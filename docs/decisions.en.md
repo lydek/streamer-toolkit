@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 7455b0bd65361dbbbcbb509bf7d855c8f65820c12b72b3e3fd797b6d7e4831aa -->
+<!-- source: docs/decisions.md source-sha256: e0f413fc41017721f824df5e79c5c10a2f7c200b11288c08e7343835dfa8f727 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -63,8 +63,9 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Time | `chrono` + `chrono-tz` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
 | Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
+| Outgoing HTTPS | `hyper-util` + `hyper-rustls` + `rustls` (`ring`) + `rustls-platform-verifier`: certificates checked against the Windows store; EventSub `wss://` shares the same TLS config |
 | OBS | `obws`; connected in the MVP, starting with OBS connection status |
-| Credentials | `keyring`, pinned to a major version with the Windows native store feature enabled (never falling back to the mock store) |
+| Credentials | `keyring-core` + `windows-native-keyring-store` (the combination keyring 4 recommends apps link directly), compiled on Windows only; never falls back to a mock store |
 | Secrets | `secrecy`: tokens are wrapped in `SecretString` and never logged |
 | Logging | `tracing` + `tracing-subscriber` (JSON) + `tracing-appender` (daily rotation with a `max_log_files` retention limit); output-layer masking is only a backup |
 | Embedded frontend | `rust-embed` (with `debug-embed`) |

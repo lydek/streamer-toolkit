@@ -62,8 +62,9 @@
 | 時間 | `chrono`＋`chrono-tz` |
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
 | Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message` |
+| 對外 HTTPS | `hyper-util`＋`hyper-rustls`＋`rustls`（`ring`）＋`rustls-platform-verifier`：憑證走 Windows 憑證庫；EventSub 的 `wss://` 共用同一組 TLS 設定 |
 | OBS | `obws`；MVP 就接，先顯示 OBS 連線狀態 |
-| 憑證 | `keyring`，鎖定主版本並啟用 Windows 原生儲存的 feature（避免落到 mock 儲存） |
+| 憑證 | `keyring-core`＋`windows-native-keyring-store`（keyring 4 建議 app 直接連結的組合），只在 Windows 編譯；不會落到 mock 儲存 |
 | 機密值 | `secrecy`：Token 用 `SecretString` 包起來，永不寫進日誌 |
 | 日誌 | `tracing`＋`tracing-subscriber`（JSON）＋`tracing-appender`（按日輪替，設 `max_log_files` 保留上限）；輸出層遮蔽只當備援 |
 | 內嵌前端 | `rust-embed`（啟用 `debug-embed`） |
