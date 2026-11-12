@@ -49,7 +49,7 @@
 | 管理視窗 | 載入 Host 網址 `http://127.0.0.1:<port>/admin`（與 API 同源，不開 CORS）；只能導向 `/admin` 路徑，開新視窗一律拒絕；`/admin` 送嚴格 CSP；Twitch 驗證頁由 Rust 指令用系統瀏覽器開啟 |
 | Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 `/admin*`）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
 | 本機 API 安全 | 每次啟動的隨機管理 token，經 IPC 指令交給管理視窗、只放記憶體；Host 標頭白名單；Origin 檢查（拒絕 `Origin: null`）；Overlay 唯讀、不帶 token，Overlay 與樣板路徑的所有回應都送 `script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本檔案並加 `nosniff`；樣板預覽放在 sandbox iframe，資料用 `postMessage` 傳入（細節見 architecture.md） |
-| Port | 固定預設 port；被佔用時不自動換 port，改開 port 修改小頁面讓使用者修改並重試 |
+| Port | 固定預設 port `47810`；被佔用時不自動換 port，改開 port 修改小頁面讓使用者修改並重試 |
 | 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板目錄送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
 | 開發模式 | Vite dev server＋proxy（`/api`、`/ws`，目標 `http://127.0.0.1:<port>`，`changeOrigin: true`、`ws: true`）到 Host；Tauri `build.devUrl` 設為 Vite 網址，Vite `server.strictPort: true`；Vite 送出與 `/admin` 相同的 CSP；dev 模式下 Vite 除了 `/api`、`/ws` 以外都允許 `null` origin（`server.cors: false`＋middleware）；dev 模式的 Origin 白名單加入 Vite origin |
 
@@ -77,7 +77,8 @@
 | 單一實例 | `tauri-plugin-single-instance` |
 | 開啟外部網址 | `tauri-plugin-opener`，由 Rust 指令呼叫（在系統瀏覽器開 Twitch 驗證頁） |
 | 安裝檔 | NSIS（Tauri bundler） |
-| 套件管理 | Node 26 LTS（寫在 `.nvmrc`）；pnpm 用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本；不依賴 Corepack |
+| 開發工具 | `@tauri-apps/cli` 與 `lefthook` 為 pnpm devDependencies，版本由 lockfile 鎖定，不需全域安裝 |
+| 套件管理 | Node 24 LTS（寫在 `.nvmrc`）；pnpm 用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本；不依賴 Corepack |
 
 ## 導入時機
 | 時機 | 項目 |
@@ -90,3 +91,5 @@
 ## 變更紀錄
 | 日期 | 改了什麼 | 為什麼 |
 |---|---|---|
+| 2026-11-13 | Node 26 LTS 改為 Node 24 LTS | 開發機已安裝、支援到 2028-04；pnpm 自管版本不依賴 Corepack，26 的優勢對本專案不重要 |
+| 2026-11-13 | Tauri CLI 與 lefthook 改為 pnpm devDependencies | 版本由 lockfile 鎖定，不改動系統 |

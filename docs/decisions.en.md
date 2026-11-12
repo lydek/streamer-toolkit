@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: e9c6aab73f876c173f4fa066ae8e71c6a9d7983d28e12fd2bc71f6c389827b23 -->
+<!-- source: docs/decisions.md source-sha256: f7eddf4c95aaf986fbea0e2dac0da116260c81477f8caf18eff978e3af5dec42 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -50,7 +50,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Admin window | Loads the Host URL `http://127.0.0.1:<port>/admin` (same origin as the API, no CORS); may only navigate to `/admin` paths, and opening new windows is always denied; `/admin` sends a strict CSP; the Twitch verification page is opened in the system browser by a Rust command |
 | Tauri IPC permissions | App commands declared with `AppManifest`; three capabilities: small port-change page (`port` window only), admin window dev (local, `admin` window only), admin window release build (remote, created at startup for the actual port, URLs limited to `/admin*`); "dev" means the `tauri/custom-protocol` feature is off (`cfg(dev)`): `tauri build` turns it on and is the only distributable build; `tauri dev` and plain cargo commands are dev; `apps/desktop` decides and tells the Host through runtime configuration |
 | Local API security | Per-launch random admin token, delivered to the admin window over an IPC command and kept in memory only; Host header allowlist; Origin checks (`Origin: null` rejected); overlays are read-only, carry no token, and every response on overlay and template paths sends `script-src 'self'; object-src 'none'`; the template directory serves only non-script files with `nosniff`; template previews go in a sandboxed iframe and receive data via `postMessage` (details in architecture.en.md) |
-| Port | Fixed default port; if taken, never switch ports automatically; instead open the small port-change page where the user changes it and retries |
+| Port | Fixed default port `47810`; if taken, never switch ports automatically; instead open the small port-change page where the user changes it and retries |
 | Frontend files | Admin UI and overlays embedded into the executable with `rust-embed`, served by the Host; the small port-change page serves as Tauri's `frontendDist`; `app.windows: []`, with all windows created from Rust (in `setup` or after a successful port retry); the build `assets/` directory and the template directory send `Access-Control-Allow-Origin: *` so the preview iframe can load them |
 | Dev mode | Vite dev server + proxy (`/api`, `/ws`, target `http://127.0.0.1:<port>`, with `changeOrigin: true` and `ws: true`) to the Host; Tauri `build.devUrl` set to the Vite URL, Vite `server.strictPort: true`; Vite sends the same CSP as `/admin`; in dev mode Vite allows the `null` origin on everything except `/api` and `/ws` (`server.cors: false` + middleware); dev mode adds the Vite origin to the Origin allowlist |
 
@@ -78,7 +78,8 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Single instance | `tauri-plugin-single-instance` |
 | Opening external URLs | `tauri-plugin-opener`, called from a Rust command (opens the Twitch verification page in the system browser) |
 | Installer | NSIS (Tauri bundler) |
-| Package management | Node 26 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
+| Dev tools | `@tauri-apps/cli` and `lefthook` are pnpm devDependencies, version-locked by the lockfile, with no global install |
+| Package management | Node 24 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
 
 ## Adoption timing
 | When | Items |
@@ -91,3 +92,5 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 ## Change log
 | Date | What changed | Why |
 |---|---|---|
+| 2026-11-13 | Node 26 LTS changed to Node 24 LTS | Already installed on the dev machine and supported until 2028-04; pnpm manages its own version without Corepack, so 26's advantages do not matter for this project |
+| 2026-11-13 | Tauri CLI and lefthook changed to pnpm devDependencies | Versions locked by the lockfile, with no system changes |

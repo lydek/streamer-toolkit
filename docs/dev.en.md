@@ -1,11 +1,11 @@
-<!-- source: docs/dev.md source-sha256: f7e56f3cfbe29142b26253790cd1328a78c6c884c675adca266de9b5615ff863 -->
+<!-- source: docs/dev.md source-sha256: 52930037453fac3721583401ee28049b7c1dd2a6ee4af448732b8e98ca8a1aba -->
 [繁體中文](dev.md) | **English**
 
 # Development
 
 ## Environment (Windows)
 - Rust: version pinned by `rust-toolchain.toml`.
-- Node: 26 LTS, in `.nvmrc`. pnpm: install once with `npm i -g pnpm`; it then switches versions according to `packageManager` in `package.json`, without Corepack; dependencies are locked by the lockfile; install with `pnpm install --frozen-lockfile`.
+- Node: 24 LTS, in `.nvmrc`. Tauri CLI and lefthook are pnpm devDependencies, run with `pnpm tauri …` and `pnpm lefthook …`. pnpm: install once with `npm i -g pnpm`; it then switches versions according to `packageManager` in `package.json`, without Corepack; dependencies are locked by the lockfile; install with `pnpm install --frozen-lockfile`.
 - Visual Studio Build Tools (MSVC) and WebView2 Runtime (required by Tauri).
 
 Exact commands will be added once the walking skeleton exists. Principle: another Windows PC can get it running by following this document.
@@ -15,8 +15,7 @@ Exact commands will be added once the walking skeleton exists. Principle: anothe
 - Commit author email uses the GitHub noreply address: `git config user.email "<id>+<username>@users.noreply.github.com"` (this repo only).
 - Branches: `main` is the default branch; each slice gets `feat/<slice>`, opens a PR, and is squash-merged after CI passes.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
-  - Before the frontend project exists: install lefthook globally (`scoop install lefthook` or `npm i -g lefthook`), then run `lefthook install`.
-  - After the frontend project exists: lefthook becomes a pnpm dev dependency, and the `prepare` script in `package.json` runs `lefthook install`, without relying on package postinstall scripts.
+  - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
 

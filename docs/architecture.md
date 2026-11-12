@@ -88,7 +88,7 @@ apps/
 - HTTP 做指令與查詢；WebSocket 推事件；用戶端連線先取快照再訂閱，重連後重新取快照。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
-- **Port**：固定預設 port（數字在 skeleton 時選定）。被佔用時不自動換 port，避免 OBS 網址悄悄失效。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
+- **Port**：固定預設 port `47810`。被佔用時不自動換 port，避免 OBS 網址悄悄失效。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
 - **前端檔案**：
   - `apps/web` 有三類 entry：管理 UI、各 Overlay、port 修改小頁面。
   - 管理 UI 與 Overlay 的建置產物用 `rust-embed` 內嵌進執行檔，由 Host 提供。

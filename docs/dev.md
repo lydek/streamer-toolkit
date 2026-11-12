@@ -4,7 +4,7 @@
 
 ## 環境（Windows）
 - Rust：用 `rust-toolchain.toml` 鎖版本。
-- Node：26 LTS，寫在 `.nvmrc`。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖依賴，安裝用 `pnpm install --frozen-lockfile`。
+- Node：24 LTS，寫在 `.nvmrc`。Tauri CLI 與 lefthook 是 pnpm devDependencies，用 `pnpm tauri …`、`pnpm lefthook …` 執行。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖依賴，安裝用 `pnpm install --frozen-lockfile`。
 - Visual Studio Build Tools（MSVC）與 WebView2 Runtime（Tauri 需要）。
 
 實際指令在 walking skeleton 建立後補上。原則：另一台 Windows 電腦照這份文件就能跑起來。
@@ -14,8 +14,7 @@
 - Commit 作者 email 用 GitHub noreply：`git config user.email "<id>+<帳號>@users.noreply.github.com"`（只設本 repo）。
 - 分支：`main` 為預設分支；每個切片開 `feat/<切片>`，發 PR，CI 通過後 squash 合併。
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
-  - 前端專案建立前：全域安裝 lefthook（`scoop install lefthook` 或 `npm i -g lefthook`），再執行 `lefthook install`。
-  - 前端專案建立後：lefthook 改為 pnpm 開發依賴，並在 `package.json` 的 `prepare` script 執行 `lefthook install`，不依賴套件的 postinstall。
+  - lefthook 是 pnpm 開發依賴；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 

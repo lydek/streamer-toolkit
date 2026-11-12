@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 3d731056a15cfcd6d02a7d493687410b815ce197d959e6319e8b3f3bfa2ff60d -->
+<!-- source: docs/architecture.md source-sha256: 0568b7a7ce0b88489e613b6aebd5956755d9023f740cbf20117d09dd61feb284 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -89,7 +89,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 - HTTP carries commands and queries; WebSocket pushes events; clients fetch a snapshot before subscribing and fetch it again after reconnecting.
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
-- **Port**: a fixed default port (number chosen during the skeleton). If it is taken, do not switch ports automatically, so OBS URLs never break silently. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
+- **Port**: a fixed default port, `47810`. If it is taken, do not switch ports automatically, so OBS URLs never break silently. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
 - **Frontend files**:
   - `apps/web` has three kinds of entries: the admin UI, each overlay, and the small port-change page.
   - The admin UI and overlay build output is embedded into the executable with `rust-embed` and served by the Host.
