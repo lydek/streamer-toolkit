@@ -1,0 +1,6 @@
+packages:
+  - apps/web
+
+# lefthook's postinstall only runs `lefthook install`; the root `prepare` script already does that.
+allowBuilds:
+  lefthook: false

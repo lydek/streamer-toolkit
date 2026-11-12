@@ -1,0 +1,16 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+mime_guess = "2.0.5"
+rust-embed = { version = "8.14.0", features = ["debug-embed"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros"] }
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
