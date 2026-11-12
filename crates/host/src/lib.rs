@@ -1,6 +1,16 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
-use std::net::{Ipv4Addr, SocketAddr};
+mod admin;
+pub mod settings;
+
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    sync::Arc,
+};
+
+use integrations::secrets::SecretStore;
+use secrecy::SecretString;
 
 use axum::{
     Router,
@@ -28,11 +38,17 @@ const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
 #[folder = "../../apps/web/dist"]
 struct Web;
 
-#[derive(Clone, Debug)]
 pub struct HostConfig {
     pub port: u16,
     /// Extra allowed origins, e.g. the Vite dev server in dev mode (decided by apps/desktop).
     pub extra_origins: Vec<String>,
+    /// Per-launch random token required by `/api/admin`; never written to disk.
+    pub admin_token: SecretString,
+    /// App config directory holding `settings.json`.
+    pub config_dir: PathBuf,
+    /// Where the broadcaster's Twitch tokens live (Windows Credential Manager in production).
+    pub twitch_secrets: Arc<dyn SecretStore>,
+    pub twitch_oauth_base: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -57,7 +73,7 @@ pub async fn bind(config: HostConfig) -> Result<BoundHost, HostError> {
     })?;
     Ok(BoundHost {
         listener,
-        router: router(&config),
+        router: router(config)?,
     })
 }
 
@@ -85,12 +101,22 @@ impl Guard {
     }
 }
 
-pub fn router(config: &HostConfig) -> Router {
-    Router::new()
+pub fn router(config: HostConfig) -> Result<Router, HostError> {
+    let guard_state = Guard::new(&config);
+    let tls = integrations::tls::client_config().map_err(std::io::Error::other)?;
+    let admin = admin::AdminState::new(
+        config.admin_token,
+        config.config_dir,
+        config.twitch_secrets,
+        config.twitch_oauth_base,
+        integrations::tls::https_client(tls),
+    );
+    Ok(Router::new()
         .route("/api/health", get(|| async { "ok" }))
         .route("/ws/overlay", get(overlay_ws))
+        .merge(admin::routes(Arc::new(admin)))
         .fallback(static_file)
-        .layer(middleware::from_fn_with_state(Guard::new(config), guard))
+        .layer(middleware::from_fn_with_state(guard_state, guard)))
 }
 
 /// Blocks DNS rebinding (Host header) and cross-site WebSocket / state-changing requests (Origin).
@@ -177,13 +203,66 @@ async fn static_file(uri: Uri) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use integrations::secrets::SecretStoreError;
     use tower::ServiceExt;
 
+    const TOKEN: &str = "test-admin-token";
+
+    struct NoSecrets;
+    impl SecretStore for NoSecrets {
+        fn read(&self) -> Result<Option<String>, SecretStoreError> {
+            Ok(None)
+        }
+        fn write(&self, _: &str) -> Result<(), SecretStoreError> {
+            Ok(())
+        }
+        fn delete(&self) -> Result<(), SecretStoreError> {
+            Ok(())
+        }
+    }
+
     fn app() -> Router {
-        router(&HostConfig {
+        router(HostConfig {
             port: 47810,
             extra_origins: vec!["http://localhost:5173".into()],
+            admin_token: TOKEN.into(),
+            config_dir: std::env::temp_dir().join(format!("st-host-test-{}", std::process::id())),
+            twitch_secrets: Arc::new(NoSecrets),
+            twitch_oauth_base: "http://127.0.0.1:1".into(),
         })
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn admin_api_requires_the_token() {
+        let no_token = get_req("/api/admin/twitch", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(status(no_token).await, StatusCode::UNAUTHORIZED);
+
+        let wrong = get_req("/api/admin/twitch", "127.0.0.1:47810")
+            .header(header::AUTHORIZATION, "Bearer nope")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(status(wrong).await, StatusCode::UNAUTHORIZED);
+
+        let ok = get_req("/api/admin/twitch", "127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(status(ok).await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn invalid_client_id_is_rejected() {
+        let req = get_req("/api/admin/twitch/client-id", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"client_id":"<script>"}"#))
+            .unwrap();
+        assert_eq!(status(req).await, StatusCode::BAD_REQUEST);
     }
 
     fn get_req(uri: &str, host: &str) -> axum::http::request::Builder {

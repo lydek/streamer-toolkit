@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "admin-dev",
+  "description": "Admin window in dev (local origin through devUrl). Release builds create a remote capability for the bound port at runtime instead.",
+  "windows": ["admin"],
+  "permissions": ["allow-get-admin-token", "allow-open-twitch-activate"]
+}

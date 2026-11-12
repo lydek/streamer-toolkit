@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-twitch-activate"
+description = "Enables the open_twitch_activate command without any pre-configured scope."
+commands.allow = ["open_twitch_activate"]
+
+[[permission]]
+identifier = "deny-open-twitch-activate"
+description = "Denies the open_twitch_activate command without any pre-configured scope."
+commands.deny = ["open_twitch_activate"]
