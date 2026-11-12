@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: f7eddf4c95aaf986fbea0e2dac0da116260c81477f8caf18eff978e3af5dec42 -->
+<!-- source: docs/decisions.md source-sha256: 7455b0bd65361dbbbcbb509bf7d855c8f65820c12b72b3e3fd797b6d7e4831aa -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -62,7 +62,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup) |
 | Time | `chrono` + `chrono-tz` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
-| Twitch | `twitch_api` (Helix and EventSub types) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
+| Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
 | OBS | `obws`; connected in the MVP, starting with OBS connection status |
 | Credentials | `keyring`, pinned to a major version with the Windows native store feature enabled (never falling back to the mock store) |
 | Secrets | `secrecy`: tokens are wrapped in `SecretString` and never logged |
@@ -94,3 +94,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 |---|---|---|
 | 2026-11-13 | Node 26 LTS changed to Node 24 LTS | Already installed on the dev machine and supported until 2028-04; pnpm manages its own version without Corepack, so 26's advantages do not matter for this project |
 | 2026-11-13 | Tauri CLI and lefthook changed to pnpm devDependencies | Versions locked by the lockfile, with no system changes |
+| 2026-11-13 | Twitch types changed from the `twitch_api` crate to hand-written serde types | The MVP uses only a few events; drops a large dependency tree and gives full control over fields and values such as `unknown` |

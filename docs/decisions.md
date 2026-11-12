@@ -61,7 +61,7 @@
 | 錯誤處理 | `thiserror`（domain／application，對應錯誤碼）＋`anyhow`（只用在 host 組合根與啟動流程） |
 | 時間 | `chrono`＋`chrono-tz` |
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
-| Twitch | `twitch_api`（Helix 與 EventSub 型別）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message` |
+| Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message` |
 | OBS | `obws`；MVP 就接，先顯示 OBS 連線狀態 |
 | 憑證 | `keyring`，鎖定主版本並啟用 Windows 原生儲存的 feature（避免落到 mock 儲存） |
 | 機密值 | `secrecy`：Token 用 `SecretString` 包起來，永不寫進日誌 |
@@ -93,3 +93,4 @@
 |---|---|---|
 | 2026-11-13 | Node 26 LTS 改為 Node 24 LTS | 開發機已安裝、支援到 2028-04；pnpm 自管版本不依賴 Corepack，26 的優勢對本專案不重要 |
 | 2026-11-13 | Tauri CLI 與 lefthook 改為 pnpm devDependencies | 版本由 lockfile 鎖定，不改動系統 |
+| 2026-11-13 | Twitch 型別由 `twitch_api` crate 改為自寫 serde 型別 | MVP 只用到少數事件；少一大串依賴，欄位與 `unknown` 等值的處理完全自己掌握 |
