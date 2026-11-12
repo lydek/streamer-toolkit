@@ -7,6 +7,7 @@ target/
 # Node / frontend
 node_modules/
 dist/
+dist-port/
 *.tsbuildinfo
 
 # Tauri generated schemas
