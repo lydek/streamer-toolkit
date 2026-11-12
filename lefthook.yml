@@ -1,0 +1,10 @@
+# Fail the commit instead of silently skipping hooks when lefthook is not installed.
+assert_lefthook_installed: true
+
+# Rust and frontend checks are added with the walking skeleton.
+# shortcut: checks the working tree, not the staged snapshot; CI re-runs it on the pushed commit.
+pre-commit:
+  parallel: true
+  commands:
+    translations:
+      run: node scripts/check-translations.mjs
