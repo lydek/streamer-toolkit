@@ -135,9 +135,10 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
         WebviewUrl::App("admin/index.html".into())
     } else {
         // Release: the Host URL is a remote origin, so its capability is created for the bound port only.
+        // Tauri matches IPC calls by their Origin header, which has no path; on_navigation keeps the window on /admin.
         app.add_capability(
             CapabilityBuilder::new("admin-remote")
-                .remote(format!("http://127.0.0.1:{port}/admin*"))
+                .remote(format!("http://127.0.0.1:{port}"))
                 .window(ADMIN)
                 .permission("allow-get-admin-token")
                 .permission("allow-open-twitch-activate"),

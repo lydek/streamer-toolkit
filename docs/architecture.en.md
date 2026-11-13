@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 0568b7a7ce0b88489e613b6aebd5956755d9023f740cbf20117d09dd61feb284 -->
+<!-- source: docs/architecture.md source-sha256: bc8c6892bb0d7508aeec48da5fc04e30ec24d8c9365755e64a97dae54639aedd -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -114,7 +114,7 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 - **Tauri IPC permissions**: app commands are declared in `build.rs` with `tauri_build::AppManifest`, and every command needs an explicit grant. There are three capabilities:
   1. Small port-change page (local origin, `port` window only): grants only the commands that validate and save the port and retry the bind.
   2. Admin window, dev (local origin through `devUrl`, `admin` window only): grants admin commands such as fetching the token.
-  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>/admin*` and the `admin` window only. It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
+  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>` and the `admin` window only (Tauri matches the IPC request's Origin, which has no path, so it cannot be limited to `/admin`; `on_navigation` restricts the path). It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
 - **User templates**:
   - Custom templates and overlays are never rendered directly in the admin window; previews go in an iframe with only `sandbox="allow-scripts"` (no `allow-same-origin`), so template code cannot reach the admin window's IPC or token; a test checks that `invoke` from the preview iframe is rejected.
   - The preview iframe's origin is `null`, so it cannot connect to the Host; the admin window passes snapshots and sample events in with `postMessage`.

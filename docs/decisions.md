@@ -47,7 +47,7 @@
 | Twitch scope | 第一次登入就申請 MVP 全部：`user:read:chat`、`moderator:read:followers`、`channel:read:subscriptions`、`channel:read:redemptions` |
 | Token 刷新 | 同時只允許一個 refresh；新 refresh token 先寫進 keyring 再使用新 access token，寫入失敗時新 token 留在記憶體並重試寫入（若程式在重試成功前關閉，下次需重新登入）；refresh 失敗（400／401）就重新走 Device Code Flow，UI 顯示「需重新登入」。Public client 的 refresh token 30 天後過期，長時間沒使用需重新登入 |
 | 管理視窗 | 載入 Host 網址 `http://127.0.0.1:<port>/admin`（與 API 同源，不開 CORS）；只能導向 `/admin` 路徑，開新視窗一律拒絕；`/admin` 送嚴格 CSP；Twitch 驗證頁由 Rust 指令用系統瀏覽器開啟 |
-| Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 `/admin*`）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
+| Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 Host origin，路徑由 `on_navigation` 限制）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
 | 本機 API 安全 | 每次啟動的隨機管理 token，經 IPC 指令交給管理視窗、只放記憶體；Host 標頭白名單；Origin 檢查（拒絕 `Origin: null`）；Overlay 唯讀、不帶 token，Overlay 與樣板路徑的所有回應都送 `script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本檔案並加 `nosniff`；樣板預覽放在 sandbox iframe，資料用 `postMessage` 傳入（細節見 architecture.md） |
 | Port | 固定預設 port `47810`；被佔用時不自動換 port，改開 port 修改小頁面讓使用者修改並重試 |
 | 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板目錄送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
