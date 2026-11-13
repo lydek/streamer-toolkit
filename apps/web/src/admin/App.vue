@@ -1,44 +1,68 @@
 <template>
   <main>
-    <h1>Streamer Toolkit</h1>
+    <h1>{{ t('app.name') }}</h1>
 
     <section aria-labelledby="twitch-heading">
-      <h2 id="twitch-heading">Twitch 連線</h2>
+      <h2 id="twitch-heading">{{ t('twitch.heading') }}</h2>
 
-      <p v-if="!overview">載入中…</p>
+      <p v-if="!overview">{{ t('app.loading') }}</p>
 
       <form v-else-if="!overview.client_id || editingClientId" @submit.prevent="saveClientId">
-        <p>
-          請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填
-          <code>http://localhost</code>，再把產生的 Client ID 貼到這裡。
-        </p>
-        <label for="client-id">Client ID</label>
+        <i18n-t keypath="twitch.guide" tag="p">
+          <template #url><code>http://localhost</code></template>
+        </i18n-t>
+        <label for="client-id">{{ t('twitch.clientId') }}</label>
         <input id="client-id" v-model="clientIdInput" autocomplete="off" required />
-        <button type="submit" :disabled="busy">儲存</button>
-        <button v-if="overview.client_id" type="button" @click="editingClientId = false">取消</button>
+        <button type="submit" :disabled="busy">{{ t('twitch.save') }}</button>
+        <button v-if="overview.client_id" type="button" @click="editingClientId = false">{{ t('twitch.cancel') }}</button>
       </form>
 
       <template v-else>
         <div v-if="overview.status.state === 'signed_in'">
-          <p>已登入：<strong>{{ overview.status.login }}</strong></p>
-          <button type="button" :disabled="busy" @click="logout">登出</button>
+          <p>{{ t('twitch.signedIn') }}<strong>{{ overview.status.login }}</strong></p>
+          <button type="button" :disabled="busy" @click="logout">{{ t('twitch.logout') }}</button>
         </div>
 
         <div v-else-if="overview.status.state === 'pending'">
-          <p>請在 Twitch 驗證頁輸入以下代碼：</p>
+          <p>{{ t('twitch.enterCode') }}</p>
           <p class="user-code" aria-live="polite">{{ overview.status.user_code }}</p>
-          <button type="button" @click="openActivate">開啟 Twitch 驗證頁</button>
+          <button type="button" @click="openActivate">{{ t('twitch.openActivate') }}</button>
         </div>
 
         <div v-else>
-          <p v-if="overview.status.state === 'failed'" role="alert">{{ message(overview.status.code) }}</p>
-          <button type="button" :disabled="busy" @click="login">登入 Twitch</button>
+          <p v-if="overview.status.state === 'failed'" role="alert">{{ errorMessage(overview.status.code) }}</p>
+          <button type="button" :disabled="busy" @click="login">{{ t('twitch.login') }}</button>
         </div>
 
-        <button type="button" @click="startEditClientId">變更 Client ID</button>
+        <button type="button" @click="startEditClientId">{{ t('twitch.changeClientId') }}</button>
       </template>
 
       <p v-if="error" role="alert">{{ error }}</p>
+    </section>
+
+    <section aria-labelledby="modules-heading">
+      <h2 id="modules-heading">{{ t('modules.heading') }}</h2>
+      <ul>
+        <li v-for="m in modules" :key="m.id">
+          <label>
+            <input type="checkbox" :checked="m.enabled" :disabled="busy" @change="toggleModule(m)" />
+            {{ te(`modules.names.${m.id}`) ? t(`modules.names.${m.id}`) : m.id }}
+          </label>
+        </li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="simulate-heading">
+      <h2 id="simulate-heading">{{ t('simulate.heading') }}</h2>
+      <p>{{ t('simulate.hint') }}</p>
+      <form @submit.prevent="simulateChat">
+        <label for="sim-user">{{ t('simulate.userName') }}</label>
+        <input id="sim-user" v-model="simUser" autocomplete="off" maxlength="25" />
+        <label for="sim-text">{{ t('simulate.text') }}</label>
+        <input id="sim-text" v-model="simText" autocomplete="off" maxlength="500" required />
+        <button type="submit" :disabled="busy">{{ t('simulate.send') }}</button>
+      </form>
+      <p aria-live="polite">{{ simSent ? t('simulate.sent') : '' }}</p>
     </section>
   </main>
 </template>
@@ -46,6 +70,8 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { errorMessage } from '../i18n'
 import { ApiError, api } from './api'
 
 type Status =
@@ -59,25 +85,27 @@ interface Overview {
   status: Status
 }
 
-// Error codes come from the Host; messages move to vue-i18n with the skeleton foundations.
-const messages: Record<string, string> = {
-  invalid_client_id: 'Client ID 格式不正確（只能是英文字母與數字）。',
-  'twitch.client_id_required': '請先設定 Client ID。',
-  'twitch.sign_in_expired': '驗證碼已過期，請重新登入。',
-  'twitch.sign_in_refused': 'Twitch 拒絕了登入，請確認 Client ID 與 app 類別（Public）。',
-  'twitch.unreachable': '連不到 Twitch，請檢查網路。',
+interface ModuleState {
+  id: string
+  enabled: boolean
 }
-const message = (code: string) => messages[code] ?? `發生錯誤（${code}）`
+
+const { t, te } = useI18n()
 
 const overview = ref<Overview>()
+const modules = ref<ModuleState[]>([])
 const clientIdInput = ref('')
 const editingClientId = ref(false)
 const busy = ref(false)
 const error = ref('')
+const simUser = ref('')
+const simText = ref('')
+const simSent = ref(false)
 let timer: number | undefined
 
 async function refresh() {
   overview.value = await api<Overview>('/api/admin/twitch')
+  modules.value = await api<ModuleState[]>('/api/admin/modules')
 }
 
 async function run(action: () => Promise<unknown>) {
@@ -87,7 +115,7 @@ async function run(action: () => Promise<unknown>) {
     await action()
     await refresh()
   } catch (e) {
-    error.value = e instanceof ApiError ? message(e.code) : String(e)
+    error.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
   } finally {
     busy.value = false
   }
@@ -100,7 +128,26 @@ const saveClientId = () =>
   })
 const login = () => run(() => api('/api/admin/twitch/login', { method: 'POST' }))
 const logout = () => run(() => api('/api/admin/twitch/logout', { method: 'POST' }))
-const openActivate = () => invoke('open_twitch_activate')
+const toggleModule = (m: ModuleState) =>
+  run(() => api(`/api/admin/modules/${m.id}`, { method: 'PUT', body: JSON.stringify({ enabled: !m.enabled }) }))
+const simulateChat = () =>
+  run(async () => {
+    simSent.value = false
+    await api('/api/admin/simulate/chat', {
+      method: 'POST',
+      body: JSON.stringify({ userName: simUser.value, text: simText.value }),
+    })
+    simText.value = ''
+    simSent.value = true
+  })
+
+async function openActivate() {
+  try {
+    await invoke('open_twitch_activate')
+  } catch (code) {
+    error.value = errorMessage(String(code))
+  }
+}
 
 function startEditClientId() {
   clientIdInput.value = overview.value?.client_id ?? ''

@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: b6fc4f13cf2bb3bc0664f945d94fd8f0ff9eeece4ce197fc563c382f753de637 -->
+<!-- source: docs/architecture.md source-sha256: d77622afea5c820e92c9edd6828fde9be88a958c5eb31779425dd19c9c3ed531 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -10,7 +10,7 @@ Adjust during the skeleton as needed, then update this section.
 
 ```text
 crates/
-  core/            # Shared core: settings, module registry and lifecycle, error codes, event envelope, in-memory event broadcast, outbox (with its own migrations)
+  core/            # Shared core (package name `toolkit-core`, avoiding Rust's built-in `core`): settings, module registry and enable/disable controls, internal integration events, event envelope, in-memory event broadcast; outbox (with its own migrations) comes later
   integrations/    # Twitch (EventSub) and OBS (obws) adapters: turn external events into internal events; handle OAuth, reconnect, backoff, rate limits
   modules/
     chat/          # Chat display (thin)
@@ -19,6 +19,7 @@ crates/
     checkin/       # Daily check-in (complex): subscribes to RedemptionRecorded and chat command events
     sound/         # Sound management (thin)
   host/            # Composition root: wires modules, Axum HTTP/WebSocket routes, overlay static pages
+  arch-tests/      # Architecture tests only (see §7)
 apps/
   desktop/         # Tauri 2 shell: starts the Host in-process, system tray, single-instance lock; the admin window loads the Host URL
   web/             # Vue 3 + TS: admin UI, overlay pages, small port-change page
@@ -86,10 +87,10 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 
 ## 5. External communication
 - The only MVP clients are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control come after the MVP.
-- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, so nothing is missed or repeated between them), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot.
+- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, to ensure that no events are lost or duplicated during snapshot initialization), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot. The snapshot's `payload` lists, per event type, the recent events kept in memory (for example the last 50 `chat.message` events).
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
-- **Port**: a fixed default port, `47810`. If it is taken, do not switch ports automatically, so OBS URLs never break silently. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
+- **Port**: a fixed default port, `47810`, stored in the data directory's `settings.json`. If it is taken, do not switch ports automatically, so OBS URLs never break silently; the only exception is a data directory's first start (no `settings.json` and no OBS URL yet): if the default port is taken, a free port is picked and saved, and used from then on. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
 - **Frontend files**:
   - `apps/web` has three kinds of entries: the admin UI, each overlay, and the small port-change page.
   - The admin UI and overlay build output is embedded into the executable with `rust-embed` and served by the Host.
@@ -133,13 +134,22 @@ Twitch's official documentation is the source for these numbers; update this sec
 - **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
 
 ## 6. Host lifecycle
-The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; only quitting from the tray stops the Host.
+The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
+
+### Data directory
+Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. Application files and user data are kept separate, except in portable distributions.
+- Which data directory is used, in order: `--data-dir <path>` on the command line; a `data` folder next to the executable if there is one (portable copy; dev builds always use it, so they never touch the installed copy's data); otherwise `%LOCALAPPDATA%\<identifier>` (installed copy; the NSIS uninstaller has a "delete app data" option, and this is the directory it deletes).
+- Contents: `settings.json`, `logs/` (JSON, rotated daily, kept 14 days), `cache/`, `WebView2/`, `instance-id`; the database and pre-upgrade backups come later.
+- Only one instance may run per data directory; different data directories can run side by side (for example to test a new version). `instance-id` is a random ID inside the data directory and survives moving it; a copied data directory keeps the same `instance-id`, counts as the same instance and cannot run next to the original.
+- Twitch sign-in is per data directory: the Credential Manager entry is named `<instance-id>/twitch`.
+- If the data directory is not writable, show an error and exit; never fall back to another location.
+- Side-by-side copies use portable copies and `--data-dir`, not several installs: NSIS registers only one install per product name, and installing to another folder removes the program from the old one first.
 
 Startup order:
-1. Register `tauri-plugin-single-instance` first and confirm this is the only instance, so a second instance does not try to take the port and fail before handing off.
+1. Resolve the data directory and check that it is writable. `tauri-plugin-single-instance` names its lock after the identifier, so at startup the identifier gets the `instance-id` appended and the lock is per data directory. Register this plugin first, so a second copy never tries to take the port before handing off.
 2. The Host binds the port; on failure, open the small port-change page and retry after the user saves.
 3. Release build: create the remote capability for the current port, then create the admin window and load the Host URL. Dev mode: the admin window loads the Vite dev server and uses capability 2.
 
 ## 7. Enforcing the rules
 - Cross-module dependencies: enforced by each crate's `Cargo.toml`.
-- Layer rules: architecture tests run in CI and at least check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths) and that modules do not use other modules' non-public types.
+- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`. Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.

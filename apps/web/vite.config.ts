@@ -1,12 +1,14 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 
 // Must match the Host's default port (docs/architecture.md §5).
 const HOST = 'http://127.0.0.1:47810'
 
 export default defineConfig(({ mode }) => ({
-  plugins: [vue()],
+  // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
+  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') })],
   server: {
     port: 5173,
     strictPort: true,

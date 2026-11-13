@@ -4,17 +4,24 @@
 
 ## 環境（Windows）
 - Rust：用 `rust-toolchain.toml` 鎖版本。
-- Node：24 LTS，寫在 `.nvmrc`。Tauri CLI 與 lefthook 是 pnpm devDependencies，用 `pnpm tauri …`、`pnpm lefthook …` 執行。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖依賴，安裝用 `pnpm install --frozen-lockfile`。
+- Node：24 LTS，寫在 `.nvmrc`。Tauri CLI 與 lefthook 是 pnpm devDependencies，用 `pnpm tauri …`、`pnpm lefthook …` 執行。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖定相依套件，安裝用 `pnpm install --frozen-lockfile`。
 - Visual Studio Build Tools（MSVC）與 WebView2 Runtime（Tauri 需要）。
 
-實際指令在 walking skeleton 建立後補上。原則：另一台 Windows 電腦照這份文件就能跑起來。
+原則：另一台 Windows 電腦照這份文件就能跑起來。
+
+## 常用指令
+- 安裝相依套件：`pnpm install --frozen-lockfile`
+- 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
+- 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`
+- 資料：dev 建置的資料在 `target\debug\data\`，不會碰到安裝版；要用另一份資料測試，加 `--data-dir <資料夾>`。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
 - Repo 是 public：任何人都看得到程式碼與 commit 紀錄。
 - Commit 作者 email 用 GitHub noreply：`git config user.email "<id>+<帳號>@users.noreply.github.com"`（只設本 repo）。
 - 分支：`main` 為預設分支；每個切片開 `feat/<切片>`，發 PR，CI 通過後 squash 合併。
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
-  - lefthook 是 pnpm 開發依賴；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
+  - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 
@@ -26,7 +33,7 @@
 ## 測試底線
 - 只測我們負責的行為，不測 Twitch／OBS 本身。
 - 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新。UI E2E 延後。
-- 架構測試：`domain/` 內沒有任何 `sqlx`／`axum` 字樣；模組不引用其他模組的非公開型別（規則見 [architecture.md](architecture.md)）。
+- 架構測試（`crates/arch-tests`）：`domain/` 內沒有任何 `sqlx`／`axum` 字樣；crate 相依方向正確：模組只依賴共用核心（`crates/core`，package 名稱 `toolkit-core`）與其他模組的公開介面，不依賴 `integrations` 與 `host`；模組不引用其他模組的非公開型別（規則見 [architecture.md](architecture.md)）。
 - Migration 測試：合併後的版本全域唯一且已排序。
 - 必測：兌換事件去重與狀態轉換、備份後能實際還原、migration 升級不掉資料。
 - 用模擬事件測試，不必真的觸發 Twitch。模擬事件標記 `source=simulation`，不得寫入任何正式業務紀錄（兌換紀錄、打卡紀錄）。
@@ -41,15 +48,15 @@
 - Overlay 路由唯讀，拿不到 OAuth Token，也不能呼叫管理 API。
 - 使用者樣板與 Overlay 絕不在管理視窗裡直接渲染；預覽放在只設 `sandbox="allow-scripts"` 的 iframe，資料用 `postMessage` 傳入。
 - 聊天內容、暱稱等觀眾輸入一律 escape，防 XSS。
-- Token 存在 Windows Credential Manager，程式內用 `SecretString` 包起來；不寫進日誌、明文檔案或備份檔。
+- Token 存在 Windows Credential Manager（項目依資料夾分開），程式內用 `SecretString` 包起來；不寫進記錄檔、明文檔案或備份檔。
 - Repo 公開：不得 commit 任何 secret、Token 或個人資料。Twitch 用 Device Code Flow，不需要 client secret；Client ID 由每位使用者自己註冊並存在設定，不內建在 repo。
 - 兌換事件依 Twitch 兌換 ID 去重。
 - migration 前自動備份資料庫；任何操作都不能無聲刪除資料。
 - 時間一律存 UTC；「每日」類功能（如打卡）依實況主設定的時區判斷。
 
 ## 授權
-- 本專案為 MIT。Rust 依賴的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0）。
-- 前端依賴用 `pnpm licenses list` 檢查，只看會打包進產物的依賴，允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。
+- 本專案為 MIT。Rust 相依套件的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0）。
+- 前端相依套件用 `pnpm licenses list` 檢查，只看會打包進產物的相依套件，允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。
 - GPL／LGPL／AGPL 一律不得引入。
 - 安裝檔切片產生 `THIRD_PARTY_LICENSES`（`cargo-about`＋`pnpm licenses`），隨安裝檔散布。
 - 內建素材（音效、字型、圖示）只收可再散布的授權（CC0、CC-BY、OFL 等），來源與授權記在 `assets/CREDITS.md`。使用者自己匯入的素材不進 repo。
@@ -67,6 +74,6 @@
 - 英文檔第一行記錄 `<!-- source: <中文檔路徑> source-sha256: <hash> -->`，第二行是語言切換連結（`[繁體中文](<name>.md) | **English**`）；中文檔開頭對應放 `**繁體中文** | [English](<name>.en.md)`。英文檔內的文件連結指向對應的 `.en.md`。
 - `node scripts/check-translations.mjs` 會檢查三件事：每份中文檔都有英文版、每份英文版的 source 都指向同名的中文檔（沒有孤兒檔）、英文版的 hash 與中文檔一致；不符就失敗，並印出問題檔案或新 hash。
 - 建立 git 後由 pre-commit hook 執行此檢查，CI 也跑同一個指令；hook 只檢查，不自動翻譯。
-- 程式碼：識別碼、註解、API／DB 欄位、錯誤碼一律英文。
+- 程式碼：識別碼、註解、API／DB 欄位、錯誤碼一律英文。錯誤碼格式 `<區域>.<原因>`，例如 `twitch.sign_in_required`。
 - Commit：英文 Conventional Commits，例：`feat(checkin): add daily check-in rule`。
 - UI 固定字串集中放在資源檔，之後要翻譯不必改元件。

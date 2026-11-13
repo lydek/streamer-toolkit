@@ -1,43 +1,99 @@
 // Prevents an extra console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{path::PathBuf, sync::Arc};
+mod data_folder;
+mod text;
+
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use host::{BoundHost, HostConfig, HostError, TwitchEndpoints, settings};
 use integrations::secrets::{CredentialManager, SecretStore};
 use secrecy::{ExposeSecret, SecretString};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder, ipc::CapabilityBuilder};
+use tauri::{
+    AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    ipc::CapabilityBuilder,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_opener::OpenerExt;
+use tracing_appender::{non_blocking::WorkerGuard, rolling};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 const ADMIN: &str = "admin";
 const PORT_PAGE: &str = "port";
 const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
+const LOG_DAYS: usize = 14;
 
 struct AppState {
     admin_token: SecretString,
-    config_dir: PathBuf,
+    data_dir: PathBuf,
     twitch_secrets: Arc<dyn SecretStore>,
 }
 
 fn main() {
-    tauri::Builder::default()
-        // Registered first: a second instance hands off before it ever tries to bind the port.
+    let mut context = tauri::generate_context!();
+    let base_identifier = context.config().identifier.clone();
+    let data_dir = data_folder::resolve(&base_identifier, cfg!(dev))
+        .unwrap_or_else(|e| fail(&text::data_folder_unusable("", &e.to_string())));
+    if let Err(e) = data_folder::ensure_writable(&data_dir) {
+        fail(&text::data_folder_unusable(
+            &data_dir.display().to_string(),
+            &e.to_string(),
+        ));
+    }
+    let mut log_guard = init_logs(&data_dir.join("logs"));
+    let instance = match data_folder::instance_id(&data_dir) {
+        Ok(id) => id,
+        Err(e) => fail(&text::data_folder_unusable(
+            &data_dir.display().to_string(),
+            &e.to_string(),
+        )),
+    };
+    tracing::info!(data_dir = %data_dir.display(), "starting");
+    // The single-instance plugin names its lock after the identifier: one running copy per data folder.
+    context.config_mut().identifier = format!("{base_identifier}.i{instance}");
+
+    let app = tauri::Builder::default()
+        // Registered first: a second copy on the same folder hands off before it ever tries to bind the port.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            focus_main_window(app)
+            show_main_window(app)
         }))
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
+        .setup(move |app| {
             CredentialManager::init()?;
             app.manage(AppState {
                 admin_token: random_token()?,
-                config_dir: app.path().app_config_dir()?,
-                twitch_secrets: CredentialManager::new("twitch")?,
+                data_dir: data_dir.clone(),
+                twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
             });
+            create_tray(app.handle())?;
             let handle = app.handle().clone();
-            let port = settings::load(&handle.state::<AppState>().config_dir).port;
-            match tauri::async_runtime::block_on(host::bind(host_config(&handle, port))) {
-                Ok(bound) => start(&handle, bound, port)?,
-                Err(HostError::PortInUse(_)) => open_port_page(&handle)?,
+            // A folder without settings has no OBS URL yet, so a taken default port can be swapped for a free one.
+            let first_run = !settings::path(&data_dir).exists();
+            let port = settings::load(&data_dir).port;
+            let bound = match tauri::async_runtime::block_on(host::bind(host_config(&handle, port))) {
+                Err(HostError::PortInUse(_)) if first_run => {
+                    tauri::async_runtime::block_on(host::bind(host_config(&handle, 0)))
+                }
+                other => other,
+            };
+            match bound {
+                Ok(bound) => {
+                    if bound.port() != port || first_run {
+                        let chosen = bound.port();
+                        if let Err(e) = settings::update(&data_dir, |s| s.port = chosen) {
+                            tracing::error!(code = "settings.save_failed", error = %e, "port not saved");
+                        }
+                    }
+                    start(&handle, bound)?
+                }
+                Err(HostError::PortInUse(port)) => {
+                    tracing::warn!(code = "port.in_use", port, "asking for another port");
+                    open_port_page(&handle)?
+                }
                 Err(e) => return Err(e.into()),
             }
             Ok(())
@@ -47,8 +103,69 @@ fn main() {
             get_admin_token,
             open_twitch_activate
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Streamer Toolkit");
+        .build(context)
+        .unwrap_or_else(|e| fail(&e.to_string()));
+    app.run(move |app, event| match event {
+        // Closing the admin window only hides it; overlays keep running until Quit in the tray.
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == ADMIN => {
+            api.prevent_close();
+            if let Some(w) = app.get_webview_window(ADMIN) {
+                let _ = w.hide();
+            }
+        }
+        // Keep running in the tray when the port page is closed.
+        RunEvent::ExitRequested {
+            code: None, api, ..
+        } => api.prevent_exit(),
+        // Flush buffered log lines before the process ends.
+        RunEvent::Exit => drop(log_guard.take()),
+        _ => {}
+    });
+}
+
+/// JSON lines, one file per day, the last `LOG_DAYS` kept. Dev builds also print to stderr.
+fn init_logs(dir: &Path) -> Option<WorkerGuard> {
+    let appender = rolling::Builder::new()
+        .rotation(rolling::Rotation::DAILY)
+        .filename_prefix("streamer-toolkit")
+        .filename_suffix("log")
+        .max_log_files(LOG_DAYS)
+        .build(dir)
+        .ok()?;
+    let (writer, guard) = tracing_appender::non_blocking(appender);
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let console = cfg!(dev).then(|| fmt::layer().with_writer(std::io::stderr));
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().json().with_writer(writer))
+        .with(console)
+        .init();
+    Some(guard)
+}
+
+/// Shows a native error box and exits; used before any window exists.
+fn fail(message: &str) -> ! {
+    tracing::error!(message, "cannot start");
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+        let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+        let (body, title) = (wide(message), wide(text::APP_NAME));
+        // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                body.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONERROR,
+            )
+        };
+    }
+    std::process::exit(1)
 }
 
 /// 32 random bytes as hex; generated per launch and kept only in memory.
@@ -67,16 +184,16 @@ fn random_token() -> Result<SecretString, getrandom::Error> {
 #[tauri::command]
 async fn retry_with_port(app: AppHandle, port: u16) -> Result<(), &'static str> {
     if port < 1024 {
-        return Err("invalid_port");
+        return Err("port.invalid");
     }
     let bound = match host::bind(host_config(&app, port)).await {
         Ok(bound) => bound,
-        Err(HostError::PortInUse(_)) => return Err("port_in_use"),
-        Err(_) => return Err("bind_failed"),
+        Err(HostError::PortInUse(_)) => return Err("port.in_use"),
+        Err(_) => return Err("port.bind_failed"),
     };
-    settings::update(&app.state::<AppState>().config_dir, |s| s.port = port)
-        .map_err(|_| "save_failed")?;
-    start(&app, bound, port).map_err(|_| "start_failed")?;
+    settings::update(&app.state::<AppState>().data_dir, |s| s.port = port)
+        .map_err(|_| "settings.save_failed")?;
+    start(&app, bound).map_err(|_| "port.start_failed")?;
     if let Some(w) = app.get_webview_window(PORT_PAGE) {
         let _ = w.close();
     }
@@ -94,7 +211,7 @@ fn get_admin_token(state: State<'_, AppState>) -> String {
 fn open_twitch_activate(app: AppHandle) -> Result<(), &'static str> {
     app.opener()
         .open_url(TWITCH_ACTIVATE_URL, None::<&str>)
-        .map_err(|_| "open_failed")
+        .map_err(|_| "admin.open_failed")
 }
 
 fn host_config(app: &AppHandle, port: u16) -> HostConfig {
@@ -114,19 +231,26 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         port,
         extra_origins,
         admin_token: state.admin_token.expose_secret().to_owned().into(),
-        config_dir: state.config_dir.clone(),
+        data_dir: state.data_dir.clone(),
         twitch_secrets: state.twitch_secrets.clone(),
         twitch: TwitchEndpoints::default(),
     }
 }
 
-fn start(app: &AppHandle, bound: BoundHost, port: u16) -> tauri::Result<()> {
+fn start(app: &AppHandle, bound: BoundHost) -> tauri::Result<()> {
+    let port = bound.port();
+    tracing::info!(port, "host listening");
     tauri::async_runtime::spawn(async move {
         if let Err(e) = bound.serve().await {
-            eprintln!("host stopped: {e}");
+            tracing::error!(code = "host.stopped", error = %e, "host stopped");
         }
     });
     open_admin_window(app, port)
+}
+
+fn webview_data_dir(app: &AppHandle) -> PathBuf {
+    // Inside the data folder, so each copy has its own WebView2 profile.
+    app.state::<AppState>().data_dir.join("WebView2")
 }
 
 fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
@@ -148,8 +272,9 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
     };
     let allowed_origin = format!("http://127.0.0.1:{port}");
     WebviewWindowBuilder::new(app, ADMIN, url)
-        .title("Streamer Toolkit")
+        .title(text::APP_NAME)
         .inner_size(1100.0, 720.0)
+        .data_directory(webview_data_dir(app))
         // Only /admin pages on the app's own origin (dev: the Vite origin).
         .on_navigation(move |url| {
             let origin = url.origin().ascii_serialization();
@@ -162,14 +287,44 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
 
 fn open_port_page(app: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, PORT_PAGE, WebviewUrl::App("port/index.html".into()))
-        .title("Streamer Toolkit")
+        .title(text::APP_NAME)
         .inner_size(480.0, 320.0)
         .resizable(false)
+        .data_directory(webview_data_dir(app))
         .build()?;
     Ok(())
 }
 
-fn focus_main_window(app: &AppHandle) {
+fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", text::TRAY_OPEN, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", text::TRAY_QUIT, true, None::<&str>)?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip(text::APP_NAME)
+        .menu(&Menu::with_items(app, &[&open, &quit])?)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
     let window = app
         .get_webview_window(ADMIN)
         .or_else(|| app.get_webview_window(PORT_PAGE));

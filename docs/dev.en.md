@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 52930037453fac3721583401ee28049b7c1dd2a6ee4af448732b8e98ca8a1aba -->
+<!-- source: docs/dev.md source-sha256: 85e9dfe5db329b647edf580c7cf521efa997539ed3f49bf093b3f1ed894f04e7 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -8,7 +8,14 @@
 - Node: 24 LTS, in `.nvmrc`. Tauri CLI and lefthook are pnpm devDependencies, run with `pnpm tauri …` and `pnpm lefthook …`. pnpm: install once with `npm i -g pnpm`; it then switches versions according to `packageManager` in `package.json`, without Corepack; dependencies are locked by the lockfile; install with `pnpm install --frozen-lockfile`.
 - Visual Studio Build Tools (MSVC) and WebView2 Runtime (required by Tauri).
 
-Exact commands will be added once the walking skeleton exists. Principle: another Windows PC can get it running by following this document.
+Principle: another Windows PC can get it running by following this document.
+
+## Common commands
+- Install dependencies: `pnpm install --frozen-lockfile`
+- Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
+- Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
+- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`
+- Data: dev builds keep their data in `target\debug\data\` and never touch the installed copy; to test with another set of data, add `--data-dir <directory>`. Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
 - The repo is public: anyone can see the code and commit history.
@@ -27,11 +34,11 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 ## Testing baseline
 - Test only the behavior we own, not Twitch/OBS themselves.
 - Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date. UI E2E deferred.
-- Architecture tests: `domain/` contains no occurrence of `sqlx`/`axum` at all; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
+- Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
 - Migration test: merged versions are globally unique and sorted.
 - Must test: redemption deduplication and state transitions, restoring a backup actually works, migrations lose no data.
 - Test with simulated events instead of real Twitch triggers. Simulated events are tagged `source=simulation` and must never be written to any real business records (redemption records, check-in records).
-- Real OBS visuals and sound: one live-stream trial per finished slice is enough.
+- For actual OBS visuals and audio, one live-stream test per completed slice is sufficient.
 - a11y baseline (checked manually once per finished slice): every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), and status is never conveyed by color alone.
 - Security test: `invoke` from the template preview iframe must be rejected.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.
@@ -42,7 +49,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - Overlay routes are read-only, never get OAuth tokens, and cannot call the admin API.
 - User templates and overlays are never rendered directly in the admin window; previews go in an iframe with only `sandbox="allow-scripts"` and receive data via `postMessage`.
 - Escape all viewer input, such as chat messages and display names, to prevent XSS.
-- Tokens are stored in Windows Credential Manager and wrapped in `SecretString` in code; never in logs, plain files or backups.
+- Tokens are stored in Windows Credential Manager (one entry per data directory) and wrapped in `SecretString` in code; never in logs, plain files or backups.
 - The repo is public: never commit secrets, tokens or personal data. Twitch uses the Device Code Flow, so no client secret is needed; each user registers their own Client ID and stores it in settings; it is never built into the repo.
 - Redemption events are deduplicated by Twitch redemption ID.
 - Back up the database automatically before migrations; no operation may silently delete data.
@@ -64,10 +71,10 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 
 ## Language
 - `README.md` and `docs/` (including `docs/modules/`) are bilingual: Traditional Chinese is the only authoritative version, and the English version is `<name>.en.md` in the same folder. `docs/archive/` is not translated. `AGENTS.md` is English only.
-- Write Chinese only while working; English need not keep pace. **Before committing docs**, generate or update the English versions with an AI command, have a person review them, then commit.
+- Write Chinese only while working; English need not keep pace. **Before committing docs**, generate or update the English versions using an AI-assisted command, then have a human review them before committing.
 - Line 1 of an English file records `<!-- source: <path to Chinese file> source-sha256: <hash> -->`, line 2 is the language switch (`[繁體中文](<name>.md) | **English**`); the Chinese file starts with `**繁體中文** | [English](<name>.en.md)`. Document links inside English files point to the matching `.en.md`.
 - `node scripts/check-translations.mjs` checks three things: every Chinese file has an English version, every English file's source points to its same-name Chinese file (no orphans), and each English hash matches its Chinese file; otherwise it fails and prints the problem file or the new hash.
 - Once git exists, the pre-commit hook runs this check and CI runs the same command; the hook only checks and never translates.
-- Code: identifiers, comments, API/DB fields and error codes are always English.
+- Code: identifiers, comments, API/DB fields and error codes are always English. Error codes use `<area>.<reason>`, e.g. `twitch.sign_in_required`.
 - Commits: English Conventional Commits, e.g. `feat(checkin): add daily check-in rule`.
 - Fixed UI strings live in resource files, so translation later needs no component changes.

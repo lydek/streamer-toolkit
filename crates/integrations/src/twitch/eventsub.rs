@@ -7,6 +7,7 @@ use rustls::ClientConfig;
 use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
+use toolkit_core::events::{ChatMessage, Fragment};
 
 use super::{
     auth::AuthError,
@@ -22,27 +23,6 @@ const MAX_BACKOFF_SECS: u64 = 60;
 const SEEN_CAPACITY: usize = 256;
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
-
-/// Internal chat message; Twitch's field names and fragment types stop here.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChatMessage {
-    pub id: String,
-    pub user_id: String,
-    pub user_login: String,
-    pub user_name: String,
-    /// `#RRGGBB`, or `None` when the user never picked a color (or Twitch sent something else).
-    pub color: Option<String>,
-    pub text: String,
-    pub fragments: Vec<Fragment>,
-    /// RFC 3339 time Twitch sent the notification.
-    pub sent_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Fragment {
-    Text(String),
-    Emote { id: String, text: String },
-}
 
 /// Stable error codes, kept for the connection status shown in a later slice.
 #[derive(Debug, thiserror::Error)]

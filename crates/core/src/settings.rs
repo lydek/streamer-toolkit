@@ -1,9 +1,10 @@
-//! User settings stored as JSON in the app config directory (kept apart from data, cache and credentials).
-//! Secrets never go here; the Twitch Client ID is public by design.
+//! User settings stored as `settings.json` in the data folder. Secrets never go here; the Twitch Client ID is
+//! public by design.
 
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,8 @@ use serde::{Deserialize, Serialize};
 pub struct Settings {
     pub port: u16,
     pub twitch_client_id: String,
+    /// Modules the broadcaster turned off; everything else is enabled.
+    pub disabled_modules: Vec<String>,
 }
 
 impl Default for Settings {
@@ -20,6 +23,7 @@ impl Default for Settings {
         Self {
             port: crate::DEFAULT_PORT,
             twitch_client_id: String::new(),
+            disabled_modules: Vec::new(),
         }
     }
 }
@@ -47,10 +51,13 @@ pub fn load(config_dir: &Path) -> Settings {
 
 fn back_up(path: &Path) {
     let backup = path.with_extension("json.bak");
-    // shortcut: stderr until structured logging lands with the skeleton foundations.
     match fs::copy(path, &backup) {
-        Ok(_) => eprintln!("settings unreadable, kept a copy at {}", backup.display()),
-        Err(e) => eprintln!("settings unreadable and could not be copied: {e}"),
+        Ok(_) => {
+            tracing::warn!(code = "settings.unreadable", backup = %backup.display(), "kept a copy")
+        }
+        Err(e) => {
+            tracing::error!(code = "settings.unreadable", error = %e, "could not keep a copy")
+        }
     }
 }
 
@@ -63,8 +70,10 @@ pub fn save(config_dir: &Path, settings: &Settings) -> io::Result<()> {
     fs::rename(tmp, path)
 }
 
-/// Loads, applies `change`, and saves in one step.
+/// Loads, applies `change`, and saves in one step. Serialized so two callers never lose each other's change.
 pub fn update(config_dir: &Path, change: impl FnOnce(&mut Settings)) -> io::Result<Settings> {
+    static WRITER: Mutex<()> = Mutex::new(());
+    let _writer = WRITER.lock().unwrap();
     let mut settings = load(config_dir);
     change(&mut settings);
     save(config_dir, &settings)?;

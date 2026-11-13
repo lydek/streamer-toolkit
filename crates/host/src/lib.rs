@@ -2,7 +2,8 @@
 
 mod admin;
 mod overlay;
-pub mod settings;
+
+pub use toolkit_core::{DEFAULT_PORT, settings};
 
 use std::{
     net::{Ipv4Addr, SocketAddr},
@@ -25,9 +26,6 @@ use axum::{
 use rust_embed::Embed;
 use tokio::net::TcpListener;
 
-/// Default Host port; OBS Browser Source URLs depend on it staying stable.
-pub const DEFAULT_PORT: u16 = 47810;
-
 // frame-src 'none': the release IPC capability covers the whole Host origin, so no same-origin page may be framed
 // inside the admin window.
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
@@ -44,8 +42,8 @@ pub struct HostConfig {
     pub extra_origins: Vec<String>,
     /// Per-launch random token required by `/api/admin`; never written to disk.
     pub admin_token: SecretString,
-    /// App config directory holding `settings.json`.
-    pub config_dir: PathBuf,
+    /// The data folder this copy owns (`settings.json`, logs, later the database).
+    pub data_dir: PathBuf,
     /// Where the broadcaster's Twitch tokens live (Windows Credential Manager in production).
     pub twitch_secrets: Arc<dyn SecretStore>,
     pub twitch: TwitchEndpoints,
@@ -81,22 +79,31 @@ pub enum HostError {
 pub struct BoundHost {
     listener: TcpListener,
     router: Router,
+    port: u16,
 }
 
 /// Binds before serving so the caller can open the port-change page when the port is taken.
-pub async fn bind(config: HostConfig) -> Result<BoundHost, HostError> {
+/// Port 0 picks a free port; the Host and Origin allowlists use the port actually bound.
+pub async fn bind(mut config: HostConfig) -> Result<BoundHost, HostError> {
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, config.port));
     let listener = TcpListener::bind(addr).await.map_err(|e| match e.kind() {
         std::io::ErrorKind::AddrInUse => HostError::PortInUse(config.port),
         _ => HostError::Io(e),
     })?;
+    config.port = listener.local_addr()?.port();
+    let port = config.port;
     Ok(BoundHost {
         listener,
         router: router(config)?,
+        port,
     })
 }
 
 impl BoundHost {
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     pub async fn serve(self) -> std::io::Result<()> {
         axum::serve(self.listener, self.router).await
     }
@@ -123,21 +130,26 @@ impl Guard {
 pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let guard_state = Guard::new(&config);
     let tls = integrations::tls::client_config().map_err(std::io::Error::other)?;
-    let hub = Arc::new(overlay::OverlayHub::new());
+    let bus = Arc::new(toolkit_core::bus::EventBus::default());
+    let modules = Arc::new(toolkit_core::modules::Modules::load(
+        config.data_dir.clone(),
+    ));
+    let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
     let admin = admin::AdminState::new(
         config.admin_token,
-        config.config_dir,
+        config.data_dir,
         config.twitch_secrets,
         config.twitch,
         tls,
-        hub.clone(),
+        chat,
+        modules,
     );
     Ok(Router::new()
         .route("/api/health", get(|| async { "ok" }))
         .merge(
             Router::new()
                 .route("/ws/overlay", get(overlay::ws))
-                .with_state(hub),
+                .with_state(bus),
         )
         .merge(admin::routes(Arc::new(admin)))
         .fallback(static_file)
@@ -236,19 +248,22 @@ mod tests {
     }
 
     fn app() -> Router {
-        router(HostConfig {
+        router(test_config()).unwrap()
+    }
+
+    fn test_config() -> HostConfig {
+        HostConfig {
             port: 47810,
             extra_origins: vec!["http://localhost:5173".into()],
             admin_token: TOKEN.into(),
-            config_dir: std::env::temp_dir().join(format!("st-host-test-{}", std::process::id())),
+            data_dir: std::env::temp_dir().join(format!("st-host-test-{}", std::process::id())),
             twitch_secrets: Arc::new(NoSecrets),
             twitch: TwitchEndpoints {
                 oauth: "http://127.0.0.1:1".into(),
                 helix: "http://127.0.0.1:1".into(),
                 eventsub: "ws://127.0.0.1:1".into(),
             },
-        })
-        .unwrap()
+        }
     }
 
     #[tokio::test]
@@ -322,7 +337,7 @@ mod tests {
             port: 47810,
             extra_origins: Vec::new(),
             admin_token: TOKEN.into(),
-            config_dir: dir.clone(),
+            data_dir: dir.clone(),
             twitch_secrets: secrets.clone(),
             twitch: TwitchEndpoints {
                 oauth: "http://127.0.0.1:1".into(),
@@ -344,6 +359,62 @@ mod tests {
         assert!(secrets.0.lock().unwrap().is_none(), "a new ID signs out");
         assert_eq!(settings::load(&dir).twitch_client_id, "xyz");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn port_zero_binds_a_free_port_and_allows_it() {
+        let mut config = test_config();
+        config.port = 0;
+        let bound = bind(config).await.unwrap();
+        let port = bound.port();
+        assert_ne!(port, 0);
+        let res = bound
+            .router
+            .oneshot(
+                get_req("/api/health", &format!("127.0.0.1:{port}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::OK,
+            "the Host allowlist uses the bound port"
+        );
+    }
+
+    #[tokio::test]
+    async fn simulated_chat_validates_text() {
+        let send = |body: &'static str| {
+            get_req("/api/admin/simulate/chat", "127.0.0.1:47810")
+                .method(Method::POST)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap()
+        };
+        assert_eq!(
+            status(send(r#"{"text":"  "}"#)).await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(send(r#"{"text":"hi","userName":"Tester"}"#)).await,
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[tokio::test]
+    async fn module_switch_rejects_unknown_modules() {
+        let req = get_req("/api/admin/modules/nope", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"enabled":false}"#))
+            .unwrap();
+        assert_eq!(status(req).await, StatusCode::NOT_FOUND);
     }
 
     fn get_req(uri: &str, host: &str) -> axum::http::request::Builder {

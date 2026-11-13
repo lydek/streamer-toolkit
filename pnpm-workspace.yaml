@@ -1,6 +1,8 @@
 packages:
   - apps/web
 
-# lefthook's postinstall only runs `lefthook install`; the root `prepare` script already does that.
 allowBuilds:
+  # esbuild ships its platform binary as an optional dependency; the postinstall check is not needed.
+  esbuild: false
+  # lefthook's postinstall only runs `lefthook install`; the root `prepare` script already does that.
   lefthook: false

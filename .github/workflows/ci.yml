@@ -1,0 +1,52 @@
+# Same checks as docs/dev.md "每次提交前"; Windows only.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Toolchain and components come from rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: Translations in sync
+        run: node scripts/check-translations.mjs
+
+      # Frontend first: the Host embeds apps/web/dist at compile time.
+      - run: pnpm web:lint
+      - run: pnpm web:test
+      - name: Typecheck and build frontend
+        run: pnpm web:build
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Clippy on release-only code (tauri/custom-protocol; checked, never shipped)
+        run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
+      - name: Tests (includes architecture tests)
+        run: cargo test --workspace
+      - name: Licenses and advisories
+        run: cargo deny check
