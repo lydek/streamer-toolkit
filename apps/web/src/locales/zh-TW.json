@@ -1,0 +1,77 @@
+{
+  "app": {
+    "name": "Streamer Toolkit",
+    "loading": "載入中……"
+  },
+  "twitch": {
+    "heading": "Twitch 連線",
+    "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",
+    "clientId": "Client ID",
+    "save": "儲存",
+    "cancel": "取消",
+    "signedIn": "已登入：",
+    "logout": "登出",
+    "enterCode": "請在 Twitch 驗證頁輸入以下代碼：",
+    "openActivate": "開啟 Twitch 驗證頁",
+    "login": "登入 Twitch",
+    "changeClientId": "變更 Client ID"
+  },
+  "modules": {
+    "heading": "模組",
+    "names": {
+      "chat": "聊天室"
+    }
+  },
+  "simulate": {
+    "heading": "事件模擬器",
+    "hint": "送出的事件標記為模擬（source=simulation），只顯示在 Overlay，不寫入任何正式紀錄。",
+    "userName": "名稱",
+    "text": "聊天訊息",
+    "send": "送出模擬聊天",
+    "sent": "已送出。"
+  },
+  "port": {
+    "heading": "連接埠被佔用",
+    "explain": "Host 無法使用目前的連接埠。請輸入新的連接埠，OBS 裡的網址也要一起更新。",
+    "label": "連接埠",
+    "retry": "儲存並重試"
+  },
+  "overlay": {
+    "status": {
+      "connecting": "連線中……",
+      "closed": "已斷線，正在重新連線……"
+    }
+  },
+  "errors": {
+    "unknown": "發生錯誤（{code}）",
+    "admin": {
+      "invalid_client_id": "Client ID 格式不正確（只能是英文字母與數字）。",
+      "open_failed": "無法開啟瀏覽器。"
+    },
+    "settings": {
+      "save_failed": "設定儲存失敗。"
+    },
+    "modules": {
+      "unknown": "沒有這個模組。",
+      "save_failed": "模組設定儲存失敗。"
+    },
+    "simulate": {
+      "invalid_text": "請輸入 1 到 500 字的訊息。"
+    },
+    "twitch": {
+      "client_id_required": "請先設定 Client ID。",
+      "sign_in_required": "請重新登入 Twitch。",
+      "sign_in_expired": "驗證碼已過期，請重新登入。",
+      "sign_in_refused": "Twitch 拒絕了登入，請確認 Client ID 與 app 類別（Public）。",
+      "unreachable": "連不到 Twitch，請檢查網路。",
+      "invalid_response": "Twitch 回應無法辨識，請稍後再試。",
+      "storage_failed": "無法把登入資料存進 Windows 認證管理員。"
+    },
+    "port": {
+      "invalid": "連接埠必須介於 1024 到 65535。",
+      "in_use": "這個連接埠也被佔用了，請換一個。",
+      "bind_failed": "無法使用這個連接埠，請檢視記錄檔。",
+      "start_failed": "無法啟動 Host，請檢視記錄檔。"
+    }
+  }
+}

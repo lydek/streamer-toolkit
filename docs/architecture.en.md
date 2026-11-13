@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 3d731056a15cfcd6d02a7d493687410b815ce197d959e6319e8b3f3bfa2ff60d -->
+<!-- source: docs/architecture.md source-sha256: 048f124753447be3b7553f711904bb982d347b5f1e065f7f6e2bc96ce92330f9 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -10,7 +10,7 @@ Adjust during the skeleton as needed, then update this section.
 
 ```text
 crates/
-  core/            # Shared core: settings, module registry and lifecycle, error codes, event envelope, in-memory event broadcast, outbox (with its own migrations)
+  core/            # Shared core (package name `toolkit-core`, avoiding Rust's built-in `core`): settings, module registry and enable/disable controls, internal integration events, event envelope, in-memory event broadcast; outbox (with its own migrations) comes later
   integrations/    # Twitch (EventSub) and OBS (obws) adapters: turn external events into internal events; handle OAuth, reconnect, backoff, rate limits
   modules/
     chat/          # Chat display (thin)
@@ -19,6 +19,7 @@ crates/
     checkin/       # Daily check-in (complex): subscribes to RedemptionRecorded and chat command events
     sound/         # Sound management (thin)
   host/            # Composition root: wires modules, Axum HTTP/WebSocket routes, overlay static pages
+  arch-tests/      # Architecture tests only (see §7)
 apps/
   desktop/         # Tauri 2 shell: starts the Host in-process, system tray, single-instance lock; the admin window loads the Host URL
   web/             # Vue 3 + TS: admin UI, overlay pages, small port-change page
@@ -86,10 +87,10 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 
 ## 5. External communication
 - The only MVP clients are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control come after the MVP.
-- HTTP carries commands and queries; WebSocket pushes events; clients fetch a snapshot before subscribing and fetch it again after reconnecting.
+- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, to ensure that no events are lost or duplicated during snapshot initialization), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot. The snapshot's `payload` lists, per event type, the recent events kept in memory (for example the last 50 `chat.message` events).
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
-- **Port**: a fixed default port (number chosen during the skeleton). If it is taken, do not switch ports automatically, so OBS URLs never break silently. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
+- **Port**: a fixed default port, `47810`, stored in the data directory's `settings.json`. If it is taken, do not switch ports automatically, so OBS URLs never break silently; the only exception is a data directory's first start (no `settings.json` and no OBS URL yet): if the default port is taken, a free port is picked and saved, and used from then on. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
 - **Frontend files**:
   - `apps/web` has three kinds of entries: the admin UI, each overlay, and the small port-change page.
   - The admin UI and overlay build output is embedded into the executable with `rust-embed` and served by the Host.
@@ -109,12 +110,12 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 ### Local API security
 Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-site requests, DNS rebinding, WebSocket hijacking), so the following is also required:
 - **Admin window**: loads `http://127.0.0.1:<port>/admin` and is created only after the Host has bound the port; in development it loads the Vite dev server instead. The admin window and the API share one origin, so there is no CORS and no Tauri origin to handle. The admin window may only navigate to `/admin` paths on the app's own origin (`on_navigation` restriction), and opening new windows (`window.open`, `target=_blank`) is always denied (`on_new_window`); the Device Code Flow verification URL is opened in the system browser by a Rust command using `tauri-plugin-opener`, and the window shows only the code.
-  - The Host sends a strict `Content-Security-Policy` on `/admin` (and every path under it): `script-src 'self'` (no inline scripts, no eval); `connect-src 'self' ipc: http://ipc.localhost` (Tauri IPC); `style-src 'self' 'unsafe-inline'` (PrimeVue injects styles at runtime, or use PrimeVue's nonce instead); `img-src 'self' data:` and `font-src 'self' data:` (Vite inlines small files as `data:`). No `default-src`. vue-i18n uses precompiled messages, so `unsafe-eval` is not needed.
+  - The Host sends a strict `Content-Security-Policy` on `/admin` (and every path under it): `script-src 'self'` (no inline scripts, no eval); `connect-src 'self' ipc: http://ipc.localhost` (Tauri IPC); `style-src 'self' 'unsafe-inline'` (PrimeVue injects styles at runtime, or use PrimeVue's nonce instead); `img-src 'self' data:` and `font-src 'self' data:` (Vite inlines small files as `data:`); `frame-src 'none'` (the release IPC capability covers the whole Host origin, so same-origin pages must not be framed inside the admin window; when template previews are added, allow only the sources the sandboxed iframe needs). No `default-src`. vue-i18n uses precompiled messages, so `unsafe-eval` is not needed.
 - **Admin token**: the Host generates a random token at every launch; it is never written to disk. The admin window fetches it at startup through a Tauri IPC command; the token stays in memory only, never in localStorage (WebView2 writes that to disk). Admin HTTP requests carry an `Authorization` header; admin WebSocket connections send the token in their first message.
 - **Tauri IPC permissions**: app commands are declared in `build.rs` with `tauri_build::AppManifest`, and every command needs an explicit grant. There are three capabilities:
   1. Small port-change page (local origin, `port` window only): grants only the commands that validate and save the port and retry the bind.
   2. Admin window, dev (local origin through `devUrl`, `admin` window only): grants admin commands such as fetching the token.
-  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>/admin*` and the `admin` window only. It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
+  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>` and the `admin` window only (Tauri matches the IPC request's Origin, which has no path, so it cannot be limited to `/admin`; `on_navigation` restricts the path). It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
 - **User templates**:
   - Custom templates and overlays are never rendered directly in the admin window; previews go in an iframe with only `sandbox="allow-scripts"` (no `allow-same-origin`), so template code cannot reach the admin window's IPC or token; a test checks that `invoke` from the preview iframe is rejected.
   - The preview iframe's origin is `null`, so it cannot connect to the Host; the admin window passes snapshots and sample events in with `postMessage`.
@@ -125,14 +126,31 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 - **Overlays**: routes are read-only, can only read snapshots and subscribe to public events, and have no state-changing endpoints; OBS URLs contain no token.
 - **OBS Dock**: not in the MVP; its pairing will be designed later together with mobile remote control.
 
+### Twitch rate limits
+Twitch's official documentation is the source for these numbers; update this section when Twitch changes them.
+- **Helix API**: a token bucket per client ID and user, refilled every minute (for example 800 points; most endpoints cost 1 point per call). Every Helix request goes through the one Helix client in `integrations`: a 401 gets one refresh and one retry; a 429 waits until `Ratelimit-Reset` (at most 1 minute) before trying again and is never resent right away. Some 429s are unrelated to the points bucket (for example EventSub limits); without `Ratelimit-Reset`, normal backoff applies.
+- **EventSub WebSocket**: per user token (client ID and user), at most 3 connections with enabled subscriptions, at most 300 subscriptions per connection, and a `max_total_cost` of 10. The app opens only 1 connection per account and closes the old one before changing the Client ID or signing out; on `session_reconnect` it moves to the reconnect URL Twitch sends (this is not a new connection; subscriptions carry over and are not created again); failed connections reconnect with exponential backoff (from 1 second, at most 60 seconds).
+- **Device Code Flow**: poll at the `interval` Twitch returns until `expires_in`, never faster, and at least 1 second apart.
+- **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
+
 ## 6. Host lifecycle
-The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; only quitting from the tray stops the Host.
+The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
+
+### Data directory
+Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. The app ships as a portable package only, so data defaults to the `data` folder next to the executable.
+- Which data directory is used: the one given by `--data-dir <path>` on the command line; otherwise the `data` folder next to the executable (dev builds too, so theirs is `target\debug\data\`).
+- Contents: `settings.json`, `logs/` (JSON, rotated daily, kept 14 days), `cache/`, `WebView2/`, `instance-id`; the database and pre-upgrade backups come later.
+- Only one instance may run per data directory; different data directories can run side by side (for example to test a new version). `instance-id` is a random ID inside the data directory and survives moving it; a copied data directory keeps the same `instance-id`, counts as the same instance and cannot run next to the original.
+- Twitch sign-in is per data directory: the Credential Manager entry is named `<instance-id>/twitch`.
+- If the data directory is not writable, show an error and exit; never fall back to another location.
+- Side-by-side copies: extract the package more than once, or point `--data-dir` at different directories. There is no installer (see "Distribution" in decisions.en.md).
 
 Startup order:
-1. Register `tauri-plugin-single-instance` first and confirm this is the only instance, so a second instance does not try to take the port and fail before handing off.
+1. Resolve the data directory and check that it is writable. `tauri-plugin-single-instance` names its lock after the identifier, so at startup the identifier gets the `instance-id` appended and the lock is per data directory. Register this plugin first, so a second copy never tries to take the port before handing off.
 2. The Host binds the port; on failure, open the small port-change page and retry after the user saves.
 3. Release build: create the remote capability for the current port, then create the admin window and load the Host URL. Dev mode: the admin window loads the Vite dev server and uses capability 2.
+4. Before creating any window, check that the WebView2 Runtime is present (built into Windows 11; missing on a few Windows 10 PCs). If it is missing, show an explanation and open Microsoft's download page; the Host, overlays and tray keep running, and after installing it, choosing Open in the tray creates the window without a restart.
 
 ## 7. Enforcing the rules
 - Cross-module dependencies: enforced by each crate's `Cargo.toml`.
-- Layer rules: architecture tests run in CI and at least check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths) and that modules do not use other modules' non-public types.
+- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`. Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.

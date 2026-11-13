@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: e9c6aab73f876c173f4fa066ae8e71c6a9d7983d28e12fd2bc71f6c389827b23 -->
+<!-- source: docs/decisions.md source-sha256: f6ee2b654f69f14a23e619e39814238da6720b186384df3119a296e83f9bebd9 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -37,7 +37,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Remote repo | GitHub public |
 | License | MIT (`LICENSE`) |
 | Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
-| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the installer and the About screen |
+| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the portable zip and the About screen |
 | Bundled assets | Only redistributable assets (CC0, CC-BY, OFL for fonts, etc.), with source and license recorded in `assets/CREDITS.md`; user-imported assets never go into the repo |
 | Branches | Default `main`; each slice gets a short-lived `feat/<slice>` branch, squash-merged by PR after CI passes |
 | Line endings | `.gitattributes`: LF everywhere; CRLF for `.ps1`/`.bat`/`.cmd`; images, sounds, videos and fonts marked binary |
@@ -48,9 +48,10 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Twitch scopes | Request all MVP scopes at first login: `user:read:chat`, `moderator:read:followers`, `channel:read:subscriptions`, `channel:read:redemptions` |
 | Token refresh | Only one refresh at a time; write the new refresh token to keyring before using the new access token, and if that write fails, keep the new tokens in memory and retry the write (if the app closes before the retry succeeds, the next start requires logging in again); if refresh fails (400/401), restart the Device Code Flow and show "login required" in the UI. Public-client refresh tokens expire after 30 days, so long inactivity requires logging in again |
 | Admin window | Loads the Host URL `http://127.0.0.1:<port>/admin` (same origin as the API, no CORS); may only navigate to `/admin` paths, and opening new windows is always denied; `/admin` sends a strict CSP; the Twitch verification page is opened in the system browser by a Rust command |
-| Tauri IPC permissions | App commands declared with `AppManifest`; three capabilities: small port-change page (`port` window only), admin window dev (local, `admin` window only), admin window release build (remote, created at startup for the actual port, URLs limited to `/admin*`); "dev" means the `tauri/custom-protocol` feature is off (`cfg(dev)`): `tauri build` turns it on and is the only distributable build; `tauri dev` and plain cargo commands are dev; `apps/desktop` decides and tells the Host through runtime configuration |
+| Tauri IPC permissions | App commands declared with `AppManifest`; three capabilities: small port-change page (`port` window only), admin window dev (local, `admin` window only), admin window release build (remote, created at startup for the actual port, URLs limited to the Host origin, path restricted by `on_navigation`); "dev" means the `tauri/custom-protocol` feature is off (`cfg(dev)`): `tauri build` turns it on and is the only distributable build; `tauri dev` and plain cargo commands are dev; `apps/desktop` decides and tells the Host through runtime configuration |
 | Local API security | Per-launch random admin token, delivered to the admin window over an IPC command and kept in memory only; Host header allowlist; Origin checks (`Origin: null` rejected); overlays are read-only, carry no token, and every response on overlay and template paths sends `script-src 'self'; object-src 'none'`; the template directory serves only non-script files with `nosniff`; template previews go in a sandboxed iframe and receive data via `postMessage` (details in architecture.en.md) |
-| Port | Fixed default port; if taken, never switch ports automatically; instead open the small port-change page where the user changes it and retries |
+| Port | Fixed default port `47810`. If the configured port is occupied, do not change it automatically; instead, open the small port-change page for the user to choose another port and retry. On the first launch of a data directory, if the default port is occupied, automatically select and save an available port |
+| Data directory | Each data directory serves as an application data unit, identified by its `instance-id`: the one given by `--data-dir`, otherwise the `data` folder next to the executable; settings, logs, cache and WebView2 data all live in it; only one instance may run per data directory, different data directories can run side by side; Twitch sign-in is per data directory; an unwritable data directory shows an error and exits (details in architecture.en.md §6) |
 | Frontend files | Admin UI and overlays embedded into the executable with `rust-embed`, served by the Host; the small port-change page serves as Tauri's `frontendDist`; `app.windows: []`, with all windows created from Rust (in `setup` or after a successful port retry); the build `assets/` directory and the template directory send `Access-Control-Allow-Origin: *` so the preview iframe can load them |
 | Dev mode | Vite dev server + proxy (`/api`, `/ws`, target `http://127.0.0.1:<port>`, with `changeOrigin: true` and `ws: true`) to the Host; Tauri `build.devUrl` set to the Vite URL, Vite `server.strictPort: true`; Vite sends the same CSP as `/admin`; in dev mode Vite allows the `null` origin on everything except `/api` and `/ws` (`server.cors: false` + middleware); dev mode adds the Vite origin to the Origin allowlist |
 
@@ -59,14 +60,15 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 |---|---|
 | Domain event dispatch | Custom outbox dispatcher: events are written to the outbox table in the same transaction as the business data, dispatched in the background with delivery state tracked per subscriber, retried on failure and shown in the UI, and resent after a restart; when disabling a module the streamer chooses "pause" (events kept and delivered after re-enabling) or "off" (after a warning, events from the disabled period skipped); events past the retry cap move to a dead-letter queue; fully delivered events are cleaned up periodically; subscribers deduplicate by event ID with an inbox table (details in architecture.en.md) |
 | Migrations | Each module has its own folder, files use timestamp versions (globally unique); `host` merges them into a single SQLx Migrator at startup; rules and dev command in architecture.en.md |
-| Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup) |
+| Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup); error codes use `<area>.<reason>` (e.g. `twitch.sign_in_required`), the API returns `{"code": …}`, the UI shows the resource key `errors.<code>`, and logs use a `code` field too |
 | Time | `chrono` + `chrono-tz` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
-| Twitch | `twitch_api` (Helix and EventSub types) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
+| Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
+| Outgoing HTTPS | `hyper-util` + `hyper-rustls` + `rustls` (`ring`) + `rustls-platform-verifier`: certificates checked against the Windows store; EventSub `wss://` shares the same TLS config |
 | OBS | `obws`; connected in the MVP, starting with OBS connection status |
-| Credentials | `keyring`, pinned to a major version with the Windows native store feature enabled (never falling back to the mock store) |
+| Credentials | `keyring-core` + `windows-native-keyring-store` (the combination keyring 4 recommends apps link directly), compiled on Windows only; never falls back to a mock store |
 | Secrets | `secrecy`: tokens are wrapped in `SecretString` and never logged |
-| Logging | `tracing` + `tracing-subscriber` (JSON) + `tracing-appender` (daily rotation with a `max_log_files` retention limit); output-layer masking is only a backup |
+| Logging | `tracing` + `tracing-subscriber` (JSON) + `tracing-appender` (daily rotation with a 14-day retention period); written to the data directory's `logs/`, level adjustable with `RUST_LOG`; output-layer masking is only a backup |
 | Embedded frontend | `rust-embed` (with `debug-embed`) |
 | OpenAPI | `utoipa` |
 | Frontend API types | `openapi-typescript` + `openapi-fetch`; WS event types also live in OpenAPI components |
@@ -75,19 +77,35 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | UI component library | PrimeVue |
 | Frontend state | Pinia |
 | Frontend tests | Vitest + Vue Test Utils |
+| Frontend lint | ESLint (flat config + `eslint-plugin-vue` + `@vue/eslint-config-typescript`), correctness-focused rules only; no formatting or stylistic rules |
+| UI strings | `vue-i18n` + `@intlify/unplugin-vue-i18n`: resource files are precompiled at build time, so no `unsafe-eval` at run time |
 | Single instance | `tauri-plugin-single-instance` |
 | Opening external URLs | `tauri-plugin-opener`, called from a Rust command (opens the Twitch verification page in the system browser) |
-| Installer | NSIS (Tauri bundler) |
-| Package management | Node 26 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
+| Distribution | Portable zip only (`tauri build --no-bundle` produces the executable, then it is packed into a zip); no installer. The app is not code-signed; the documentation includes the SmartScreen "Run anyway" and zip "Unblock" steps. Updates: at startup the app checks GitHub Releases for the latest version and, if there is a newer one, the admin UI shows a notice with a download link; the user extracts the new zip into the existing application folder. The zip never contains a `data` folder, so extracting over the old folder does not overwrite or modify existing data. Upgrades only: an older build refuses to open newer data |
+| WebView2 | Uses the system's Evergreen WebView2 Runtime (built into Windows 11); detected at startup, and if missing, an explanation is shown and Microsoft's download page opens while the Host, overlays and tray keep running; no fixed-version runtime is bundled |
+| Dev tools | `@tauri-apps/cli` and `lefthook` are pnpm devDependencies, version-locked by the lockfile, with no global install |
+| Package management | Node 24 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
 
 ## Adoption timing
 | When | Items |
 |---|---|
-| **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, automatic backup before migrations, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program/user data/cache/credentials kept apart), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | Outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (installer slice) |
-| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, auto-update, sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
+| **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
+| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
 ## Change log
 | Date | What changed | Why |
 |---|---|---|
+| 2026-11-13 | Node 26 LTS changed to Node 24 LTS | Already installed on the dev machine and supported until 2028-04; pnpm manages its own version without Corepack, so 26's advantages do not matter for this project |
+| 2026-11-13 | Tauri CLI and lefthook changed to pnpm devDependencies | Versions locked by the lockfile, with no system changes |
+| 2026-11-13 | Twitch types changed from the `twitch_api` crate to hand-written serde types | The MVP uses only a few events; drops a large dependency tree and gives full control over fields and values such as `unknown` |
+| 2026-11-13 | Data storage changed to the "data directory" model (`--data-dir`, portable copies, one instance per data directory) | Testing and upgrades need side-by-side copies; NSIS registers only one install per product, so portable copies and `--data-dir` are used instead |
+| 2026-11-13 | SQLite and the automatic backup before migrations moved to the redemption records slice | The skeleton has no tables yet; the backup is then tested with real data |
+| 2026-11-13 | ESLint chosen for frontend lint | Provides the most comprehensive support for Vue SFCs |
+| 2026-11-13 | Error codes unified as `<area>.<reason>` | The API, UI resource keys and logs share one code |
+| 2026-11-13 | The core crate's package name is `toolkit-core` | `core` collides with Rust's built-in crate |
+| 2026-11-13 | The MVP ships only a Windows portable package, no installer; data always sits next to the executable (or in `--data-dir`) | No code-signing certificate will be bought, and unsigned installers are more likely to be blocked by antivirus and SmartScreen; a portable package also fits the data directory model |
+| 2026-11-13 | The app is not code-signed | No certificate will be bought; Azure Artifact Signing is open to individuals only in the USA and Canada; SmartScreen warnings are accepted, and the documentation includes the steps |
+| 2026-11-13 | Missing WebView2 is detected and the user is guided to install it | Built into Windows 11 and present on the vast majority of Windows 10 PCs; a fixed-version runtime gets no automatic security updates, so none is bundled |
+| 2026-11-13 | The portable package uses "new-version notice + manual replacement"; auto-update moves to after the MVP | The Tauri updater supports only installers on Windows; the app must never replace itself during a stream, and manual replacement is the safest and simplest |

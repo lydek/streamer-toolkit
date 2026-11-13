@@ -1,0 +1,10 @@
+[package]
+name = "arch-tests"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Architecture rules checked in CI (docs/architecture.md §7)."
+
+[dev-dependencies]
+cargo_metadata = "0.23.1"
