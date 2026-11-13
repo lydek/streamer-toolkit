@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 1b82294c7ea53daf14ced52bbc2d5407749049f324f664a10cd532d629d61226 -->
+<!-- source: docs/scope.md source-sha256: 87bb0be3d6539ff5a43e352b2d1289b3c6d4b7b16d9b7f9dab347b1db29e475e -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -24,7 +24,7 @@ Build in order. Try each slice on a real stream when it is done, and move on onl
 | 4 | Daily check-in | Viewers check in by redeeming channel points or with a chat command; the streamer can manually register or backfill check-ins in the UI; one check-in per viewer per business day, with the day boundary set by the streamer's time zone; old check-in data can be imported (preview before import, deduplication, original file untouched; supported formats to be confirmed) |
 | 5 | Sound management | Import local sound files and choose which event triggers each one |
 | 6 | Backup and restore | One-click export/import of settings and records, with all data preserved after import |
-| 7 | Windows portable package | Usable on another PC after extracting the zip; the zip includes the third-party license list and instructions for SmartScreen and "Unblock" |
+| 7 | Windows portable package | Usable on another PC after extracting the zip; the zip includes a list of third-party licenses and instructions for handling SmartScreen warnings and unblocking the zip. When a new version is available, the admin UI notifies the user; extracting the new zip over the existing folder updates the app without affecting existing data |
 
 **After the MVP (confirmed needs):** personal badges, shoutout clips. Technical follow-ups are listed in [decisions.en.md](decisions.en.md).
 

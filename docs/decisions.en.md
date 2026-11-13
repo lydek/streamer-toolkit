@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 5f95f31d11a5a4f1fdb2c5bde7ca43a3f401a5113a343ca8195520c6258cc97e -->
+<!-- source: docs/decisions.md source-sha256: f6ee2b654f69f14a23e619e39814238da6720b186384df3119a296e83f9bebd9 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -81,7 +81,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | UI strings | `vue-i18n` + `@intlify/unplugin-vue-i18n`: resource files are precompiled at build time, so no `unsafe-eval` at run time |
 | Single instance | `tauri-plugin-single-instance` |
 | Opening external URLs | `tauri-plugin-opener`, called from a Rust command (opens the Twitch verification page in the system browser) |
-| Distribution | Portable zip only (`tauri build --no-bundle` builds the executable, then it is packed into a zip); no installer. The app is not code-signed; the documentation includes the SmartScreen "Run anyway" and zip "Unblock" steps |
+| Distribution | Portable zip only (`tauri build --no-bundle` produces the executable, then it is packed into a zip); no installer. The app is not code-signed; the documentation includes the SmartScreen "Run anyway" and zip "Unblock" steps. Updates: at startup the app checks GitHub Releases for the latest version and, if there is a newer one, the admin UI shows a notice with a download link; the user extracts the new zip into the existing application folder. The zip never contains a `data` folder, so extracting over the old folder does not overwrite or modify existing data. Upgrades only: an older build refuses to open newer data |
 | WebView2 | Uses the system's Evergreen WebView2 Runtime (built into Windows 11); detected at startup, and if missing, an explanation is shown and Microsoft's download page opens while the Host, overlays and tray keep running; no fixed-version runtime is bundled |
 | Dev tools | `@tauri-apps/cli` and `lefthook` are pnpm devDependencies, version-locked by the lockfile, with no global install |
 | Package management | Node 24 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
@@ -91,7 +91,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
 | **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
-| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, auto-update, sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
+| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
 ## Change log
@@ -108,3 +108,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-13 | The MVP ships only a Windows portable package, no installer; data always sits next to the executable (or in `--data-dir`) | No code-signing certificate will be bought, and unsigned installers are more likely to be blocked by antivirus and SmartScreen; a portable package also fits the data directory model |
 | 2026-11-13 | The app is not code-signed | No certificate will be bought; Azure Artifact Signing is open to individuals only in the USA and Canada; SmartScreen warnings are accepted, and the documentation includes the steps |
 | 2026-11-13 | Missing WebView2 is detected and the user is guided to install it | Built into Windows 11 and present on the vast majority of Windows 10 PCs; a fixed-version runtime gets no automatic security updates, so none is bundled |
+| 2026-11-13 | The portable package uses "new-version notice + manual replacement"; auto-update moves to after the MVP | The Tauri updater supports only installers on Windows; the app must never replace itself during a stream, and manual replacement is the safest and simplest |
