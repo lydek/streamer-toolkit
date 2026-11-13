@@ -136,18 +136,19 @@ apps/
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。
 
 ### 資料夾
-每個資料夾是一個執行單位：設定、記錄檔、快取與 WebView2 資料都在裡面，程式檔案不放資料（可攜版除外）。
-- 使用哪個資料夾，依序：命令列 `--data-dir <路徑>`；執行檔旁邊有 `data` 資料夾就用它（可攜版；dev 建置一律用它，不會碰到安裝版的資料）；否則用 `%LOCALAPPDATA%\<identifier>`（安裝版；NSIS 解除安裝時有「刪除 app 資料」選項，刪除的就是這個資料夾）。
+每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
+- 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
 - 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`WebView2/`、`instance-id`；之後加資料庫與升級前備份。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
 - Twitch 登入依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
-- 多份並存靠可攜版與 `--data-dir`，不靠多份安裝：NSIS 同一個產品名稱只登記一份安裝，換目錄安裝會先移除舊目錄的程式。
+- 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
 
 啟動順序：
 1. 決定資料夾並確認可寫入；`tauri-plugin-single-instance` 依 identifier 命名它的鎖，因此啟動時把 identifier 加上 `instance-id`，讓鎖依資料夾區分。先註冊這個 plugin，第二份程式在交棒前不會去搶 port。
 2. Host 綁 port；失敗時開啟 port 修改小頁面，使用者儲存後重試。
 3. 正式版：為目前的 port 建立 remote capability，再建立管理視窗並載入 Host 網址。dev 模式：管理視窗載入 Vite dev server，使用 capability 2。
+4. 建立任何視窗前先確認有 WebView2 Runtime（Windows 11 內建，少數 Windows 10 沒有）。缺少時顯示說明並開啟微軟的下載頁，Host、Overlay 與系統匣照常運作；安裝後在系統匣選「開啟」就會建立視窗，不必重新啟動。
 
 ## 7. 規則怎麼強制
 - 跨模組相依性：由各 crate 的 `Cargo.toml` 強制。

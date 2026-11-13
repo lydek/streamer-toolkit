@@ -1,5 +1,6 @@
-//! The data folder is the unit of a running copy: settings, logs, cache, WebView2 data and the instance ID all
-//! live in it, and only one copy may run per folder. Program files never hold data unless a copy is portable.
+//! The data directory is the unit of a running copy: settings, logs, cache, WebView2 data and the instance ID
+//! all live in it, and only one copy may run per directory. The app ships portable only, so data sits next to
+//! the executable unless `--data-dir` points elsewhere.
 
 use std::{
     env, fs, io,
@@ -8,13 +9,8 @@ use std::{
 
 const INSTANCE_FILE: &str = "instance-id";
 
-/// Which folder this copy uses, in order:
-/// 1. `--data-dir <path>` on the command line;
-/// 2. a `data` folder next to the executable (portable copy; dev builds always use it, so they never touch the
-///    installed copy's data);
-/// 3. `%LOCALAPPDATA%\<identifier>` for the installed copy (the NSIS uninstaller's "delete app data" option
-///    removes exactly this folder).
-pub fn resolve(identifier: &str, dev: bool) -> io::Result<PathBuf> {
+/// `--data-dir <path>` on the command line, otherwise the `data` folder next to the executable.
+pub fn resolve() -> io::Result<PathBuf> {
     let args: Vec<String> = env::args().collect();
     if let Some(i) = args.iter().position(|a| a == "--data-dir") {
         let dir = args.get(i + 1).ok_or_else(|| {
@@ -26,13 +22,7 @@ pub fn resolve(identifier: &str, dev: bool) -> io::Result<PathBuf> {
         .parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "executable has no folder"))?;
-    let portable = exe_dir.join("data");
-    if dev || portable.is_dir() {
-        return Ok(portable);
-    }
-    let local = env::var_os("LOCALAPPDATA")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA is not set"))?;
-    Ok(PathBuf::from(local).join(identifier))
+    Ok(exe_dir.join("data"))
 }
 
 /// Creates the folder and proves it is writable; a copy never falls back to another folder silently.

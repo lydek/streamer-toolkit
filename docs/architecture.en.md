@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: d77622afea5c820e92c9edd6828fde9be88a958c5eb31779425dd19c9c3ed531 -->
+<!-- source: docs/architecture.md source-sha256: 048f124753447be3b7553f711904bb982d347b5f1e065f7f6e2bc96ce92330f9 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -137,18 +137,19 @@ Twitch's official documentation is the source for these numbers; update this sec
 The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
 
 ### Data directory
-Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. Application files and user data are kept separate, except in portable distributions.
-- Which data directory is used, in order: `--data-dir <path>` on the command line; a `data` folder next to the executable if there is one (portable copy; dev builds always use it, so they never touch the installed copy's data); otherwise `%LOCALAPPDATA%\<identifier>` (installed copy; the NSIS uninstaller has a "delete app data" option, and this is the directory it deletes).
+Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. The app ships as a portable package only, so data defaults to the `data` folder next to the executable.
+- Which data directory is used: the one given by `--data-dir <path>` on the command line; otherwise the `data` folder next to the executable (dev builds too, so theirs is `target\debug\data\`).
 - Contents: `settings.json`, `logs/` (JSON, rotated daily, kept 14 days), `cache/`, `WebView2/`, `instance-id`; the database and pre-upgrade backups come later.
 - Only one instance may run per data directory; different data directories can run side by side (for example to test a new version). `instance-id` is a random ID inside the data directory and survives moving it; a copied data directory keeps the same `instance-id`, counts as the same instance and cannot run next to the original.
 - Twitch sign-in is per data directory: the Credential Manager entry is named `<instance-id>/twitch`.
 - If the data directory is not writable, show an error and exit; never fall back to another location.
-- Side-by-side copies use portable copies and `--data-dir`, not several installs: NSIS registers only one install per product name, and installing to another folder removes the program from the old one first.
+- Side-by-side copies: extract the package more than once, or point `--data-dir` at different directories. There is no installer (see "Distribution" in decisions.en.md).
 
 Startup order:
 1. Resolve the data directory and check that it is writable. `tauri-plugin-single-instance` names its lock after the identifier, so at startup the identifier gets the `instance-id` appended and the lock is per data directory. Register this plugin first, so a second copy never tries to take the port before handing off.
 2. The Host binds the port; on failure, open the small port-change page and retry after the user saves.
 3. Release build: create the remote capability for the current port, then create the admin window and load the Host URL. Dev mode: the admin window loads the Vite dev server and uses capability 2.
+4. Before creating any window, check that the WebView2 Runtime is present (built into Windows 11; missing on a few Windows 10 PCs). If it is missing, show an explanation and open Microsoft's download page; the Host, overlays and tray keep running, and after installing it, choosing Open in the tray creates the window without a restart.
 
 ## 7. Enforcing the rules
 - Cross-module dependencies: enforced by each crate's `Cargo.toml`.

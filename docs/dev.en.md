@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 85e9dfe5db329b647edf580c7cf521efa997539ed3f49bf093b3f1ed894f04e7 -->
+<!-- source: docs/dev.md source-sha256: 63470622580c3e07edcdb99d2693b7b9da4df0435b87515b8f58eb5b7bfc53f0 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -15,7 +15,7 @@ Principle: another Windows PC can get it running by following this document.
 - Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
 - Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`
-- Data: dev builds keep their data in `target\debug\data\` and never touch the installed copy; to test with another set of data, add `--data-dir <directory>`. Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
+- Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>`. Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
 - The repo is public: anyone can see the code and commit history.
@@ -59,7 +59,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - This project is MIT. Rust dependency licenses must be on the `cargo-deny` allowlist (MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0).
 - Check frontend dependencies with `pnpm licenses list`, only those shipped in the build; their allowlist also includes 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0.
 - Never add GPL/LGPL/AGPL.
-- The installer slice generates `THIRD_PARTY_LICENSES` (`cargo-about` + `pnpm licenses`), shipped with the installer.
+- The portable package slice generates `THIRD_PARTY_LICENSES` (`cargo-about` + `pnpm licenses`), shipped in the zip.
 - Bundled assets (sounds, fonts, icons) must have redistributable licenses (CC0, CC-BY, OFL, etc.), with source and license recorded in `assets/CREDITS.md`. Assets users import themselves never go into the repo.
 
 ## Documentation rules

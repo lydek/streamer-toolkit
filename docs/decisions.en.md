@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 9925ce093752b5dd3c8a1727bf6feab9036a78035ed7ea5c207fd5c85299a278 -->
+<!-- source: docs/decisions.md source-sha256: 5f95f31d11a5a4f1fdb2c5bde7ca43a3f401a5113a343ca8195520c6258cc97e -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -37,7 +37,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Remote repo | GitHub public |
 | License | MIT (`LICENSE`) |
 | Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
-| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the installer and the About screen |
+| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the portable zip and the About screen |
 | Bundled assets | Only redistributable assets (CC0, CC-BY, OFL for fonts, etc.), with source and license recorded in `assets/CREDITS.md`; user-imported assets never go into the repo |
 | Branches | Default `main`; each slice gets a short-lived `feat/<slice>` branch, squash-merged by PR after CI passes |
 | Line endings | `.gitattributes`: LF everywhere; CRLF for `.ps1`/`.bat`/`.cmd`; images, sounds, videos and fonts marked binary |
@@ -51,7 +51,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Tauri IPC permissions | App commands declared with `AppManifest`; three capabilities: small port-change page (`port` window only), admin window dev (local, `admin` window only), admin window release build (remote, created at startup for the actual port, URLs limited to the Host origin, path restricted by `on_navigation`); "dev" means the `tauri/custom-protocol` feature is off (`cfg(dev)`): `tauri build` turns it on and is the only distributable build; `tauri dev` and plain cargo commands are dev; `apps/desktop` decides and tells the Host through runtime configuration |
 | Local API security | Per-launch random admin token, delivered to the admin window over an IPC command and kept in memory only; Host header allowlist; Origin checks (`Origin: null` rejected); overlays are read-only, carry no token, and every response on overlay and template paths sends `script-src 'self'; object-src 'none'`; the template directory serves only non-script files with `nosniff`; template previews go in a sandboxed iframe and receive data via `postMessage` (details in architecture.en.md) |
 | Port | Fixed default port `47810`. If the configured port is occupied, do not change it automatically; instead, open the small port-change page for the user to choose another port and retry. On the first launch of a data directory, if the default port is occupied, automatically select and save an available port |
-| Data directory | Each data directory serves as an application data unit, identified by its `instance-id`: `--data-dir` > a `data` folder next to the executable (portable copy; dev builds always use it) > `%LOCALAPPDATA%\<identifier>` (installed copy); settings, logs, cache and WebView2 data all live in it; only one instance may run per data directory, different data directories can run side by side; Twitch sign-in is per data directory; an unwritable data directory shows an error and exits; side-by-side copies use portable copies, not several installs (details in architecture.en.md §6) |
+| Data directory | Each data directory serves as an application data unit, identified by its `instance-id`: the one given by `--data-dir`, otherwise the `data` folder next to the executable; settings, logs, cache and WebView2 data all live in it; only one instance may run per data directory, different data directories can run side by side; Twitch sign-in is per data directory; an unwritable data directory shows an error and exits (details in architecture.en.md §6) |
 | Frontend files | Admin UI and overlays embedded into the executable with `rust-embed`, served by the Host; the small port-change page serves as Tauri's `frontendDist`; `app.windows: []`, with all windows created from Rust (in `setup` or after a successful port retry); the build `assets/` directory and the template directory send `Access-Control-Allow-Origin: *` so the preview iframe can load them |
 | Dev mode | Vite dev server + proxy (`/api`, `/ws`, target `http://127.0.0.1:<port>`, with `changeOrigin: true` and `ws: true`) to the Host; Tauri `build.devUrl` set to the Vite URL, Vite `server.strictPort: true`; Vite sends the same CSP as `/admin`; in dev mode Vite allows the `null` origin on everything except `/api` and `/ws` (`server.cors: false` + middleware); dev mode adds the Vite origin to the Origin allowlist |
 
@@ -81,7 +81,8 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | UI strings | `vue-i18n` + `@intlify/unplugin-vue-i18n`: resource files are precompiled at build time, so no `unsafe-eval` at run time |
 | Single instance | `tauri-plugin-single-instance` |
 | Opening external URLs | `tauri-plugin-opener`, called from a Rust command (opens the Twitch verification page in the system browser) |
-| Installer | NSIS (Tauri bundler) |
+| Distribution | Portable zip only (`tauri build --no-bundle` builds the executable, then it is packed into a zip); no installer. The app is not code-signed; the documentation includes the SmartScreen "Run anyway" and zip "Unblock" steps |
+| WebView2 | Uses the system's Evergreen WebView2 Runtime (built into Windows 11); detected at startup, and if missing, an explanation is shown and Microsoft's download page opens while the Host, overlays and tray keep running; no fixed-version runtime is bundled |
 | Dev tools | `@tauri-apps/cli` and `lefthook` are pnpm devDependencies, version-locked by the lockfile, with no global install |
 | Package management | Node 24 LTS (in `.nvmrc`); install pnpm once with `npm i -g pnpm`, after which it switches versions according to `packageManager` in `package.json`; no Corepack |
 
@@ -89,7 +90,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | When | Items |
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (installer slice) |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
 | **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, auto-update, sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
@@ -104,3 +105,6 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-13 | ESLint chosen for frontend lint | Provides the most comprehensive support for Vue SFCs |
 | 2026-11-13 | Error codes unified as `<area>.<reason>` | The API, UI resource keys and logs share one code |
 | 2026-11-13 | The core crate's package name is `toolkit-core` | `core` collides with Rust's built-in crate |
+| 2026-11-13 | The MVP ships only a Windows portable package, no installer; data always sits next to the executable (or in `--data-dir`) | No code-signing certificate will be bought, and unsigned installers are more likely to be blocked by antivirus and SmartScreen; a portable package also fits the data directory model |
+| 2026-11-13 | The app is not code-signed | No certificate will be bought; Azure Artifact Signing is open to individuals only in the USA and Canada; SmartScreen warnings are accepted, and the documentation includes the steps |
+| 2026-11-13 | Missing WebView2 is detected and the user is guided to install it | Built into Windows 11 and present on the vast majority of Windows 10 PCs; a fixed-version runtime gets no automatic security updates, so none is bundled |

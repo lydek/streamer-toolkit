@@ -36,7 +36,7 @@
 | 遠端 repo | GitHub public |
 | 授權 | MIT（`LICENSE`） |
 | 相依套件授權 | Rust（`cargo-deny`）允許清單：MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0。前端另設清單，只檢查會打包進產物的相依套件：上述加上 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。GPL／LGPL／AGPL 一律擋下 |
-| 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）合成 `THIRD_PARTY_LICENSES`，放進安裝檔與關於畫面 |
+| 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）合成 `THIRD_PARTY_LICENSES`，放進可攜版 zip 與關於畫面 |
 | 內建素材 | 只收可再散布的素材（CC0、CC-BY、字型 OFL 等），來源與授權記在 `assets/CREDITS.md`；使用者匯入的素材不進 repo |
 | 分支 | 預設 `main`；每個切片開 `feat/<切片>` 短命分支，PR 經 CI 通過後 squash 合併 |
 | 換行 | `.gitattributes`：一律 LF；`.ps1`／`.bat`／`.cmd` 用 CRLF；圖片、音效、影片、字型標為 binary |
@@ -50,7 +50,7 @@
 | Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 Host origin，路徑由 `on_navigation` 限制）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
 | 本機 API 安全 | 每次啟動的隨機管理 token，經 IPC 指令交給管理視窗、只放記憶體；Host 標頭白名單；Origin 檢查（拒絕 `Origin: null`）；Overlay 唯讀、不帶 token，Overlay 與樣板路徑的所有回應都送 `script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本檔案並加 `nosniff`；樣板預覽放在 sandbox iframe，資料用 `postMessage` 傳入（細節見 architecture.md） |
 | Port | 固定預設 port `47810`；被佔用時不自動換 port，改開 port 修改小頁面讓使用者修改並重試；例外是資料夾第一次啟動時預設 port 被佔用，自動挑空的 port 並存下來 |
-| 資料夾 | 每個資料夾是一個執行單位：`--data-dir` ＞ 執行檔旁的 `data`（可攜版，dev 建置一律用它）＞ `%LOCALAPPDATA%\<identifier>`（安裝版）；設定、記錄檔、快取、WebView2 資料都在裡面；一個資料夾同時只跑一份，不同資料夾可同時執行；Twitch 登入依資料夾分開；無法寫入時顯示錯誤並結束；多份並存用可攜版，不用多份安裝（細節見 architecture.md §6） |
+| 資料夾 | 每個資料夾是一個執行單位，以 `instance-id` 識別：`--data-dir` 指定的資料夾，沒有指定就用執行檔旁的 `data`；設定、記錄檔、快取、WebView2 資料都在裡面；一個資料夾同時只跑一份，不同資料夾可同時執行；Twitch 登入依資料夾分開；無法寫入時顯示錯誤並結束（細節見 architecture.md §6） |
 | 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板目錄送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
 | 開發模式 | Vite dev server＋proxy（`/api`、`/ws`，目標 `http://127.0.0.1:<port>`，`changeOrigin: true`、`ws: true`）到 Host；Tauri `build.devUrl` 設為 Vite 網址，Vite `server.strictPort: true`；Vite 送出與 `/admin` 相同的 CSP；dev 模式下 Vite 除了 `/api`、`/ws` 以外都允許 `null` origin（`server.cors: false`＋middleware）；dev 模式的 Origin 白名單加入 Vite origin |
 
@@ -80,7 +80,8 @@
 | UI 字串 | `vue-i18n`＋`@intlify/unplugin-vue-i18n`：資源檔在建置時預先編譯，執行期不需要 `unsafe-eval` |
 | 單一實例 | `tauri-plugin-single-instance` |
 | 開啟外部網址 | `tauri-plugin-opener`，由 Rust 指令呼叫（在系統瀏覽器開 Twitch 驗證頁） |
-| 安裝檔 | NSIS（Tauri bundler） |
+| 散布 | 只出可攜版 zip（`tauri build --no-bundle` 產生執行檔，再打包成 zip），不出安裝檔；程式不簽章，說明文件附 SmartScreen「仍要執行」與 zip「解除封鎖」的步驟 |
+| WebView2 | 使用系統的 Evergreen WebView2 Runtime（Windows 11 內建）；啟動時偵測，缺少就顯示說明並開啟微軟下載頁，Host、Overlay 與系統匣照常運作；不隨附固定版 |
 | 開發工具 | `@tauri-apps/cli` 與 `lefthook` 為 pnpm devDependencies，版本由 lockfile 鎖定，不需全域安裝 |
 | 套件管理 | Node 24 LTS（寫在 `.nvmrc`）；pnpm 用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本；不依賴 Corepack |
 
@@ -88,7 +89,7 @@
 | 時機 | 項目 |
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
-| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表）、outbox 與停用時的「暫停／關閉」（兌換紀錄切片）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（安裝檔切片） |
+| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表）、outbox 與停用時的「暫停／關閉」（兌換紀錄切片）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
 | **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、自動更新、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證、UI E2E |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 
@@ -103,3 +104,6 @@
 | 2026-11-13 | 前端 lint 選 ESLint | Vue SFC 的支援最完整 |
 | 2026-11-13 | 錯誤碼統一為 `<區域>.<原因>` | API、UI 資源鍵與記錄檔共用同一個碼 |
 | 2026-11-13 | core crate 的 package 名稱定為 `toolkit-core` | `core` 會與 Rust 內建的 crate 撞名 |
+| 2026-11-13 | MVP 只出 Windows 可攜版，不出安裝檔；資料固定放在執行檔旁（或 `--data-dir`） | 不購買程式碼簽章，未簽章的安裝檔較容易被防毒與 SmartScreen 擋下；可攜版也符合資料夾模式 |
+| 2026-11-13 | 程式不簽章 | 不購買憑證；Azure Artifact Signing 只開放美國與加拿大的個人；接受 SmartScreen 警告，說明文件附操作步驟 |
+| 2026-11-13 | 缺少 WebView2 時偵測並引導安裝 | Windows 11 內建、Windows 10 絕大多數已有；固定版 Runtime 不會自動更新安全修補，所以不隨附 |

@@ -14,7 +14,7 @@
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
 - 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`
-- 資料：dev 建置的資料在 `target\debug\data\`，不會碰到安裝版；要用另一份資料測試，加 `--data-dir <資料夾>`。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
+- 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
 - Repo 是 public：任何人都看得到程式碼與 commit 紀錄。
@@ -58,7 +58,7 @@
 - 本專案為 MIT。Rust 相依套件的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0）。
 - 前端相依套件用 `pnpm licenses list` 檢查，只看會打包進產物的相依套件，允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。
 - GPL／LGPL／AGPL 一律不得引入。
-- 安裝檔切片產生 `THIRD_PARTY_LICENSES`（`cargo-about`＋`pnpm licenses`），隨安裝檔散布。
+- 可攜版切片產生 `THIRD_PARTY_LICENSES`（`cargo-about`＋`pnpm licenses`），放進 zip 一起散布。
 - 內建素材（音效、字型、圖示）只收可再散布的授權（CC0、CC-BY、OFL 等），來源與授權記在 `assets/CREDITS.md`。使用者自己匯入的素材不進 repo。
 
 ## 文件規則

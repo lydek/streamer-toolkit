@@ -6,7 +6,7 @@ mod text;
 
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use host::{BoundHost, HostConfig, HostError, TwitchEndpoints, settings};
@@ -25,18 +25,21 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 const ADMIN: &str = "admin";
 const PORT_PAGE: &str = "port";
 const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
+const WEBVIEW2_DOWNLOAD_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 const LOG_DAYS: usize = 14;
 
 struct AppState {
     admin_token: SecretString,
     data_dir: PathBuf,
     twitch_secrets: Arc<dyn SecretStore>,
+    /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
+    host_port: Mutex<Option<u16>>,
 }
 
 fn main() {
     let mut context = tauri::generate_context!();
     let base_identifier = context.config().identifier.clone();
-    let data_dir = data_folder::resolve(&base_identifier, cfg!(dev))
+    let data_dir = data_folder::resolve()
         .unwrap_or_else(|e| fail(&text::data_folder_unusable("", &e.to_string())));
     if let Err(e) = data_folder::ensure_writable(&data_dir) {
         fail(&text::data_folder_unusable(
@@ -68,6 +71,7 @@ fn main() {
                 admin_token: random_token()?,
                 data_dir: data_dir.clone(),
                 twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
+                host_port: Mutex::new(None),
             });
             create_tray(app.handle())?;
             let handle = app.handle().clone();
@@ -150,6 +154,12 @@ fn init_logs(dir: &Path) -> Option<WorkerGuard> {
 /// Shows a native error box and exits; used before any window exists.
 fn fail(message: &str) -> ! {
     tracing::error!(message, "cannot start");
+    message_box(message);
+    std::process::exit(1)
+}
+
+/// A native message box; works without WebView2.
+fn message_box(message: &str) {
     #[cfg(windows)]
     {
         use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
@@ -165,7 +175,21 @@ fn fail(message: &str) -> ! {
             )
         };
     }
-    std::process::exit(1)
+}
+
+/// Windows 11 ships WebView2; some Windows 10 PCs lack it. Without it no window can open, but the Host, overlays
+/// and tray keep running, so explain and open Microsoft's download page instead of quitting.
+fn webview_available(app: &AppHandle) -> bool {
+    if tauri::webview_version().is_ok() {
+        return true;
+    }
+    tracing::error!(
+        code = "desktop.webview_missing",
+        "WebView2 Runtime not found"
+    );
+    message_box(text::WEBVIEW_MISSING);
+    let _ = app.opener().open_url(WEBVIEW2_DOWNLOAD_URL, None::<&str>);
+    false
 }
 
 /// 32 random bytes as hex; generated per launch and kept only in memory.
@@ -240,6 +264,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
 fn start(app: &AppHandle, bound: BoundHost) -> tauri::Result<()> {
     let port = bound.port();
     tracing::info!(port, "host listening");
+    *app.state::<AppState>().host_port.lock().unwrap() = Some(port);
     tauri::async_runtime::spawn(async move {
         if let Err(e) = bound.serve().await {
             tracing::error!(code = "host.stopped", error = %e, "host stopped");
@@ -254,6 +279,9 @@ fn webview_data_dir(app: &AppHandle) -> PathBuf {
 }
 
 fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
+    if !webview_available(app) {
+        return Ok(());
+    }
     let url = if cfg!(dev) {
         // Dev: served by Vite through devUrl (local origin, static capability in capabilities/admin.json).
         WebviewUrl::App("admin/index.html".into())
@@ -286,6 +314,9 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
 }
 
 fn open_port_page(app: &AppHandle) -> tauri::Result<()> {
+    if !webview_available(app) {
+        return Ok(());
+    }
     WebviewWindowBuilder::new(app, PORT_PAGE, WebviewUrl::App("port/index.html".into()))
         .title(text::APP_NAME)
         .inner_size(480.0, 320.0)
@@ -332,5 +363,15 @@ fn show_main_window(app: &AppHandle) {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
+        return;
+    }
+    // No window yet (WebView2 was missing, or the port page was closed): create the one that fits now.
+    let port = *app.state::<AppState>().host_port.lock().unwrap();
+    let opened = match port {
+        Some(port) => open_admin_window(app, port),
+        None => open_port_page(app),
+    };
+    if let Err(e) = opened {
+        tracing::error!(code = "desktop.window_failed", error = %e, "window not opened");
     }
 }
