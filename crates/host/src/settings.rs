@@ -28,12 +28,30 @@ pub fn path(config_dir: &Path) -> PathBuf {
     config_dir.join("settings.json")
 }
 
-/// Missing or unreadable settings fall back to defaults instead of blocking startup.
+/// Missing settings mean defaults. A file that cannot be read or parsed also falls back to defaults so startup is
+/// never blocked, but is first copied to `settings.json.bak`: the next save would otherwise overwrite it.
 pub fn load(config_dir: &Path) -> Settings {
-    fs::read_to_string(path(config_dir))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let path = path(config_dir);
+    match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| {
+            back_up(&path);
+            Settings::default()
+        }),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Settings::default(),
+        Err(_) => {
+            back_up(&path);
+            Settings::default()
+        }
+    }
+}
+
+fn back_up(path: &Path) {
+    let backup = path.with_extension("json.bak");
+    // shortcut: stderr until structured logging lands with the skeleton foundations.
+    match fs::copy(path, &backup) {
+        Ok(_) => eprintln!("settings unreadable, kept a copy at {}", backup.display()),
+        Err(e) => eprintln!("settings unreadable and could not be copied: {e}"),
+    }
 }
 
 pub fn save(config_dir: &Path, settings: &Settings) -> io::Result<()> {
@@ -62,6 +80,18 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"port":5000}"#).unwrap();
         assert_eq!(s.port, 5000);
         assert_eq!(s.twitch_client_id, "");
+    }
+
+    #[test]
+    fn broken_file_is_backed_up_before_defaults_are_used() {
+        let dir = std::env::temp_dir().join(format!("st-settings-broken-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let broken = r#"{"port":"not a number","twitch_client_id":"abc"}"#;
+        fs::write(path(&dir), broken).unwrap();
+        assert_eq!(load(&dir), Settings::default());
+        let backup = path(&dir).with_extension("json.bak");
+        assert_eq!(fs::read_to_string(backup).unwrap(), broken);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

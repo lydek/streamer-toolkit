@@ -9,7 +9,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use rustls::ClientConfig;
+pub use rustls::ClientConfig;
 use rustls_platform_verifier::BuilderVerifierExt;
 
 pub type HttpsClient = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;

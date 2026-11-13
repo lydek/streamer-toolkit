@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: bc8c6892bb0d7508aeec48da5fc04e30ec24d8c9365755e64a97dae54639aedd -->
+<!-- source: docs/architecture.md source-sha256: b6fc4f13cf2bb3bc0664f945d94fd8f0ff9eeece4ce197fc563c382f753de637 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -86,7 +86,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 
 ## 5. External communication
 - The only MVP clients are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control come after the MVP.
-- HTTP carries commands and queries; WebSocket pushes events; clients fetch a snapshot before subscribing and fetch it again after reconnecting.
+- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, so nothing is missed or repeated between them), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot.
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
 - **Port**: a fixed default port, `47810`. If it is taken, do not switch ports automatically, so OBS URLs never break silently. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
@@ -109,7 +109,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 ### Local API security
 Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-site requests, DNS rebinding, WebSocket hijacking), so the following is also required:
 - **Admin window**: loads `http://127.0.0.1:<port>/admin` and is created only after the Host has bound the port; in development it loads the Vite dev server instead. The admin window and the API share one origin, so there is no CORS and no Tauri origin to handle. The admin window may only navigate to `/admin` paths on the app's own origin (`on_navigation` restriction), and opening new windows (`window.open`, `target=_blank`) is always denied (`on_new_window`); the Device Code Flow verification URL is opened in the system browser by a Rust command using `tauri-plugin-opener`, and the window shows only the code.
-  - The Host sends a strict `Content-Security-Policy` on `/admin` (and every path under it): `script-src 'self'` (no inline scripts, no eval); `connect-src 'self' ipc: http://ipc.localhost` (Tauri IPC); `style-src 'self' 'unsafe-inline'` (PrimeVue injects styles at runtime, or use PrimeVue's nonce instead); `img-src 'self' data:` and `font-src 'self' data:` (Vite inlines small files as `data:`). No `default-src`. vue-i18n uses precompiled messages, so `unsafe-eval` is not needed.
+  - The Host sends a strict `Content-Security-Policy` on `/admin` (and every path under it): `script-src 'self'` (no inline scripts, no eval); `connect-src 'self' ipc: http://ipc.localhost` (Tauri IPC); `style-src 'self' 'unsafe-inline'` (PrimeVue injects styles at runtime, or use PrimeVue's nonce instead); `img-src 'self' data:` and `font-src 'self' data:` (Vite inlines small files as `data:`); `frame-src 'none'` (the release IPC capability covers the whole Host origin, so same-origin pages must not be framed inside the admin window; when template previews are added, allow only the sources the sandboxed iframe needs). No `default-src`. vue-i18n uses precompiled messages, so `unsafe-eval` is not needed.
 - **Admin token**: the Host generates a random token at every launch; it is never written to disk. The admin window fetches it at startup through a Tauri IPC command; the token stays in memory only, never in localStorage (WebView2 writes that to disk). Admin HTTP requests carry an `Authorization` header; admin WebSocket connections send the token in their first message.
 - **Tauri IPC permissions**: app commands are declared in `build.rs` with `tauri_build::AppManifest`, and every command needs an explicit grant. There are three capabilities:
   1. Small port-change page (local origin, `port` window only): grants only the commands that validate and save the port and retry the bind.
@@ -124,6 +124,13 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 - **CORS**: none on `/api`, `/ws` and `/admin`. Only the build `assets/` directory (chunks shared by the admin UI and overlays) and the template directory send `Access-Control-Allow-Origin: *` (without credentials; the content is public code and user templates), because the preview iframe's origin is `null` and Vite's module scripts, CSS and fonts must load through CORS.
 - **Overlays**: routes are read-only, can only read snapshots and subscribe to public events, and have no state-changing endpoints; OBS URLs contain no token.
 - **OBS Dock**: not in the MVP; its pairing will be designed later together with mobile remote control.
+
+### Twitch rate limits
+Twitch's official documentation is the source for these numbers; update this section when Twitch changes them.
+- **Helix API**: a token bucket per client ID and user, refilled every minute (for example 800 points; most endpoints cost 1 point per call). Every Helix request goes through the one Helix client in `integrations`: a 401 gets one refresh and one retry; a 429 waits until `Ratelimit-Reset` (at most 1 minute) before trying again and is never resent right away. Some 429s are unrelated to the points bucket (for example EventSub limits); without `Ratelimit-Reset`, normal backoff applies.
+- **EventSub WebSocket**: per user token (client ID and user), at most 3 connections with enabled subscriptions, at most 300 subscriptions per connection, and a `max_total_cost` of 10. The app opens only 1 connection per account and closes the old one before changing the Client ID or signing out; on `session_reconnect` it moves to the reconnect URL Twitch sends (this is not a new connection; subscriptions carry over and are not created again); failed connections reconnect with exponential backoff (from 1 second, at most 60 seconds).
+- **Device Code Flow**: poll at the `interval` Twitch returns until `expires_in`, never faster, and at least 1 second apart.
+- **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
 
 ## 6. Host lifecycle
 The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; only quitting from the tray stops the Host.

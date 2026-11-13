@@ -3,7 +3,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use host::{BoundHost, HostConfig, HostError, settings};
+use host::{BoundHost, HostConfig, HostError, TwitchEndpoints, settings};
 use integrations::secrets::{CredentialManager, SecretStore};
 use secrecy::{ExposeSecret, SecretString};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder, ipc::CapabilityBuilder};
@@ -116,7 +116,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         admin_token: state.admin_token.expose_secret().to_owned().into(),
         config_dir: state.config_dir.clone(),
         twitch_secrets: state.twitch_secrets.clone(),
-        twitch_oauth_base: integrations::twitch::auth::OAUTH_BASE.into(),
+        twitch: TwitchEndpoints::default(),
     }
 }
 

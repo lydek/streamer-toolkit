@@ -72,6 +72,9 @@ pub struct Token {
 /// Serialized form kept only in the secret store.
 #[derive(Serialize, Deserialize)]
 struct StoredToken {
+    /// The app registration the token was issued to; empty for tokens stored before this field existed.
+    #[serde(default)]
+    client_id: String,
     access_token: String,
     refresh_token: String,
     user_id: String,
@@ -80,8 +83,9 @@ struct StoredToken {
 }
 
 impl Token {
-    fn to_stored(&self) -> StoredToken {
+    fn to_stored(&self, client_id: &str) -> StoredToken {
         StoredToken {
+            client_id: client_id.into(),
             access_token: self.access.expose_secret().into(),
             refresh_token: self.refresh.expose_secret().into(),
             user_id: self.user_id.clone(),
@@ -145,13 +149,16 @@ struct Inner {
     store: Arc<dyn SecretStore>,
     state: Mutex<State>,
     refresh_lock: tokio::sync::Mutex<()>,
+    /// Signed-in user ID; adapters such as EventSub watch it to connect after login and stop after logout.
+    account: tokio::sync::watch::Sender<Option<String>>,
 }
 
 #[derive(Clone)]
 pub struct TwitchAuth(Arc<Inner>);
 
 impl TwitchAuth {
-    /// Loads a previously stored token; an unreadable entry counts as signed out.
+    /// Loads a previously stored token; an unreadable entry, a missing Client ID or a token issued to another
+    /// Client ID counts as signed out. The entry itself is left alone, so nothing is deleted by mistake.
     pub fn new(
         client_id: String,
         oauth_base: &str,
@@ -163,7 +170,11 @@ impl TwitchAuth {
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str::<StoredToken>(&json).ok())
+            .filter(|t| {
+                !client_id.is_empty() && (t.client_id.is_empty() || t.client_id == client_id)
+            })
             .map(Token::from_stored);
+        let account = tokio::sync::watch::Sender::new(token.as_ref().map(|t| t.user_id.clone()));
         Self(Arc::new(Inner {
             client_id,
             oauth_base: oauth_base.trim_end_matches('/').into(),
@@ -174,7 +185,17 @@ impl TwitchAuth {
                 ..State::default()
             }),
             refresh_lock: tokio::sync::Mutex::new(()),
+            account,
         }))
+    }
+
+    pub fn client_id(&self) -> &str {
+        &self.0.client_id
+    }
+
+    /// Changes whenever the user signs in or out.
+    pub fn account(&self) -> tokio::sync::watch::Receiver<Option<String>> {
+        self.0.account.subscribe()
     }
 
     pub fn token(&self) -> Option<Token> {
@@ -256,7 +277,8 @@ impl TwitchAuth {
         generation: u64,
     ) -> Result<(), AuthError> {
         let deadline = Instant::now() + Duration::from_secs(expires_in_secs);
-        let interval = Duration::from_secs(interval_secs);
+        // Never faster than once a second, whatever Twitch sends.
+        let interval = Duration::from_secs(interval_secs.max(1));
         while Instant::now() < deadline {
             tokio::time::sleep(interval).await;
             let fields = [
@@ -282,8 +304,18 @@ impl TwitchAuth {
                 if self.0.state.lock().unwrap().generation != generation {
                     return Ok(()); // superseded by a newer login or a logout
                 }
-                self.persist(&token)?;
-                self.0.state.lock().unwrap().token = Some(token);
+                self.persist(&token).await?;
+                let user_id = token.user_id.clone();
+                {
+                    let mut state = self.0.state.lock().unwrap();
+                    if state.generation != generation {
+                        // A logout or newer login ran while the token was being written.
+                        self.undo_write(&state);
+                        return Ok(());
+                    }
+                    state.token = Some(token);
+                }
+                self.0.account.send_replace(Some(user_id));
                 return Ok(());
             }
             let error: ErrorResponse = serde_json::from_slice(&body).unwrap_or(ErrorResponse {
@@ -300,7 +332,11 @@ impl TwitchAuth {
     /// behind it see the token already changed and return without spending the single-use refresh token again.
     pub async fn refresh(&self, rejected_access: &str) -> Result<(), AuthError> {
         let _guard = self.0.refresh_lock.lock().await;
-        let token = self.token().ok_or(AuthError::SignInRequired)?;
+        let (token, generation) = {
+            let state = self.0.state.lock().unwrap();
+            let token = state.token.clone().ok_or(AuthError::SignInRequired)?;
+            (token, state.generation)
+        };
         if token.access.expose_secret() != rejected_access {
             return Ok(());
         }
@@ -311,7 +347,10 @@ impl TwitchAuth {
         ];
         let (status, body) = self.form("token", &fields).await?;
         if matches!(status, 400 | 401) {
-            self.clear();
+            // Only sign out the session this refresh belonged to, never a newer login.
+            if self.0.state.lock().unwrap().generation == generation {
+                self.clear();
+            }
             return Err(AuthError::SignInRequired);
         }
         if !(200..300).contains(&status) {
@@ -323,10 +362,28 @@ impl TwitchAuth {
             refresh: tokens.refresh_token.into(),
             ..token
         };
-        // The old refresh token is already spent: keep the new pair in memory even if persisting fails.
-        let persisted = self.persist(&updated);
-        self.0.state.lock().unwrap().token = Some(updated);
+        {
+            let mut state = self.0.state.lock().unwrap();
+            if state.generation != generation {
+                return Err(AuthError::SignInRequired); // signed out while refreshing
+            }
+            // The old refresh token is already spent: keep the new pair in memory even if persisting fails.
+            state.token = Some(updated.clone());
+        }
+        let persisted = self.persist(&updated).await;
+        let state = self.0.state.lock().unwrap();
+        if state.generation != generation {
+            self.undo_write(&state);
+        }
         persisted
+    }
+
+    /// Called when a login or logout superseded a token that was being written: if the user is now signed out,
+    /// the entry just written must not survive. A newer login keeps its own entry.
+    fn undo_write(&self, state: &State) {
+        if state.token.is_none() {
+            let _ = self.0.store.delete();
+        }
     }
 
     pub fn logout(&self) -> Result<(), AuthError> {
@@ -340,19 +397,29 @@ impl TwitchAuth {
         state.status_override = None;
         state.generation += 1;
         let _ = self.0.store.delete();
+        drop(state);
+        self.0.account.send_replace(None);
     }
 
-    /// Writes the token to the secret store, retrying briefly before giving up.
-    fn persist(&self, token: &Token) -> Result<(), AuthError> {
-        let json =
-            serde_json::to_string(&token.to_stored()).map_err(|_| AuthError::StorageFailed)?;
-        for _ in 0..3 {
-            if self.0.store.write(&json).is_ok() {
-                return Ok(());
+    /// Writes the token to the secret store, retrying briefly before giving up. Credential Manager calls block,
+    /// so they run on the blocking pool instead of an async worker.
+    async fn persist(&self, token: &Token) -> Result<(), AuthError> {
+        let json = serde_json::to_string(&token.to_stored(&self.0.client_id))
+            .map_err(|_| AuthError::StorageFailed)?;
+        let store = self.0.store.clone();
+        tokio::task::spawn_blocking(move || {
+            for attempt in 0..3 {
+                if attempt > 0 {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                if store.write(&json).is_ok() {
+                    return Ok(());
+                }
             }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        Err(AuthError::StorageFailed)
+            Err(AuthError::StorageFailed)
+        })
+        .await
+        .map_err(|_| AuthError::StorageFailed)?
     }
 
     async fn validate(&self, access: &str) -> Result<Option<ValidateResponse>, AuthError> {
@@ -560,6 +627,72 @@ mod tests {
         assert_eq!(
             auth.start_login(&[]).await.unwrap_err(),
             AuthError::ClientIdRequired
+        );
+    }
+
+    fn store_with(stored: serde_json::Value) -> Arc<MemoryStore> {
+        let store = Arc::new(MemoryStore::default());
+        *store.value.lock().unwrap() = Some(stored.to_string());
+        store
+    }
+
+    #[tokio::test]
+    async fn stored_token_needs_the_matching_client_id() {
+        let token = json!({"access_token":"a","refresh_token":"r","user_id":"42","login":"streamer","scopes":[]});
+        let mut other = token.clone();
+        other["client_id"] = json!("other-app");
+        for (client_id, stored, signed_in) in [
+            ("", token.clone(), false),
+            ("client", token.clone(), true), // stored before client_id was recorded
+            ("client", other, false),
+        ] {
+            let store = store_with(stored);
+            let auth = TwitchAuth::new(
+                client_id.into(),
+                "http://127.0.0.1:1",
+                tls::https_client(tls::client_config().unwrap()),
+                store.clone(),
+            );
+            assert_eq!(auth.token().is_some(), signed_in, "client_id {client_id:?}");
+            assert_eq!(auth.account().borrow().is_some(), signed_in);
+            assert!(
+                store.value.lock().unwrap().is_some(),
+                "the entry is never deleted here"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn logout_during_refresh_stays_signed_out() {
+        let app = Router::new().route(
+            "/token",
+            post(|| async {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                Json(json!({"access_token":"access-2","refresh_token":"refresh-2"}))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let store = store_with(
+            json!({"client_id":"client","access_token":"access-1","refresh_token":"refresh-1",
+                   "user_id":"42","login":"streamer","scopes":[]}),
+        );
+        let auth = auth(&base, store.clone());
+
+        let refreshing = tokio::spawn({
+            let auth = auth.clone();
+            async move { auth.refresh("access-1").await }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        auth.logout().unwrap();
+
+        assert_eq!(refreshing.await.unwrap(), Err(AuthError::SignInRequired));
+        assert!(auth.token().is_none());
+        assert_eq!(auth.status(), AuthStatus::SignedOut);
+        assert!(
+            store.value.lock().unwrap().is_none(),
+            "nothing written back after logout"
         );
     }
 }

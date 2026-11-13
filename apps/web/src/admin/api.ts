@@ -10,7 +10,11 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  token ??= invoke<string>('get_admin_token')
+  // A failed fetch is not cached, so the next call asks again.
+  token ??= invoke<string>('get_admin_token').catch((e) => {
+    token = undefined
+    throw e
+  })
   const res = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token}`, ...init.headers },

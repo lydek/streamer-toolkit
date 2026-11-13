@@ -1,6 +1,9 @@
 //! Admin API under `/api/admin`, reachable only with the per-launch admin token.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use axum::{
     Json, Router,
@@ -12,25 +15,31 @@ use axum::{
 };
 use integrations::{
     secrets::SecretStore,
-    tls::HttpsClient,
+    tls::{ClientConfig, HttpsClient},
     twitch::{
         MVP_SCOPES,
         auth::{AuthError, AuthStatus, TwitchAuth},
+        eventsub::EventSub,
+        helix::Helix,
     },
 };
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, task::AbortHandle};
 
-use crate::settings;
+use crate::{TwitchEndpoints, overlay::OverlayHub, settings};
 
 pub(crate) struct AdminState {
     token: SecretString,
     config_dir: PathBuf,
     secrets: Arc<dyn SecretStore>,
-    oauth_base: String,
+    endpoints: TwitchEndpoints,
     http: HttpsClient,
+    tls: Arc<ClientConfig>,
+    hub: Arc<OverlayHub>,
     twitch: RwLock<TwitchAuth>,
+    /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
+    eventsub: Mutex<Option<AbortHandle>>,
 }
 
 impl AdminState {
@@ -38,18 +47,42 @@ impl AdminState {
         token: SecretString,
         config_dir: PathBuf,
         secrets: Arc<dyn SecretStore>,
-        oauth_base: String,
-        http: HttpsClient,
+        endpoints: TwitchEndpoints,
+        tls: Arc<ClientConfig>,
+        hub: Arc<OverlayHub>,
     ) -> Self {
+        let http = integrations::tls::https_client(tls.clone());
         let client_id = settings::load(&config_dir).twitch_client_id;
-        let twitch = TwitchAuth::new(client_id, &oauth_base, http.clone(), secrets.clone());
-        Self {
+        let twitch = TwitchAuth::new(client_id, &endpoints.oauth, http.clone(), secrets.clone());
+        let state = Self {
             token,
             config_dir,
             secrets,
-            oauth_base,
+            endpoints,
             http,
-            twitch: RwLock::new(twitch),
+            tls,
+            hub,
+            twitch: RwLock::new(twitch.clone()),
+            eventsub: Mutex::new(None),
+        };
+        state.start_eventsub(twitch);
+        state
+    }
+
+    /// Connects chat for `auth` (it waits until signed in) and stops the task of the previous auth.
+    fn start_eventsub(&self, auth: TwitchAuth) {
+        let hub = self.hub.clone();
+        let task = tokio::spawn(
+            EventSub {
+                url: self.endpoints.eventsub.clone(),
+                helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
+                tls: self.tls.clone(),
+                deliver: Arc::new(move |m| hub.publish_chat(m)),
+            }
+            .run(),
+        );
+        if let Some(old) = self.eventsub.lock().unwrap().replace(task.abort_handle()) {
+            old.abort();
         }
     }
 }
@@ -114,6 +147,11 @@ async fn set_client_id(
     if !valid_client_id(&client_id) {
         return error(StatusCode::BAD_REQUEST, "invalid_client_id");
     }
+    // Write lock first so two saves cannot interleave; an unchanged ID keeps the current sign-in.
+    let mut twitch = s.twitch.write().await;
+    if twitch.client_id() == client_id {
+        return StatusCode::NO_CONTENT.into_response();
+    }
     if settings::update(&s.config_dir, |set| {
         set.twitch_client_id = client_id.clone()
     })
@@ -122,9 +160,14 @@ async fn set_client_id(
         return error(StatusCode::INTERNAL_SERVER_ERROR, "save_failed");
     }
     // Tokens belong to the previous app registration, so a new Client ID starts signed out.
-    let mut twitch = s.twitch.write().await;
     let _ = twitch.logout();
-    *twitch = TwitchAuth::new(client_id, &s.oauth_base, s.http.clone(), s.secrets.clone());
+    *twitch = TwitchAuth::new(
+        client_id,
+        &s.endpoints.oauth,
+        s.http.clone(),
+        s.secrets.clone(),
+    );
+    s.start_eventsub(twitch.clone());
     StatusCode::NO_CONTENT.into_response()
 }
 
