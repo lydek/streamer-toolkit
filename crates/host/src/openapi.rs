@@ -3,14 +3,15 @@
 
 use utoipa::OpenApi;
 
-use crate::{admin, obs, overlay};
+use crate::{admin, obs, overlay, templates};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Streamer Toolkit Host",
         description = "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message \
-                       is a `Snapshot`, then events such as `ChatMessageEvent` and `ObsStatusEvent` follow in `seq` order."
+                       is a `Snapshot`, then events such as `ChatMessageEvent`, `ObsStatusEvent` and `TemplateChangedEvent` follow in \
+                       `seq` order."
     ),
     paths(
         admin::twitch_overview,
@@ -22,8 +23,14 @@ use crate::{admin, obs, overlay};
         admin::simulate_chat,
         obs::obs_overview,
         obs::update_obs,
+        templates::chat_template,
     ),
-    components(schemas(overlay::Snapshot, chat::ChatMessageEvent, obs::ObsStatusEvent)),
+    components(schemas(
+        overlay::Snapshot,
+        chat::ChatMessageEvent,
+        obs::ObsStatusEvent,
+        templates::TemplateChangedEvent
+    )),
     tags((name = "admin", description = "Requires `Authorization: Bearer <per-launch admin token>`; \
                                          otherwise 401."))
 )]

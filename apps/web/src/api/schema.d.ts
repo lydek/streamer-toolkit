@@ -70,6 +70,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/templates/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["chat_template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/twitch": {
         parameters: {
             query?: never;
@@ -284,7 +300,33 @@ export interface components {
          * @description Where an event came from. Simulated events never go into real business records.
          * @enum {string}
          */
-        Source: "twitch" | "obs" | "simulation";
+        Source: "twitch" | "obs" | "simulation" | "system";
+        /** @description A `template.changed` event exactly as `/ws/overlay` sends it; not kept in snapshots. */
+        TemplateChangedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["TemplateChangedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["TemplateChangedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        TemplateChangedPayload: {
+            /** @description Which overlay's template changed; only `chat` for now. */
+            overlay: string;
+        };
+        /** @enum {string} */
+        TemplateChangedType: "template.changed";
+        /** @description `GET /api/admin/templates/chat`. */
+        TemplateStatus: {
+            /**
+             * @description `template.missing`, `template.unreadable` or `template.invalid` while overlays get the default
+             *     template instead of the user's; `null` when the user template is in use.
+             */
+            error: string | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -441,6 +483,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    chat_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateStatus"];
                 };
             };
         };

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent` and `ObsStatusEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `ObsStatusEvent` and `TemplateChangedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -171,6 +171,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/templates/chat": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "chat_template",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateStatus"
                 }
               }
             }
@@ -794,8 +813,83 @@
         "enum": [
           "twitch",
           "obs",
-          "simulation"
+          "simulation",
+          "system"
         ]
+      },
+      "TemplateChangedEvent": {
+        "type": "object",
+        "description": "A `template.changed` event exactly as `/ws/overlay` sends it; not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TemplateChangedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TemplateChangedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "TemplateChangedPayload": {
+        "type": "object",
+        "required": [
+          "overlay"
+        ],
+        "properties": {
+          "overlay": {
+            "type": "string",
+            "description": "Which overlay's template changed; only `chat` for now."
+          }
+        }
+      },
+      "TemplateChangedType": {
+        "type": "string",
+        "enum": [
+          "template.changed"
+        ]
+      },
+      "TemplateStatus": {
+        "type": "object",
+        "description": "`GET /api/admin/templates/chat`.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`template.missing`, `template.unreadable` or `template.invalid` while overlays get the default\ntemplate instead of the user's; `null` when the user template is in use."
+          }
+        }
       }
     }
   },

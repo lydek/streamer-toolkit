@@ -1,6 +1,7 @@
 <template>
   <main>
     <h1>{{ t('app.name') }}</h1>
+    <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
 
     <section aria-labelledby="twitch-heading">
       <h2 id="twitch-heading">{{ t('twitch.heading') }}</h2>
@@ -85,11 +86,17 @@ const error = ref('')
 const simUser = ref('')
 const simText = ref('')
 const simSent = ref(false)
+const templateError = ref<string | null>(null)
 let timer: number | undefined
 
 async function refresh() {
   overview.value = await api(client.GET('/api/admin/twitch'))
   modules.value = await api(client.GET('/api/admin/modules'))
+  await refreshTemplate()
+}
+
+async function refreshTemplate() {
+  templateError.value = (await api(client.GET('/api/admin/templates/chat'))).error
 }
 
 async function run(action: () => Promise<unknown>) {
@@ -139,9 +146,11 @@ function startEditClientId() {
 
 onMounted(async () => {
   await run(async () => {})
-  // Poll while a device login is pending so the page updates once the user approves.
+  // Poll while a device login is pending so the page updates once the user approves;
+  // the template status is polled always, so an edit that breaks it shows up without a reload.
   timer = window.setInterval(() => {
     if (overview.value?.status.state === 'pending') refresh().catch(() => {})
+    else refreshTemplate().catch(() => {})
   }, 2000)
 })
 onBeforeUnmount(() => window.clearInterval(timer))

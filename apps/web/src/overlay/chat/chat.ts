@@ -1,7 +1,11 @@
 import type { components } from '../../api/schema'
 
 export type ChatEvent = components['schemas']['ChatMessageEvent']
-export type Incoming = components['schemas']['Snapshot'] | ChatEvent | components['schemas']['ObsStatusEvent']
+export type Incoming =
+  | components['schemas']['Snapshot']
+  | ChatEvent
+  | components['schemas']['ObsStatusEvent']
+  | components['schemas']['TemplateChangedEvent']
 
 export interface ChatState {
   messages: ChatEvent[]
