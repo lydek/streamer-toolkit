@@ -1,0 +1,607 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Streamer Toolkit Host",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent` follow in `seq` order.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/admin/modules": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_modules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModuleState"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/modules/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_module",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/simulate/chat": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sends a chat message tagged `source=simulation` through the same path as Twitch chat.",
+        "operationId": "simulate_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatedChat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/twitch": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "twitch_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/twitch/client-id": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_client_id",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientIdBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/twitch/login": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "login",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/twitch/logout": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed_out"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_code",
+              "verification_uri",
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending"
+                ]
+              },
+              "user_code": {
+                "type": "string"
+              },
+              "verification_uri": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "login",
+              "state"
+            ],
+            "properties": {
+              "login": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed_in"
+                ]
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "code",
+              "state"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "What the admin UI may see; never contains tokens."
+      },
+      "ChatFragment": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "emoteId",
+              "type"
+            ],
+            "properties": {
+              "emoteId": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "emote"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ChatMessageEvent": {
+        "type": "object",
+        "description": "A `chat.message` event exactly as `/ws/overlay` sends it: the event envelope around its payload.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatMessagePayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChatMessageType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatMessagePayload": {
+        "type": "object",
+        "description": "The `payload` of a `chat.message` event.",
+        "required": [
+          "userId",
+          "userLogin",
+          "userName",
+          "color",
+          "text",
+          "fragments"
+        ],
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`#RRGGBB`, or `null` when the user never picked a color."
+          },
+          "fragments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatFragment"
+            }
+          },
+          "text": {
+            "type": "string",
+            "description": "Raw viewer text; overlays escape it when rendering."
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userLogin": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatMessageType": {
+        "type": "string",
+        "enum": [
+          "chat.message"
+        ]
+      },
+      "ClientIdBody": {
+        "type": "object",
+        "required": [
+          "client_id"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string"
+          }
+        }
+      },
+      "DeviceLogin": {
+        "type": "object",
+        "required": [
+          "user_code",
+          "verification_uri",
+          "expires_in_secs"
+        ],
+        "properties": {
+          "expires_in_secs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "user_code": {
+            "type": "string"
+          },
+          "verification_uri": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.\nThe missing-token 401 has an empty body, and malformed JSON gets axum's plain-text rejection.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "ModuleBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModuleState": {
+        "type": "object",
+        "required": [
+          "id",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "required": [
+          "client_id",
+          "status"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AuthStatus"
+          }
+        }
+      },
+      "SimulatedChat": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "Snapshot": {
+        "type": "object",
+        "description": "The first message on `/ws/overlay`: the recent retained events of each type.",
+        "required": [
+          "type",
+          "version",
+          "seq",
+          "payload"
+        ],
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/SnapshotPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "type": {
+            "$ref": "#/components/schemas/SnapshotType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "SnapshotPayload": {
+        "type": "object",
+        "required": [
+          "chat.message"
+        ],
+        "properties": {
+          "chat.message": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageEvent"
+            }
+          }
+        }
+      },
+      "SnapshotType": {
+        "type": "string",
+        "enum": [
+          "snapshot"
+        ]
+      },
+      "Source": {
+        "type": "string",
+        "description": "Where an event came from. Simulated events never go into real business records.",
+        "enum": [
+          "twitch",
+          "simulation"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "admin",
+      "description": "Requires `Authorization: Bearer <per-launch admin token>`; otherwise 401."
+    }
+  ]
+}

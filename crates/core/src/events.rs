@@ -1,9 +1,9 @@
 //! Internal events produced by integrations (or the simulator) and consumed by modules.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Where an event came from. Simulated events never go into real business records.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Source {
     Twitch,

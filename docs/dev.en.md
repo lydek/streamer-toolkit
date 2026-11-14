@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: da895e4a6a574d22f9ae95b84e155bef6f468ab9494d9aa899da50a6dd1708e3 -->
+<!-- source: docs/dev.md source-sha256: c48d40437990e6e0e1aada203b4f9ecf858556f3c6da6c9096213f9b816d5a02 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -15,7 +15,8 @@ Principle: another Windows PC can get it running by following this document.
 - Install dependencies: `pnpm install --frozen-lockfile`
 - Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
-- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build and release clippy), use `pnpm lefthook run pre-push`
+- API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
+- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push`
 - Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>`. Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
@@ -25,7 +26,7 @@ Principle: another Windows PC can get it running by following this document.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
-  - `pre-push` runs the full check in CI order (translations, frontend lint/test/build, `cargo fmt`, both `cargo clippy` runs, `cargo test`, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
+  - `pre-push` runs the full check in CI order (translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
 
 ## Before every commit (CI runs the same set, Windows only)

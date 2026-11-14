@@ -19,7 +19,7 @@ use integrations::{
     tls::{ClientConfig, HttpsClient},
     twitch::{
         MVP_SCOPES,
-        auth::{AuthError, AuthStatus, TwitchAuth},
+        auth::{AuthError, AuthStatus, DeviceLogin, TwitchAuth},
         eventsub::EventSub,
         helix::Helix,
     },
@@ -29,9 +29,11 @@ use serde::{Deserialize, Serialize};
 use tokio::{sync::RwLock, task::AbortHandle};
 use toolkit_core::{
     events::{ChatMessage, Fragment, Source},
-    modules::{ModuleError, Modules},
+    modules::{ModuleError, ModuleState, Modules},
     settings,
 };
+
+use utoipa::ToSchema;
 
 use crate::TwitchEndpoints;
 
@@ -128,12 +130,13 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-#[derive(Serialize)]
-struct Overview {
+#[derive(Serialize, ToSchema)]
+pub(crate) struct Overview {
     client_id: String,
     status: AuthStatus,
 }
 
+#[utoipa::path(get, path = "/api/admin/twitch", tag = "admin", responses((status = 200, body = Overview)))]
 async fn twitch_overview(State(s): State<Arc<AdminState>>) -> Json<Overview> {
     Json(Overview {
         client_id: settings::load(&s.data_dir).twitch_client_id,
@@ -141,8 +144,8 @@ async fn twitch_overview(State(s): State<Arc<AdminState>>) -> Json<Overview> {
     })
 }
 
-#[derive(Deserialize)]
-struct ClientIdBody {
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct ClientIdBody {
     client_id: String,
 }
 
@@ -151,6 +154,17 @@ fn valid_client_id(id: &str) -> bool {
     (1..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/twitch/client-id",
+    tag = "admin",
+    request_body = ClientIdBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 500, body = ErrorBody),
+    )
+)]
 async fn set_client_id(
     State(s): State<Arc<AdminState>>,
     Json(body): Json<ClientIdBody>,
@@ -179,6 +193,17 @@ async fn set_client_id(
     StatusCode::NO_CONTENT.into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/twitch/login",
+    tag = "admin",
+    responses(
+        (status = 200, body = DeviceLogin),
+        (status = 400, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
 async fn login(State(s): State<Arc<AdminState>>) -> Response {
     let twitch = s.twitch.read().await.clone();
     match twitch.start_login(MVP_SCOPES).await {
@@ -187,6 +212,13 @@ async fn login(State(s): State<Arc<AdminState>>) -> Response {
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/twitch/logout",
+    tag = "admin",
+    // TwitchAuth::logout never fails today; auth_error stays as the guard if that changes.
+    responses((status = 204))
+)]
 async fn logout(State(s): State<Arc<AdminState>>) -> Response {
     match s.twitch.read().await.logout() {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -194,15 +226,28 @@ async fn logout(State(s): State<Arc<AdminState>>) -> Response {
     }
 }
 
+#[utoipa::path(get, path = "/api/admin/modules", tag = "admin", responses((status = 200, body = Vec<ModuleState>)))]
 async fn list_modules(State(s): State<Arc<AdminState>>) -> Response {
     Json(s.modules.list()).into_response()
 }
 
-#[derive(Deserialize)]
-struct ModuleBody {
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct ModuleBody {
     enabled: bool,
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/modules/{id}",
+    tag = "admin",
+    params(("id" = String, Path)),
+    request_body = ModuleBody,
+    responses(
+        (status = 204),
+        (status = 404, body = ErrorBody),
+        (status = 500, body = ErrorBody),
+    )
+)]
 async fn set_module(
     State(s): State<Arc<AdminState>>,
     Path(id): Path<String>,
@@ -217,9 +262,9 @@ async fn set_module(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct SimulatedChat {
+pub(crate) struct SimulatedChat {
     #[serde(default)]
     user_name: String,
     text: String,
@@ -228,6 +273,13 @@ struct SimulatedChat {
 const SIMULATED_TEXT_MAX: usize = 500;
 
 /// Sends a chat message tagged `source=simulation` through the same path as Twitch chat.
+#[utoipa::path(
+    post,
+    path = "/api/admin/simulate/chat",
+    tag = "admin",
+    request_body = SimulatedChat,
+    responses((status = 204), (status = 400, body = ErrorBody))
+)]
 async fn simulate_chat(
     State(s): State<Arc<AdminState>>,
     Json(body): Json<SimulatedChat>,
@@ -262,11 +314,18 @@ fn auth_error(e: AuthError) -> Response {
         AuthError::Unreachable => StatusCode::BAD_GATEWAY,
         _ => StatusCode::BAD_REQUEST,
     };
-    (status, Json(serde_json::json!({ "code": e.to_string() }))).into_response()
+    error(status, &e.to_string())
+}
+
+/// Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
+/// The missing-token 401 has an empty body, and malformed JSON gets axum's plain-text rejection.
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ErrorBody {
+    code: String,
 }
 
 fn error(status: StatusCode, code: &str) -> Response {
-    (status, Json(serde_json::json!({ "code": code }))).into_response()
+    (status, Json(ErrorBody { code: code.into() })).into_response()
 }
 
 #[cfg(test)]

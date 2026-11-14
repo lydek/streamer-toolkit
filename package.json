@@ -12,7 +12,8 @@
     "web:build": "pnpm --filter web build",
     "check:translations": "node scripts/check-translations.mjs",
     "web:lint": "pnpm --filter web lint",
-    "web:test": "pnpm --filter web test"
+    "web:test": "pnpm --filter web test",
+    "api:gen": "cargo run -q -p host --example openapi -- apps/web/src/api/openapi.json && pnpm --filter web api:types"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.4",

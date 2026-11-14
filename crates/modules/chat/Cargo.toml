@@ -8,3 +8,5 @@ publish.workspace = true
 [dependencies]
 toolkit-core = { version = "0.1.0", path = "../../core" }
 serde_json = "1.0.154"
+utoipa = "6.0.0"
+serde = { version = "1.0.229", features = ["derive"] }

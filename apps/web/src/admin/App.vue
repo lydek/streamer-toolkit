@@ -72,28 +72,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
-import { ApiError, api } from './api'
-
-type Status =
-  | { state: 'signed_out' }
-  | { state: 'pending'; user_code: string; verification_uri: string }
-  | { state: 'signed_in'; user_id: string; login: string }
-  | { state: 'failed'; code: string }
-
-interface Overview {
-  client_id: string
-  status: Status
-}
-
-interface ModuleState {
-  id: string
-  enabled: boolean
-}
+import { ApiError, type Schemas, api, client } from './api'
 
 const { t, te } = useI18n()
 
-const overview = ref<Overview>()
-const modules = ref<ModuleState[]>([])
+const overview = ref<Schemas['Overview']>()
+const modules = ref<Schemas['ModuleState'][]>([])
 const clientIdInput = ref('')
 const editingClientId = ref(false)
 const busy = ref(false)
@@ -104,8 +88,8 @@ const simSent = ref(false)
 let timer: number | undefined
 
 async function refresh() {
-  overview.value = await api<Overview>('/api/admin/twitch')
-  modules.value = await api<ModuleState[]>('/api/admin/modules')
+  overview.value = await api(client.GET('/api/admin/twitch'))
+  modules.value = await api(client.GET('/api/admin/modules'))
 }
 
 async function run(action: () => Promise<unknown>) {
@@ -123,20 +107,19 @@ async function run(action: () => Promise<unknown>) {
 
 const saveClientId = () =>
   run(async () => {
-    await api('/api/admin/twitch/client-id', { method: 'PUT', body: JSON.stringify({ client_id: clientIdInput.value }) })
+    await api(client.PUT('/api/admin/twitch/client-id', { body: { client_id: clientIdInput.value } }))
     editingClientId.value = false
   })
-const login = () => run(() => api('/api/admin/twitch/login', { method: 'POST' }))
-const logout = () => run(() => api('/api/admin/twitch/logout', { method: 'POST' }))
-const toggleModule = (m: ModuleState) =>
-  run(() => api(`/api/admin/modules/${m.id}`, { method: 'PUT', body: JSON.stringify({ enabled: !m.enabled }) }))
+const login = () => run(() => api(client.POST('/api/admin/twitch/login')))
+const logout = () => run(() => api(client.POST('/api/admin/twitch/logout')))
+const toggleModule = (m: Schemas['ModuleState']) =>
+  run(() =>
+    api(client.PUT('/api/admin/modules/{id}', { params: { path: { id: m.id } }, body: { enabled: !m.enabled } })),
+  )
 const simulateChat = () =>
   run(async () => {
     simSent.value = false
-    await api('/api/admin/simulate/chat', {
-      method: 'POST',
-      body: JSON.stringify({ userName: simUser.value, text: simText.value }),
-    })
+    await api(client.POST('/api/admin/simulate/chat', { body: { userName: simUser.value, text: simText.value } }))
     simText.value = ''
     simSent.value = true
   })

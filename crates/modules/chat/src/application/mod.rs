@@ -82,6 +82,9 @@ mod tests {
         );
         assert_eq!(recent[0]["source"], "twitch");
         assert_eq!(recent[0]["payload"]["fragments"][1]["emoteId"], "25");
+        // The OpenAPI type must describe the wire format exactly: no missing, extra or renamed fields.
+        let typed: crate::ChatMessageEvent = serde_json::from_value(recent[0].clone()).unwrap();
+        assert_eq!(serde_json::to_value(typed).unwrap(), recent[0]);
         let _ = std::fs::remove_dir_all(dir);
     }
 }
