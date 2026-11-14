@@ -1,7 +1,9 @@
 {
   "app": {
     "name": "Streamer Toolkit",
-    "loading": "載入中……"
+    "loading": "載入中……",
+    "notFound": "找不到這個頁面。",
+    "home": "回首頁"
   },
   "twitch": {
     "heading": "Twitch 連線",

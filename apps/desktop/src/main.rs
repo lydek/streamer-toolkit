@@ -287,7 +287,8 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
     }
     let url = if cfg!(dev) {
         // Dev: served by Vite through devUrl (local origin, static capability in capabilities/admin.json).
-        WebviewUrl::App("admin/index.html".into())
+        // `admin/`, not `admin/index.html`: the router's base is /admin/, so the latter would be the route /index.html.
+        WebviewUrl::App("admin/".into())
     } else {
         // Release: the Host URL is a remote origin, so its capability is created for the bound port only.
         // Tauri matches IPC calls by their Origin header, which has no path; on_navigation keeps the window on /admin.
@@ -305,6 +306,9 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, ADMIN, url)
         .title(text::APP_NAME)
         .inner_size(1100.0, 720.0)
+        .min_inner_size(360.0, 480.0)
+        // Ctrl +/-/wheel: lets users enlarge the UI (WCAG 1.4.4).
+        .zoom_hotkeys_enabled(true)
         .data_directory(webview_data_dir(app))
         // Only /admin pages on the app's own origin (dev: the Vite origin).
         .on_navigation(move |url| {

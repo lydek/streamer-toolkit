@@ -2,9 +2,8 @@ import { resolve } from 'node:path'
 import { type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
+import { ADMIN_CSP, devDataDir, devServer, hostProxy } from './dev-server'
 
-// Must match the Host's default port (docs/architecture.md §5).
-const HOST = 'http://127.0.0.1:47810'
 // Must match OVERLAY_CSP in crates/host/src/lib.rs.
 const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
 
@@ -21,15 +20,15 @@ const overlayCsp: Plugin = {
 
 export default defineConfig(({ mode }) => ({
   // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
-  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), overlayCsp],
+  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), overlayCsp, devServer()],
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      '/api': { target: HOST, changeOrigin: true },
-      '/ws': { target: HOST, changeOrigin: true, ws: true },
-      '/templates': { target: HOST, changeOrigin: true },
-    },
+    // Same CSP as the Host's /admin, so violations show up while developing.
+    headers: { 'Content-Security-Policy': ADMIN_CSP },
+    // Replaced by devServer(): only the null origin, and never on /api or /ws.
+    cors: false,
+    proxy: hostProxy(devDataDir()),
   },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.
   build:
