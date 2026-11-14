@@ -12,7 +12,7 @@
     @click="onClick"
   />
   <Teleport v-if="isOpen && mounted" :to="(modal ? dialog : aside)!">
-    <div ref="content" class="drawer-content">
+    <div :id="drawerId(id)" ref="content" class="drawer-content">
       <header class="drawer-header">
         <h2 :id="titleId">{{ title }}</h2>
         <Button data-drawer-close icon="pi pi-times" text rounded :aria-label="t('drawer.close')" autofocus @click="close" />
@@ -37,7 +37,7 @@ import Button from 'primevue/button'
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
-import { useDrawer } from './drawer'
+import { drawerId, useDrawer } from './drawer'
 
 const props = defineProps<{ id: string; title: string; fullPage?: RouteLocationRaw }>()
 

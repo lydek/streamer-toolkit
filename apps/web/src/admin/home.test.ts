@@ -4,10 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
 import { i18n } from '../i18n'
 import type { Schemas } from './api'
+import { drawerId } from './drawer'
 import {
   type Line,
   type LiveState,
-  PANEL_ID,
   applyLive,
   errorToast,
   obsLight,
@@ -194,14 +194,15 @@ describe('toasts', () => {
 describe('HomeTile', () => {
   const tile = (line: Line, attention = false) =>
     mount(HomeTile, {
-      props: { name: '聊天室', icon: 'pi pi-comments', line, attention, expanded: false },
+      props: { id: 'chat', name: '聊天室', icon: 'pi pi-comments', line, attention, expanded: false },
       global: { plugins: [i18n] },
     })
 
-  it('is a disclosure button for the panel', () => {
+  it('is a disclosure button for its drawer and the drawer focus fallback', () => {
     const btn = tile({ state: 'ready', text: 'U：hi' }).get('button')
     expect(btn.attributes('aria-expanded')).toBe('false')
-    expect(btn.attributes('aria-controls')).toBe(PANEL_ID)
+    expect(btn.attributes('aria-controls')).toBe(drawerId('chat'))
+    expect(btn.attributes('data-drawer-tile')).toBe('chat')
     expect(btn.text()).toContain('U：hi')
     expect(btn.find('.dot').exists()).toBe(false)
   })

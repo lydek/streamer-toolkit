@@ -1,5 +1,5 @@
 <template>
-  <button type="button" class="tile" :aria-expanded="expanded" :aria-controls="PANEL_ID">
+  <button type="button" class="tile" :aria-expanded="expanded" :aria-controls="drawerId(id)" :data-drawer-tile="id">
     <i :class="icon" aria-hidden="true"></i>
     <span class="name">{{ name }}</span>
     <span class="line">{{ text }}</span>
@@ -13,9 +13,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { type Line, PANEL_ID, useThrottled } from './home'
+import { drawerId } from './drawer'
+import { type Line, useThrottled } from './home'
 
-const props = defineProps<{ name: string; icon: string; line: Line; attention?: boolean; expanded: boolean }>()
+const props = defineProps<{ id: string; name: string; icon: string; line: Line; attention?: boolean; expanded: boolean }>()
 const { t } = useI18n()
 
 const shown = useThrottled(() => props.line)

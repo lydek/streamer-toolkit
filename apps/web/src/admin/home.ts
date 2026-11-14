@@ -11,9 +11,6 @@ export interface Light {
 /** One tile status line: never blank, never a stale value while loading or failed. */
 export type Line = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; text: string }
 
-/** The id of the element tiles and lights open (`aria-controls`). */
-export const PANEL_ID = 'home-panel'
-
 /** The Twitch light, from `GET /api/admin/twitch` (`failed`: the last request failed). */
 export function twitchLight(overview: Schemas['Overview'] | undefined, failed: boolean): Light {
   if (failed) return { state: 'error', key: 'home.status.failed' }

@@ -1,70 +1,79 @@
 <template>
   <a href="#tiles" class="skip-link" @click.prevent="focusTiles">{{ t('home.skip') }}</a>
-  <main>
-    <header class="top">
-      <h1>{{ t('app.name') }}</h1>
-      <div class="lights">
-        <StatusLight
-          name="Twitch"
-          :light="twitch"
-          :aria-expanded="openId === 'connections'"
-          :aria-controls="PANEL_ID"
-          @click="openPanel('connections', $event.currentTarget)"
-        />
-        <StatusLight
-          name="OBS"
-          :light="obs"
-          :aria-expanded="openId === 'connections'"
-          :aria-controls="PANEL_ID"
-          @click="openPanel('connections', $event.currentTarget)"
-        />
-      </div>
-    </header>
-    <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
+  <div class="layout">
+    <main>
+      <header class="top">
+        <h1>{{ t('app.name') }}</h1>
+        <div class="lights">
+          <StatusLight
+            name="Twitch"
+            :light="twitch"
+            :aria-expanded="drawer.current.value === 'connections'"
+            :aria-controls="drawerId('connections')"
+            @click="toggle('connections', $event.currentTarget)"
+          />
+          <StatusLight
+            name="OBS"
+            :light="obs"
+            :aria-expanded="drawer.current.value === 'connections'"
+            :aria-controls="drawerId('connections')"
+            @click="toggle('connections', $event.currentTarget)"
+          />
+        </div>
+      </header>
+      <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
 
-    <!-- Later slices add pending items; the list shows only when it has some. -->
-    <section v-if="pending.length" aria-labelledby="pending-heading">
-      <h2 id="pending-heading">{{ t('home.pending') }}</h2>
-      <ul class="plain">
-        <li v-for="p in pending" :key="p.id">
-          <Button :label="p.text" text @click="openPanel(p.panel, $event.currentTarget)" />
-        </li>
-      </ul>
-    </section>
-
-    <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
-      <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
-      <div v-else-if="!groups.length" class="stack">
-        <p>{{ t('home.empty') }}</p>
-        <!-- TODO(#12): enter arrange mode. Until then the module switches are the way to bring tiles back. -->
-        <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined @click="focusModules" />
-      </div>
-      <template v-for="g in groups" :key="g.group">
-        <h2 :id="`group-${g.group}`">{{ t(`home.groups.${g.group}`) }}</h2>
-        <ul class="plain grid" :aria-labelledby="`group-${g.group}`">
-          <li v-for="tile in g.tiles" :key="tile.id">
-            <HomeTile
-              :name="moduleName(tile.id)"
-              :icon="tile.icon"
-              :line="lines[tile.id] ?? { state: 'loading' }"
-              :attention="attention[tile.id]"
-              :expanded="openId === tile.id"
-              @click="openPanel(tile.id, $event.currentTarget)"
-            />
+      <!-- Later slices add pending items; the list shows only when it has some. -->
+      <section v-if="pending.length" aria-labelledby="pending-heading">
+        <h2 id="pending-heading">{{ t('home.pending') }}</h2>
+        <ul class="plain">
+          <li v-for="p in pending" :key="p.id">
+            <Button :label="p.text" text @click="toggle(p.panel, $event.currentTarget)" />
           </li>
         </ul>
-      </template>
-    </section>
+      </section>
 
-    <!-- TODO(#9): stand-in for the drawer; move these panels into it and drop this section once #9 merges. -->
-    <section v-if="openId" :id="PANEL_ID" class="panel" aria-labelledby="panel-heading" @keydown.esc="closePanel">
-      <div class="panel-head">
-        <h2 id="panel-heading">{{ openId === 'connections' ? t('home.connections') : moduleName(openId) }}</h2>
-        <Button id="panel-close" icon="pi pi-times" text :aria-label="t('app.close')" @click="closePanel" />
-      </div>
+      <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
+        <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+        <div v-else-if="!groups.length" class="stack">
+          <p>{{ t('home.empty') }}</p>
+          <!-- TODO(#12): enter arrange mode. Until then the module switches are the way to bring tiles back. -->
+          <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="focusModules" />
+        </div>
+        <template v-for="g in groups" :key="g.group">
+          <h2 :id="`group-${g.group}`">{{ t(`home.groups.${g.group}`) }}</h2>
+          <ul class="plain grid" :aria-labelledby="`group-${g.group}`">
+            <li v-for="tile in g.tiles" :key="tile.id">
+              <HomeTile
+                :id="tile.id"
+                :name="moduleName(tile.id)"
+                :icon="tile.icon"
+                :line="lines[tile.id] ?? { state: 'loading' }"
+                :attention="attention[tile.id]"
+                :expanded="drawer.current.value === tile.id"
+                @click="toggle(tile.id, $event.currentTarget)"
+              />
+            </li>
+          </ul>
+        </template>
+      </section>
 
-      <template v-if="openId === 'connections'">
-        <h3>{{ t('twitch.heading') }}</h3>
+      <!-- TODO(#10): moves to the settings page. -->
+      <section aria-labelledby="modules-heading">
+        <h2 id="modules-heading" ref="modulesHeading" tabindex="-1">{{ t('modules.heading') }}</h2>
+        <ul class="plain">
+          <li v-for="m in modules" :key="m.id" class="module">
+            <Checkbox :input-id="`module-${m.id}`" :model-value="m.enabled" binary :disabled="busy" @update:model-value="toggleModule(m)" />
+            <label :for="`module-${m.id}`">{{ moduleName(m.id) }}</label>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <AppDrawer id="connections" :title="t('home.connections')">
+      <template #now>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+        <h4>{{ t('twitch.heading') }}</h4>
         <p v-if="!overview">{{ t('app.loading') }}</p>
 
         <form v-else-if="!overview.client_id || editingClientId" @submit.prevent="saveClientId">
@@ -97,37 +106,28 @@
           <Button :label="t('twitch.changeClientId')" text @click="startEditClientId" />
         </template>
 
-        <h3>OBS</h3>
+        <h4>OBS</h4>
         <p>
           {{ t(obs.key) }}
           <template v-if="live.obs?.reason">— {{ errorMessage(live.obs.reason) }}</template>
         </p>
       </template>
+    </AppDrawer>
 
-      <template v-else-if="openId === 'chat'">
-        <h3>{{ t('simulate.heading') }}</h3>
-        <p>{{ t('simulate.hint') }}</p>
+    <AppDrawer id="chat" :title="moduleName('chat')">
+      <template #actions>
         <form @submit.prevent="simulateChat">
+          <p>{{ t('simulate.hint') }}</p>
           <label for="sim-user">{{ t('simulate.userName') }}</label>
           <InputText id="sim-user" v-model="simUser" autocomplete="off" maxlength="25" />
           <label for="sim-text">{{ t('simulate.text') }}</label>
           <InputText id="sim-text" v-model="simText" autocomplete="off" maxlength="500" required />
           <Button type="submit" :label="t('simulate.send')" icon="pi pi-send" :disabled="busy" />
+          <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
         </form>
       </template>
-    </section>
-
-    <!-- TODO(#10): moves to the settings page. -->
-    <section aria-labelledby="modules-heading">
-      <h2 id="modules-heading" ref="modulesHeading" tabindex="-1">{{ t('modules.heading') }}</h2>
-      <ul class="plain">
-        <li v-for="m in modules" :key="m.id" class="module">
-          <Checkbox :input-id="`module-${m.id}`" :model-value="m.enabled" binary :disabled="busy" @update:model-value="toggleModule(m)" />
-          <label :for="`module-${m.id}`">{{ moduleName(m.id) }}</label>
-        </li>
-      </ul>
-    </section>
-  </main>
+    </AppDrawer>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -136,13 +136,14 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import AppDrawer from './AppDrawer.vue'
+import { drawerId, useDrawer } from './drawer'
 import {
   type Line,
-  PANEL_ID,
   errorToast,
   obsLight,
   successToast,
@@ -166,12 +167,13 @@ const busy = ref(false)
 const simUser = ref('')
 const simText = ref('')
 const templateError = ref<string | null>(null)
-const openId = ref<string>()
+const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
 const modulesHeading = ref<HTMLElement>()
-let opener: HTMLElement | undefined
 let timer: number | undefined
 
+const drawer = useDrawer()
+watch(drawer.current, () => (notice.value = undefined))
 const live = useLiveEvents()
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
@@ -211,14 +213,25 @@ async function refreshTemplate() {
   templateError.value = (await api(client.GET('/api/admin/templates/chat'))).error
 }
 
+// Toasts sit under a modal drawer's top layer, so results show inside the drawer while it is modal.
+function notify(text: string, error: boolean) {
+  if (document.querySelector('.drawer-dialog[open]')) notice.value = { text, error }
+  else toast.add(error ? errorToast(text) : successToast(text))
+}
+
+// Tiles and lights are disclosure buttons: a second press closes their drawer.
+const toggle = (id: string, el: EventTarget | null) =>
+  drawer.current.value === id ? drawer.close() : drawer.open(id, el)
+
 async function run(action: () => Promise<unknown>) {
   busy.value = true
+  notice.value = undefined
   try {
     await action()
     await refresh()
   } catch (e) {
     loadFailed.value = !modules.value
-    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+    notify(e instanceof ApiError ? errorMessage(e.code) : String(e), true)
   } finally {
     busy.value = false
   }
@@ -239,34 +252,21 @@ const simulateChat = () =>
   run(async () => {
     await api(client.POST('/api/admin/simulate/chat', { body: { userName: simUser.value, text: simText.value } }))
     simText.value = ''
-    toast.add(successToast(t('simulate.sent')))
+    notify(t('simulate.sent'), false)
   })
 
 async function openActivate() {
+  notice.value = undefined
   try {
     await invoke('open_twitch_activate')
   } catch (code) {
-    toast.add(errorToast(errorMessage(String(code))))
+    notify(errorMessage(String(code)), true)
   }
 }
 
 function startEditClientId() {
   clientIdInput.value = overview.value?.client_id ?? ''
   editingClientId.value = true
-}
-
-// TODO(#9): replace with the drawer's open/close (it also owns focus return and submit-before-close).
-async function openPanel(id: string, el: EventTarget | null) {
-  if (openId.value === id) return closePanel()
-  openId.value = id
-  opener = el as HTMLElement
-  await nextTick()
-  document.getElementById('panel-close')?.focus()
-}
-
-function closePanel() {
-  openId.value = undefined
-  opener?.focus()
 }
 
 const focusTiles = () => tilesEl.value?.focus()
@@ -321,18 +321,19 @@ onBeforeUnmount(() => window.clearInterval(timer))
   outline: none;
 }
 
-.panel {
-  margin-top: 1.5rem;
-  padding: 0 1rem 1rem;
-  border: 1px solid var(--p-surface-500);
-  border-radius: 6px;
-  background: var(--p-surface-900);
+/* Wider than 1000px the drawer is an aside beside the page. */
+.layout {
+  display: flex;
+  align-items: flex-start;
 }
 
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.layout > main {
+  flex: 1;
+  min-width: 0;
+}
+
+h4 {
+  margin: 0;
 }
 
 .module {
