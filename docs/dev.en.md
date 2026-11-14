@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 9acbad6195aa5dac4504d6f0d15183fac1b81d0e34666b17fe0c39b8508c2130 -->
+<!-- source: docs/dev.md source-sha256: 3c3faa15f6eff7a315d6de48a108d8474f6ed6606b45573380750cd2f1c46440 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -53,6 +53,8 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
     - When the drawer is modal, error messages and their buttons are visible and can be pressed.
     - With a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
     - The close-window hint: Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
+    - Full pages (e.g. ⚙ Settings): entering focuses "← Home"; it and Alt+← both return home, and history does not grow (on home, Alt+← does nothing); back on home, focus returns to the tile, ⚙ or "Arrange tiles" used to enter, falling back to the first tile, then "Arrange tiles", when that item is gone; the drawer does not reopen.
+    - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Alt+←; when the save fails, the page stays and shows the error.
   - Logic that can be extracted into pure functions still gets unit tests; the Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.

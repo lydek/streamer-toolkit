@@ -60,10 +60,27 @@
     "changeClientId": "變更 Client ID"
   },
   "modules": {
-    "heading": "模組",
     "names": {
       "chat": "聊天室"
     }
+  },
+  "settings": {
+    "title": "設定",
+    "general": "一般",
+    "askBeforeClose": "關閉視窗前先詢問",
+    "obs": {
+      "host": "主機",
+      "port": "連接埠",
+      "password": "密碼",
+      "passwordSet": "已儲存密碼；輸入新密碼即可取代。",
+      "passwordNone": "尚未設定密碼。",
+      "removePassword": "移除密碼"
+    },
+    "features": "功能",
+    "backup": "備份與還原",
+    "backupLater": "之後的版本才會提供。",
+    "about": "關於",
+    "license": "以 MIT 授權釋出。"
   },
   "simulate": {
     "heading": "事件模擬器",
