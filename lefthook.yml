@@ -17,6 +17,10 @@ pre-push:
   jobs:
     - name: translations
       run: node scripts/check-translations.mjs
+    - name: script-tests
+      run: pnpm test:scripts
+    - name: frontend-licenses
+      run: pnpm check:licenses
     - name: web-lint
       run: pnpm web:lint
     - name: web-test

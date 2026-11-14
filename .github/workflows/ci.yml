@@ -36,6 +36,11 @@ jobs:
       - name: Translations in sync
         run: node scripts/check-translations.mjs
 
+      - name: Script tests
+        run: pnpm test:scripts
+      - name: Bundled frontend licenses (allowlist in docs/decisions.md)
+        run: pnpm check:licenses
+
       # Frontend first: the Host embeds apps/web/dist at compile time.
       - run: pnpm web:lint
       - run: pnpm web:test
