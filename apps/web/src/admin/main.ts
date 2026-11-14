@@ -1,6 +1,7 @@
 import 'primeicons/primeicons.css'
 import './style.css'
 import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
 import { createApp } from 'vue'
 import { i18n } from '../i18n'
 import App from './App.vue'
@@ -12,4 +13,5 @@ createApp(App)
   .use(router)
   // Dark only (MVP): admin/index.html always carries the class.
   .use(PrimeVue, { theme: { preset: theme, options: { darkModeSelector: '.app-dark' } } })
+  .use(ToastService)
   .mount('#app')
