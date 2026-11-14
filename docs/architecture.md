@@ -104,7 +104,7 @@ apps/
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
   - Vite 以 `server.headers` 送出與 `/admin` 相同的 CSP，`/overlay/` 下的頁面改送 Overlay CSP（`vite.config.ts` 的 middleware），讓違規在開發時就出現。
-  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
+  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
 
 ### 本機 API 安全
 只綁 `127.0.0.1` 擋不住瀏覽器裡的惡意網頁（跨站請求、DNS rebinding、WebSocket 劫持），因此另外做：
@@ -121,10 +121,10 @@ apps/
   - 預覽 iframe 的 origin 是 `null`，無法連 Host；快照與範例事件由管理視窗用 `postMessage` 傳入。
   - Overlay 與樣板路徑的所有回應（含 HTML 與 SVG）都送 Overlay CSP：`script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本類型的檔案（白名單：HTML、CSS、圖片、字型、音效），並加 `X-Content-Type-Options: nosniff`，落實初版只開放 HTML／CSS。
   - 聊天室樣板放在資料夾的 `templates/chat/`：`template.html`（HTML 片段）、`style.css`，以及圖片、字型等檔案。這個目錄不存在時（例如第一次啟動）複製內建預設樣板進去，不覆寫既有檔案；預設樣板的原始檔在 `apps/web/src/overlay/chat/default-template/`，同時內嵌進執行檔。
-  - 綁定方式：`template.html` 要有一個 `data-chat-list` 元素（新訊息加在它裡面）與一個 `<template data-chat-message>`（一則訊息的標記），裡面用 `data-field="userName"`、`data-field="text"` 標出填值位置；觀眾名稱顏色以 CSS 變數 `--user-color` 設在每則訊息上。Overlay 用 `fetch` 取得 `template.html`、以 `DOMParser` 解析（解析時不執行任何程式），移除 `script`、`iframe`、`object`、`embed`、`base`、`meta` 等元素與 `on*` 屬性。網址屬性（`src`、`href`、`xlink:href`、`poster`、`action`、`formaction`）只保留 `http:`、`https:`、`data:` 與相對路徑，其餘（例如 `javascript:`）移除；相對路徑改指向樣板目錄，`#` 開頭的同頁片段（例如 SVG 的 `<use href="#icon">`）不改。`style` 屬性、`<style>` 與 `srcset` 裡的相對路徑不改寫，會以 Overlay 頁面為基準，所以 `url()` 要寫在 `style.css`。新樣板先隱藏掛上，等樣式表載入（最多 3 秒）才換掉舊樣板，避免閃出沒有樣式的畫面。觀眾輸入一律以 `textContent` 寫入，不當 HTML 解析。
+  - 綁定方式：`template.html` 要有一個 `data-chat-list` 元素（新訊息加在它裡面）與一個 `<template data-chat-message>`（一則訊息的標記），裡面用 `data-field="userName"`、`data-field="text"` 標出填值位置；觀眾有設定名稱顏色時，以 CSS 變數 `--user-color` 設在每則訊息上（樣式要寫後備值，例如 `var(--user-color, #fff)`）。Overlay 用 `fetch` 取得 `template.html`、以 `DOMParser` 解析（解析時不執行任何程式），移除 `script`、`iframe`、`object`、`embed`、`base`、`meta` 等元素與 `on*` 屬性。網址屬性（`src`、`href`、`xlink:href`、`poster`、`action`、`formaction`）只保留 `http:`、`https:`、`data:` 與相對路徑，其餘（例如 `javascript:`）移除；相對路徑改指向樣板目錄（以 `/` 開頭的路徑以 Host 根目錄為準，不指向樣板目錄），`#` 開頭的同頁片段（例如 SVG 的 `<use href="#icon">`）不改。`style` 屬性、`<style>` 與 `srcset` 裡的相對路徑不改寫，會以 Overlay 頁面為基準，所以 `url()` 要寫在 `style.css`。新樣板先隱藏掛上，等樣式表載入（最多 3 秒）才換掉舊樣板，避免閃出沒有樣式的畫面。觀眾輸入一律以 `textContent` 寫入，不當 HTML 解析。
   - 樣板路由 `GET /templates/chat/{*path}`：路徑每一段不得為空、`.` 或 `..`，也不得含 `\`、`:`；檔案經 `canonicalize` 後必須仍在樣板目錄內（擋 `..`、符號連結與 junction）；回應另加 `Cache-Control: no-store`。`/templates` 下的標頭由一層 middleware 加上，連進入 handler 前就產生的錯誤回應（編碼錯誤、錯誤的方法、找不到路徑、Host 標頭被拒）也有。
-  - 備援：`template.html` 不存在、無法以 UTF-8 讀取、超過 1 MB，或在 HTML 註解以外找不到 `data-chat-list` 屬性與帶 `data-chat-message` 的 `<template>` 標籤時，樣板路由整組改提供內建預設樣板，`GET /api/admin/templates/chat` 回傳錯誤碼，由管理 UI 顯示。Overlay 取不到樣板或解析不到標記時也改用預設樣板，畫面不會空白。
-  - 即時套用：Host 每秒掃描樣板目錄內可提供檔案（白名單內的類型，不含編輯器暫存檔）的路徑、大小與修改時間（輪詢，不另加檔案監看依賴），有變化就重新檢查樣板，並在 `/ws/overlay` 發布 `template.changed` 事件（`source` 為 `system`，不放進快照）。Overlay 收到這個事件或新的快照時重新載入樣板，相對網址加上新的版本參數避開快取；目前的訊息保留，以新樣板重新畫出。
+  - 備援：`template.html` 不存在、無法讀取（包括不是 UTF-8）、超過 1 MB，或在 HTML 註解以外缺少 `data-chat-list` 屬性或帶 `data-chat-message` 的 `<template>` 標籤時，樣板路由整組改提供內建預設樣板，`GET /api/admin/templates/chat` 回傳錯誤碼（`template.missing`／`template.unreadable`／`template.invalid`），由管理 UI 顯示。Overlay 取不到樣板或解析不到標記時也改用預設樣板，畫面不會空白。
+  - 即時套用：Host 每秒掃描樣板目錄內可提供檔案（白名單內的類型，不含編輯器暫存檔）的路徑、大小與修改時間（輪詢，不另加檔案監看依賴），有變化就重新檢查樣板，並在 `/ws/overlay` 發布 `template.changed` 事件（`source` 為 `system`，不放進快照）。Overlay 收到這個事件或新的快照時重新載入樣板；網址若指向樣板目錄，就加上新的版本參數，避開快取；目前的訊息保留，以新樣板重新畫出。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板目錄送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與使用者樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。
