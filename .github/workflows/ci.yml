@@ -46,7 +46,7 @@ jobs:
       - name: Regenerate API contracts
         run: pnpm api:gen
       - name: API contracts are up to date (run pnpm api:gen and commit)
-        run: git diff --exit-code -- apps/web/src/api
+        run: git diff --exit-code HEAD -- apps/web/src/api
 
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings

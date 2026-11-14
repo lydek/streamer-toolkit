@@ -97,6 +97,27 @@ mod tests {
         // No missing, extra or renamed fields; a new retained event type must be added to SnapshotPayload.
         let typed: Snapshot = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(typed).unwrap(), wire);
+
+        // The generated schema must agree too: every field it marks required is on the wire.
+        let event = &wire["payload"]["chat.message"][0];
+        assert_required("Snapshot", &wire);
+        assert_required("SnapshotPayload", &wire["payload"]);
+        assert_required("ChatMessageEvent", event);
+        assert_required("ChatMessagePayload", &event["payload"]);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn assert_required(schema: &str, value: &serde_json::Value) {
+        let doc = serde_json::to_value(crate::openapi()).unwrap();
+        let required = doc["components"]["schemas"][schema]["required"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{schema} has a required list"));
+        for key in required {
+            let key = key.as_str().unwrap();
+            assert!(
+                value.get(key).is_some(),
+                "{schema}.{key} is required but not sent"
+            );
+        }
     }
 }

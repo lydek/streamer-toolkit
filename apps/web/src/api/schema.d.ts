@@ -184,7 +184,10 @@ export interface components {
             user_code: string;
             verification_uri: string;
         };
-        /** @description Body of every admin API error: a stable `<area>.<reason>` code the admin UI translates. */
+        /**
+         * @description Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
+         *     The missing-token 401 has an empty body, and malformed JSON gets axum's plain-text rejection.
+         */
         ErrorBody: {
             code: string;
         };
@@ -431,30 +434,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
             };
         };
     };

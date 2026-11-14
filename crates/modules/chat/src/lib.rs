@@ -5,4 +5,4 @@ mod domain;
 mod infrastructure;
 
 pub use application::ChatService;
-pub use infrastructure::{ChatFragment, ChatMessageEvent, ChatMessagePayload, ChatMessageType};
+pub use infrastructure::ChatMessageEvent;

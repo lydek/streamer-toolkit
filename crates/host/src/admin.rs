@@ -216,12 +216,8 @@ async fn login(State(s): State<Arc<AdminState>>) -> Response {
     post,
     path = "/api/admin/twitch/logout",
     tag = "admin",
-    responses(
-        (status = 204),
-        (status = 400, body = ErrorBody),
-        (status = 409, body = ErrorBody),
-        (status = 502, body = ErrorBody),
-    )
+    // TwitchAuth::logout never fails today; auth_error stays as the guard if that changes.
+    responses((status = 204))
 )]
 async fn logout(State(s): State<Arc<AdminState>>) -> Response {
     match s.twitch.read().await.logout() {
@@ -321,7 +317,8 @@ fn auth_error(e: AuthError) -> Response {
     error(status, &e.to_string())
 }
 
-/// Body of every admin API error: a stable `<area>.<reason>` code the admin UI translates.
+/// Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
+/// The missing-token 401 has an empty body, and malformed JSON gets axum's plain-text rejection.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct ErrorBody {
     code: String,
