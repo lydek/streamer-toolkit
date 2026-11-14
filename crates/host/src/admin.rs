@@ -111,7 +111,11 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .with_state(state)
 }
 
-async fn require_token(State(s): State<Arc<AdminState>>, req: Request, next: Next) -> Response {
+pub(crate) async fn require_token(
+    State(s): State<Arc<AdminState>>,
+    req: Request,
+    next: Next,
+) -> Response {
     let ok = req
         .headers()
         .get(header::AUTHORIZATION)
@@ -324,7 +328,7 @@ pub(crate) struct ErrorBody {
     code: String,
 }
 
-fn error(status: StatusCode, code: &str) -> Response {
+pub(crate) fn error(status: StatusCode, code: &str) -> Response {
     (status, Json(ErrorBody { code: code.into() })).into_response()
 }
 

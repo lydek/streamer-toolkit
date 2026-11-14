@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent` and `ObsStatusEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -61,6 +61,72 @@
         "responses": {
           "204": {},
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/obs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "obs_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObsOverview"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the address (and the password, when given) and reconnects with them.",
+        "operationId": "update_obs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObsSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
@@ -511,6 +577,132 @@
           }
         }
       },
+      "ObsOverview": {
+        "type": "object",
+        "required": [
+          "host",
+          "port",
+          "password_set",
+          "status"
+        ],
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "password_set": {
+            "type": "boolean",
+            "description": "Whether a password is stored; the password itself is never returned."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/ObsStatusPayload"
+          }
+        }
+      },
+      "ObsSettingsBody": {
+        "type": "object",
+        "required": [
+          "host",
+          "port"
+        ],
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "Host name or IPv4 address."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Absent keeps the stored password; empty removes it (OBS with authentication off)."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1-65535.",
+            "minimum": 0
+          }
+        }
+      },
+      "ObsState": {
+        "type": "string",
+        "enum": [
+          "connected",
+          "reconnecting",
+          "error"
+        ]
+      },
+      "ObsStatusEvent": {
+        "type": "object",
+        "description": "An `obs.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ObsStatusPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ObsStatusType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ObsStatusPayload": {
+        "type": "object",
+        "description": "The `payload` of an `obs.status` event, and the `status` of `GET /api/admin/obs`.",
+        "required": [
+          "state",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code such as `obs.auth_failed`; `null` when connected or right after startup."
+          },
+          "state": {
+            "$ref": "#/components/schemas/ObsState"
+          }
+        }
+      },
+      "ObsStatusType": {
+        "type": "string",
+        "enum": [
+          "obs.status"
+        ]
+      },
       "Overview": {
         "type": "object",
         "required": [
@@ -571,7 +763,8 @@
       "SnapshotPayload": {
         "type": "object",
         "required": [
-          "chat.message"
+          "chat.message",
+          "obs.status"
         ],
         "properties": {
           "chat.message": {
@@ -579,6 +772,13 @@
             "items": {
               "$ref": "#/components/schemas/ChatMessageEvent"
             }
+          },
+          "obs.status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObsStatusEvent"
+            },
+            "description": "At most one: the latest status."
           }
         }
       },
@@ -593,6 +793,7 @@
         "description": "Where an event came from. Simulated events never go into real business records.",
         "enum": [
           "twitch",
+          "obs",
           "simulation"
         ]
       }

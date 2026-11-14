@@ -113,3 +113,26 @@ fn domain_folders_do_not_mention_sqlx_or_axum() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
 }
+
+/// External platform SDKs live only in `integrations`; modules and `core` get internal events instead.
+#[test]
+fn external_sdks_stay_in_integrations() {
+    const SDKS: [&str; 2] = ["obws", "tokio-tungstenite"];
+    let metadata = MetadataCommand::new()
+        .manifest_path(workspace_root().join("Cargo.toml"))
+        .no_deps()
+        .exec()
+        .expect("cargo metadata");
+    let problems: Vec<String> = metadata
+        .workspace_packages()
+        .into_iter()
+        .filter(|p| p.name.as_str() != "integrations")
+        .flat_map(|p| {
+            p.dependencies
+                .iter()
+                .filter(|d| d.kind == DependencyKind::Normal && SDKS.contains(&d.name.as_str()))
+                .map(move |d| format!("{} must not depend on {}", p.name, d.name))
+        })
+        .collect();
+    assert!(problems.is_empty(), "{problems:#?}");
+}

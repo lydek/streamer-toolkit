@@ -19,7 +19,6 @@ pub const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Twitch sends something at least every keepalive interval; this much extra silence means the link is dead.
 const KEEPALIVE_GRACE: Duration = Duration::from_secs(10);
-const MAX_BACKOFF_SECS: u64 = 60;
 const SEEN_CAPACITY: usize = 256;
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -75,8 +74,7 @@ impl EventSub {
                 }
             };
             failures += 1;
-            let backoff =
-                Duration::from_secs((1u64 << (failures - 1).min(6)).min(MAX_BACKOFF_SECS));
+            let backoff = crate::backoff(failures);
             // A 429 with a reset time waits at least that long (Helix points bucket).
             let wait = match &error {
                 EventSubError::Helix(HelixError::RateLimited(Some(reset))) => backoff.max(*reset),

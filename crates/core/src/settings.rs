@@ -16,6 +16,24 @@ pub struct Settings {
     pub twitch_client_id: String,
     /// Modules the broadcaster turned off; everything else is enabled.
     pub disabled_modules: Vec<String>,
+    /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
+    pub obs: ObsSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ObsSettings {
+    pub host: String,
+    pub port: u16,
+}
+
+impl Default for ObsSettings {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".into(),
+            port: 4455,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -24,6 +42,7 @@ impl Default for Settings {
             port: crate::DEFAULT_PORT,
             twitch_client_id: String::new(),
             disabled_modules: Vec::new(),
+            obs: ObsSettings::default(),
         }
     }
 }
@@ -89,6 +108,8 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"port":5000}"#).unwrap();
         assert_eq!(s.port, 5000);
         assert_eq!(s.twitch_client_id, "");
+        assert_eq!(s.obs, ObsSettings::default());
+        assert_eq!((s.obs.host.as_str(), s.obs.port), ("127.0.0.1", 4455));
     }
 
     #[test]

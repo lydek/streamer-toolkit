@@ -36,6 +36,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["obs_overview"];
+        /** Saves the address (and the password, when given) and reconnects with them. */
+        put: operations["update_obs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/chat": {
         parameters: {
             query?: never;
@@ -198,6 +215,47 @@ export interface components {
             enabled: boolean;
             id: string;
         };
+        ObsOverview: {
+            host: string;
+            /** @description Whether a password is stored; the password itself is never returned. */
+            password_set: boolean;
+            /** Format: int32 */
+            port: number;
+            status: components["schemas"]["ObsStatusPayload"];
+        };
+        ObsSettingsBody: {
+            /** @description Host name or IPv4 address. */
+            host: string;
+            /** @description Absent keeps the stored password; empty removes it (OBS with authentication off). */
+            password?: string | null;
+            /**
+             * Format: int32
+             * @description 1-65535.
+             */
+            port: number;
+        };
+        /** @enum {string} */
+        ObsState: "connected" | "reconnecting" | "error";
+        /** @description An `obs.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
+        ObsStatusEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ObsStatusPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ObsStatusType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The `payload` of an `obs.status` event, and the `status` of `GET /api/admin/obs`. */
+        ObsStatusPayload: {
+            /** @description Stable code such as `obs.auth_failed`; `null` when connected or right after startup. */
+            reason: string | null;
+            state: components["schemas"]["ObsState"];
+        };
+        /** @enum {string} */
+        ObsStatusType: "obs.status";
         Overview: {
             client_id: string;
             status: components["schemas"]["AuthStatus"];
@@ -217,6 +275,8 @@ export interface components {
         };
         SnapshotPayload: {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
+            /** @description At most one: the latest status. */
+            "obs.status": components["schemas"]["ObsStatusEvent"][];
         };
         /** @enum {string} */
         SnapshotType: "snapshot";
@@ -224,7 +284,7 @@ export interface components {
          * @description Where an event came from. Simulated events never go into real business records.
          * @enum {string}
          */
-        Source: "twitch" | "simulation";
+        Source: "twitch" | "obs" | "simulation";
     };
     responses: never;
     parameters: never;
@@ -275,6 +335,70 @@ export interface operations {
                 content?: never;
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    obs_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObsOverview"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_obs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObsSettingsBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
