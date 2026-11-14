@@ -7,6 +7,7 @@
 - Node：24 LTS，寫在 `.nvmrc`。Tauri CLI 與 lefthook 是 pnpm devDependencies，用 `pnpm tauri …`、`pnpm lefthook …` 執行。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖定相依套件，安裝用 `pnpm install --frozen-lockfile`。
 - Visual Studio Build Tools（MSVC）與 WebView2 Runtime（Tauri 需要）。
 - `cargo-deny`：`cargo install --locked cargo-deny`（pre-push hook 與 CI 都會跑 `cargo deny check`）。
+- Playwright 的 Chromium（UI E2E 用）：`pnpm --filter web exec playwright install chromium`，裝一次即可；瀏覽器放在使用者資料夾，不進 repo。
 
 原則：另一台 Windows 電腦照這份文件就能跑起來。
 
@@ -15,7 +16,7 @@
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
 - API 契約：改了 Host 的 HTTP API 或 WebSocket 事件後執行 `pnpm api:gen`（需要先建置前端），由 Rust（`utoipa`）產生 `apps/web/src/api/openapi.json`，再由 `openapi-typescript` 產生 `schema.d.ts`，兩個檔案一起 commit；CI 重新產生後有差異就失敗。WebSocket 的快照與事件型別也放在 OpenAPI components，測試會拿實際送出的 JSON 比對；新增對外事件或快照保留的事件種類時，要一起在 `crates/host/src/openapi.rs` 的 components 加型別。
-- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push`
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`pnpm web:e2e`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push`
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`（`pnpm tauri dev` 的 Vite proxy 只讀 `target\debug\data\` 的 port，所以那份資料的 port 要和它相同）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
@@ -25,34 +26,42 @@
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
-  - `pre-push` 依 CI 的順序跑完整檢查（翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
+  - `pre-push` 依 CI 的順序跑完整檢查（翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 
 ## 每次提交前（CI 也跑同一套，只跑 Windows）
 順序：先建置前端（`dist/` 不進版控，`rust-embed` 需要它才編得過），再跑 Rust 檢查。
-格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
+格式、lint、型別檢查、測試、架構測試、UI E2E、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
 沒有開啟 `tauri/custom-protocol` 的 cargo 指令都以 dev 模式編譯，所以 CI 另跑 `cargo clippy --features tauri/custom-protocol`，檢查只在正式版編譯的程式碼（只用來檢查，不散布產物）。正式發佈一律用 `tauri build`。
 
 ## 測試底線
 - 只測我們負責的行為，不測 Twitch／OBS 本身。
-- 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新。UI E2E 延後。
+- 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新；UI E2E 測 jsdom 測不了的瀏覽器行為。
+- UI E2E（`apps/web/e2e/`，Playwright＋Chromium，`pnpm web:e2e`，需要先建置前端）：
+  - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/overlay` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 不放任何 token 或 secret。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
+  - Overlay 對真的 Host 測：`crates/host/examples/e2e_host.rs` 在暫存資料夾啟動 Host（隨機管理 token、假的 secret 儲存、Twitch 指向不存在的位址）。
+  - 能用單元測試測的判斷照樣寫單元測試，E2E 不重複。
 - 架構測試（`crates/arch-tests`）：`domain/` 內沒有任何 `sqlx`／`axum` 字樣；crate 相依方向正確：模組只依賴共用核心（`crates/core`，package 名稱 `toolkit-core`）與其他模組的公開介面，不依賴 `integrations` 與 `host`；模組不引用其他模組的非公開型別（規則見 [architecture.md](architecture.md)）。
 - Migration 測試：合併後的版本全域唯一且已排序。
 - 必測：兌換事件去重與狀態轉換、備份後能實際還原、migration 升級不掉資料。
 - 用模擬事件測試，不必真的觸發 Twitch。模擬事件標記 `source=simulation`，不得寫入任何正式業務紀錄（兌換紀錄、打卡紀錄）。
-- OBS 實際畫面與音效，每個切片完成時直播試用一次即可。
-- a11y 基準（每個切片完成時人工檢查一次）：所有操作可用鍵盤完成、焦點可見、每個控制項有 label、文字對比達 WCAG 2.2 AA（4.5:1）、控制項邊界與傳達資訊的圖示達 3:1（WCAG 1.4.11）、狀態不只用顏色表達。
-  - 檢查方法：用鍵盤走一遍；對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；以 1280px 寬的視窗放大到 200%、400%（相當於 640px、320px 寬）時，沒有橫向捲軸、文字沒被裁掉（刻意以「……」省略的除外）、按鈕都按得到。不做螢幕閱讀器實測，但語意標記與 ARIA 照做。
-  - 抽屜與對話方塊（`<dialog>`）的行為 jsdom 測不了，在實際 Tauri 視窗手動走一遍：
-    - 視窗 > 1000px 時抽屜在功能磚旁並排（380px），功能磚仍可操作；≤ 1000px 時是右側 modal，點背景或按 Esc 會關；< 600px 時從底部出現。
-    - 跨過 1000px 寬度門檻後，抽屜沒有關閉，焦點、輸入值、捲動位置都還在。
-    - 打開抽屜時焦點在關閉鈕；關閉後焦點回到開啟它的功能磚、狀態燈或待處理項目；那個項目已不在時，依序退回它所屬的功能磚、第一個功能磚、「整理功能磚」。
-    - 打字後不按 Enter，用下列方式離開抽屜，值都已寫入：✕、Esc、「開啟完整頁」（並排與 modal 各走一遍），再加並排時點另一個功能磚、modal 時點背景。
-    - 儲存失敗時抽屜不關、欄位回到舊值並顯示錯誤；失敗發生在欄位失焦時，之後第一次按 ✕ 抽屜也不關（再按一次才會關）。
-    - 抽屜為 modal 時，錯誤訊息與其中的按鈕都看得到、按得到。
-    - 抽屜內下拉選單開著時按 Esc，只關下拉選單、不關抽屜。
-    - 關閉視窗時的提示：按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣。
-  - 能抽成純函式的判斷照樣寫單元測試；關閉提示的 Rust 狀態流程（已顯示／取消／隱藏、2 秒逾時、提示中再按 ✕）寫 Rust 單元測試。
+- a11y 基準：所有操作可用鍵盤完成、焦點可見、每個控制項有 label、文字對比達 WCAG 2.2 AA（4.5:1）、控制項邊界與傳達資訊的圖示達 3:1（WCAG 1.4.11）、狀態不只用顏色表達。不做螢幕閱讀器實測，但語意標記與 ARIA 照做。
+- 由 UI E2E 自動檢查（CI 每次都跑）：
+  - 抽屜：視窗 > 1000px 時在功能磚旁並排（380px），功能磚仍可操作；≤ 1000px 時是右側 modal，點背景或按 Esc 會關；< 600px 時從底部出現。
+  - 跨過 1000px 寬度門檻後，抽屜沒有關閉，焦點、輸入值、捲動位置都還在。
+  - 打開抽屜時焦點在關閉鈕；關閉後焦點回到開啟它的功能磚或狀態燈；那個項目已不在時退回它所屬的功能磚（再往下退回第一個功能磚、「整理功能磚」的順序由單元測試涵蓋）。
+  - 打字後不按 Enter，用下列方式離開抽屜，值都已寫入：✕、Esc、「開啟完整頁」（並排與 modal 各一次），再加並排時點另一個功能磚、modal 時點背景。
+  - 儲存失敗時抽屜不關、欄位回到舊值並顯示錯誤；失敗發生在欄位失焦時，之後第一次按 ✕ 抽屜也不關（再按一次才會關）。
+  - 抽屜為 modal 時，錯誤訊息與其中的按鈕都看得到、按得到；抽屜內下拉選單開著時按 Esc，只關下拉選單、不關抽屜。
+  - 視窗寬 1280px、640px、320px（相當於 1280px 放大到 200%、400%）時沒有橫向捲軸；首頁只用鍵盤走得完（略過連結、功能磚、開關抽屜）。
+  - 關閉提示的 `<dialog>`（IPC 用假的代替）：按 Esc 取消、按「知道了」、勾「不再提示」後送給 Rust 的動作都正確。
+  - Overlay（真的 Host）：改聊天樣板後立即套用；樣板裡的 `<script>`、事件屬性與 `.js` 檔都不會執行；壞掉的樣板退回預設樣板。
+- 每個切片完成時人工檢查一次（自動化做不到）：
+  - 真的 Twitch 登入與聊天、真的 OBS 連線；OBS 實際畫面與音效（直播試用一次）。
+  - 原生視窗 ✕ 與系統匣：按 ✕ 出現提示；按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣。
+  - 對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；焦點看得見；放大到 200%、400% 時文字沒被裁掉（刻意以「……」省略的除外）。
+  - 新頁面或新流程還沒有 E2E 時，先用鍵盤走一遍，再補 E2E。
+- 關閉提示的 Rust 狀態流程（已顯示／取消／隱藏、2 秒逾時、提示中再按 ✕）寫 Rust 單元測試。
 - 安全測試：樣板預覽 iframe 呼叫 `invoke` 必須被拒絕。
 - AI 協作：可以改實作、加測試；不得為了讓測試通過而放寬驗收條件、刪除測試或修改 CI 檢查。
 

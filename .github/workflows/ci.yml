@@ -59,5 +59,22 @@ jobs:
         run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
       - name: Tests (includes architecture tests)
         run: cargo test --workspace
+
+      # After cargo test, which already built the E2E Host (crates/host/examples/e2e_host.rs).
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Playwright Chromium
+        run: pnpm --filter web exec playwright install chromium
+      - name: UI E2E (Playwright)
+        run: pnpm web:e2e
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results
+          if-no-files-found: ignore
       - name: Licenses and advisories
         run: cargo deny check

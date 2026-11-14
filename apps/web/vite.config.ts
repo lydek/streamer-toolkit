@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => ({
       deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx,cer,der}', '.npmrc', '.yarnrc.yml', '**/.git/**', '**/target/**'],
     },
   },
+  // Every dev page, incl. the E2E harness: with build inputs set, Vite would scan only those at startup and reload
+  // all open pages when another page brings a new dependency ("optimized dependencies changed").
+  optimizeDeps: {
+    entries: ['admin/index.html', 'overlay/chat/index.html', 'port/index.html', 'e2e/harness/index.html'],
+  },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.
   build:
     mode === 'port'

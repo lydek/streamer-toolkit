@@ -21,7 +21,7 @@
 | 事件格式 | 首版就用 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source` |
 | Host 生命週期 | 與 Tauri 同程序，關視窗隱藏到系統匣，單一實例 |
 | 架構強制 | crate 相依性＋架構測試（CI 執行） |
-| 測試 | 首版：Unit＋Integration（真 SQLite）＋Contract（產物是否最新）；UI E2E 延後 |
+| 測試 | 首版：Unit＋Integration（真 SQLite）＋Contract（產物是否最新）＋UI E2E（Playwright＋Chromium） |
 | CI | GitHub Actions，skeleton 就建，只跑 Windows；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼 |
 | 正式發佈 | 一律用 `tauri build`；不得散布沒有開啟 `tauri/custom-protocol` 的建置產物 |
 | Overlay 自訂 | 初版只開放 HTML／CSS 樣板 |
@@ -80,7 +80,7 @@
 | 圖示 | PrimeIcons 7.0.0（版本寫死）；不升到 8（改為專有授權） |
 | 前端路由 | vue-router（history 模式，base `/admin/`）；dev 版管理視窗載入 `admin/`（不是 `admin/index.html`，否則路由對不上），Vite 加深層路徑 fallback |
 | 前端狀態 | Pinia |
-| 前端測試 | Vitest＋Vue Test Utils |
+| 前端測試 | Vitest＋Vue Test Utils；UI E2E 用 Playwright（`@playwright/test`，Apache-2.0，只當開發相依套件）＋Chromium（與 WebView2 同引擎） |
 | 前端 lint | ESLint（flat config＋`eslint-plugin-vue`＋`@vue/eslint-config-typescript`），只用正確性規則，不含排版規則 |
 | UI 字串 | `vue-i18n`＋`@intlify/unplugin-vue-i18n`：資源檔在建置時預先編譯，執行期不需要 `unsafe-eval` |
 | 單一實例 | `tauri-plugin-single-instance` |
@@ -95,7 +95,7 @@
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
 | **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表）、outbox 與停用時的「暫停／關閉」（兌換紀錄切片）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
-| **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證、UI E2E |
+| **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 
 ## 變更紀錄
@@ -116,3 +116,4 @@
 | 2026-11-14 | 新增管理 UI 版面、抽屜元件、視覺風格、前端路由、圖示；UI 元件庫定為 Aura preset（固定深色、`definePreset` 覆寫色階）；開啟外部網址限定為網址寫死的指令；管理視窗開啟縮放快速鍵並設最小尺寸 | UI／UX 規劃定案：側欄＋卡片網格太像通用的後台管理系統，改用功能磚；PrimeVue Drawer 不能並排，所以自製抽屜；能帶網址參數的指令在管理視窗被注入腳本時可開任意網址或自訂通訊協定；縮放快速鍵讓使用者能放大（WCAG 1.4.4） |
 | 2026-11-14 | PrimeVue 固定在 4.5.5、`@primeuix/themes` 2.0.3、PrimeIcons 7.0.0（版本寫死） | PrimeVue 5、`@primeuix/themes` 3、PrimeIcons 8 改用專有的 PrimeUI License（需授權金鑰、不得拆出原始程式碼），不在允許清單內；以上是最後的 MIT 版本。v4 不會再有修正，出現安全問題時重新評估 |
 | 2026-11-14 | 開發模式的 proxy port 改為每個請求從 dev 資料夾（`target\debug\data\`）的 `settings.json` 讀取；Vite `server.fs.deny` 另加 Cargo 的 `target` 資料夾 | Vite 比 app 先啟動，資料夾第一次啟動可能自動換 port，port 修改小頁面也可能存下新的 port，只在啟動時讀一次會對不上；`null` origin 讀得到 Vite 提供的檔案，而 dev 資料夾（設定、記錄檔、WebView2 資料）在 `target` 裡 |
+| 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 的人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |

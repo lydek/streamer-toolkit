@@ -39,5 +39,8 @@ pre-push:
       run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
     - name: cargo-test
       run: cargo test --workspace
+    # Needs Playwright's Chromium once: pnpm --filter web exec playwright install chromium (docs/dev.md).
+    - name: ui-e2e
+      run: pnpm web:e2e
     - name: cargo-deny
       run: cargo deny check
