@@ -10,6 +10,12 @@
     "dontAskAgain": "不再提示",
     "ok": "知道了"
   },
+  "drawer": {
+    "close": "關閉",
+    "now": "現在",
+    "settings": "常改的設定",
+    "fullPage": "開啟完整頁"
+  },
   "twitch": {
     "heading": "Twitch 連線",
     "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",
