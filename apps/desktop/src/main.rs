@@ -265,6 +265,11 @@ fn admin_close_requested(app: &AppHandle) {
     let Some(id) = state.close_hint.lock().unwrap().close_requested(skip_hint) else {
         return hide_admin_window(app);
     };
+    // Closing from the taskbar does not restore a minimized window; the hint must be visible to be answered.
+    if let Some(w) = app.get_webview_window(ADMIN) {
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
     if app.emit_to(ADMIN, CLOSE_HINT_EVENT, true).is_err() {
         state
             .close_hint

@@ -23,6 +23,11 @@ const dialog = ref<HTMLDialogElement>()
 const dontAskAgain = ref(false)
 let unlisten: UnlistenFn | undefined
 
+// IPC failures only cost Rust's 2 s timeout or a second ✕ to hide the window; log them for debugging.
+function send(action: unknown) {
+  invoke('close_hint', { action }).catch(console.error)
+}
+
 onMounted(async () => {
   unlisten = await listen<boolean>('close-hint', ({ payload: show }) => {
     const d = dialog.value!
@@ -35,19 +40,22 @@ onMounted(async () => {
       dontAskAgain.value = false
       d.showModal()
     }
-    void invoke('close_hint', { action: 'shown' })
+    send('shown')
+  }).catch((e) => {
+    console.error(e)
+    return undefined
   })
 })
 onUnmounted(() => unlisten?.())
 
 function hide() {
   dialog.value!.close('hide')
-  void invoke('close_hint', { action: { hide: { dont_ask_again: dontAskAgain.value } } })
+  send({ hide: { dont_ask_again: dontAskAgain.value } })
 }
 
 // An empty return value means the dialog closed on its own (Esc), so the window stays.
 function onClose() {
-  if (dialog.value!.returnValue === '') void invoke('close_hint', { action: 'cancel' })
+  if (dialog.value!.returnValue === '') send('cancel')
 }
 </script>
 
