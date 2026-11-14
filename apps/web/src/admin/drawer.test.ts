@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, h, nextTick, ref } from 'vue'
 import { i18n } from '../i18n'
 import AppDrawer from './AppDrawer.vue'
-import { focusTarget, onDrawerSubmit, useDrawer, useDrawerSetting } from './drawer'
+import { drawerId, focusTarget, onDrawerSubmit, useDrawer, useDrawerSetting } from './drawer'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
@@ -185,6 +185,7 @@ describe('AppDrawer (side by side)', () => {
     await drawer.open('chat', byId('opener'))
     await nextTick()
     expect(aside.hidden).toBe(false)
+    expect(aside.querySelector(`#${drawerId('chat')}`), 'aria-controls target').not.toBeNull()
     expect(document.activeElement).toBe(aside.querySelector('[data-drawer-close]'))
 
     document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))

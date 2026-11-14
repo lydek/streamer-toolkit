@@ -19,6 +19,9 @@ import { ApiError } from './api'
 
 type Submit = () => Promise<boolean>
 
+/** The element id of drawer `id`'s content, for openers' `aria-controls`; it exists only while that drawer is open. */
+export const drawerId = (id: string) => `drawer-${id}`
+
 const current = ref<string | null>(null)
 const error = ref('')
 const submits = new Set<Submit>()
