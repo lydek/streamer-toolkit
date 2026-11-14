@@ -67,19 +67,26 @@ function open(id: string, from?: EventTarget | null): Promise<boolean> {
   })
 }
 
-/** Closes the open drawer after submitting its changed settings; `true` when nothing is open. */
+let closing: Promise<boolean> | null = null
+
+/**
+ * Closes the open drawer after submitting its changed settings; `true` when nothing is open. A close requested
+ * while one is pending (double Esc, double click on ✕) shares its result, so a failed save keeps the drawer.
+ */
 function close(): Promise<boolean> {
-  return serial(async () => {
-    const id = current.value
-    if (!id) return true
-    if (!(await submitAll(submits))) return false
-    error.value = ''
-    current.value = null
-    await nextTick()
-    focusTarget(document, id, opener)?.focus()
-    opener = null
-    return true
-  })
+  return (closing ??= serial(doClose).finally(() => (closing = null)))
+}
+
+async function doClose(): Promise<boolean> {
+  const id = current.value
+  if (!id) return true
+  if (!(await submitAll(submits))) return false
+  error.value = ''
+  current.value = null
+  await nextTick()
+  focusTarget(document, id, opener)?.focus()
+  opener = null
+  return true
 }
 
 export function useDrawer() {
@@ -101,23 +108,35 @@ export function onDrawerSubmit(submit: Submit): () => void {
 export function useDrawerSetting<T>(saved: Ref<T>, save: (value: T) => Promise<unknown>) {
   const value = ref(saved.value) as Ref<T>
   watch(saved, (v) => (value.value = v))
+  // The error this setting showed, so another setting's success does not hide it (and this one's does).
+  let shown = ''
+  // A failure nobody awaited yet (a blur commit), reported by the next close/switch so the drawer stays open.
+  let unreported = false
   async function apply(): Promise<boolean> {
     const next = value.value
     if (Object.is(next, saved.value)) return true
     try {
       await save(next)
       saved.value = next
-      error.value = ''
+      if (shown && error.value === shown) error.value = ''
+      shown = ''
+      unreported = false
       return true
     } catch (e) {
       value.value = saved.value
-      error.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
+      error.value = shown = e instanceof ApiError ? errorMessage(e.code) : String(e)
+      unreported = true
       return false
     }
   }
   // Chained, so blur followed at once by Esc saves once: the second call sees the value already saved.
   let chain = Promise.resolve(true)
   const commit = () => (chain = chain.then(apply))
-  onDrawerSubmit(commit)
+  onDrawerSubmit(async () => {
+    const ok = await commit()
+    const failed = unreported
+    unreported = false
+    return ok && !failed
+  })
   return { value, commit }
 }

@@ -85,7 +85,14 @@ describe('useDrawer', () => {
     expect(drawer.current.value).toBe('obs')
   })
 
-  it('runs a second close only after the first finishes', async () => {
+  it('keeps the drawer when a second close comes in while a failing one is pending', async () => {
+    submit(async () => false)
+    await drawer.open('chat')
+    expect(await Promise.all([drawer.close(), drawer.close()])).toEqual([false, false])
+    expect(drawer.current.value).toBe('chat')
+  })
+
+  it('shares a pending close instead of submitting twice', async () => {
     let release!: () => void
     const save = vi.fn(() => new Promise<boolean>((r) => (release = () => r(true))))
     submit(save)
@@ -130,6 +137,32 @@ describe('useDrawerSetting', () => {
     s.value.value = 'new'
     expect(await s.commit()).toBe(false)
     expect(s.value.value).toBe('old')
+    expect(drawer.error.value).toContain('boom')
+  })
+
+  it('keeps the drawer open when a blur commit failed just before ✕', async () => {
+    const s = setting(async () => {
+      throw new Error('boom')
+    })
+    await drawer.open('chat')
+    s.value.value = 'new'
+    void s.commit() // blur on the way to the close button; nobody awaits it
+
+    expect(await drawer.close()).toBe(false)
+    expect(drawer.current.value).toBe('chat')
+    expect(drawer.error.value).toContain('boom')
+    expect(await drawer.close()).toBe(true) // the user saw the error and closes again
+  })
+
+  it("keeps one setting's error when another one saves", async () => {
+    const failing = setting(async () => {
+      throw new Error('boom')
+    })
+    const fine = setting(async () => {})
+    failing.value.value = 'new'
+    await failing.commit()
+    fine.value.value = 'new'
+    await fine.commit()
     expect(drawer.error.value).toContain('boom')
   })
 })
