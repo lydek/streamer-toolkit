@@ -1,6 +1,7 @@
 // Prevents an extra console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod close_hint;
 mod data_folder;
 mod text;
 
@@ -13,7 +14,7 @@ use host::{BoundHost, HostConfig, HostError, TwitchEndpoints, settings};
 use integrations::secrets::{CredentialManager, SecretStore};
 use secrecy::{ExposeSecret, SecretString};
 use tauri::{
-    AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
     ipc::CapabilityBuilder,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -24,6 +25,8 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 const ADMIN: &str = "admin";
 const PORT_PAGE: &str = "port";
+/// Sent to the admin window: `true` shows the close hint, `false` closes it.
+const CLOSE_HINT_EVENT: &str = "close-hint";
 const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
 const WEBVIEW2_DOWNLOAD_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 const LOG_DAYS: usize = 14;
@@ -35,6 +38,7 @@ struct AppState {
     obs_secrets: Arc<dyn SecretStore>,
     /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
     host_port: Mutex<Option<u16>>,
+    close_hint: Mutex<close_hint::CloseHint>,
 }
 
 fn main() {
@@ -74,6 +78,7 @@ fn main() {
                 twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
                 obs_secrets: CredentialManager::new(&format!("{instance}/obs"))?,
                 host_port: Mutex::new(None),
+                close_hint: Mutex::default(),
             });
             create_tray(app.handle())?;
             let handle = app.handle().clone();
@@ -107,7 +112,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             retry_with_port,
             get_admin_token,
-            open_twitch_activate
+            open_twitch_activate,
+            close_hint
         ])
         .build(context)
         .unwrap_or_else(|e| fail(&e.to_string()));
@@ -119,9 +125,7 @@ fn main() {
             ..
         } if label == ADMIN => {
             api.prevent_close();
-            if let Some(w) = app.get_webview_window(ADMIN) {
-                let _ = w.hide();
-            }
+            admin_close_requested(app);
         }
         // Keep running in the tray when the port page is closed.
         RunEvent::ExitRequested {
@@ -240,6 +244,58 @@ fn open_twitch_activate(app: AppHandle) -> Result<(), &'static str> {
         .map_err(|_| "admin.open_failed")
 }
 
+/// The admin window reports what happened to the close hint.
+#[tauri::command]
+fn close_hint(app: AppHandle, state: State<'_, AppState>, action: close_hint::Action) {
+    let hide = state.close_hint.lock().unwrap().act(action);
+    if let Some(dont_ask_again) = hide {
+        if dont_ask_again
+            && let Err(e) = settings::update(&state.data_dir, |s| s.skip_close_hint = true)
+        {
+            tracing::error!(code = "settings.save_failed", error = %e, "close hint choice not saved");
+        }
+        hide_admin_window(&app);
+    }
+}
+
+/// ✕ on the admin window: hide it, or first ask the window to explain the tray (docs/architecture.md §6).
+fn admin_close_requested(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let skip_hint = settings::load(&state.data_dir).skip_close_hint;
+    let Some(id) = state.close_hint.lock().unwrap().close_requested(skip_hint) else {
+        return hide_admin_window(app);
+    };
+    if app.emit_to(ADMIN, CLOSE_HINT_EVENT, true).is_err() {
+        state
+            .close_hint
+            .lock()
+            .unwrap()
+            .act(close_hint::Action::Cancel);
+        return hide_admin_window(app);
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(close_hint::TIMEOUT);
+        if app
+            .state::<AppState>()
+            .close_hint
+            .lock()
+            .unwrap()
+            .timed_out(id)
+        {
+            hide_admin_window(&app);
+        }
+    });
+}
+
+/// Hides the admin window and closes a hint still open in it, so it is gone when the window comes back.
+fn hide_admin_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(ADMIN) {
+        let _ = w.hide();
+    }
+    let _ = app.emit_to(ADMIN, CLOSE_HINT_EVENT, false);
+}
+
 fn host_config(app: &AppHandle, port: u16) -> HostConfig {
     let state = app.state::<AppState>();
     // Only apps/desktop sees cfg(dev); the Host receives the extra dev origin as runtime config.
@@ -297,7 +353,11 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
                 .remote(format!("http://127.0.0.1:{port}"))
                 .window(ADMIN)
                 .permission("allow-get-admin-token")
-                .permission("allow-open-twitch-activate"),
+                .permission("allow-open-twitch-activate")
+                .permission("allow-close-hint")
+                // Receives the close hint event; no core:default or core:window:*, the capability covers the whole Host origin.
+                .permission("core:event:allow-listen")
+                .permission("core:event:allow-unlisten"),
         )?;
         let host_url = format!("http://127.0.0.1:{port}/admin");
         WebviewUrl::External(host_url.parse().expect("valid admin URL"))

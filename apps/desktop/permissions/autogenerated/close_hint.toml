@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-hint"
+description = "Enables the close_hint command without any pre-configured scope."
+commands.allow = ["close_hint"]
+
+[[permission]]
+identifier = "deny-close-hint"
+description = "Denies the close_hint command without any pre-configured scope."
+commands.deny = ["close_hint"]

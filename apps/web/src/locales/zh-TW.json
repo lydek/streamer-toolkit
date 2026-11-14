@@ -5,6 +5,11 @@
     "notFound": "找不到這個頁面。",
     "home": "回首頁"
   },
+  "closeHint": {
+    "message": "程式會在系統匣繼續執行，Overlay 不受影響；要結束請在系統匣選「結束」。",
+    "dontAskAgain": "不再提示",
+    "ok": "知道了"
+  },
   "twitch": {
     "heading": "Twitch 連線",
     "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",

@@ -18,6 +18,8 @@ pub struct Settings {
     pub disabled_modules: Vec<String>,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
+    /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
+    pub skip_close_hint: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +45,7 @@ impl Default for Settings {
             twitch_client_id: String::new(),
             disabled_modules: Vec::new(),
             obs: ObsSettings::default(),
+            skip_close_hint: false,
         }
     }
 }
