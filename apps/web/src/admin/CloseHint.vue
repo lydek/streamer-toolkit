@@ -24,7 +24,7 @@ const dontAskAgain = ref(false)
 let unlisten: UnlistenFn | undefined
 
 // IPC failures only cost Rust's 2 s timeout or a second ✕ to hide the window; log them for debugging.
-function send(action: unknown) {
+function send(action: 'shown' | 'cancel' | { hide: { dont_ask_again: boolean } }) {
   invoke('close_hint', { action }).catch(console.error)
 }
 
