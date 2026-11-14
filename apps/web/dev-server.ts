@@ -3,14 +3,18 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Plugin, ProxyOptions } from 'vite'
 
-// Must match crates/host/src/lib.rs (dev-server.test.ts checks it).
+// Both must match crates/host/src/lib.rs (dev-server.test.ts checks them).
 export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'none'"
+export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
+
+/** The CSP the Host sends for the page at `url`, so violations show up while developing. */
+export const devCsp = (url = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : ADMIN_CSP)
 
 const DEFAULT_PORT = 47810
 // Vite's proxy matches these as plain prefixes, so the null-origin rule uses the same test.
-const HOST_PREFIXES = ['/api', '/ws']
+const HOST_PREFIXES = ['/api', '/ws', '/templates']
 const isHostPath = (url = '') => HOST_PREFIXES.some((p) => url.startsWith(p))
 
 /** `tauri dev` runs the debug build, whose data folder sits next to the executable. */
@@ -30,8 +34,9 @@ export function hostPort(dataDir: string): number {
 }
 
 /**
- * `/api` and `/ws` go to the Host. The target is read on every request, not once at startup: Vite starts before
- * the app, and a first run may save a free port instead of the default, or the port page may save a new one.
+ * `/api`, `/ws` and `/templates` go to the Host. The target is read on every request, not once at startup:
+ * Vite starts before the app, and a first run may save a free port instead of the default, or the port page may
+ * save a new one.
  */
 export function hostProxy(dataDir: string): Record<string, ProxyOptions> {
   const options = (ws: boolean): ProxyOptions => ({
@@ -55,6 +60,8 @@ export function devServer(): Plugin {
       // Added here, these run before Vite's own middlewares (including the proxy).
       server.middlewares.use((req, res, next) => {
         if (!isHostPath(req.url)) {
+          // Set here, not in server.headers: Vite applies server.headers last, which would replace the overlay CSP.
+          res.setHeader('Content-Security-Policy', devCsp(req.url))
           // Sandboxed preview iframes have the null origin and load /@vite/client, /src/... as CORS module scripts.
           res.setHeader('Vary', 'Origin')
           if (req.headers.origin === 'null') res.setHeader('Access-Control-Allow-Origin', 'null')

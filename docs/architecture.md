@@ -104,7 +104,7 @@ apps/
   - `<port>` 每個請求都重新讀 dev 資料夾（`target\debug\data\`，由 `pnpm tauri dev` 使用，不看 `--data-dir`；有設 `CARGO_TARGET_DIR` 時以它為準，須為絕對路徑）的 `settings.json`，沒有檔案或內容不合法時用預設 port：Vite 比 app 先啟動，資料夾第一次啟動時可能自動換 port，port 修改小頁面也可能存下新的 port。
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
-  - Vite 以 `server.headers` 送出與 `/admin` 相同的 CSP，`/overlay/` 下的頁面改送 Overlay CSP（`vite.config.ts` 的 middleware），讓違規在開發時就出現。
+  - Vite 送出和 Host 相同的 CSP：`/overlay/` 下的頁面送 Overlay CSP，其他送 `/admin` 的 CSP，讓違規在開發時就出現。CSP 由下一條的 middleware 設定，不用 `server.headers`：Vite 最後才套用它，會蓋掉 Overlay CSP。
   - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
   - 任何網站的 sandbox iframe 都是 `null` origin，所以依上一條，任何網站都讀得到 Vite 提供的檔案。因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 資料）在裡面，不能經由 Vite 讀到。
 

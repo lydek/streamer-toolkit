@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: c48d40437990e6e0e1aada203b4f9ecf858556f3c6da6c9096213f9b816d5a02 -->
+<!-- source: docs/dev.md source-sha256: 6b0183770500f9e1e0c5c8b26d9226aeb936d51c77fe678414a3538773134c5a -->
 [繁體中文](dev.md) | **English**
 
 # Development

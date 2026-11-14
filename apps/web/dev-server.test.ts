@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, resolveConfig, type ViteDevServer } from 'vite'
-import { ADMIN_CSP, hostPort } from './dev-server.ts'
+import { ADMIN_CSP, OVERLAY_CSP, devCsp, hostPort } from './dev-server.ts'
 
 const portOf = (s: { address(): unknown }) => (s.address() as AddressInfo).port
 
@@ -23,11 +23,20 @@ describe('hostPort', () => {
   })
 })
 
-it('ADMIN_CSP matches the Host', () => {
+it.each([
+  ['ADMIN_CSP', ADMIN_CSP],
+  ['OVERLAY_CSP', OVERLAY_CSP],
+])('%s matches the Host', (name, csp) => {
   const rust = readFileSync(resolve(import.meta.dirname, '../../crates/host/src/lib.rs'), 'utf8')
-  const literal = /const ADMIN_CSP: &str = "((?:[^"\\]|\\[\s\S])*)";/.exec(rust)?.[1]
+  const literal = new RegExp(`const ${name}: &str = "((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(rust)?.[1]
   // A trailing backslash continues a Rust string literal and drops the newline and leading spaces.
-  expect(literal?.replace(/\\\r?\n\s*/g, '')).toBe(ADMIN_CSP)
+  expect(literal?.replace(/\\\r?\n\s*/g, '')).toBe(csp)
+})
+
+it('picks the CSP the Host sends for each page', () => {
+  expect(devCsp('/admin/')).toBe(ADMIN_CSP)
+  expect(devCsp('/port/')).toBe(ADMIN_CSP)
+  expect(devCsp('/overlay/chat/')).toBe(OVERLAY_CSP)
 })
 
 // The real vite.config.ts against a fake Host; CARGO_TARGET_DIR points the data folder at a temp directory.
@@ -92,9 +101,17 @@ describe('dev server', () => {
     expect(seen.at(-1)).toMatchObject({ url: '/ws', upgrade: true })
   })
 
-  it('sends the admin CSP', () => {
+  it('proxies /templates to the Host without opening it to the null origin', async () => {
+    const res = await fetch(`${base}/templates/chat/style.css`, { headers: { Origin: 'null' } })
+    expect(await res.text()).toBe('host')
+    expect(seen.at(-1)).toMatchObject({ url: '/templates/chat/style.css', upgrade: false })
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('leaves the CSP to devServer()', () => {
+    // Vite applies server.headers after every middleware, so a CSP there would replace the overlay CSP.
     // Checked on the config: local HTTPS filters (e.g. AdGuard) may rewrite CSP headers on the wire.
-    expect(vite.config.server.headers).toMatchObject({ 'Content-Security-Policy': ADMIN_CSP })
+    expect(vite.config.server.headers?.['Content-Security-Policy']).toBeUndefined()
   })
 
   it('opens Vite modules to the null origin only', async () => {

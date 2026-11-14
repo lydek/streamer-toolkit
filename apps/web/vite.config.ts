@@ -1,32 +1,16 @@
 import { resolve } from 'node:path'
-import { type Plugin, defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
-import { ADMIN_CSP, devDataDir, devServer, hostProxy } from './dev-server.ts'
-
-// Must match OVERLAY_CSP in crates/host/src/lib.rs.
-const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
-
-/** Dev only: overlay pages get the Overlay CSP the Host sends, so violations show up during development. */
-const overlayCsp: Plugin = {
-  name: 'overlay-csp',
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      if (req.url?.startsWith('/overlay/')) res.setHeader('Content-Security-Policy', OVERLAY_CSP)
-      next()
-    })
-  },
-}
+import { devDataDir, devServer, hostProxy } from './dev-server.ts'
 
 export default defineConfig(({ mode }) => ({
   // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
-  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), overlayCsp, devServer()],
+  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), devServer()],
   server: {
     port: 5173,
     strictPort: true,
-    // Same CSP as the Host's /admin, so violations show up while developing.
-    headers: { 'Content-Security-Policy': ADMIN_CSP },
-    // Replaced by devServer(): only the null origin, and never on /api or /ws.
+    // Replaced by devServer(): only the null origin, and never on /api, /ws or /templates.
     cors: false,
     proxy: hostProxy(devDataDir()),
     fs: {
