@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       '/api': { target: HOST, changeOrigin: true },
       '/ws': { target: HOST, changeOrigin: true, ws: true },
+      '/templates': { target: HOST, changeOrigin: true },
     },
   },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.

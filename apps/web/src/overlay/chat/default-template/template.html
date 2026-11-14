@@ -1,0 +1,17 @@
+<!--
+  Chat overlay template. HTML and CSS only: scripts are removed and never run.
+  - data-chat-list: the element new messages are appended to.
+  - <template data-chat-message>: the markup for one message.
+  - data-field="userName" / data-field="text": filled with the viewer's name / message as plain text.
+  - --user-color: CSS variable set on each message with the viewer's name color, when they picked one.
+  Relative src/href paths point into this folder.
+-->
+<link rel="stylesheet" href="style.css" />
+<ul class="chat" data-chat-list>
+  <template data-chat-message>
+    <li class="message">
+      <span class="name" data-field="userName"></span>
+      <span class="text" data-field="text"></span>
+    </li>
+  </template>
+</ul>

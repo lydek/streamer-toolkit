@@ -4,6 +4,7 @@ mod admin;
 mod obs;
 mod openapi;
 mod overlay;
+mod templates;
 
 pub use openapi::openapi;
 
@@ -142,6 +143,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
+    let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,
@@ -162,6 +164,17 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin.clone(),
             admin::require_token,
         )))
+        .merge(
+            templates::admin_routes(templates.clone()).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
+        )
+        .merge(
+            Router::new()
+                .route("/templates/chat/{*path}", get(templates::serve))
+                .with_state(templates),
+        )
         .merge(admin::routes(admin))
         .fallback(static_file)
         .layer(middleware::from_fn_with_state(guard_state, guard)))
@@ -610,5 +623,159 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+    }
+
+    /// A Host with its own data folder, so template tests can change files without racing each other.
+    fn template_app(name: &str) -> (Router, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("st-tpl-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        (router(config).unwrap(), dir)
+    }
+
+    async fn get_body(app: &Router, uri: &str) -> (StatusCode, axum::http::HeaderMap, String) {
+        let res = app
+            .clone()
+            .oneshot(get_req(uri, "127.0.0.1:47810").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let (parts, body) = res.into_parts();
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        (
+            parts.status,
+            parts.headers,
+            String::from_utf8_lossy(&bytes).into(),
+        )
+    }
+
+    async fn template_error(app: &Router) -> serde_json::Value {
+        let res = app
+            .clone()
+            .oneshot(
+                get_req("/api/admin/templates/chat", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["error"].clone()
+    }
+
+    /// The watcher polls every second; give it a few rounds.
+    async fn wait_for_error(app: &Router, code: &str) {
+        for _ in 0..50 {
+            if template_error(app).await == code {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        panic!("template error never became {code}");
+    }
+
+    #[tokio::test]
+    async fn first_run_copies_the_default_template_and_serves_it_with_overlay_headers() {
+        let (app, dir) = template_app("default");
+        assert!(dir.join("templates/chat/template.html").is_file());
+        let (status, headers, body) = get_body(&app, "/templates/chat/template.html").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("data-chat-list"));
+        assert_eq!(headers[header::CONTENT_TYPE], "text/html; charset=utf-8");
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+        assert_eq!(template_error(&app).await, serde_json::Value::Null);
+        let no_token = get_req("/api/admin/templates/chat", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.clone().oneshot(no_token).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        // Error answers carry the same headers.
+        let (status, headers, _) = get_body(&app, "/templates/chat/nope.css").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn template_route_never_serves_scripts() {
+        let (app, dir) = template_app("scripts");
+        let chat = dir.join("templates/chat");
+        for name in ["evil.js", "evil.mjs", "evil.JS", "data.json"] {
+            std::fs::write(chat.join(name), "alert(1)").unwrap();
+            let (status, _, body) = get_body(&app, &format!("/templates/chat/{name}")).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{name}");
+            assert!(!body.contains("alert"), "{name}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn template_route_rejects_path_escapes() {
+        let (app, dir) = template_app("escape");
+        std::fs::write(dir.join("secret.css"), "secret").unwrap();
+        std::fs::write(dir.join("templates/secret.css"), "secret").unwrap();
+        for uri in [
+            "/templates/chat/../secret.css",
+            "/templates/chat/../../secret.css",
+            "/templates/chat/%2e%2e/%2e%2e/secret.css",
+            "/templates/chat/..%2f..%2fsecret.css",
+            "/templates/chat/..%5c..%5csecret.css",
+            "/templates/chat/sub/..%5c..%5c..%5csecret.css",
+            "/templates/chat/C:%5cWindows%5cwin.ini.css",
+            "/templates/chat//secret.css",
+        ] {
+            let (status, _, body) = get_body(&app, uri).await;
+            assert!(!status.is_success(), "{uri} -> {status}");
+            assert!(!body.contains("secret"), "{uri}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn missing_or_broken_template_falls_back_to_the_default() {
+        let (app, dir) = template_app("fallback");
+        let chat = dir.join("templates/chat");
+        std::fs::write(chat.join("template.html"), "<p>broken</p>").unwrap();
+        std::fs::write(chat.join("style.css"), "user-css").unwrap();
+        wait_for_error(&app, "template.invalid").await;
+        let (status, _, body) = get_body(&app, "/templates/chat/template.html").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("data-chat-list"), "default HTML, never blank");
+        let (_, _, css) = get_body(&app, "/templates/chat/style.css").await;
+        assert!(!css.contains("user-css"), "the default comes as a whole");
+
+        std::fs::remove_file(chat.join("template.html")).unwrap();
+        wait_for_error(&app, "template.missing").await;
+        let (status, _, body) = get_body(&app, "/templates/chat/template.html").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("data-chat-list"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn template_change_is_pushed_to_overlays() {
+        let dir = std::env::temp_dir().join(format!("st-tpl-watch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(toolkit_core::bus::EventBus::default());
+        let _templates = templates::Templates::start(&dir, bus.clone());
+        let (_, mut events) = bus.subscribe();
+        std::fs::write(dir.join("templates/chat/style.css"), ".chat{color:red}").unwrap();
+        let event = tokio::time::timeout(std::time::Duration::from_secs(5), events.recv())
+            .await
+            .expect("notified within a couple of seconds")
+            .unwrap();
+        let event: serde_json::Value = serde_json::from_str(&event).unwrap();
+        assert_eq!(event["type"], "template.changed");
+        assert_eq!(event["source"], "system");
+        assert_eq!(event["payload"]["overlay"], "chat");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -98,8 +98,8 @@ apps/
   - 「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`／`tauri::is_dev()`），不是 `debug_assertions`。`tauri build`（含 `--debug`）會開啟它，是唯一可以散布的建置方式；`tauri dev` 與沒有加這個 feature 的一般 cargo 指令（`cargo run`、`cargo build --release`、`cargo test`、`cargo clippy`）都是 dev。CI 手動加上這個 feature 只用來檢查，不散布產物。
   - `cfg(dev)` 只在 `apps/desktop` 有效：由 `apps/desktop` 判斷是否為 dev，再把 dev 額外允許的 Vite origin 當成執行期設定傳給 Host；`crates/host` 不讀任何 cfg。
   - `rust-embed` 啟用 `debug-embed` feature，debug 建置也真的把檔案內嵌進執行檔。
-  - 使用者自訂的 HTML／CSS 樣板存在使用者資料目錄。
-- **開發模式**：前端用 Vite dev server 熱更新，`/api` 與 `/ws` proxy 到 Host：
+  - 使用者自訂的 HTML／CSS 樣板存在資料夾的 `templates/`（見下方「本機 API 安全」的「使用者樣板」）。
+- **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws` 與 `/templates` proxy 到 Host：
   - proxy 目標寫 `http://127.0.0.1:<port>`，不寫 `localhost`（Node 可能解析成 IPv6 `::1`，但 Host 只綁 IPv4）。
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
@@ -120,6 +120,11 @@ apps/
   - 自訂樣板與 Overlay 絕不在管理視窗裡直接渲染；預覽放在只設 `sandbox="allow-scripts"`（不帶 `allow-same-origin`）的 iframe，樣板裡的程式拿不到管理視窗的 IPC 與 token；有測試確認預覽 iframe 呼叫 `invoke` 會被拒絕。
   - 預覽 iframe 的 origin 是 `null`，無法連 Host；快照與範例事件由管理視窗用 `postMessage` 傳入。
   - Overlay 與樣板路徑的所有回應（含 HTML 與 SVG）都送 Overlay CSP：`script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本類型的檔案（白名單：HTML、CSS、圖片、字型、音效），並加 `X-Content-Type-Options: nosniff`，落實初版只開放 HTML／CSS。
+  - 聊天室樣板放在資料夾的 `templates/chat/`：`template.html`（HTML 片段）、`style.css`，以及圖片、字型等檔案。這個目錄不存在時（例如第一次啟動）複製內建預設樣板進去，不覆寫既有檔案；預設樣板的原始檔在 `apps/web/src/overlay/chat/default-template/`，同時內嵌進執行檔。
+  - 綁定方式：`template.html` 要有一個 `data-chat-list` 元素（新訊息加在它裡面）與一個 `<template data-chat-message>`（一則訊息的標記），裡面用 `data-field="userName"`、`data-field="text"` 標出填值位置；觀眾名稱顏色以 CSS 變數 `--user-color` 設在每則訊息上。Overlay 用 `fetch` 取得 `template.html`、以 `DOMParser` 解析（解析時不執行任何程式），移除 `script`、`iframe`、`object`、`embed`、`base`、`meta` 等元素與 `on*` 屬性，把相對的 `src`、`href` 改指向樣板目錄，再掛到頁面上。觀眾輸入一律以 `textContent` 寫入，不當 HTML 解析。
+  - 樣板路由 `GET /templates/chat/{*path}`：路徑每一段不得為空、`.` 或 `..`，也不得含 `\`、`:`；檔案經 `canonicalize` 後必須仍在樣板目錄內（擋 `..`、符號連結與 junction）；回應另加 `Cache-Control: no-store`。
+  - 備援：`template.html` 不存在、無法以 UTF-8 讀取、超過 1 MB，或缺少 `data-chat-list`、`data-chat-message` 標記時，樣板路由整組改提供內建預設樣板，`GET /api/admin/templates/chat` 回傳錯誤碼，由管理 UI 顯示。Overlay 取不到樣板或解析不到標記時也改用預設樣板，畫面不會空白。
+  - 即時套用：Host 每秒掃描樣板目錄內檔案的路徑、大小與修改時間（輪詢，不另加檔案監看依賴），有變化就重新檢查樣板，並在 `/ws/overlay` 發布 `template.changed` 事件（`source` 為 `system`，不放進快照）。Overlay 收到這個事件或新的快照時重新載入樣板，相對網址加上新的版本參數避開快取；目前的訊息保留，以新樣板重新畫出。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板目錄送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與使用者樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。
@@ -155,7 +160,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
-- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`WebView2/`、`instance-id`；之後加資料庫與升級前備份。
+- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（使用者樣板）、`WebView2/`、`instance-id`；之後加資料庫與升級前備份。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。

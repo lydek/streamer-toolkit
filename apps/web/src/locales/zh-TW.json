@@ -58,6 +58,11 @@
     "simulate": {
       "invalid_text": "請輸入 1 到 500 字的訊息。"
     },
+    "template": {
+      "missing": "找不到聊天室樣板 templates/chat/template.html，Overlay 暫時使用預設樣板。",
+      "unreadable": "無法讀取聊天室樣板（必須是 UTF-8 文字檔），Overlay 暫時使用預設樣板。",
+      "invalid": "聊天室樣板缺少 data-chat-list 或 data-chat-message，或檔案超過 1 MB，Overlay 暫時使用預設樣板。"
+    },
     "twitch": {
       "client_id_required": "請先設定 Client ID。",
       "sign_in_required": "請重新登入 Twitch。",

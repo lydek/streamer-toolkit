@@ -9,6 +9,8 @@ pub enum Source {
     Twitch,
     Obs,
     Simulation,
+    /// The toolkit itself, e.g. a template file changed.
+    System,
 }
 
 /// A chat message; Twitch's field names and fragment types stop at the integration layer.
