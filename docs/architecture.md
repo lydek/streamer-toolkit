@@ -86,7 +86,7 @@ apps/
 
 ## 5. 對外通訊
 - MVP 的用戶端只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制在 MVP 之後。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）。連線狀態也是事件，例如 `obs.status` 只保留最新一則，管理 UI 連上就拿到目前狀態；狀態不含任何秘密，Overlay 也收得到。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）。連線狀態也是事件：`obs.status` 只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -134,15 +134,18 @@ apps/
 - **聊天發訊**：MVP 沒有發訊功能。之後要發訊（例如打卡回覆）時，必須在本機排隊並限速，採保守值 20 則／30 秒。Twitch 的上限是一般帳號 20 則／30 秒、實況主／mod／VIP 100 則／30 秒（實況主發的訊息也會算進 20 則的桶）；超過時 Twitch 會忽略該帳號的訊息 1 小時。
 
 ### OBS 連線
-- 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows 認證管理員，以 `SecretString` 傳遞，不寫入 `settings.json` 與 log。交握時只送 challenge 回應，不送密碼本身。
+- 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows Credential Manager，取出後立即包成 `SecretString`，不寫入 `settings.json` 與 log；沒設密碼就不帶驗證連線（OBS 關閉驗證時這是正常狀態）。交握時只送 challenge 回應，不送密碼本身。
 - MVP 只看連線狀態，不控制場景或來源：不訂閱任何 OBS 事件，只從連線關閉得知 OBS 結束。
-- 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新計算。
-- 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼）：
+- 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新從 1 秒計算。每次連線嘗試（含交握與版本檢查）最多 10 秒。
+- 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼，`connected` 與剛啟動時為 `null`）：
   - `connected`：已連上。
-  - `reconnecting`：還沒連上，或會自己恢復，例如 OBS 沒開（`obs.unreachable`）、OBS 關閉（`obs.disconnected`）。OBS 沒開是正常狀態，不算錯誤。
-  - `error`：仍會重試，但要使用者處理，例如密碼錯誤（`obs.auth_failed`）、OBS 要求密碼但沒有設定（`obs.password_required`）、版本不支援（`obs.unsupported_version`，需要 OBS 30.2 以上、obs-websocket 5.5）。
+  - `reconnecting`：還沒連上，或會自己恢復，例如 OBS 沒開（`obs.unreachable`）、OBS 關閉（`obs.disconnected`）、連上但交握失敗或沒有在時限內完成（`obs.handshake_failed`，例如對方不是 obs-websocket）。OBS 沒開是正常狀態，不算錯誤。
+  - `error`：仍會重試，但要使用者處理，例如密碼錯誤（`obs.auth_failed`）、OBS 要求密碼但沒有設定（`obs.password_required`）、版本不支援（`obs.unsupported_version`，需要 OBS 30.2 以上、obs-websocket 5.5 以上的 5.x）。
 - log 只記狀態變化，OBS 長時間沒開也不會一直寫 log。
-- 管理 API `GET`／`PUT /api/admin/obs` 讀取與修改位址和密碼（`password` 省略表示不變，空字串表示刪除）；修改後立即用新設定重連。
+- 管理 API `/api/admin/obs`：
+  - `GET` 回傳位址、是否已設密碼（`password_set`，不回傳密碼本身）與目前狀態；讀不到 Credential Manager 時回 500 `obs.secret_store_failed`。
+  - `PUT` 修改位址與密碼（`password` 省略表示不變，空字串表示刪除），修改後立即用新設定重連。host 只接受主機名稱與 IPv4、port 不得為 0，否則回 400 `obs.invalid_address`。
+  - `PUT` 先存 `settings.json` 再寫密碼：密碼寫入失敗時新位址仍會生效，回 500 `obs.secret_store_failed`；存不了 `settings.json` 時回 500 `settings.save_failed`，位址、密碼與連線都維持原樣。
 
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。
@@ -154,7 +157,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
 - 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`WebView2/`、`instance-id`；之後加資料庫與升級前備份。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
-- Twitch 登入依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch`。
+- Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
 

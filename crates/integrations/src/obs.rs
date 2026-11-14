@@ -17,7 +17,9 @@ use tokio::sync::watch;
 
 use crate::secrets::SecretStore;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Covers the whole connect: TCP, upgrade, handshake and version check (obws times out only the first two).
+// shortcut: 1 s in tests keeps the stalled-handshake test fast; make it a field if callers ever need to tune it.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 10 });
 /// obs-websocket close code for a missing or wrong password.
 const AUTHENTICATION_FAILED: u16 = 4009;
 
@@ -103,11 +105,14 @@ impl Obs {
             // Status only: OBS sends no events, obws still reports the connection closing.
             event_subscriptions: Some(EventSubscription::NONE),
             broadcast_capacity: 8,
-            connect_timeout: CONNECT_TIMEOUT,
+            // Half the budget, so a silent host ends as `Timeout` (unreachable) before the outer limit fires.
+            connect_timeout: CONNECT_TIMEOUT / 2,
         };
-        Client::connect_with_config(config)
-            .await
-            .map_err(|e| classify(&e, password.is_some()))
+        match tokio::time::timeout(CONNECT_TIMEOUT, Client::connect_with_config(config)).await {
+            Ok(connected) => connected.map_err(|e| classify(&e, password.is_some())),
+            // Something answered the upgrade but never finished the obs-websocket handshake.
+            Err(_) => Err(ObsStatus::reconnecting(Some("obs.handshake_failed"))),
+        }
     }
 
     /// Publishes and logs only real changes, so a closed OBS never fills the log.
@@ -178,6 +183,8 @@ mod tests {
     #[derive(Clone, Default)]
     struct FakeObs {
         require_auth: bool,
+        /// Reads `Identify` and never answers, like a stuck OBS or another WebSocket service.
+        stall: bool,
         identify: Arc<Mutex<Vec<Value>>>,
         exit: Arc<Notify>,
     }
@@ -215,6 +222,10 @@ mod tests {
                 .push(serde_json::from_str(identify.as_str()).unwrap());
             if fake.require_auth {
                 return close(&mut socket, AUTHENTICATION_FAILED).await;
+            }
+            if fake.stall {
+                while let Some(Ok(_)) = socket.recv().await {}
+                return;
             }
             send(&mut socket, json!({"op": 2, "d": {"negotiatedRpcVersion": 1}})).await;
             loop {
@@ -287,6 +298,31 @@ mod tests {
         // The first retry comes after 1 s.
         reaches(&mut rx, ObsStatus::CONNECTED).await;
         assert_eq!(fake.identify.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn stalled_handshake_times_out_and_retries() {
+        let fake = FakeObs {
+            stall: true,
+            ..FakeObs::default()
+        };
+        let mut rx = run(start(fake.clone()).await, None);
+        reaches(
+            &mut rx,
+            ObsStatus::reconnecting(Some("obs.handshake_failed")),
+        )
+        .await;
+        // The 1 s backoff, then another attempt that stalls again.
+        let retried = async {
+            while fake.identify.lock().unwrap().len() < 2 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        };
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), retried)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

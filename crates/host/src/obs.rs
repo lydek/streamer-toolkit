@@ -74,6 +74,8 @@ impl ObsLink {
 
     /// Starts a connection with the saved settings and stops the previous one.
     fn restart(&self) {
+        // Held while reading settings too, so concurrent restarts end with the task for the latest settings.
+        let mut current = self.task.lock().unwrap();
         let saved = settings::load(&self.data_dir).obs;
         let task = tokio::spawn(
             Obs {
@@ -84,8 +86,17 @@ impl ObsLink {
             }
             .run(),
         );
-        if let Some(old) = self.task.lock().unwrap().replace(task.abort_handle()) {
+        if let Some(old) = current.replace(task.abort_handle()) {
             old.abort();
+        }
+    }
+}
+
+impl Drop for ObsLink {
+    /// A dropped router (e.g. a failed port retry) must not leave a connection retrying in the background.
+    fn drop(&mut self) {
+        if let Some(task) = self.task.lock().unwrap().take() {
+            task.abort();
         }
     }
 }
@@ -105,7 +116,7 @@ struct Overview {
 }
 
 async fn overview(State(link): State<Arc<ObsLink>>) -> Response {
-    let Ok(password) = link.secrets.read() else {
+    let Ok(password) = link.secrets.read().map(|p| p.map(SecretString::from)) else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "obs.secret_store_failed");
     };
     let saved = settings::load(&link.data_dir).obs;
@@ -140,15 +151,6 @@ async fn update(State(link): State<Arc<ObsLink>>, Json(body): Json<UpdateBody>) 
     if !valid_host(&host) || body.port == 0 {
         return error(StatusCode::BAD_REQUEST, "obs.invalid_address");
     }
-    if let Some(password) = &body.password {
-        let saved = match password.expose_secret() {
-            "" => link.secrets.delete(),
-            value => link.secrets.write(value),
-        };
-        if saved.is_err() {
-            return error(StatusCode::INTERNAL_SERVER_ERROR, "obs.secret_store_failed");
-        }
-    }
     if settings::update(&link.data_dir, |s| {
         s.obs.host = host;
         s.obs.port = body.port;
@@ -157,7 +159,19 @@ async fn update(State(link): State<Arc<ObsLink>>, Json(body): Json<UpdateBody>) 
     {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed");
     }
+    // After the settings, so a failed save never leaves a new password silently in use.
+    let password_saved =
+        body.password
+            .as_ref()
+            .is_none_or(|password| match password.expose_secret() {
+                "" => link.secrets.delete().is_ok(),
+                value => link.secrets.write(value).is_ok(),
+            });
+    // The saved address applies either way; the response says whether the password did.
     link.restart();
+    if !password_saved {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "obs.secret_store_failed");
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
