@@ -14,7 +14,8 @@ const HOST_PREFIXES = ['/api', '/ws']
 const isHostPath = (url = '') => HOST_PREFIXES.some((p) => url.startsWith(p))
 
 /** `tauri dev` runs the debug build, whose data folder sits next to the executable. */
-// shortcut: ignores `--data-dir`; pass the folder here if dev runs ever use one.
+// shortcut: ignores `--data-dir`, and CARGO_TARGET_DIR must be absolute (cargo resolves a relative one from its
+// own working directory, not apps/web); pass the folder here if dev runs ever need either.
 export const devDataDir = () =>
   resolve(process.env.CARGO_TARGET_DIR ?? resolve(import.meta.dirname, '../../target'), 'debug', 'data')
 
@@ -57,8 +58,8 @@ export function devServer(): Plugin {
           // Sandboxed preview iframes have the null origin and load /@vite/client, /src/... as CORS module scripts.
           res.setHeader('Vary', 'Origin')
           if (req.headers.origin === 'null') res.setHeader('Access-Control-Allow-Origin', 'null')
-          // The admin UI is an SPA under /admin/: deep paths reload into its index, as the Host does.
-          if (/^\/admin(\/[^.]*)?(\?.*)?$/.test(req.url ?? '') && req.headers.accept?.includes('text/html')) {
+          // The admin UI is an SPA under /admin/: every page load below it gets its index, as the Host does.
+          if (/^\/admin(\/|\?|$)/.test(req.url ?? '') && req.headers.accept?.includes('text/html')) {
             req.url = '/admin/index.html'
           }
         }

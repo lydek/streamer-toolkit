@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
-import { ADMIN_CSP, devDataDir, devServer, hostProxy } from './dev-server'
+import { ADMIN_CSP, devDataDir, devServer, hostProxy } from './dev-server.ts'
 
 // Must match OVERLAY_CSP in crates/host/src/lib.rs.
 const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
@@ -29,6 +29,11 @@ export default defineConfig(({ mode }) => ({
     // Replaced by devServer(): only the null origin, and never on /api or /ws.
     cors: false,
     proxy: hostProxy(devDataDir()),
+    fs: {
+      // Vite's defaults (this list replaces them; dev-server.test.ts keeps it a superset) plus Cargo's target folder:
+      // the dev data folder (settings, logs, WebView2 profile) is inside it, and the null origin may read what Vite serves.
+      deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx,cer,der}', '.npmrc', '.yarnrc.yml', '**/.git/**', '**/target/**'],
+    },
   },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.
   build:

@@ -4,8 +4,8 @@ import { createServer as createHttpServer, request, type IncomingHttpHeaders } f
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createServer, type ViteDevServer } from 'vite'
-import { ADMIN_CSP, hostPort } from './dev-server'
+import { createServer, resolveConfig, type ViteDevServer } from 'vite'
+import { ADMIN_CSP, hostPort } from './dev-server.ts'
 
 const portOf = (s: { address(): unknown }) => (s.address() as AddressInfo).port
 
@@ -106,8 +106,29 @@ describe('dev server', () => {
     expect(other.headers.get('access-control-allow-origin')).toBeNull()
   })
 
+  it("keeps Vite's default fs.deny list", async () => {
+    const defaults = (await resolveConfig({ configFile: false, logLevel: 'silent' }, 'serve')).server.fs.deny
+    expect(vite.config.server.fs.deny).toEqual(expect.arrayContaining(defaults))
+  })
+
+  it('never serves files under the Cargo target folder, where the dev data folder lives', async () => {
+    const repo = resolve(import.meta.dirname, '../..').replaceAll('\\', '/')
+    const dir = join(repo, 'target', 'st-dev-server-test')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'settings.json'), '{"port":1}')
+    try {
+      const denied = await fetch(`${base}/@fs/${repo}/target/st-dev-server-test/settings.json`, { headers: { Origin: 'null' } })
+      expect(denied.status).toBe(403)
+      // Control: a file outside target/ is served, so the 403 comes from the deny rule.
+      const served = await fetch(`${base}/@fs/${repo}/Cargo.toml`, { headers: { Origin: 'null' } })
+      expect(served.status).toBe(200)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('serves the admin index for deep paths', async () => {
-    for (const path of ['/admin', '/admin/', '/admin/chat', '/admin/chat/settings?x=1']) {
+    for (const path of ['/admin', '/admin/', '/admin/chat', '/admin/chat/settings?x=1', '/admin/templates/my.theme']) {
       const res = await fetch(`${base}${path}`, { headers: { Accept: 'text/html' } })
       expect(res.status, path).toBe(200)
       expect(await res.text(), path).toContain('/src/admin/main.ts')

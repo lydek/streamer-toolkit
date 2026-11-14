@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 64b367aac24c7e0427e39673348af9e9f1c00fba0a456a23e2130605b0c7f16d -->
+<!-- source: docs/architecture.md source-sha256: 5357b5f7e15975e7fa8fe6c830ade6668dc0e2f92a580beb3769effce8617511 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -107,6 +107,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
   - Tauri's `build.devUrl` is set to the Vite URL, so in development both the admin window and the small port-change page are served by Vite and count as a local origin; Vite uses `server.strictPort: true` so the port cannot drift away from the allowlist.
   - Vite sends the same CSP as `/admin` through `server.headers`, and pages under `/overlay/` get the overlay CSP instead (a middleware in `vite.config.ts`), so violations show up during development.
   - In dev mode, Vite allows the `null` origin on every response except the proxied `/api`, `/ws` and `/templates` (`server.cors: false` plus a `configureServer` middleware), because the preview iframe loads modules from paths such as `/@vite/client` and `/src/...`.
+  - Sandboxed iframes on any website have the `null` origin, so Vite's `server.fs.deny` adds Cargo's `target` folder to the default list: the dev data folder (settings, logs, WebView2 profile) is inside it and must not be readable through Vite.
 
 ### Local API security
 Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-site requests, DNS rebinding, WebSocket hijacking), so the following is also required:

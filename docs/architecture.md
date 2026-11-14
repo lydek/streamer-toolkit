@@ -106,6 +106,7 @@ apps/
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
   - Vite 以 `server.headers` 送出與 `/admin` 相同的 CSP，`/overlay/` 下的頁面改送 Overlay CSP（`vite.config.ts` 的 middleware），讓違規在開發時就出現。
   - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
+  - 任何網站的 sandbox iframe 都是 `null` origin，因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 設定檔）在裡面，不能經由 Vite 讀到。
 
 ### 本機 API 安全
 只綁 `127.0.0.1` 擋不住瀏覽器裡的惡意網頁（跨站請求、DNS rebinding、WebSocket 劫持），因此另外做：

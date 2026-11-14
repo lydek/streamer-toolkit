@@ -5,8 +5,8 @@ import Aura from '@primeuix/themes/aura'
 // sRGB, with 400 (Aura's dark primary color) set to the accent #d8b7ff.
 export const theme = definePreset(Aura, {
   primitive: {
-    // Flat, 6px corners everywhere.
-    borderRadius: { lg: '6px', xl: '6px' },
+    // Flat, 6px corners (xs stays 2px for hairline details).
+    borderRadius: { sm: '6px', lg: '6px', xl: '6px' },
   },
   semantic: {
     primary: {
