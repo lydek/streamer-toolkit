@@ -86,6 +86,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/templates/chat/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["chat_source"];
+        put: operations["save_chat_source"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/twitch": {
         parameters: {
             query?: never;
@@ -319,6 +335,17 @@ export interface components {
         };
         /** @enum {string} */
         TemplateChangedType: "template.changed";
+        /** @description `GET`/`PUT /api/admin/templates/chat/source`: the user's `template.html` and `style.css` as they are on disk. */
+        TemplateSource: {
+            css: string;
+            /** @description Empty when the file does not exist. */
+            html: string;
+            /**
+             * @description Changes whenever either file changes. A save carries the revision it was based on and is refused with
+             *     409 `template.conflict` when the files changed since (e.g. edited in another editor).
+             */
+            revision: string;
+        };
         /** @description `GET /api/admin/templates/chat`. */
         TemplateStatus: {
             /**
@@ -502,6 +529,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateStatus"];
+                };
+            };
+        };
+    };
+    chat_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSource"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_chat_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateSource"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSource"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

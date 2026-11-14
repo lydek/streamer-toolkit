@@ -116,6 +116,7 @@
 
     <AppDrawer id="chat" :title="moduleName('chat')">
       <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl" />
         <form @submit.prevent="simulateChat">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-user">{{ t('simulate.userName') }}</label>
@@ -123,8 +124,11 @@
           <label for="sim-text">{{ t('simulate.text') }}</label>
           <InputText id="sim-text" v-model="simText" autocomplete="off" maxlength="500" required />
           <Button type="submit" :label="t('simulate.send')" icon="pi pi-send" :disabled="busy" />
-          <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
         </form>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <ChatNow v-model:log="chatLog" :broadcaster-id="broadcasterId" :disconnected="live.status === 'failed'" />
       </template>
     </AppDrawer>
   </div>
@@ -136,11 +140,13 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import AppDrawer from './AppDrawer.vue'
+import ChatNow from './ChatNow.vue'
+import { EMPTY_LOG, applyChat } from './chatLog'
 import { drawerId, useDrawer } from './drawer'
 import {
   type Line,
@@ -174,7 +180,12 @@ let timer: number | undefined
 
 const drawer = useDrawer()
 watch(drawer.current, () => (notice.value = undefined))
-const live = useLiveEvents()
+// Kept here, not in the drawer, so messages keep arriving while it is closed.
+const chatLog = shallowRef(EMPTY_LOG)
+const live = useLiveEvents(2000, (msg) => (chatLog.value = applyChat(chatLog.value, msg)))
+const broadcasterId = computed(() =>
+  overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
+)
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
 const groups = computed(() => tileGroups(modules.value ?? []))
@@ -254,6 +265,18 @@ const simulateChat = () =>
     simText.value = ''
     notify(t('simulate.sent'), false)
   })
+
+async function copyObsUrl() {
+  notice.value = undefined
+  try {
+    // The admin window loads the Host URL, so its origin is what OBS needs.
+    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
+    await navigator.clipboard.writeText(`${location.origin}/overlay/chat/`)
+    notify(t('chat.copied'), false)
+  } catch {
+    notify(t('chat.copyFailed'), true)
+  }
+}
 
 async function openActivate() {
   notice.value = undefined

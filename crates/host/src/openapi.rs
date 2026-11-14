@@ -24,6 +24,8 @@ use crate::{admin, obs, overlay, templates};
         obs::obs_overview,
         obs::update_obs,
         templates::chat_template,
+        templates::chat_source,
+        templates::save_chat_source,
     ),
     components(schemas(
         overlay::Snapshot,

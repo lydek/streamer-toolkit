@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, resolveConfig, type ViteDevServer } from 'vite'
-import { ADMIN_CSP, OVERLAY_CSP, devCsp, hostPort } from './dev-server.ts'
+import { ADMIN_CSP, OVERLAY_CSP, PREVIEW_PATH, devCsp, hostPort } from './dev-server.ts'
 
 const portOf = (s: { address(): unknown }) => (s.address() as AddressInfo).port
 
@@ -26,6 +26,7 @@ describe('hostPort', () => {
 it.each([
   ['ADMIN_CSP', ADMIN_CSP],
   ['OVERLAY_CSP', OVERLAY_CSP],
+  ['PREVIEW_PATH', PREVIEW_PATH],
 ])('%s matches the Host', (name, csp) => {
   const rust = readFileSync(resolve(import.meta.dirname, '../../crates/host/src/lib.rs'), 'utf8')
   const literal = new RegExp(`const ${name}: &str = "((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(rust)?.[1]
@@ -34,9 +35,13 @@ it.each([
 })
 
 it('picks the CSP the Host sends for each page', () => {
-  expect(devCsp('/admin/')).toBe(ADMIN_CSP)
-  expect(devCsp('/port/')).toBe(ADMIN_CSP)
-  expect(devCsp('/overlay/chat/')).toBe(OVERLAY_CSP)
+  const admin = `${ADMIN_CSP}; frame-src http://localhost:5173/overlay/chat/`
+  expect(devCsp('/admin/', 'localhost:5173')).toBe(admin)
+  expect(devCsp('/port/', 'localhost:5173')).toBe(admin)
+  expect(devCsp('/overlay/chat/', 'localhost:5173')).toBe(OVERLAY_CSP)
+  // Nothing from a Host header gets into the policy except a plain host name and port.
+  expect(devCsp('/admin/', "x; script-src 'unsafe-inline'")).toBe(`${ADMIN_CSP}; frame-src 'none'`)
+  expect(devCsp('/admin/')).toBe(`${ADMIN_CSP}; frame-src 'none'`)
 })
 
 // The real vite.config.ts against a fake Host; CARGO_TARGET_DIR points the data folder at a temp directory.
