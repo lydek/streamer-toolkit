@@ -737,8 +737,8 @@ mod tests {
                 .status(),
             StatusCode::UNAUTHORIZED
         );
-        // 1 MB of HTML is allowed, though above axum's default 2 MB body limit once JSON-escaped.
-        let html = "<".repeat(1024 * 1024);
+        // 1 MB of HTML is allowed, though above axum's default 2 MB body limit once JSON-escaped (`"` -> `\"`).
+        let html = "\"".repeat(1024 * 1024);
         let res = app
             .clone()
             .oneshot(put_source(body(html.clone()), TOKEN))

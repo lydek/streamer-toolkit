@@ -1,6 +1,7 @@
 <template>
   <div class="chat-now">
-    <p v-if="disconnected">{{ t('chat.disconnected') }}</p>
+    <!-- Always in the DOM, so screen readers announce the text when it appears. -->
+    <p role="status" class="connection">{{ disconnected ? t('chat.disconnected') : '' }}</p>
     <div class="bar">
       <span v-if="log.paused">{{ t('chat.paused', { n: log.unseen }) }}</span>
       <!-- WCAG 2.2.2: moving content can be paused without scrolling. -->
@@ -95,6 +96,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* Empty it takes no height; not display:none, which would drop it from the accessibility tree. */
+.connection {
+  margin: 0;
 }
 
 .bar {

@@ -166,8 +166,7 @@ impl Templates {
         }
         let failed = |_| (StatusCode::INTERNAL_SERVER_ERROR, "template.save_failed");
         std::fs::create_dir_all(&self.dir).map_err(failed)?;
-        write_replace(&self.dir.join(ENTRY), &body.html).map_err(failed)?;
-        write_replace(&self.dir.join(STYLE), &body.css).map_err(failed)?;
+        write_both(&self.dir, &body.html, &body.css).map_err(failed)?;
         Ok(TemplateSource {
             revision: revision(body.html.as_bytes(), body.css.as_bytes()),
             ..body
@@ -340,14 +339,28 @@ fn revision(html: &[u8], css: &[u8]) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// Writes a sibling `.tmp` file and renames it over `path`, so readers never see a half-written file.
+/// Writes both files as sibling `.tmp` files first, then renames them over the originals, so readers never see
+/// a half-written file and a failed write (disk full) changes neither. Only the two renames can split a save.
 /// `.tmp` is outside the served types, so the watcher ignores it.
-fn write_replace(path: &Path, text: &str) -> std::io::Result<()> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
-        let _ = std::fs::remove_file(&tmp);
-    })
+fn write_both(dir: &Path, html: &str, css: &str) -> std::io::Result<()> {
+    let files = [(dir.join(ENTRY), html), (dir.join(STYLE), css)];
+    let tmps: Vec<PathBuf> = files.iter().map(|(p, _)| p.with_extension("tmp")).collect();
+    let result = files
+        .iter()
+        .zip(&tmps)
+        .try_for_each(|((_, text), tmp)| std::fs::write(tmp, text))
+        .and_then(|()| {
+            files
+                .iter()
+                .zip(&tmps)
+                .try_for_each(|((path, _), tmp)| std::fs::rename(tmp, path))
+        });
+    if result.is_err() {
+        for tmp in &tmps {
+            let _ = std::fs::remove_file(tmp);
+        }
+    }
+    result
 }
 
 fn write_defaults(dir: &Path) -> std::io::Result<()> {

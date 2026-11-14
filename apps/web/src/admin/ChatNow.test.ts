@@ -89,6 +89,25 @@ describe('ChatNow', () => {
     wrapper.unmount()
   })
 
+  it('ignores scroll events without movement, such as the drawer moving between aside and dialog', async () => {
+    const wrapper = setup(receive(EMPTY_LOG, [chat(1)]))
+    const el = wrapper.get('[role="log"]').element as HTMLElement
+    await flushPromises()
+    layout(el, 500)
+    // Content grew without a scroll to the end yet: not at the bottom, but the reader did not scroll up.
+    await wrapper.get('[role="log"]').trigger('scroll')
+    expect(wrapper.props('log').paused).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('announces a lost connection', async () => {
+    const wrapper = setup(EMPTY_LOG)
+    expect(wrapper.get('[role="status"]').text()).toBe('')
+    await wrapper.setProps({ disconnected: true })
+    expect(wrapper.get('[role="status"]').text()).toBe(i18n.global.t('chat.disconnected'))
+    wrapper.unmount()
+  })
+
   it('has a Pause / Jump to latest button', async () => {
     const wrapper = setup(receive(EMPTY_LOG, [chat(1)]))
     const el = wrapper.get('[role="log"]').element as HTMLElement

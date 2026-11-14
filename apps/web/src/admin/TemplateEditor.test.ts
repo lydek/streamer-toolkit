@@ -97,4 +97,20 @@ describe('TemplateEditor', () => {
     expect(wrapper.get('[role="status"]').text()).toBe(i18n.global.t('editor.saved'))
     wrapper.unmount()
   })
+
+  it('keeps CRLF line endings of files saved with them', async () => {
+    calls.get.mockImplementation(async (path: string) =>
+      path === '/api/admin/templates/chat/source' ? { html: 'a\r\nb', css: 'c\nd', revision: 'r1' } : { error: null },
+    )
+    const wrapper = await setup()
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('#template-html').setValue('a\nb\nx')
+    calls.put.mockImplementation(async (_p: string, { body }: { body: object }) => ({ ...body, revision: 'r2' }))
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(calls.put.mock.calls[0][1].body).toMatchObject({ html: 'a\r\nb\r\nx', css: 'c\nd' })
+    // Saved: nothing left to save until the next edit.
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
 })

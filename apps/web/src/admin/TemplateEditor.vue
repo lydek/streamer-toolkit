@@ -54,7 +54,12 @@ const loadFailed = ref(false)
 const conflict = ref(false)
 const templateError = ref<string | null>(null)
 const status = ref<{ text: string; error: boolean }>()
-const dirty = computed(() => !!source.value && (html.value !== source.value.html || css.value !== source.value.css))
+// A textarea turns CRLF into LF; files saved with CRLF get it back on save, so one edit does not rewrite every line.
+const lf = (s: string) => s.replaceAll('\r\n', '\n')
+const like = (text: string, original: string) => (original.includes('\r\n') ? text.replaceAll('\n', '\r\n') : text)
+const dirty = computed(
+  () => !!source.value && (html.value !== lf(source.value.html) || css.value !== lf(source.value.css)),
+)
 
 let chat: ChatState = { messages: [], lastSeq: 0 }
 
@@ -117,8 +122,8 @@ async function run(action: () => Promise<void>) {
 
 function show(s: Schemas['TemplateSource']) {
   source.value = s
-  html.value = s.html
-  css.value = s.css
+  html.value = lf(s.html)
+  css.value = lf(s.css)
 }
 
 const load = () =>
@@ -136,12 +141,12 @@ const load = () =>
 
 const save = () =>
   run(async () => {
-    show(
-      await api(
-        client.PUT('/api/admin/templates/chat/source', {
-          body: { html: html.value, css: css.value, revision: source.value!.revision },
-        }),
-      ),
+    const base = source.value!
+    // Only `source` moves on: anything typed while the save was in flight stays in the fields and stays dirty.
+    source.value = await api(
+      client.PUT('/api/admin/templates/chat/source', {
+        body: { html: like(html.value, base.html), css: like(css.value, base.css), revision: base.revision },
+      }),
     )
     status.value = { text: t('editor.saved'), error: false }
   })
