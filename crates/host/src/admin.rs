@@ -328,7 +328,7 @@ pub(crate) struct ErrorBody {
     code: String,
 }
 
-fn error(status: StatusCode, code: &str) -> Response {
+pub(crate) fn error(status: StatusCode, code: &str) -> Response {
     (status, Json(ErrorBody { code: code.into() })).into_response()
 }
 

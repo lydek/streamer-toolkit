@@ -12,7 +12,7 @@ use obws::{
     requests::EventSubscription,
 };
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
 use crate::secrets::SecretStore;
@@ -23,7 +23,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(if cfg!(test) { 1 } else {
 /// obs-websocket close code for a missing or wrong password.
 const AUTHENTICATION_FAILED: u16 = 4009;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ObsState {
     Connected,

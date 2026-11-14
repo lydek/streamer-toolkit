@@ -10,6 +10,8 @@ use axum::{
     response::Response,
 };
 use chat::ChatMessageEvent;
+
+use crate::obs::ObsStatusEvent;
 use serde::{Deserialize, Serialize};
 use toolkit_core::bus::EventBus;
 use utoipa::ToSchema;
@@ -64,6 +66,9 @@ enum SnapshotType {
 struct SnapshotPayload {
     #[serde(rename = "chat.message")]
     chat_message: Vec<ChatMessageEvent>,
+    /// At most one: the latest status.
+    #[serde(rename = "obs.status")]
+    obs_status: Vec<ObsStatusEvent>,
 }
 
 #[cfg(test)]
@@ -93,6 +98,8 @@ mod tests {
             },
             Source::Simulation,
         );
+        crate::obs::retain(&bus);
+        crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
         let wire: serde_json::Value = serde_json::from_str(&bus.subscribe().0).unwrap();
         // No missing, extra or renamed fields; a new retained event type must be added to SnapshotPayload.
         let typed: Snapshot = serde_json::from_value(wire.clone()).unwrap();
@@ -104,6 +111,9 @@ mod tests {
         assert_required("SnapshotPayload", &wire["payload"]);
         assert_required("ChatMessageEvent", event);
         assert_required("ChatMessagePayload", &event["payload"]);
+        let obs = &wire["payload"]["obs.status"][0];
+        assert_required("ObsStatusEvent", obs);
+        assert_required("ObsStatusPayload", &obs["payload"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

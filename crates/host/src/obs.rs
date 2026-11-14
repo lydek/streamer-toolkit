@@ -14,7 +14,7 @@ use axum::{
     routing::get,
 };
 use integrations::{
-    obs::{Obs, ObsStatus},
+    obs::{Obs, ObsState, ObsStatus},
     secrets::SecretStore,
 };
 use secrecy::{ExposeSecret, SecretString};
@@ -25,8 +25,67 @@ use toolkit_core::{
     events::Source,
     settings,
 };
+use utoipa::ToSchema;
+
+use crate::admin::{ErrorBody, error};
 
 pub(crate) const STATUS_EVENT: &str = "obs.status";
+const STATUS_VERSION: u32 = 1;
+
+/// The `payload` of an `obs.status` event, and the `status` of `GET /api/admin/obs`.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub(crate) struct ObsStatusPayload {
+    state: ObsState,
+    /// Stable code such as `obs.auth_failed`; `null` when connected or right after startup.
+    #[schema(required)]
+    reason: Option<String>,
+}
+
+impl From<ObsStatus> for ObsStatusPayload {
+    fn from(status: ObsStatus) -> Self {
+        Self {
+            state: status.state,
+            reason: status.reason.map(Into::into),
+        }
+    }
+}
+
+/// An `obs.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.
+// The bus serializes its own envelope; the snapshot test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ObsStatusEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: ObsStatusType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: ObsStatusPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum ObsStatusType {
+    #[serde(rename = "obs.status")]
+    ObsStatus,
+}
+
+/// Keeps the latest `obs.status` for snapshots.
+pub(crate) fn retain(bus: &EventBus) {
+    bus.retain(STATUS_EVENT, 1);
+}
+
+pub(crate) fn publish(bus: &EventBus, status: ObsStatus) {
+    bus.publish(Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type: STATUS_EVENT,
+        version: STATUS_VERSION,
+        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        source: Source::Obs,
+        payload: serde_json::to_value(ObsStatusPayload::from(status)).expect("status serializes"),
+    });
+}
 
 pub(crate) struct ObsLink {
     data_dir: PathBuf,
@@ -43,20 +102,12 @@ impl ObsLink {
         bus: Arc<EventBus>,
     ) -> Arc<Self> {
         let status = Arc::new(watch::channel(ObsStatus::CONNECTING).0);
-        bus.retain(STATUS_EVENT, 1);
+        retain(&bus);
         let mut changes = status.subscribe();
         tokio::spawn(async move {
             loop {
                 let current = *changes.borrow_and_update();
-                bus.publish(Event {
-                    id: uuid::Uuid::now_v7().to_string(),
-                    event_type: STATUS_EVENT,
-                    version: 1,
-                    occurred_at: chrono::Utc::now()
-                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                    source: Source::Obs,
-                    payload: serde_json::to_value(current).expect("status serializes"),
-                });
+                publish(&bus, current);
                 if changes.changed().await.is_err() {
                     return;
                 }
@@ -103,38 +154,52 @@ impl Drop for ObsLink {
 
 pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
     Router::new()
-        .route("/api/admin/obs", get(overview).put(update))
+        .route("/api/admin/obs", get(obs_overview).put(update_obs))
         .with_state(link)
 }
 
-#[derive(Serialize)]
-struct Overview {
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ObsOverview {
     host: String,
     port: u16,
+    /// Whether a password is stored; the password itself is never returned.
     password_set: bool,
-    status: ObsStatus,
+    status: ObsStatusPayload,
 }
 
-async fn overview(State(link): State<Arc<ObsLink>>) -> Response {
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs",
+    tag = "admin",
+    responses(
+        (status = 200, body = ObsOverview),
+        (status = 500, body = ErrorBody),
+    )
+)]
+pub(crate) async fn obs_overview(State(link): State<Arc<ObsLink>>) -> Response {
     let Ok(password) = link.secrets.read().map(|p| p.map(SecretString::from)) else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "obs.secret_store_failed");
     };
     let saved = settings::load(&link.data_dir).obs;
-    Json(Overview {
+    let status = (*link.status.borrow()).into();
+    Json(ObsOverview {
         host: saved.host,
         port: saved.port,
         password_set: password.is_some(),
-        status: *link.status.borrow(),
+        status,
     })
     .into_response()
 }
 
-#[derive(Deserialize)]
-struct UpdateBody {
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct ObsSettingsBody {
+    /// Host name or IPv4 address.
     host: String,
+    /// 1-65535.
     port: u16,
     /// Absent keeps the stored password; empty removes it (OBS with authentication off).
     #[serde(default)]
+    #[schema(value_type = Option<String>)]
     password: Option<SecretString>,
 }
 
@@ -146,7 +211,22 @@ fn valid_host(host: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
 }
 
-async fn update(State(link): State<Arc<ObsLink>>, Json(body): Json<UpdateBody>) -> Response {
+/// Saves the address (and the password, when given) and reconnects with them.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs",
+    tag = "admin",
+    request_body = ObsSettingsBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 500, body = ErrorBody),
+    )
+)]
+pub(crate) async fn update_obs(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<ObsSettingsBody>,
+) -> Response {
     let host = body.host.trim().to_owned();
     if !valid_host(&host) || body.port == 0 {
         return error(StatusCode::BAD_REQUEST, "obs.invalid_address");
@@ -173,10 +253,6 @@ async fn update(State(link): State<Arc<ObsLink>>, Json(body): Json<UpdateBody>) 
         return error(StatusCode::INTERNAL_SERVER_ERROR, "obs.secret_store_failed");
     }
     StatusCode::NO_CONTENT.into_response()
-}
-
-fn error(status: StatusCode, code: &str) -> Response {
-    (status, Json(serde_json::json!({ "code": code }))).into_response()
 }
 
 #[cfg(test)]
