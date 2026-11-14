@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 048f124753447be3b7553f711904bb982d347b5f1e065f7f6e2bc96ce92330f9 -->
+<!-- source: docs/architecture.md source-sha256: 72363c3f576e910be09a93ae7c961ab7da451d11848ca83d55319af409777bca -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -109,13 +109,14 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 
 ### Local API security
 Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-site requests, DNS rebinding, WebSocket hijacking), so the following is also required:
-- **Admin window**: loads `http://127.0.0.1:<port>/admin` and is created only after the Host has bound the port; in development it loads the Vite dev server instead. The admin window and the API share one origin, so there is no CORS and no Tauri origin to handle. The admin window may only navigate to `/admin` paths on the app's own origin (`on_navigation` restriction), and opening new windows (`window.open`, `target=_blank`) is always denied (`on_new_window`); the Device Code Flow verification URL is opened in the system browser by a Rust command using `tauri-plugin-opener`, and the window shows only the code.
+- **Admin window**: loads `http://127.0.0.1:<port>/admin` and is created only after the Host has bound the port; in development it loads the Vite dev server instead. The admin window and the API share one origin, so there is no CORS and no Tauri origin to handle. The admin window may only navigate to `/admin` paths on the app's own origin (`on_navigation` restriction), and opening new windows (`window.open`, `target=_blank`) is always denied (`on_new_window`); the Device Code Flow verification URL is opened in the system browser by a Rust command using `tauri-plugin-opener`, and the window shows only the code. Other external URLs work the same way: each destination gets its own command with a hard-coded URL and no parameters, with no generic command that takes a URL parameter (a script injected into the admin window could use one to open any URL or custom protocol, such as `ms-settings:`), and no window is granted opener plugin permissions.
   - The Host sends a strict `Content-Security-Policy` on `/admin` (and every path under it): `script-src 'self'` (no inline scripts, no eval); `connect-src 'self' ipc: http://ipc.localhost` (Tauri IPC); `style-src 'self' 'unsafe-inline'` (PrimeVue injects styles at runtime, or use PrimeVue's nonce instead); `img-src 'self' data:` and `font-src 'self' data:` (Vite inlines small files as `data:`); `frame-src 'none'` (the release IPC capability covers the whole Host origin, so same-origin pages must not be framed inside the admin window; when template previews are added, allow only the sources the sandboxed iframe needs). No `default-src`. vue-i18n uses precompiled messages, so `unsafe-eval` is not needed.
 - **Admin token**: the Host generates a random token at every launch; it is never written to disk. The admin window fetches it at startup through a Tauri IPC command; the token stays in memory only, never in localStorage (WebView2 writes that to disk). Admin HTTP requests carry an `Authorization` header; admin WebSocket connections send the token in their first message.
 - **Tauri IPC permissions**: app commands are declared in `build.rs` with `tauri_build::AppManifest`, and every command needs an explicit grant. There are three capabilities:
   1. Small port-change page (local origin, `port` window only): grants only the commands that validate and save the port and retry the bind.
   2. Admin window, dev (local origin through `devUrl`, `admin` window only): grants admin commands such as fetching the token.
   3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>` and the `admin` window only (Tauri matches the IPC request's Origin, which has no path, so it cannot be limited to `/admin`; `on_navigation` restricts the path). It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
+  - Besides app commands, the admin window (capabilities 2 and 3) is granted only `core:event:allow-listen` and `core:event:allow-unlisten` (to receive the close-hint event), never `core:default` or `core:window:*` (the release capability covers the whole Host origin).
 - **User templates**:
   - Custom templates and overlays are never rendered directly in the admin window; previews go in an iframe with only `sandbox="allow-scripts"` (no `allow-same-origin`), so template code cannot reach the admin window's IPC or token; a test checks that `invoke` from the preview iframe is rejected.
   - The preview iframe's origin is `null`, so it cannot connect to the Host; the admin window passes snapshots and sample events in with `postMessage`.
@@ -135,6 +136,8 @@ Twitch's official documentation is the source for these numbers; update this sec
 
 ## 6. Host lifecycle
 The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
+
+When ✕ is clicked on the admin window, Rust always calls `prevent_close()`: if "Don't show again" is already stored in `settings.json`, the window is hidden right away; otherwise Rust sends an event to the admin window to show a hint, and the frontend reports "shown", "cancel" or "hide" with the app command `close_hint`; "hide" also carries the "Don't show again" checkbox value, which Rust writes to `settings.json`. If "shown" does not arrive within 2 seconds, or ✕ is clicked again while the hint is open, the window is hidden directly so that ✕ never appears to do nothing.
 
 ### Data directory
 Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. The app ships as a portable package only, so data defaults to the `data` folder next to the executable.

@@ -6,6 +6,7 @@
 - Rust：用 `rust-toolchain.toml` 鎖版本。
 - Node：24 LTS，寫在 `.nvmrc`。Tauri CLI 與 lefthook 是 pnpm devDependencies，用 `pnpm tauri …`、`pnpm lefthook …` 執行。pnpm：用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本，不依賴 Corepack；用 lockfile 鎖定相依套件，安裝用 `pnpm install --frozen-lockfile`。
 - Visual Studio Build Tools（MSVC）與 WebView2 Runtime（Tauri 需要）。
+- `cargo-deny`：`cargo install --locked cargo-deny`（pre-push hook 與 CI 都會跑 `cargo deny check`）。
 
 原則：另一台 Windows 電腦照這份文件就能跑起來。
 
@@ -13,7 +14,7 @@
 - 安裝相依套件：`pnpm install --frozen-lockfile`
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
-- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、正式版 clippy），用 `pnpm lefthook run pre-push`
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
@@ -23,6 +24,7 @@
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
+  - `pre-push` 依 CI 的順序跑完整檢查（翻譯、前端 lint／test／build、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 
 ## 每次提交前（CI 也跑同一套，只跑 Windows）
@@ -38,7 +40,15 @@
 - 必測：兌換事件去重與狀態轉換、備份後能實際還原、migration 升級不掉資料。
 - 用模擬事件測試，不必真的觸發 Twitch。模擬事件標記 `source=simulation`，不得寫入任何正式業務紀錄（兌換紀錄、打卡紀錄）。
 - OBS 實際畫面與音效，每個切片完成時直播試用一次即可。
-- a11y 基準（每個切片完成時人工檢查一次）：所有操作可用鍵盤完成、焦點可見、每個控制項有 label、文字對比達 WCAG 2.2 AA（4.5:1）、狀態不只用顏色表達。
+- a11y 基準（每個切片完成時人工檢查一次）：所有操作可用鍵盤完成、焦點可見、每個控制項有 label、文字對比達 WCAG 2.2 AA（4.5:1）、控制項邊界與傳達資訊的圖示達 3:1（WCAG 1.4.11）、狀態不只用顏色表達。
+  - 檢查方法：用鍵盤走一遍；對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；以 1280px 寬的視窗放大到 200%、400%（相當於 640px、320px 寬）時，沒有橫向捲軸、文字沒被裁掉（刻意以「……」省略的除外）、按鈕都按得到。不做螢幕閱讀器實測，但語意標記與 ARIA 照做。
+  - 抽屜與對話方塊（`<dialog>`）的行為 jsdom 測不了，在實際 Tauri 視窗手動走一遍：
+    - 跨過 1000px 寬度門檻後，焦點、輸入值、捲動位置都還在。
+    - 打字後按 Esc，值已寫入。
+    - 抽屜為 modal 時，錯誤訊息與其中的按鈕都看得到、按得到。
+    - 抽屜內下拉選單開著時按 Esc，只關下拉選單、不關抽屜。
+    - 關閉視窗時的提示：按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣。
+  - 能抽成純函式的判斷照樣寫單元測試；關閉提示的 Rust 狀態流程（已顯示／取消／隱藏、2 秒逾時、提示中再按 ✕）寫 Rust 單元測試。
 - 安全測試：樣板預覽 iframe 呼叫 `invoke` 必須被拒絕。
 - AI 協作：可以改實作、加測試；不得為了讓測試通過而放寬驗收條件、刪除測試或修改 CI 檢查。
 
