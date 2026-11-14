@@ -78,6 +78,32 @@ describe('SettingsView', () => {
     wrapper.unmount()
   })
 
+  it('keeps the module switches usable when the OBS settings fail to load', async () => {
+    client.GET.mockImplementation(async (path: string) =>
+      path === '/api/admin/obs'
+        ? { error: { code: 'obs.secret_store_failed' }, response: new Response(null, { status: 500 }) }
+        : ok(GETS[path]),
+    )
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: SettingsView }] })
+    await router.push('/settings')
+    const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
+    await vi.waitFor(() => expect(wrapper.find('#module-chat').exists()).toBe(true))
+    expect(wrapper.find('#ask-before-close').exists()).toBe(true)
+    expect(wrapper.find('#obs-host').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reads "Ask before closing" again when the window gets focus back', async () => {
+    const wrapper = await mountSettings()
+    expect(wrapper.get<HTMLInputElement>('#ask-before-close').element.checked).toBe(true)
+    GETS['/api/admin/general'] = { ask_before_close: false } // the close hint's "Don't show again"
+    window.dispatchEvent(new Event('focus'))
+    await vi.waitFor(() => expect(wrapper.get<HTMLInputElement>('#ask-before-close').element.checked).toBe(false))
+    expect(client.PUT).not.toHaveBeenCalled()
+    GETS['/api/admin/general'] = { ask_before_close: true }
+    wrapper.unmount()
+  })
+
   it('turns a module off from Features', async () => {
     client.PUT.mockResolvedValue(ok())
     const wrapper = await mountSettings()

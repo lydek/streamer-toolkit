@@ -143,14 +143,15 @@ async function commitPassword() {
   if (await obsPassword.commit()) passwordSaved.value = ''
 }
 
+const report = (e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+
 async function run(action: () => Promise<unknown>) {
   busy.value = true
   try {
     await action()
     await refresh()
   } catch (e) {
-    loadFailed.value = true
-    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+    report(e)
   } finally {
     busy.value = false
   }
@@ -160,21 +161,45 @@ async function refreshTwitch() {
   overview.value = await api(client.GET('/api/admin/twitch'))
 }
 
-async function refresh() {
-  await refreshTwitch()
+async function refreshModules() {
   modules.value = await api(client.GET('/api/admin/modules'))
 }
 
-async function load() {
-  const [general, obs] = await Promise.all([api(client.GET('/api/admin/general')), api(client.GET('/api/admin/obs'))])
-  askSaved.value = general.ask_before_close
+async function refresh() {
+  await Promise.all([refreshTwitch(), refreshModules()])
+}
+
+async function loadGeneral() {
+  askSaved.value = (await api(client.GET('/api/admin/general'))).ask_before_close
+}
+
+async function loadObs() {
+  const obs = await api(client.GET('/api/admin/obs'))
   Object.assign(savedAddress, { host: obs.host, port: obs.port })
   hostSaved.value = obs.host
   portSaved.value = String(obs.port)
   passwordSet.value = obs.password_set
 }
 
-const loaded = () => modules.value !== undefined && hostSaved.value !== undefined
+// Each group loads on its own, so one failing endpoint (e.g. the Credential Manager behind OBS) does not hide
+// the others, above all the module switches an emptied home sends the user to. Twitch is polled throughout.
+async function load() {
+  const results = await Promise.allSettled([
+    askSaved.value === undefined && loadGeneral(),
+    hostSaved.value === undefined && loadObs(),
+    modules.value === undefined && refreshModules(),
+    refreshTwitch(),
+  ])
+  const failed = results.find((r) => r.status === 'rejected')
+  if (failed) {
+    loadFailed.value = true
+    throw failed.reason
+  }
+}
+
+// The close hint's "Don't show again" can change this while the page is open; the window is hidden then, so
+// reading it again when the window gets focus back is enough.
+const reloadGeneral = () => void loadGeneral().catch(() => {})
 
 const toggleModule = (m: Schemas['ModuleState']) =>
   run(() =>
@@ -187,14 +212,15 @@ const removePassword = () =>
   })
 
 onMounted(async () => {
-  await run(load)
-  // Polled so a sign-in finished in the browser shows up; until the first load succeeds, retry all of it.
-  timer = window.setInterval(() => {
-    const poll = loaded() ? refreshTwitch() : load().then(refresh)
-    poll.catch(() => {})
-  }, 2000)
+  window.addEventListener('focus', reloadGeneral)
+  await load().catch(report)
+  // Polled so a sign-in finished in the browser shows up, and so groups that failed to load retry.
+  timer = window.setInterval(() => void load().catch(() => {}), 2000)
 })
-onBeforeUnmount(() => window.clearInterval(timer))
+onBeforeUnmount(() => {
+  window.clearInterval(timer)
+  window.removeEventListener('focus', reloadGeneral)
+})
 </script>
 
 <style scoped>

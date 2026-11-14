@@ -139,7 +139,7 @@
       "password_required": "OBS WebSocket 需要密碼，請先設定密碼。",
       "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",
       "invalid_address": "OBS 位址格式不正確。",
-      "secret_store_failed": "無法從 Windows 認證管理員讀取 OBS 密碼。",
+      "secret_store_failed": "無法存取 Windows 認證管理員中的 OBS 密碼。",
       "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。"
     },
     "port": {
