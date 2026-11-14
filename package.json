@@ -11,6 +11,8 @@
     "web:dev": "pnpm --filter web dev",
     "web:build": "pnpm --filter web build",
     "check:translations": "node scripts/check-translations.mjs",
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
     "api:gen": "cargo run -q -p host --example openapi -- apps/web/src/api/openapi.json && pnpm --filter web api:types"

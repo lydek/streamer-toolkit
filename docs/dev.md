@@ -30,7 +30,7 @@
 
 ## 每次提交前（CI 也跑同一套，只跑 Windows）
 順序：先建置前端（`dist/` 不進版控，`rust-embed` 需要它才編得過），再跑 Rust 檢查。
-格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
+格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
 沒有開啟 `tauri/custom-protocol` 的 cargo 指令都以 dev 模式編譯，所以 CI 另跑 `cargo clippy --features tauri/custom-protocol`，檢查只在正式版編譯的程式碼（只用來檢查，不散布產物）。正式發佈一律用 `tauri build`。
 
 ## 測試底線
@@ -67,7 +67,7 @@
 
 ## 授權
 - 本專案為 MIT。Rust 相依套件的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0）。
-- 前端相依套件用 `pnpm licenses list` 檢查，只看會打包進產物的相依套件，允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。
+- 前端相依套件由 `scripts/check-licenses.mjs`（`pnpm check:licenses`）檢查，CI 與 pre-push 都會跑：只看會打包進產物的相依套件（`pnpm licenses list --prod`，開發工具不算），允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。清單直接讀 `docs/decisions.md` 的「相依套件授權」列，改清單只改那一列。授權不在清單內、未知、或寫成 `SEE LICENSE IN …`（例如 PrimeVue 5）都算失敗；清單不得為了讓檢查通過而放寬。
 - GPL／LGPL／AGPL 一律不得引入。
 - 可攜版切片產生 `THIRD_PARTY_LICENSES`（`cargo-about`＋`pnpm licenses`），放進 zip 一起散布。
 - 內建素材（音效、字型、圖示）只收可再散布的授權（CC0、CC-BY、OFL 等），來源與授權記在 `assets/CREDITS.md`。使用者自己匯入的素材不進 repo。
