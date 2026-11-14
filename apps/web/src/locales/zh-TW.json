@@ -3,7 +3,8 @@
     "name": "Streamer Toolkit",
     "loading": "載入中……",
     "notFound": "找不到這個頁面。",
-    "home": "回首頁"
+    "home": "回首頁",
+    "close": "關閉"
   },
   "closeHint": {
     "message": "程式會在系統匣繼續執行，Overlay 不受影響；要結束請在系統匣選「結束」。",
@@ -15,6 +16,35 @@
     "now": "現在",
     "settings": "常改的設定",
     "fullPage": "開啟完整頁"
+  },
+  "home": {
+    "skip": "跳到功能磚",
+    "tiles": "功能磚",
+    "groups": {
+      "live": "直播中",
+      "features": "功能"
+    },
+    "pending": "待處理",
+    "attention": "需要注意",
+    "loadFailed": "載入失敗",
+    "empty": "首頁沒有功能磚",
+    "arrange": "整理功能磚",
+    "connections": "連線與 OBS 來源",
+    "chatEmpty": "還沒有訊息",
+    "status": {
+      "connected": "已連線",
+      "failed": "無法取得狀態",
+      "twitch": {
+        "setup": "尚未設定",
+        "pending": "等待登入",
+        "signedOut": "未登入",
+        "failed": "登入失敗"
+      },
+      "obs": {
+        "reconnecting": "重新連線中",
+        "error": "連線失敗"
+      }
+    }
   },
   "twitch": {
     "heading": "Twitch 連線",
@@ -41,7 +71,7 @@
     "userName": "名稱",
     "text": "聊天訊息",
     "send": "送出模擬聊天",
-    "sent": "已送出。"
+    "sent": "已送出模擬聊天。"
   },
   "port": {
     "heading": "連接埠被佔用",
@@ -84,6 +114,16 @@
       "unreachable": "連不到 Twitch，請檢查網路。",
       "invalid_response": "Twitch 回應無法辨識，請稍後再試。",
       "storage_failed": "無法把登入資料存進 Windows 認證管理員。"
+    },
+    "obs": {
+      "unreachable": "連不到 OBS，請確認 OBS 已開啟，並在「工具 → WebSocket 伺服器設定」啟用伺服器。",
+      "disconnected": "與 OBS 的連線中斷了。",
+      "auth_failed": "OBS WebSocket 密碼錯誤。",
+      "password_required": "OBS WebSocket 需要密碼，請先設定密碼。",
+      "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",
+      "invalid_address": "OBS 位址格式不正確。",
+      "secret_store_failed": "無法從 Windows 認證管理員讀取 OBS 密碼。",
+      "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。"
     },
     "port": {
       "invalid": "連接埠必須介於 1024 到 65535。",
