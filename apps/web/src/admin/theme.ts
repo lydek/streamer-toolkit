@@ -47,4 +47,31 @@ export const theme = definePreset(Aura, {
       },
     },
   },
+  components: {
+    toast: {
+      colorScheme: {
+        // Flat (docs/decisions.md 視覺風格): Aura's dark toasts are translucent with blur and a colored shadow.
+        // Text on surface.900: green.400 10.2:1, red.400 6.4:1, blue.400 and yellow.400 higher.
+        dark: {
+          root: { blur: '0' },
+          ...Object.fromEntries(
+            (['info', 'success', 'warn', 'error'] as const).map((s) => {
+              const hue = { info: 'blue', success: 'green', warn: 'yellow', error: 'red' }[s]
+              return [
+                s,
+                {
+                  background: '{surface.900}',
+                  borderColor: `{${hue}.400}`,
+                  color: `{${hue}.400}`,
+                  detailColor: '{surface.0}',
+                  shadow: 'none',
+                  closeButton: { hoverBackground: '{surface.800}', focusRing: { color: `{${hue}.400}`, shadow: 'none' } },
+                },
+              ]
+            }),
+          ),
+        },
+      },
+    },
+  },
 })

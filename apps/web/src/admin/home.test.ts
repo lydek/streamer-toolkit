@@ -14,6 +14,7 @@ import {
   successToast,
   tileGroups,
   twitchLight,
+  useLiveEvents,
   useThrottled,
 } from './home'
 import HomeTile from './HomeTile.vue'
@@ -43,7 +44,10 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   payload: { 'chat.message': [], 'obs.status': [], ...payload },
 })
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 describe('twitchLight', () => {
   const overview = (status: Schemas['AuthStatus'], client_id = 'abc'): Schemas['Overview'] => ({ client_id, status })
@@ -102,6 +106,39 @@ describe('applyLive', () => {
     s = applyLive(s, obsEvent(6, 'error'))
     s = applyLive(s, chat(7, 'hi'))
     expect(s).toMatchObject({ lastSeq: 7, obs: { state: 'error' }, lastChat: { payload: { text: 'hi' } } })
+  })
+})
+
+describe('useLiveEvents', () => {
+  it('drops known state on disconnect, reconnects, and stops with its scope', () => {
+    vi.useFakeTimers()
+    const sockets: { onmessage?: (e: { data: string }) => void; onclose?: () => void; close: () => void }[] = []
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        onmessage?: (e: { data: string }) => void
+        onclose?: () => void
+        close = vi.fn()
+        constructor() {
+          sockets.push(this)
+        }
+      },
+    )
+    const scope = effectScope()
+    const live = scope.run(() => useLiveEvents(2000))!
+
+    sockets[0].onmessage!({ data: JSON.stringify(snapshot(3, { 'obs.status': [obsEvent(2, 'connected')] })) })
+    expect(live.value).toMatchObject({ status: 'open', obs: { state: 'connected' } })
+    sockets[0].onclose!()
+    expect(live.value).toEqual({ status: 'failed', lastSeq: 0 })
+    vi.advanceTimersByTime(2000)
+    expect(sockets).toHaveLength(2)
+
+    scope.stop()
+    expect(sockets[1].close).toHaveBeenCalled()
+    sockets[1].onclose!()
+    vi.advanceTimersByTime(2000)
+    expect(sockets).toHaveLength(2)
   })
 })
 

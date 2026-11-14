@@ -71,14 +71,23 @@ pub fn load(config_dir: &Path) -> Settings {
     }
 }
 
-fn back_up(path: &Path) {
+/// Returns whether a copy was made. The admin UI polls settings, so an unchanged broken file is copied and
+/// logged once, not on every load.
+fn back_up(path: &Path) -> bool {
     let backup = path.with_extension("json.bak");
+    if let (Ok(current), Ok(kept)) = (fs::read(path), fs::read(&backup))
+        && current == kept
+    {
+        return false;
+    }
     match fs::copy(path, &backup) {
         Ok(_) => {
-            tracing::warn!(code = "settings.unreadable", backup = %backup.display(), "kept a copy")
+            tracing::warn!(code = "settings.unreadable", backup = %backup.display(), "kept a copy");
+            true
         }
         Err(e) => {
-            tracing::error!(code = "settings.unreadable", error = %e, "could not keep a copy")
+            tracing::error!(code = "settings.unreadable", error = %e, "could not keep a copy");
+            false
         }
     }
 }
@@ -124,6 +133,12 @@ mod tests {
         assert_eq!(load(&dir), Settings::default());
         let backup = path(&dir).with_extension("json.bak");
         assert_eq!(fs::read_to_string(backup).unwrap(), broken);
+        assert!(
+            !back_up(&path(&dir)),
+            "same broken file is not copied again"
+        );
+        fs::write(path(&dir), "{").unwrap();
+        assert!(back_up(&path(&dir)), "a different broken file is copied");
         let _ = fs::remove_dir_all(dir);
     }
 

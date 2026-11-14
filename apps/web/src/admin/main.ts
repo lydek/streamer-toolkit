@@ -12,6 +12,10 @@ createApp(App)
   .use(i18n)
   .use(router)
   // Dark only (MVP): admin/index.html always carries the class.
-  .use(PrimeVue, { theme: { preset: theme, options: { darkModeSelector: '.app-dark' } } })
+  // `locale` is merged into PrimeVue's defaults; only the strings our components read aloud are translated.
+  .use(PrimeVue, {
+    theme: { preset: theme, options: { darkModeSelector: '.app-dark' } },
+    locale: { aria: { close: i18n.global.t('app.close') } },
+  })
   .use(ToastService)
   .mount('#app')

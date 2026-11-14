@@ -60,7 +60,7 @@
     <section v-if="openId" :id="PANEL_ID" class="panel" aria-labelledby="panel-heading" @keydown.esc="closePanel">
       <div class="panel-head">
         <h2 id="panel-heading">{{ openId === 'connections' ? t('home.connections') : moduleName(openId) }}</h2>
-        <Button id="panel-close" icon="pi pi-times" text :aria-label="t('home.close')" @click="closePanel" />
+        <Button id="panel-close" icon="pi pi-times" text :aria-label="t('app.close')" @click="closePanel" />
       </div>
 
       <template v-if="openId === 'connections'">
@@ -275,9 +275,10 @@ const focusModules = () => modulesHeading.value?.focus()
 onMounted(async () => {
   await run(async () => {})
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
+  // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
   timer = window.setInterval(() => {
-    refreshOverview().catch(() => {})
-    refreshTemplate().catch(() => {})
+    const poll = modules.value ? Promise.all([refreshOverview(), refreshTemplate()]) : refresh()
+    poll.catch(() => {})
   }, 2000)
 })
 onBeforeUnmount(() => window.clearInterval(timer))

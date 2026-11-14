@@ -3,7 +3,8 @@
     "name": "Streamer Toolkit",
     "loading": "載入中……",
     "notFound": "找不到這個頁面。",
-    "home": "回首頁"
+    "home": "回首頁",
+    "close": "關閉"
   },
   "closeHint": {
     "message": "程式會在系統匣繼續執行，Overlay 不受影響；要結束請在系統匣選「結束」。",
@@ -29,7 +30,6 @@
     "empty": "首頁沒有功能磚",
     "arrange": "整理功能磚",
     "connections": "連線與 OBS 來源",
-    "close": "關閉",
     "chatEmpty": "還沒有訊息",
     "status": {
       "connected": "已連線",
