@@ -33,6 +33,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   document.body.innerHTML = ''
+  GETS['/api/admin/general'] = { ask_before_close: true }
 })
 
 describe('SettingsView', () => {
@@ -100,7 +101,21 @@ describe('SettingsView', () => {
     window.dispatchEvent(new Event('focus'))
     await vi.waitFor(() => expect(wrapper.get<HTMLInputElement>('#ask-before-close').element.checked).toBe(false))
     expect(client.PUT).not.toHaveBeenCalled()
-    GETS['/api/admin/general'] = { ask_before_close: true }
+    wrapper.unmount()
+  })
+
+  it('keeps a toggle saved while that read was in flight', async () => {
+    client.PUT.mockResolvedValue(ok())
+    const wrapper = await mountSettings()
+    let answer!: () => void
+    client.GET.mockImplementationOnce(() => new Promise((r) => (answer = () => r(ok({ ask_before_close: true })))))
+    window.dispatchEvent(new Event('focus')) // the read starts, returning the old value later
+    await wrapper.get('#ask-before-close').trigger('change')
+    await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(1))
+    await flushPromises()
+    answer()
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('#ask-before-close').element.checked).toBe(false)
     wrapper.unmount()
   })
 

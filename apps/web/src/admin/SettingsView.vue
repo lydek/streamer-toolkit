@@ -170,7 +170,10 @@ async function refresh() {
 }
 
 async function loadGeneral() {
-  askSaved.value = (await api(client.GET('/api/admin/general'))).ask_before_close
+  const before = askSaved.value
+  const { ask_before_close } = await api(client.GET('/api/admin/general'))
+  // A toggle saved while this read was in flight is newer than what it returned.
+  if (askSaved.value === before) askSaved.value = ask_before_close
 }
 
 async function loadObs() {
@@ -198,8 +201,10 @@ async function load() {
 }
 
 // The close hint's "Don't show again" can change this while the page is open; the window is hidden then, so
-// reading it again when the window gets focus back is enough.
-const reloadGeneral = () => void loadGeneral().catch(() => {})
+// reading it again when the window is shown or focused again is enough.
+const reloadGeneral = () => {
+  if (document.visibilityState === 'visible') void loadGeneral().catch(() => {})
+}
 
 const toggleModule = (m: Schemas['ModuleState']) =>
   run(() =>
@@ -213,6 +218,7 @@ const removePassword = () =>
 
 onMounted(async () => {
   window.addEventListener('focus', reloadGeneral)
+  document.addEventListener('visibilitychange', reloadGeneral)
   await load().catch(report)
   // Polled so a sign-in finished in the browser shows up, and so groups that failed to load retry.
   timer = window.setInterval(() => void load().catch(() => {}), 2000)
@@ -220,6 +226,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.clearInterval(timer)
   window.removeEventListener('focus', reloadGeneral)
+  document.removeEventListener('visibilitychange', reloadGeneral)
 })
 </script>
 
