@@ -1,7 +1,10 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+mod openapi;
 mod overlay;
+
+pub use openapi::openapi;
 
 pub use toolkit_core::{DEFAULT_PORT, settings};
 

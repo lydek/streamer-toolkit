@@ -23,6 +23,10 @@ pre-push:
       run: pnpm web:test
     - name: web-build
       run: pnpm web:build
+    - name: api-gen
+      run: pnpm api:gen
+    - name: api-fresh
+      run: git diff --exit-code -- apps/web/src/api
     - name: cargo-fmt
       run: cargo fmt --all --check
     - name: clippy

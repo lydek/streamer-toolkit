@@ -35,7 +35,7 @@ pub enum AuthError {
     StorageFailed,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct DeviceLogin {
     pub user_code: String,
     pub verification_uri: String,
@@ -43,7 +43,7 @@ pub struct DeviceLogin {
 }
 
 /// What the admin UI may see; never contains tokens.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum AuthStatus {
     SignedOut,

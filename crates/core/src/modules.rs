@@ -19,7 +19,7 @@ pub enum ModuleError {
     SaveFailed(#[from] io::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct ModuleState {
     pub id: &'static str,
     pub enabled: bool,

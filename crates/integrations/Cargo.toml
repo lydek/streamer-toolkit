@@ -25,6 +25,7 @@ tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "__rustls-tls"] }
 toolkit-core = { version = "0.1.0", path = "../core" }
 tracing = "0.1.44"
+utoipa = "6.0.0"
 
 [dev-dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
