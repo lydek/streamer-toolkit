@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 72363c3f576e910be09a93ae7c961ab7da451d11848ca83d55319af409777bca -->
+<!-- source: docs/architecture.md source-sha256: 72fa0807261d11ce0005748549b17d5379f0323a9e3ba7dfe763e07b51daafa9 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -87,7 +87,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 
 ## 5. External communication
 - The only MVP clients are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control come after the MVP.
-- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, to ensure that no events are lost or duplicated during snapshot initialization), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot. The snapshot's `payload` lists, per event type, the recent events kept in memory (for example the last 50 `chat.message` events).
+- HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, to ensure that no events are lost or duplicated during snapshot initialization), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot. The snapshot's `payload` lists, per event type, the recent events kept in memory (for example the last 50 `chat.message` events). Connection status is an event too: for `obs.status` only the latest one is kept, so the admin UI gets the current status as soon as it connects; status contains no secrets, and overlays receive it as well.
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
 - **Port**: a fixed default port, `47810`, stored in the data directory's `settings.json`. If it is taken, do not switch ports automatically, so OBS URLs never break silently; the only exception is a data directory's first start (no `settings.json` and no OBS URL yet): if the default port is taken, a free port is picked and saved, and used from then on. The Host is then not running and the settings page cannot open, so the small port-change page opens instead (served directly by Tauri; see "Frontend files" below): it shows the error, lets the user enter and validate a new port, saves it and retries the bind. Its strings also use resource keys.
@@ -134,6 +134,17 @@ Twitch's official documentation is the source for these numbers; update this sec
 - **Device Code Flow**: poll at the `interval` Twitch returns until `expires_in`, never faster, and at least 1 second apart.
 - **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
 
+### OBS connection
+- `obws` connects to obs-websocket 5, which is built into OBS, without TLS. The address is stored in `settings.json` as `obs.host`/`obs.port` (default `127.0.0.1`/`4455`); the password is stored in the Windows Credential Manager, passed around as a `SecretString`, and never written to `settings.json` or logs. The handshake sends only the challenge response, never the password itself.
+- The MVP only reads the connection status and does not control scenes or sources: it subscribes to no OBS events and learns that OBS exited only from the connection closing.
+- When the connection fails or drops, it reconnects with exponential backoff (from 1 second, at most 60 seconds, the same as EventSub); the backoff starts over after a successful connection.
+- Status (event `obs.status`; its `payload` holds `state` and `reason`; `reason` is a stable code):
+  - `connected`: connected.
+  - `reconnecting`: not connected yet, or a state that recovers on its own, for example OBS is not running (`obs.unreachable`) or OBS was closed (`obs.disconnected`). OBS not running is a normal state, not an error.
+  - `error`: still retrying, but the user has to fix something, for example a wrong password (`obs.auth_failed`), OBS requires a password but none is set (`obs.password_required`), or an unsupported version (`obs.unsupported_version`; OBS 30.2 or later with obs-websocket 5.5 is required).
+- Logs record only status changes, so OBS staying closed for a long time does not keep writing logs.
+- The admin API `GET`/`PUT /api/admin/obs` reads and changes the address and password (an omitted `password` keeps the stored one, an empty string deletes it); after a change it reconnects with the new settings right away.
+
 ## 6. Host lifecycle
 The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
 
@@ -156,4 +167,4 @@ Startup order:
 
 ## 7. Enforcing the rules
 - Cross-module dependencies: enforced by each crate's `Cargo.toml`.
-- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`. Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.
+- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`; only `integrations` may depend on external platform SDKs (`obws`, `tokio-tungstenite`). Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.

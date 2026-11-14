@@ -86,7 +86,7 @@ apps/
 
 ## 5. 對外通訊
 - MVP 的用戶端只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制在 MVP 之後。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）。連線狀態也是事件，例如 `obs.status` 只保留最新一則，管理 UI 連上就拿到目前狀態；狀態不含任何秘密，Overlay 也收得到。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -133,6 +133,17 @@ apps/
 - **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止，不自行加快；間隔最少 1 秒。
 - **聊天發訊**：MVP 沒有發訊功能。之後要發訊（例如打卡回覆）時，必須在本機排隊並限速，採保守值 20 則／30 秒。Twitch 的上限是一般帳號 20 則／30 秒、實況主／mod／VIP 100 則／30 秒（實況主發的訊息也會算進 20 則的桶）；超過時 Twitch 會忽略該帳號的訊息 1 小時。
 
+### OBS 連線
+- 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows 認證管理員，以 `SecretString` 傳遞，不寫入 `settings.json` 與 log。交握時只送 challenge 回應，不送密碼本身。
+- MVP 只看連線狀態，不控制場景或來源：不訂閱任何 OBS 事件，只從連線關閉得知 OBS 結束。
+- 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新計算。
+- 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼）：
+  - `connected`：已連上。
+  - `reconnecting`：還沒連上，或會自己恢復，例如 OBS 沒開（`obs.unreachable`）、OBS 關閉（`obs.disconnected`）。OBS 沒開是正常狀態，不算錯誤。
+  - `error`：仍會重試，但要使用者處理，例如密碼錯誤（`obs.auth_failed`）、OBS 要求密碼但沒有設定（`obs.password_required`）、版本不支援（`obs.unsupported_version`，需要 OBS 30.2 以上、obs-websocket 5.5）。
+- log 只記狀態變化，OBS 長時間沒開也不會一直寫 log。
+- 管理 API `GET`／`PUT /api/admin/obs` 讀取與修改位址和密碼（`password` 省略表示不變，空字串表示刪除）；修改後立即用新設定重連。
+
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。
 
@@ -155,4 +166,4 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 
 ## 7. 規則怎麼強制
 - 跨模組相依性：由各 crate 的 `Cargo.toml` 強制。
-- 層內規則：架構測試（`crates/arch-tests`）在 CI 執行，檢查 `domain/` 內沒有任何 `sqlx`／`axum` 字樣（含 `use`、derive、完整路徑），並用 `cargo metadata` 檢查相依方向：模組只能依賴 `core` 與其他模組，不依賴 `integrations` 與 `host`；`core` 不依賴其他 workspace crate；`integrations` 只依賴 `core`。模組的內部型別一律 `pub(crate)`，其他模組只看得到對方公開的介面；Cargo 本身禁止循環相依，出現循環時把共用型別移到 `core`。
+- 層內規則：架構測試（`crates/arch-tests`）在 CI 執行，檢查 `domain/` 內沒有任何 `sqlx`／`axum` 字樣（含 `use`、derive、完整路徑），並用 `cargo metadata` 檢查相依方向：模組只能依賴 `core` 與其他模組，不依賴 `integrations` 與 `host`；`core` 不依賴其他 workspace crate；`integrations` 只依賴 `core`；外部平台 SDK（`obws`、`tokio-tungstenite`）只有 `integrations` 可以依賴。模組的內部型別一律 `pub(crate)`，其他模組只看得到對方公開的介面；Cargo 本身禁止循環相依，出現循環時把共用型別移到 `core`。

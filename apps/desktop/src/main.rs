@@ -32,6 +32,7 @@ struct AppState {
     admin_token: SecretString,
     data_dir: PathBuf,
     twitch_secrets: Arc<dyn SecretStore>,
+    obs_secrets: Arc<dyn SecretStore>,
     /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
     host_port: Mutex<Option<u16>>,
 }
@@ -71,6 +72,7 @@ fn main() {
                 admin_token: random_token()?,
                 data_dir: data_dir.clone(),
                 twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
+                obs_secrets: CredentialManager::new(&format!("{instance}/obs"))?,
                 host_port: Mutex::new(None),
             });
             create_tray(app.handle())?;
@@ -258,6 +260,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         data_dir: state.data_dir.clone(),
         twitch_secrets: state.twitch_secrets.clone(),
         twitch: TwitchEndpoints::default(),
+        obs_secrets: state.obs_secrets.clone(),
     }
 }
 

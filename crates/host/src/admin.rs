@@ -111,7 +111,11 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .with_state(state)
 }
 
-async fn require_token(State(s): State<Arc<AdminState>>, req: Request, next: Next) -> Response {
+pub(crate) async fn require_token(
+    State(s): State<Arc<AdminState>>,
+    req: Request,
+    next: Next,
+) -> Response {
     let ok = req
         .headers()
         .get(header::AUTHORIZATION)

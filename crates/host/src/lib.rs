@@ -1,6 +1,7 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+mod obs;
 mod openapi;
 mod overlay;
 
@@ -50,6 +51,8 @@ pub struct HostConfig {
     /// Where the broadcaster's Twitch tokens live (Windows Credential Manager in production).
     pub twitch_secrets: Arc<dyn SecretStore>,
     pub twitch: TwitchEndpoints,
+    /// Where the obs-websocket password lives (Windows Credential Manager in production).
+    pub obs_secrets: Arc<dyn SecretStore>,
 }
 
 /// Twitch addresses; tests point them at fake services.
@@ -138,7 +141,8 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
-    let admin = admin::AdminState::new(
+    let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
+    let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,
         config.twitch_secrets,
@@ -146,7 +150,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         tls,
         chat,
         modules,
-    );
+    ));
     Ok(Router::new()
         .route("/api/health", get(|| async { "ok" }))
         .merge(
@@ -154,7 +158,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                 .route("/ws/overlay", get(overlay::ws))
                 .with_state(bus),
         )
-        .merge(admin::routes(Arc::new(admin)))
+        .merge(obs::routes(obs).layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(admin::routes(admin))
         .fallback(static_file)
         .layer(middleware::from_fn_with_state(guard_state, guard)))
 }
@@ -266,6 +274,7 @@ mod tests {
                 helix: "http://127.0.0.1:1".into(),
                 eventsub: "ws://127.0.0.1:1".into(),
             },
+            obs_secrets: Arc::new(NoSecrets),
         }
     }
 
@@ -347,6 +356,7 @@ mod tests {
                 helix: "http://127.0.0.1:1".into(),
                 eventsub: "ws://127.0.0.1:1".into(),
             },
+            obs_secrets: Arc::new(NoSecrets),
         })
         .unwrap();
 
@@ -361,6 +371,85 @@ mod tests {
         assert_eq!(res.status(), StatusCode::NO_CONTENT);
         assert!(secrets.0.lock().unwrap().is_none(), "a new ID signs out");
         assert_eq!(settings::load(&dir).twitch_client_id, "xyz");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn obs_password_goes_to_the_secret_store_only() {
+        let dir = std::env::temp_dir().join(format!("st-host-obs-{}", std::process::id()));
+        let secrets = Arc::new(MemSecrets::default());
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        config.obs_secrets = secrets.clone();
+        let app = router(config).unwrap();
+        let put = |body: &'static str| {
+            get_req("/api/admin/obs", "127.0.0.1:47810")
+                .method(Method::PUT)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap()
+        };
+
+        let res = app
+            .clone()
+            .oneshot(put(
+                r#"{"host":"obs-pc.local","port":4456,"password":"hunter2"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert_eq!(secrets.0.lock().unwrap().as_deref(), Some("hunter2"));
+        let saved = std::fs::read_to_string(settings::path(&dir)).unwrap();
+        assert!(saved.contains("obs-pc.local"));
+        assert!(!saved.contains("hunter2"), "{saved}");
+
+        let res = app
+            .clone()
+            .oneshot(
+                get_req("/api/admin/obs", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        let overview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(overview["port"], 4456);
+        assert_eq!(overview["password_set"], true);
+        assert!(!String::from_utf8_lossy(&body).contains("hunter2"));
+
+        // Without `password` the stored one stays; an empty one removes it.
+        let res = app
+            .clone()
+            .oneshot(put(r#"{"host":"127.0.0.1","port":4455}"#))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert!(secrets.0.lock().unwrap().is_some());
+        let res = app
+            .clone()
+            .oneshot(put(r#"{"host":"127.0.0.1","port":4455,"password":""}"#))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert!(secrets.0.lock().unwrap().is_none());
+
+        let res = app
+            .clone()
+            .oneshot(put(r#"{"host":"ws://evil","port":4455}"#))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let unauthorized = get_req("/api/admin/obs", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.oneshot(unauthorized).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
