@@ -9,8 +9,9 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{Path as UrlPath, State},
+    extract::{Path as UrlPath, Request, State},
     http::{HeaderValue, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -137,13 +138,27 @@ pub(crate) async fn chat_template(State(t): State<Arc<Templates>>) -> Json<Templ
     })
 }
 
-/// `GET /templates/chat/{*path}`. Every answer, errors included, carries the Overlay CSP, `nosniff` and
-/// `Access-Control-Allow-Origin: *` (the sandboxed preview iframe has a `null` origin).
+/// `GET /templates/chat/{*path}`; the headers come from [`headers`].
 pub(crate) async fn serve(
     State(t): State<Arc<Templates>>,
     UrlPath(path): UrlPath<String>,
 ) -> Response {
-    let mut res = t.file(&path);
+    // File reads block; keep them off the async workers.
+    tokio::task::spawn_blocking(move || t.file(&path))
+        .await
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+/// Every answer under `/templates`, including the ones axum or the guard produce before [`serve`] runs
+/// (bad percent-encoding, wrong method, unknown path, rejected Host), carries the Overlay CSP, `nosniff`
+/// and `Access-Control-Allow-Origin: *` (the sandboxed preview iframe has a `null` origin).
+pub(crate) async fn headers(req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let is_template = path == "/templates" || path.starts_with("/templates/");
+    let mut res = next.run(req).await;
+    if !is_template {
+        return res;
+    }
     let headers = res.headers_mut();
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
@@ -209,7 +224,7 @@ fn write_defaults(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The same markers the overlay binds to (`apps/web/src/overlay/chat/template.ts`).
+/// Checks for the markers the overlay binds to (`apps/web/src/overlay/chat/template.ts`).
 fn check(dir: &Path) -> Result<(), &'static str> {
     let path = dir.join(ENTRY);
     let meta = std::fs::metadata(&path).map_err(|e| match e.kind() {
@@ -220,16 +235,38 @@ fn check(dir: &Path) -> Result<(), &'static str> {
         return Err("template.invalid");
     }
     let html = std::fs::read_to_string(&path).map_err(|_| "template.unreadable")?;
-    if html.contains("data-chat-list") && html.contains("data-chat-message") {
+    if has_markers(&html) {
         Ok(())
     } else {
         Err("template.invalid")
     }
 }
 
+/// Outside comments: a `data-chat-list` attribute and a `<template>` tag carrying `data-chat-message`.
+/// shortcut: a text scan, not an HTML parser; the overlay still falls back if markup fools it.
+fn has_markers(html: &str) -> bool {
+    let mut code = String::new();
+    let mut rest = html;
+    while let Some(start) = rest.find("<!--") {
+        code.push_str(&rest[..start]);
+        let body = &rest[start + 4..];
+        rest = body.find("-->").map_or("", |end| &body[end + 3..]);
+    }
+    code.push_str(rest);
+    let code = code.to_ascii_lowercase();
+    code.contains("data-chat-list")
+        && code.match_indices("<template").any(|(i, _)| {
+            code[i..]
+                .split('>')
+                .next()
+                .is_some_and(|tag| tag.contains("data-chat-message"))
+        })
+}
+
 type FileStamp = (PathBuf, u64, Option<SystemTime>);
 
-/// Paths, sizes and modification times of every file under `dir`; any difference means "re-apply".
+/// Paths, sizes and modification times of the servable files under `dir`; any difference means "re-apply".
+/// Files the route never serves (editor swap files, `Thumbs.db`) are left out so they trigger no reload.
 fn fingerprint(dir: &Path) -> Vec<FileStamp> {
     let mut files = Vec::new();
     let mut dirs = vec![dir.to_path_buf()];
@@ -242,7 +279,7 @@ fn fingerprint(dir: &Path) -> Vec<FileStamp> {
             let Ok(meta) = entry.metadata() else { continue };
             if meta.is_dir() {
                 dirs.push(entry.path());
-            } else {
+            } else if entry.file_name().to_str().and_then(allowed_type).is_some() {
                 files.push((entry.path(), meta.len(), meta.modified().ok()));
             }
         }
@@ -260,7 +297,11 @@ async fn watch(t: Arc<Templates>, bus: Arc<EventBus>, mut last: Vec<FileStamp>) 
             return;
         };
         if now != last {
-            *t.error.write().unwrap() = check(&t.dir).err();
+            let dir = t.dir.clone();
+            let error = tokio::task::spawn_blocking(move || check(&dir).err())
+                .await
+                .unwrap_or(Some("template.unreadable"));
+            *t.error.write().unwrap() = error;
             publish_changed(&bus);
         }
         last = now;
@@ -350,6 +391,24 @@ mod tests {
         assert_eq!(check(&dir), Err("template.unreadable"));
         write_defaults(&dir).unwrap();
         assert_eq!(check(&dir), Ok(()));
+        // The default's header comment names both markers; without the real elements it is still invalid.
+        let default = std::fs::read_to_string(dir.join(ENTRY)).unwrap();
+        let (start, end) = (
+            default.find("<ul").unwrap(),
+            default.find("</ul>").unwrap() + 5,
+        );
+        std::fs::write(
+            dir.join(ENTRY),
+            format!("{}{}", &default[..start], &default[end..]),
+        )
+        .unwrap();
+        assert_eq!(check(&dir), Err("template.invalid"));
+        let misspelled = default.replace(
+            "<template data-chat-message>",
+            "<template data-chat-mesage>",
+        );
+        std::fs::write(dir.join(ENTRY), misspelled).unwrap();
+        assert_eq!(check(&dir), Err("template.invalid"));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

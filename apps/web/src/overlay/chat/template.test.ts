@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChatEvent } from './chat'
-import { loadTemplate, mount, parseTemplate } from './template'
+import { loadTemplate, mount, parseTemplate, stylesheetsLoaded } from './template'
 
 const BASE = 'http://127.0.0.1:47810/templates/chat/'
 
@@ -44,6 +44,25 @@ describe('parseTemplate', () => {
     const [local, remote] = host.querySelectorAll('img')
     expect(local.getAttribute('src')).toBe(`${BASE}img/logo.png?v=42`)
     expect(remote.getAttribute('src')).toBe('https://cdn.example/x.png')
+  })
+
+  it('keeps same-document fragments and drops unsafe URL schemes', () => {
+    const t = parseTemplate(
+      `${TEMPLATE}<svg><use href="#icon"></use><use xlink:href="logo.svg#a"></use></svg>
+      <a href="javascript:alert(1)">x</a><form action="vbscript:x"><button formaction="javascript:y"></button></form>
+      <img src="data:image/png;base64,AA==">`,
+      BASE,
+      '7',
+    )!
+    const host = document.createElement('div')
+    mount(host, t)
+    const [frag, xlink] = host.querySelectorAll('use')
+    expect(frag.getAttribute('href')).toBe('#icon')
+    expect(xlink.getAttributeNS('http://www.w3.org/1999/xlink', 'href')).toBe(`${BASE}logo.svg?v=7#a`)
+    expect(host.querySelector('a')!.hasAttribute('href')).toBe(false)
+    expect(host.querySelector('form')!.hasAttribute('action')).toBe(false)
+    expect(host.querySelector('button')!.hasAttribute('formaction')).toBe(false)
+    expect(host.querySelector('img')!.getAttribute('src')).toBe('data:image/png;base64,AA==')
   })
 
   it('returns null without the binding markers', () => {
@@ -89,6 +108,28 @@ describe('mount', () => {
     mount(host, parseTemplate('<div data-chat-list><template data-chat-message><p data-field="text"></p></template></div>', BASE, '2')!)(messages)
     expect(host.querySelector('ol')).toBeNull()
     expect([...host.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['msg a', 'msg b'])
+  })
+})
+
+describe('stylesheetsLoaded', () => {
+  it('waits for every stylesheet to load or fail, or for the timeout', async () => {
+    const root = document.createElement('div')
+    root.innerHTML = '<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="b.css">'
+    const [a, b] = root.querySelectorAll('link')
+    let done = false
+    const waiting = stylesheetsLoaded(root, 10_000).then(() => (done = true))
+    a.dispatchEvent(new Event('load'))
+    await Promise.resolve()
+    expect(done).toBe(false)
+    b.dispatchEvent(new Event('error'))
+    await waiting
+    expect(done).toBe(true)
+
+    vi.useFakeTimers()
+    const timedOut = stylesheetsLoaded(root.cloneNode(true) as Element, 3000)
+    vi.advanceTimersByTime(3000)
+    await timedOut
+    vi.useRealTimers()
   })
 })
 

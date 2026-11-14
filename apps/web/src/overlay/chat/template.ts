@@ -10,21 +10,27 @@ export interface ChatTemplate {
 
 // The Overlay CSP already blocks inline script; these are removed so nothing active or navigating is mounted.
 const BLOCKED = 'script, iframe, frame, frameset, object, embed, base, meta, portal'
-const URL_ATTRS = new Set(['src', 'href', 'poster'])
+const URL_ATTRS = new Set(['src', 'href', 'xlink:href', 'poster', 'action', 'formaction'])
+const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'data:'])
 
 /** Removes active content and points relative URLs into the template folder (`base`), tagged with `rev`. */
 function clean(root: ParentNode, base: string, rev: string) {
   root.querySelectorAll(BLOCKED).forEach((el) => el.remove())
   for (const el of root.querySelectorAll('*')) {
-    for (const { name, value } of [...el.attributes]) {
+    for (const attr of [...el.attributes]) {
+      const { name, value } = attr
       if (name.startsWith('on') || name === 'srcdoc') {
         el.removeAttribute(name)
-      } else if (URL_ATTRS.has(name)) {
+      } else if (URL_ATTRS.has(name) && !value.trim().startsWith('#')) {
+        // Same-document fragments (SVG <use href="#icon">) stay as they are.
         try {
           const url = new URL(value, base)
+          // javascript: and other schemes are dropped too, not only blocked by the Overlay CSP.
+          if (!SAFE_PROTOCOLS.has(url.protocol)) throw new Error(url.protocol)
           // A fresh query per load makes OBS fetch edited files instead of reusing cached ones.
           if (url.href.startsWith(base)) url.searchParams.set('v', rev)
-          el.setAttribute(name, url.href)
+          // Set through the Attr so namespaced attributes (xlink:href) keep their namespace.
+          attr.value = url.href
         } catch {
           el.removeAttribute(name)
         }
@@ -69,6 +75,20 @@ function fill(item: HTMLTemplateElement, m: ChatEvent): DocumentFragment {
     for (const el of frag.children) (el as HTMLElement).style.setProperty('--user-color', m.payload.color)
   }
   return frag
+}
+
+/** Resolves once the stylesheets under `root` have loaded or failed, or after `timeoutMs`. */
+export function stylesheetsLoaded(root: ParentNode, timeoutMs = 3000): Promise<void> {
+  const pending = [...root.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')]
+    .filter((link) => !link.sheet)
+    .map(
+      (link) =>
+        new Promise<void>((done) => {
+          link.addEventListener('load', () => done(), { once: true })
+          link.addEventListener('error', () => done(), { once: true })
+        }),
+    )
+  return Promise.race([Promise.all(pending).then(() => {}), new Promise<void>((done) => setTimeout(done, timeoutMs))])
 }
 
 /** Mounts `template` into `host`; the returned renderer adds and removes only the messages that changed. */

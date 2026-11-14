@@ -177,7 +177,8 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         )
         .merge(admin::routes(admin))
         .fallback(static_file)
-        .layer(middleware::from_fn_with_state(guard_state, guard)))
+        .layer(middleware::from_fn_with_state(guard_state, guard))
+        .layer(middleware::from_fn(templates::headers)))
 }
 
 /// Blocks DNS rebinding (Host header) and cross-site WebSocket / state-changing requests (Origin).
@@ -696,11 +697,44 @@ mod tests {
             app.clone().oneshot(no_token).await.unwrap().status(),
             StatusCode::UNAUTHORIZED
         );
-        // Error answers carry the same headers.
-        let (status, headers, _) = get_body(&app, "/templates/chat/nope.css").await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
-        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        // Error answers carry the same headers, also the ones produced before the handler runs.
+        for uri in [
+            "/templates/chat/nope.css",
+            "/templates/chat/%ff.css",
+            "/templates/chat/",
+            "/templates",
+        ] {
+            let (status, headers, _) = get_body(&app, uri).await;
+            assert!(!status.is_success(), "{uri}");
+            assert_eq!(
+                headers[header::CONTENT_SECURITY_POLICY],
+                OVERLAY_CSP,
+                "{uri}"
+            );
+            assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff", "{uri}");
+            assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*", "{uri}");
+        }
+        let foreign_host = app
+            .clone()
+            .oneshot(
+                get_req("/templates/chat/style.css", "evil.example:47810")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_host.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            foreign_host.headers()[header::CONTENT_SECURITY_POLICY],
+            OVERLAY_CSP
+        );
+        // Assets in subfolders are served.
+        std::fs::create_dir_all(dir.join("templates/chat/img")).unwrap();
+        std::fs::write(dir.join("templates/chat/img/logo.svg"), "<svg/>").unwrap();
+        let (status, headers, body) = get_body(&app, "/templates/chat/img/logo.svg").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers[header::CONTENT_TYPE], "image/svg+xml");
+        assert_eq!(body, "<svg/>");
         let _ = std::fs::remove_dir_all(dir);
     }
 

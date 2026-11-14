@@ -4,7 +4,8 @@
   - <template data-chat-message>: the markup for one message.
   - data-field="userName" / data-field="text": filled with the viewer's name / message as plain text.
   - --user-color: CSS variable set on each message with the viewer's name color, when they picked one.
-  Relative src/href paths point into this folder.
+  Relative src/href paths point into this folder. Put url() in style.css: relative paths in style="",
+  <style> and srcset resolve against the overlay page instead.
 -->
 <link rel="stylesheet" href="style.css" />
 <ul class="chat" data-chat-list>
