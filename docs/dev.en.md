@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: e2220c408889551dddfae4cf08aad276d9e2ed5107a38fee995b314d3317787c -->
+<!-- source: docs/dev.md source-sha256: 9acbad6195aa5dac4504d6f0d15183fac1b81d0e34666b17fe0c39b8508c2130 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -45,11 +45,11 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - a11y baseline (checked manually once per finished slice): every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), control boundaries and informative icons reach 3:1 (WCAG 1.4.11), and status is never conveyed by color alone.
   - How to check: walk through with the keyboard; compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; with a 1280px-wide window zoomed to 200% and 400% (equivalent to 640px and 320px wide), there is no horizontal scrollbar, no text is clipped (except deliberate "…" truncation), and every button can be pressed. No screen reader testing, but semantic markup and ARIA are still done properly.
   - Drawer and dialog (`<dialog>`) behavior cannot be tested in jsdom, so walk through it manually in a real Tauri window:
-    - Wider than 1000px, the drawer sits beside the tiles (380px) and the tiles stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
+    - Wider than 1000px, the drawer (380px wide) sits side by side with the tiles, which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
     - After crossing the 1000px width threshold, the drawer stays open and focus, input values and scroll positions are preserved.
-    - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it.
-    - After typing without leaving the field, leaving the drawer by ✕, Esc, a backdrop click, another tile or "Open full page" has saved the value in every case.
-    - When a save fails, the drawer stays open, the field returns to the old value and the error is shown.
+    - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it; if that item is gone, it falls back in order to its tile, the first tile, then "Arrange tiles".
+    - After typing without pressing Enter, leaving the drawer in each of these ways has saved the value: ✕, Esc and "Open full page" (once side by side and once modal), plus another tile when side by side and a backdrop click when modal.
+    - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
     - When the drawer is modal, error messages and their buttons are visible and can be pressed.
     - With a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
     - The close-window hint: Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
