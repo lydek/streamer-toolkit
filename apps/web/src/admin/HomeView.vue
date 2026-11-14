@@ -48,10 +48,10 @@
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
         <ArrangeTiles
           v-else-if="arranging"
-          v-model="savedTiles"
+          :saved="savedTiles"
+          :save="saveTiles"
           :modules="modules"
           :name="moduleName"
-          @failed="notify($event, true)"
         />
         <div v-else-if="!groups.length" class="stack">
           <p>{{ t('home.empty') }}</p>
@@ -193,6 +193,7 @@ const savedTiles = ref<string[] | null>(null)
 const arranging = ref(false)
 const arrangeButton = ref<{ $el: HTMLElement }>()
 const doneButton = ref<{ $el: HTMLElement }>()
+let savingTiles = false
 let timer: number | undefined
 
 const drawer = useDrawer()
@@ -309,9 +310,32 @@ async function leaveArrange() {
   arrangeButton.value?.$el.focus()
 }
 
-// Esc leaves arrange mode, but an open drawer takes it first (its close is still pending when this runs).
+/**
+ * Shows the tile order `next` at once and saves it; a failure puts the previous order back and reports it, even
+ * after arrange mode was left. Returns nothing while another save runs, so saves never overlap.
+ */
+function saveTiles(next: string[] | null): Promise<boolean> | undefined {
+  if (savingTiles) return
+  savingTiles = true
+  const previous = savedTiles.value
+  savedTiles.value = next
+  return api(client.PUT('/api/admin/home-tiles', { body: next }))
+    .then(
+      () => true,
+      (e) => {
+        savedTiles.value = previous
+        notify(e instanceof ApiError ? errorMessage(e.code) : String(e), true)
+        return false
+      },
+    )
+    .finally(() => (savingTiles = false))
+}
+
+// Esc leaves arrange mode, but an open drawer or dialog (the close hint) takes it first; a drawer's close is
+// still pending when this runs.
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !e.defaultPrevented && arranging.value && !drawer.current.value) leaveArrange()
+  if (e.key !== 'Escape' || e.defaultPrevented || !arranging.value) return
+  if (!drawer.current.value && !document.querySelector('dialog[open]')) leaveArrange()
 }
 
 onMounted(async () => {

@@ -90,8 +90,7 @@
 import Button from 'primevue/button'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { errorMessage } from '../i18n'
-import { ApiError, type Schemas, api, client } from './api'
+import type { Schemas } from './api'
 import {
   type Tile,
   arrangedTiles,
@@ -103,22 +102,27 @@ import {
 } from './home'
 
 /*
- * Arrange mode of the admin home: every action saves at once; a failed save puts the previous order back and
- * reports the error through `failed`. Results are announced in a polite live region.
+ * Arrange mode of the admin home: every action saves at once through `save`, which the page owns, so a save still
+ * restores and reports its failure after this component is gone (Done during a save). Results are announced in a
+ * polite live region.
  */
 
-const saved = defineModel<string[] | null>({ required: true })
-const props = defineProps<{ modules: Schemas['ModuleState'][]; name: (id: string) => string }>()
-const emit = defineEmits<{ failed: [message: string] }>()
+const props = defineProps<{
+  saved: string[] | null
+  /** Shows `next` at once and saves it; resolves `false` after a failure was restored and reported, and returns
+   * nothing (changing nothing) while another save is running. */
+  save: (next: string[] | null) => Promise<boolean> | undefined
+  modules: Schemas['ModuleState'][]
+  name: (id: string) => string
+}>()
 
 const { t } = useI18n()
 const root = ref<HTMLElement>()
 const announcement = ref('')
 const dragged = ref<string | null>(null)
 const over = ref<string | null>(null)
-let saving = false
 
-const arranged = computed(() => arrangedTiles(saved.value))
+const arranged = computed(() => arrangedTiles(props.saved))
 const groups = computed(() => groupTiles(arranged.value))
 const available = computed(() => availableTiles(arranged.value))
 const disabled = (id: string) => props.modules.some((m) => m.id === id && !m.enabled)
@@ -141,26 +145,14 @@ async function focusOn(attr: 'data-tile' | 'data-available', id: string, actions
   }
 }
 
-/**
- * Shows `next` at once (`focus` runs after it renders), then saves it. Clicks during a save are ignored, so
- * saves never overlap. On failure the previous order returns and `undo` puts focus back.
- */
-async function save(next: string[] | null, focus: () => unknown, done: () => string, undo: () => unknown) {
-  if (saving) return
-  saving = true
-  const previous = saved.value
-  saved.value = next
+/** Saves `next`; `focus` runs once it renders, then `done` is announced, or `undo` puts focus back on failure. */
+async function apply(next: string[] | null, focus: () => unknown, done: () => string, undo: () => unknown) {
+  const saving = props.save(next)
+  // Ignored while another save runs, so saves never overlap.
+  if (!saving) return
   focus()
-  try {
-    await api(client.PUT('/api/admin/home-tiles', { body: next }))
-    await announce(done())
-  } catch (e) {
-    saved.value = previous
-    undo()
-    emit('failed', e instanceof ApiError ? errorMessage(e.code) : String(e))
-  } finally {
-    saving = false
-  }
+  if (await saving) await announce(done())
+  else undo()
 }
 
 const moved = (id: string) => () =>
@@ -169,14 +161,14 @@ const moved = (id: string) => () =>
 function move(id: string, step: -1 | 1) {
   const actions = step < 0 ? ['earlier', 'later'] : ['later', 'earlier']
   const refocus = () => focusOn('data-tile', id, actions)
-  save(moveTile(arranged.value, id, step), refocus, moved(id), refocus)
+  apply(moveTile(arranged.value, id, step), refocus, moved(id), refocus)
 }
 
 function remove(id: string) {
   const order = groups.value.flatMap((g) => g.tiles.map((tile) => tile.id))
   const at = order.indexOf(id)
   const neighbour = order[at + 1] ?? order[at - 1]
-  save(
+  apply(
     order.filter((other) => other !== id),
     async () => {
       if (neighbour) await focusOn('data-tile', neighbour, ['remove'])
@@ -188,7 +180,7 @@ function remove(id: string) {
 }
 
 function add(id: string) {
-  save(
+  apply(
     [...arranged.value.map((tile) => tile.id), id],
     () => focusOn('data-tile', id, ['earlier', 'later', 'remove']),
     () => t('arrange.added', { name: props.name(id), group: groupName(id), position: groupPosition(arranged.value, id) }),
@@ -197,7 +189,7 @@ function add(id: string) {
 }
 
 const restore = () =>
-  save(
+  apply(
     null,
     () => {},
     () => t('arrange.restored'),
@@ -222,7 +214,7 @@ function onDrop(target: string) {
   const id = dragged.value
   dragged.value = over.value = null
   if (!id || id === target) return
-  save(
+  apply(
     dropTile(arranged.value, id, target),
     () => {},
     moved(id),
