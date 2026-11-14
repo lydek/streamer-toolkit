@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 9acbad6195aa5dac4504d6f0d15183fac1b81d0e34666b17fe0c39b8508c2130 -->
+<!-- source: docs/dev.md source-sha256: fd0b811a0e9fc4b535e248abee01fec7f2b8a06d88ded37e99b72e483b8c0088 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -52,6 +52,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
     - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
     - When the drawer is modal, error messages and their buttons are visible and can be pressed.
     - With a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
+    - Arranging tiles: dragging with the mouse reorders tiles within a group, and dropping on another group does nothing; below 600px the tiles form a single column and their buttons wrap; pressing ✎ with a drawer open submits the drawer's changes before closing it; with a drawer opened in arrange mode, the first Esc closes only the drawer and the second leaves arrange mode.
     - The close-window hint: Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
   - Logic that can be extracted into pure functions still gets unit tests; the Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.

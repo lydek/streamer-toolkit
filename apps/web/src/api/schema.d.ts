@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/api/admin/home-tiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tile IDs in display order; `null` when never arranged (the admin UI shows its defaults). */
+        get: operations["home_tiles"];
+        /**
+         * Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
+         *     `null` restores the defaults; `[]` keeps the home empty.
+         */
+        put: operations["set_home_tiles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/modules": {
         parameters: {
             query?: never;
@@ -336,6 +357,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    home_tiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[] | null;
+                };
+            };
+        };
+    };
+    set_home_tiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_modules: {
         parameters: {
             query?: never;

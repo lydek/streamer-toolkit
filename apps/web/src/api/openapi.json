@@ -10,6 +10,75 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/home-tiles": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Tile IDs in display order; `null` when never arranged (the admin UI shows its defaults).",
+        "operationId": "home_tiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.\n`null` restores the defaults; `[]` keeps the home empty.",
+        "operationId": "set_home_tiles",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/modules": {
       "get": {
         "tags": [

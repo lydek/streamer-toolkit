@@ -3,7 +3,7 @@
 
 use utoipa::OpenApi;
 
-use crate::{admin, obs, overlay, templates};
+use crate::{admin, home_tiles, obs, overlay, templates};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -21,6 +21,8 @@ use crate::{admin, obs, overlay, templates};
         admin::list_modules,
         admin::set_module,
         admin::simulate_chat,
+        home_tiles::home_tiles,
+        home_tiles::set_home_tiles,
         obs::obs_overview,
         obs::update_obs,
         templates::chat_template,

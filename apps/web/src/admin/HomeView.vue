@@ -19,6 +19,17 @@
             :aria-controls="drawerId('connections')"
             @click="toggle('connections', $event.currentTarget)"
           />
+          <Button v-if="arranging" ref="doneButton" :label="t('arrange.done')" icon="pi pi-check" @click="leaveArrange" />
+          <Button
+            v-else
+            ref="arrangeButton"
+            icon="pi pi-pencil"
+            severity="secondary"
+            text
+            :aria-label="t('home.arrange')"
+            :disabled="!modules"
+            @click="enterArrange"
+          />
         </div>
       </header>
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
@@ -35,12 +46,18 @@
 
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+        <ArrangeTiles
+          v-else-if="arranging"
+          v-model="savedTiles"
+          :modules="modules"
+          :name="moduleName"
+          @failed="notify($event, true)"
+        />
         <div v-else-if="!groups.length" class="stack">
           <p>{{ t('home.empty') }}</p>
-          <!-- TODO(#12): enter arrange mode. Until then the module switches are the way to bring tiles back. -->
-          <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="focusModules" />
+          <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="enterArrange" />
         </div>
-        <template v-for="g in groups" :key="g.group">
+        <template v-for="g in groups" v-else :key="g.group">
           <h2 :id="`group-${g.group}`">{{ t(`home.groups.${g.group}`) }}</h2>
           <ul class="plain grid" :aria-labelledby="`group-${g.group}`">
             <li v-for="tile in g.tiles" :key="tile.id">
@@ -60,7 +77,7 @@
 
       <!-- TODO(#10): moves to the settings page. -->
       <section aria-labelledby="modules-heading">
-        <h2 id="modules-heading" ref="modulesHeading" tabindex="-1">{{ t('modules.heading') }}</h2>
+        <h2 id="modules-heading">{{ t('modules.heading') }}</h2>
         <ul class="plain">
           <li v-for="m in modules" :key="m.id" class="module">
             <Checkbox :input-id="`module-${m.id}`" :model-value="m.enabled" binary :disabled="busy" @update:model-value="toggleModule(m)" />
@@ -136,14 +153,16 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import AppDrawer from './AppDrawer.vue'
+import ArrangeTiles from './ArrangeTiles.vue'
 import { drawerId, useDrawer } from './drawer'
 import {
   type Line,
+  arrangedTiles,
   errorToast,
   obsLight,
   successToast,
@@ -169,7 +188,11 @@ const simText = ref('')
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
-const modulesHeading = ref<HTMLElement>()
+// Saved tile order (`null`: never arranged). Only this page changes it, so it is read once with the modules.
+const savedTiles = ref<string[] | null>(null)
+const arranging = ref(false)
+const arrangeButton = ref<{ $el: HTMLElement }>()
+const doneButton = ref<{ $el: HTMLElement }>()
 let timer: number | undefined
 
 const drawer = useDrawer()
@@ -177,7 +200,7 @@ watch(drawer.current, () => (notice.value = undefined))
 const live = useLiveEvents()
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
-const groups = computed(() => tileGroups(modules.value ?? []))
+const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(savedTiles.value)))
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
 
 const lines = computed<Record<string, Line>>(() => {
@@ -205,6 +228,7 @@ async function refreshOverview() {
 
 async function refresh() {
   await refreshOverview()
+  if (!modules.value) savedTiles.value = await api(client.GET('/api/admin/home-tiles'))
   modules.value = await api(client.GET('/api/admin/modules'))
   await refreshTemplate()
 }
@@ -270,9 +294,28 @@ function startEditClientId() {
 }
 
 const focusTiles = () => tilesEl.value?.focus()
-const focusModules = () => modulesHeading.value?.focus()
+
+/** Closes an open drawer first (submitting its changes); a failed submit keeps the drawer and the normal home. */
+async function enterArrange() {
+  if (!(await drawer.close())) return
+  arranging.value = true
+  await nextTick()
+  doneButton.value?.$el.focus()
+}
+
+async function leaveArrange() {
+  arranging.value = false
+  await nextTick()
+  arrangeButton.value?.$el.focus()
+}
+
+// Esc leaves arrange mode, but an open drawer takes it first (its close is still pending when this runs).
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !e.defaultPrevented && arranging.value && !drawer.current.value) leaveArrange()
+}
 
 onMounted(async () => {
+  document.addEventListener('keydown', onKeydown)
   await run(async () => {})
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
   // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
@@ -281,7 +324,10 @@ onMounted(async () => {
     poll.catch(() => {})
   }, 2000)
 })
-onBeforeUnmount(() => window.clearInterval(timer))
+onBeforeUnmount(() => {
+  window.clearInterval(timer)
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <style scoped>
