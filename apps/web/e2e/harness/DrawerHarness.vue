@@ -3,7 +3,7 @@
     <main>
       <h1>Drawer harness</h1>
       <!-- Stands in for a status light or pending item: an opener outside the tiles that can disappear. -->
-      <Button v-if="controls.pending" label="Pending item" text data-pending @click="toggle('a', $event.currentTarget)" />
+      <Button v-if="controls.pending" label="Pending item" text @click="toggle('a', $event.currentTarget)" />
       <div class="tiles">
         <button type="button" data-drawer-tile="a" @click="toggle('a', $event.currentTarget)">Tile A</button>
         <button type="button" data-drawer-tile="b" @click="toggle('b', $event.currentTarget)">Tile B</button>
@@ -21,7 +21,6 @@
         <Select v-model="color" input-id="color" :options="['red', 'green', 'blue']" append-to="self" @change="commitColor" />
         <!-- Taller than the window, so the drawer content scrolls. -->
         <div class="filler"></div>
-        <button type="button" data-last>Last</button>
       </template>
     </AppDrawer>
     <AppDrawer id="b" title="Drawer B">

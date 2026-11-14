@@ -33,11 +33,10 @@ async fn main() {
     let admin_token = std::env::var("E2E_ADMIN_TOKEN").expect(usage).into();
     let unreachable = "127.0.0.1:1";
     // OBS points nowhere too, so an OBS running on this machine is never contacted.
-    std::fs::create_dir_all(&data_dir).expect("create the data folder");
-    std::fs::write(
-        data_dir.join("settings.json"),
-        r#"{"obs":{"host":"127.0.0.1","port":1}}"#,
-    )
+    host::settings::update(&data_dir, |s| {
+        s.obs.host = "127.0.0.1".into();
+        s.obs.port = 1;
+    })
     .expect("write settings.json");
     let host = host::bind(HostConfig {
         port,

@@ -45,6 +45,7 @@ test('lays out side by side above 1000px, as a modal up to 1000px and as a botto
   await page.mouse.click(20, 400) // backdrop
   await expect(dialog(page)).toHaveCount(0)
   await page.getByRole('button', { name: 'Tile A' }).click()
+  await expect(dialog(page)).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
 

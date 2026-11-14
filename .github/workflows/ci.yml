@@ -61,10 +61,13 @@ jobs:
         run: cargo test --workspace
 
       # After cargo test, which already built the E2E Host (crates/host/examples/e2e_host.rs).
+      - name: Playwright version
+        id: playwright
+        run: '"version=$((pnpm --filter web exec playwright --version) -replace ''\s'', ''-'')" >> $env:GITHUB_OUTPUT'
       - uses: actions/cache@v4
         with:
-          path: ~\AppData\Local\ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: ~/AppData/Local/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Playwright Chromium
         run: pnpm --filter web exec playwright install chromium
       - name: UI E2E (Playwright)

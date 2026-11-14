@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: e2f24741ae4e680a3ab8d73342450dd5e2452bb97fc7b5207b8aab645ae016c5 -->
+<!-- source: docs/dev.md source-sha256: 100910df309054fcd257a4c316b002a5fd80ce23b85a00a68e6e81a4cf3e11b0 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -39,8 +39,8 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - Test only the behavior we own, not Twitch/OBS themselves.
 - Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date; UI E2E for browser behavior jsdom cannot test.
 - UI E2E (`apps/web/e2e/`, Playwright + Chromium, `pnpm web:e2e`; build the frontend first):
-  - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain no token or secret. Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
-  - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch pointed at an address nothing listens on).
+  - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain only a dummy token, never a real token or secret; Vite sends the same CSP as the Host, so E2E runs under it (the header the Host actually sends is covered by the `crates/host` Rust tests). Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
+  - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on).
   - Logic that unit tests can cover still gets unit tests; E2E does not repeat them.
 - Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
 - Migration test: merged versions are globally unique and sorted.
@@ -48,20 +48,20 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - Test with simulated events instead of real Twitch triggers. Simulated events are tagged `source=simulation` and must never be written to any real business records (redemption records, check-in records).
 - a11y baseline: every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), control boundaries and informative icons reach 3:1 (WCAG 1.4.11), and status is never conveyed by color alone. No screen reader testing, but semantic markup and ARIA are still done properly.
 - Checked automatically by UI E2E (CI runs it every time):
-  - Drawer: wider than 1000px it sits side by side with the tiles (380px), which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
+  - Drawer: at window widths above 1000px, the drawer (380px wide) sits side by side with the tiles, which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
   - After crossing the 1000px width threshold, the drawer stays open and focus, input values and scroll positions are preserved.
-  - On open, focus is on the close button; after closing, focus returns to the tile or status light that opened it; if that item is gone, it falls back to its tile (the further fallbacks, the first tile and then "Arrange tiles", are covered by unit tests).
+  - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it (the home page has no pending items yet, so a stand-in on the test page is used); if that item is gone, it falls back to its tile (the further fallbacks, the first tile and then "Arrange tiles", are covered by unit tests).
   - After typing without pressing Enter, leaving the drawer in each of these ways has saved the value: ✕, Esc and "Open full page" (once side by side and once modal), plus another tile when side by side and a backdrop click when modal.
   - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
   - When the drawer is modal, error messages and its buttons are visible and can be pressed; with a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
-  - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page can be walked through with the keyboard alone (skip link, tiles, opening and closing the drawer).
-  - The close-hint `<dialog>` (with fake IPC): Esc cancels, "Got it" and "Don't show again" send the right actions to Rust.
+  - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page's keyboard path works end to end: skip link, chat tile, open the drawer, send a simulated chat, close the drawer (1280px and 800px).
+  - The close-hint `<dialog>` (with fake IPC): the actions sent to Rust are correct when pressing Esc to cancel, clicking "Got it", and checking "Don't show again".
   - Overlay (real Host): editing the chat template applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
-- Checked manually once per finished slice (cannot be automated):
-  - Real Twitch sign-in and chat, a real OBS connection; actual OBS visuals and audio (one live-stream test).
+- Checked manually once per finished slice:
+  - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.
   - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
-  - Compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; focus is visible; at 200% and 400% zoom no text is clipped (except deliberate "…" truncation).
-  - A new page or flow without E2E yet: walk through it with the keyboard first, then add E2E.
+  - Compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; focus is visible; at 200% and 400% zoom no text is clipped (except deliberate "…" truncation) and every button can be pressed.
+  - New pages or flows, and controls the path above does not cover (status lights, "Arrange tiles", other tiles): walk through them with the keyboard first, then add E2E.
 - The Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.

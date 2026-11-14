@@ -38,8 +38,8 @@
 - 只測我們負責的行為，不測 Twitch／OBS 本身。
 - 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新；UI E2E 測 jsdom 測不了的瀏覽器行為。
 - UI E2E（`apps/web/e2e/`，Playwright＋Chromium，`pnpm web:e2e`，需要先建置前端）：
-  - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/overlay` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 不放任何 token 或 secret。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
-  - Overlay 對真的 Host 測：`crates/host/examples/e2e_host.rs` 在暫存資料夾啟動 Host（隨機管理 token、假的 secret 儲存、Twitch 指向不存在的位址）。
+  - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/overlay` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 只放假的 token，不放任何真的 token 或 secret；Vite 送出與 Host 相同的 CSP，E2E 在這份 CSP 下執行（Host 實際送出的標頭由 `crates/host` 的 Rust 測試涵蓋）。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
+  - Overlay 對真的 Host 測：`crates/host/examples/e2e_host.rs` 在暫存資料夾啟動 Host（隨機管理 token、假的 secret 儲存、Twitch 與 OBS 都指向沒有服務的位址）。
   - 能用單元測試測的判斷照樣寫單元測試，E2E 不重複。
 - 架構測試（`crates/arch-tests`）：`domain/` 內沒有任何 `sqlx`／`axum` 字樣；crate 相依方向正確：模組只依賴共用核心（`crates/core`，package 名稱 `toolkit-core`）與其他模組的公開介面，不依賴 `integrations` 與 `host`；模組不引用其他模組的非公開型別（規則見 [architecture.md](architecture.md)）。
 - Migration 測試：合併後的版本全域唯一且已排序。
@@ -49,18 +49,18 @@
 - 由 UI E2E 自動檢查（CI 每次都跑）：
   - 抽屜：視窗 > 1000px 時在功能磚旁並排（380px），功能磚仍可操作；≤ 1000px 時是右側 modal，點背景或按 Esc 會關；< 600px 時從底部出現。
   - 跨過 1000px 寬度門檻後，抽屜沒有關閉，焦點、輸入值、捲動位置都還在。
-  - 打開抽屜時焦點在關閉鈕；關閉後焦點回到開啟它的功能磚或狀態燈；那個項目已不在時退回它所屬的功能磚（再往下退回第一個功能磚、「整理功能磚」的順序由單元測試涵蓋）。
+  - 打開抽屜時焦點在關閉鈕；關閉後焦點回到開啟它的功能磚、狀態燈或待處理項目（首頁還沒有待處理項目，用測試頁的替身測）；那個項目已不在時退回它所屬的功能磚（再往下退回第一個功能磚、「整理功能磚」的順序由單元測試涵蓋）。
   - 打字後不按 Enter，用下列方式離開抽屜，值都已寫入：✕、Esc、「開啟完整頁」（並排與 modal 各一次），再加並排時點另一個功能磚、modal 時點背景。
   - 儲存失敗時抽屜不關、欄位回到舊值並顯示錯誤；失敗發生在欄位失焦時，之後第一次按 ✕ 抽屜也不關（再按一次才會關）。
   - 抽屜為 modal 時，錯誤訊息與其中的按鈕都看得到、按得到；抽屜內下拉選單開著時按 Esc，只關下拉選單、不關抽屜。
-  - 視窗寬 1280px、640px、320px（相當於 1280px 放大到 200%、400%）時沒有橫向捲軸；首頁只用鍵盤走得完（略過連結、功能磚、開關抽屜）。
+  - 視窗寬 1280px、640px、320px（相當於 1280px 放大到 200%、400%）時沒有橫向捲軸；首頁的鍵盤路徑走得完：略過連結、聊天功能磚、開抽屜、送出模擬聊天、關抽屜（1280px、800px）。
   - 關閉提示的 `<dialog>`（IPC 用假的代替）：按 Esc 取消、按「知道了」、勾「不再提示」後送給 Rust 的動作都正確。
   - Overlay（真的 Host）：改聊天樣板後立即套用；樣板裡的 `<script>`、事件屬性與 `.js` 檔都不會執行；壞掉的樣板退回預設樣板。
-- 每個切片完成時人工檢查一次（自動化做不到）：
-  - 真的 Twitch 登入與聊天、真的 OBS 連線；OBS 實際畫面與音效（直播試用一次）。
+- 每個切片完成時人工檢查一次：
+  - 真的 OBS 連線與實際畫面、音效（直播試用一次）；動到 Twitch 登入或聊天的切片，另測真的 Twitch 登入與聊天。
   - 原生視窗 ✕ 與系統匣：按 ✕ 出現提示；按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣。
-  - 對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；焦點看得見；放大到 200%、400% 時文字沒被裁掉（刻意以「……」省略的除外）。
-  - 新頁面或新流程還沒有 E2E 時，先用鍵盤走一遍，再補 E2E。
+  - 對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；焦點看得見；放大到 200%、400% 時文字沒被裁掉（刻意以「……」省略的除外）、按鈕都按得到。
+  - 新頁面或新流程，以及上述路徑沒涵蓋的控制項（狀態燈、「整理功能磚」、其他功能磚），先用鍵盤走一遍，再補 E2E。
 - 關閉提示的 Rust 狀態流程（已顯示／取消／隱藏、2 秒逾時、提示中再按 ✕）寫 Rust 單元測試。
 - 安全測試：樣板預覽 iframe 呼叫 `invoke` 必須被拒絕。
 - AI 協作：可以改實作、加測試；不得為了讓測試通過而放寬驗收條件、刪除測試或修改 CI 檢查。

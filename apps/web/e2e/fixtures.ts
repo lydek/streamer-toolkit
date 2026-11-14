@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import type { Page, Route } from '@playwright/test'
+import type { Locator, Page, Route } from '@playwright/test'
 import type { components } from '../src/api/schema'
 
 type Schemas = components['schemas']
@@ -113,6 +113,11 @@ export async function openAdmin(page: Page, state: Partial<AdminState> = {}) {
   return s
 }
 
-/** True when the page scrolls sideways (WCAG 1.4.10 reflow). */
-export const scrollsSideways = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+/**
+ * True when the page, or the given element, scrolls sideways (WCAG 1.4.10 reflow). Check dialogs and drawers
+ * themselves: content in the top layer never widens the page.
+ */
+export const scrollsSideways = (target: Page | Locator) =>
+  'goto' in target
+    ? target.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    : target.evaluate((el) => el.scrollWidth > el.clientWidth)

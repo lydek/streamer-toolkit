@@ -4,16 +4,21 @@ import { emit, invokes, openAdmin, scrollsSideways, zh } from './fixtures'
 
 const chatTile = (page: Page) => page.locator('[data-drawer-tile="chat"]')
 
-test('never scrolls sideways at 1280px, 640px and 320px, with the drawer closed or open', async ({ page }) => {
+test('never scrolls sideways at 1280px, 640px and 320px, nor do the drawers', async ({ page }) => {
   await openAdmin(page)
+  const openers = { chat: chatTile(page), connections: page.getByRole('button', { name: /^OBS：/ }) }
   for (const width of [1280, 640, 320]) {
     await page.setViewportSize({ width, height: 800 })
-    expect(await scrollsSideways(page), `${width}px, closed`).toBe(false)
-    await chatTile(page).click()
-    await expect(page.locator('#drawer-chat')).toBeVisible()
-    expect(await scrollsSideways(page), `${width}px, open`).toBe(false)
-    await page.keyboard.press('Escape')
-    await expect(page.locator('#drawer-chat')).toHaveCount(0)
+    expect(await scrollsSideways(page), `${width}px, page`).toBe(false)
+    for (const [id, opener] of Object.entries(openers)) {
+      await opener.click()
+      const drawer = page.locator(`#drawer-${id}`)
+      await expect(drawer).toBeVisible()
+      expect(await scrollsSideways(page), `${width}px, page with ${id} open`).toBe(false)
+      expect(await scrollsSideways(drawer), `${width}px, ${id} drawer`).toBe(false)
+      await page.keyboard.press('Escape')
+      await expect(drawer).toHaveCount(0)
+    }
   }
 })
 
@@ -91,7 +96,7 @@ test('close hint: Esc cancels, "Got it" hides, "Don\'t show again" is sent', asy
   await emit(page, 'close-hint', true)
   await expect(hint).toBeInViewport()
   await expect(ok).toBeFocused()
-  expect(await scrollsSideways(page)).toBe(false)
+  expect(await scrollsSideways(hint)).toBe(false)
   await page.keyboard.press('Escape')
   await expect(hint).toBeHidden()
   await expect.poll(actions).toEqual(['shown', 'cancel'])

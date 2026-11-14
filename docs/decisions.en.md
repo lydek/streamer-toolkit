@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: e432b511c23eadb7f876b6d40ac5b162a637e8857099bdfb2120bb6c9b16f08c -->
+<!-- source: docs/decisions.md source-sha256: e174a5892dd99476a8f2d094aaddf5758e8080e07923ce59bcde456055356812 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions

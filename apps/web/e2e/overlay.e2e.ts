@@ -9,11 +9,7 @@ const HOST = `http://127.0.0.1:${HOST_PORT}`
 const TEMPLATE_DIR = join(process.env.E2E_DATA_DIR!, 'templates', 'chat')
 const admin = { Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}`, Origin: HOST }
 
-// One Host and one template folder: run in order.
-test.describe.configure({ mode: 'serial' })
-// The Host polls the folder once a second.
-test.use({ actionTimeout: 10_000 })
-expect.configure({ timeout: 10_000 })
+// The tests share one Host and template folder; they run one after another as long as fullyParallel stays off.
 
 const template = (item: string, extra = '') =>
   `${extra}<ul data-chat-list><template data-chat-message>${item}</template></ul>`

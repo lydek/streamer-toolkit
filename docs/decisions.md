@@ -116,4 +116,4 @@
 | 2026-11-14 | 新增管理 UI 版面、抽屜元件、視覺風格、前端路由、圖示；UI 元件庫定為 Aura preset（固定深色、`definePreset` 覆寫色階）；開啟外部網址限定為網址寫死的指令；管理視窗開啟縮放快速鍵並設最小尺寸 | UI／UX 規劃定案：側欄＋卡片網格太像通用的後台管理系統，改用功能磚；PrimeVue Drawer 不能並排，所以自製抽屜；能帶網址參數的指令在管理視窗被注入腳本時可開任意網址或自訂通訊協定；縮放快速鍵讓使用者能放大（WCAG 1.4.4） |
 | 2026-11-14 | PrimeVue 固定在 4.5.5、`@primeuix/themes` 2.0.3、PrimeIcons 7.0.0（版本寫死） | PrimeVue 5、`@primeuix/themes` 3、PrimeIcons 8 改用專有的 PrimeUI License（需授權金鑰、不得拆出原始程式碼），不在允許清單內；以上是最後的 MIT 版本。v4 不會再有修正，出現安全問題時重新評估 |
 | 2026-11-14 | 開發模式的 proxy port 改為每個請求從 dev 資料夾（`target\debug\data\`）的 `settings.json` 讀取；Vite `server.fs.deny` 另加 Cargo 的 `target` 資料夾 | Vite 比 app 先啟動，資料夾第一次啟動可能自動換 port，port 修改小頁面也可能存下新的 port，只在啟動時讀一次會對不上；`null` origin 讀得到 Vite 提供的檔案，而 dev 資料夾（設定、記錄檔、WebView2 資料）在 `target` 裡 |
-| 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 的人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |
+| 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |

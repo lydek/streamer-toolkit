@@ -1,8 +1,12 @@
 import { reactive } from 'vue'
 
 /** Test controls, as `window.e2e`: settings saved so far, whether saves fail, whether the pending item shows. */
-export const controls = reactive({ saved: [] as string[], fail: false, pending: true })
+export interface Controls {
+  saved: string[]
+  fail: boolean
+  pending: boolean
+}
 
-export type Controls = typeof controls
+export const controls: Controls = reactive({ saved: [], fail: false, pending: true })
 
 Object.assign(window, { e2e: controls })
