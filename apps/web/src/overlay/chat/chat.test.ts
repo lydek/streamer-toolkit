@@ -13,7 +13,7 @@ const chat = (seq: number): ChatEvent => ({
 
 describe('apply', () => {
   it('starts from the snapshot and skips events it already contains', () => {
-    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.message': [chat(1), chat(2)] } })
+    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.message': [chat(1), chat(2)], 'obs.status': [] } })
     state = apply(state, chat(2))
     state = apply(state, chat(3))
     expect(state.messages.map((m) => m.seq)).toEqual([1, 2, 3])
@@ -21,8 +21,22 @@ describe('apply', () => {
   })
 
   it('replaces everything on a new snapshot after a reconnect', () => {
-    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [] } })
+    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [] } })
     expect(before).toEqual({ messages: [], lastSeq: 0 })
+  })
+
+  it('ignores other event types such as obs.status', () => {
+    const state = { messages: [chat(1)], lastSeq: 1 }
+    const status = apply(state, {
+      id: 's2',
+      type: 'obs.status',
+      version: 1,
+      seq: 2,
+      occurredAt: '2026-11-13T10:00:00.000Z',
+      source: 'obs',
+      payload: { state: 'connected', reason: null },
+    })
+    expect(status).toBe(state)
   })
 
   it('keeps only the newest messages', () => {
