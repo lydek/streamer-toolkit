@@ -1,34 +1,22 @@
 import { resolve } from 'node:path'
-import { type Plugin, defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
-
-// Must match the Host's default port (docs/architecture.md §5).
-const HOST = 'http://127.0.0.1:47810'
-// Must match OVERLAY_CSP in crates/host/src/lib.rs.
-const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
-
-/** Dev only: overlay pages get the Overlay CSP the Host sends, so violations show up during development. */
-const overlayCsp: Plugin = {
-  name: 'overlay-csp',
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      if (req.url?.startsWith('/overlay/')) res.setHeader('Content-Security-Policy', OVERLAY_CSP)
-      next()
-    })
-  },
-}
+import { devDataDir, devServer, hostProxy } from './dev-server.ts'
 
 export default defineConfig(({ mode }) => ({
   // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
-  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), overlayCsp],
+  plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), devServer()],
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      '/api': { target: HOST, changeOrigin: true },
-      '/ws': { target: HOST, changeOrigin: true, ws: true },
-      '/templates': { target: HOST, changeOrigin: true },
+    // Replaced by devServer(): only the null origin, and never on /api, /ws or /templates.
+    cors: false,
+    proxy: hostProxy(devDataDir()),
+    fs: {
+      // Vite's defaults (this list replaces them; dev-server.test.ts keeps it a superset) plus Cargo's target folder:
+      // the dev data folder (settings, logs, WebView2 profile) is inside it, and the null origin may read what Vite serves.
+      deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx,cer,der}', '.npmrc', '.yarnrc.yml', '**/.git/**', '**/target/**'],
     },
   },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.

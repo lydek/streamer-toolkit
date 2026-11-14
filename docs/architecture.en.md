@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 9fb0194ccaa11c0e0d6de5d1037a989c71816361f566c9a36149c9de2964edb3 -->
+<!-- source: docs/architecture.md source-sha256: d98c2c737fa1b1460dc9aea63c7304cf11a75a1c94949a149562bdc89e039db0 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -102,10 +102,12 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
   - User-customized HTML/CSS templates live in the data directory's `templates/` folder (see "User templates" under "Local API security" below).
 - **Dev mode**: the frontend runs on the Vite dev server with hot reload, proxying `/api`, `/ws` and `/templates` to the Host:
   - The proxy target is `http://127.0.0.1:<port>`, not `localhost` (Node may resolve that to IPv6 `::1`, while the Host binds IPv4 only).
+  - `<port>` is read on every request from the dev data folder's `settings.json` (`target\debug\data\` as used by `pnpm tauri dev`, ignoring `--data-dir`; under `CARGO_TARGET_DIR` when set, which must be an absolute path), falling back to the default port when there is no file or its content is invalid: Vite starts before the app, a data folder's first run may switch ports automatically, and the port page may save a new one.
   - The proxy sets `changeOrigin: true` (rewrites only the Host header, not Origin) and `ws: true`.
   - Tauri's `build.devUrl` is set to the Vite URL, so in development both the admin window and the small port-change page are served by Vite and count as a local origin; Vite uses `server.strictPort: true` so the port cannot drift away from the allowlist.
-  - Vite sends the same CSP as `/admin` through `server.headers`, and pages under `/overlay/` get the overlay CSP instead (a middleware in `vite.config.ts`), so violations show up during development.
+  - Vite sends the same CSP as the Host: pages under `/overlay/` get the overlay CSP and everything else gets the `/admin` CSP, so violations show up during development. The middleware in the next item sets it, not `server.headers`: Vite applies that last, which would replace the overlay CSP.
   - In dev mode, Vite allows the `null` origin on every response except the proxied `/api`, `/ws` and `/templates` (`server.cors: false` plus a `configureServer` middleware), because the preview iframe loads modules from paths such as `/@vite/client` and `/src/...`.
+  - Sandboxed iframes on any website have the `null` origin, so by the previous item any website can read the files Vite serves. Vite's `server.fs.deny` therefore adds Cargo's `target` folder to the default list: the dev data folder (settings, logs, WebView2 profile) is inside it and must not be readable through Vite.
 
 ### Local API security
 Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-site requests, DNS rebinding, WebSocket hijacking), so the following is also required:

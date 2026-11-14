@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: c48d40437990e6e0e1aada203b4f9ecf858556f3c6da6c9096213f9b816d5a02 -->
+<!-- source: docs/dev.md source-sha256: 6b0183770500f9e1e0c5c8b26d9226aeb936d51c77fe678414a3538773134c5a -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -17,7 +17,7 @@ Principle: another Windows PC can get it running by following this document.
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
 - API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
 - Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push`
-- Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>`. Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
+- Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>` (the Vite proxy of `pnpm tauri dev` reads the port only from `target\debug\data\`, so that data's port must match it). Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
 - The repo is public: anyone can see the code and commit history.
