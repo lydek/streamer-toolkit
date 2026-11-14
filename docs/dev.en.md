@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: c3ee629b952a0db9df831de94f2c252baa4ffc04a59a6b4e9e1dc9673397c326 -->
+<!-- source: docs/dev.md source-sha256: cbd2592d084aaaea08df106496ccc6934d203e62edb7b8c0ac90fd835366588d -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -68,7 +68,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 
 ## Licenses
 - This project is MIT. Rust dependency licenses must be on the `cargo-deny` allowlist (MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0).
-- Frontend dependencies are checked by `scripts/check-licenses.mjs` (`pnpm check:licenses`), which CI and pre-push both run: only dependencies shipped in the build count (`pnpm licenses list --prod`; dev tooling does not), and their allowlist also includes 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. The script reads the allowlist from the "Dependency licenses" row of `docs/decisions.md`, so changing the list means changing only that row. A license outside the list, an unknown one, or one written as `SEE LICENSE IN …` (for example PrimeVue 5) fails; never loosen the list to make the check pass.
+- Frontend dependencies are checked by `scripts/check-licenses.mjs` (`pnpm check:licenses`), which CI and pre-push both run: only dependencies shipped in the build count (`pnpm licenses list --prod`; dev tooling does not), and their allowlist also includes 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. The script reads the allowlist from the "相依套件授權" (Dependency licenses) row of `docs/decisions.md`, so the script needs no change; when changing the list, update that row and this section together (Rust: also `deny.toml`). A license outside the list, an unknown one, or one written as `SEE LICENSE IN …` (for example PrimeVue 5) fails; never loosen the list to make the check pass.
 - Never add GPL/LGPL/AGPL.
 - The portable package slice generates `THIRD_PARTY_LICENSES` (`cargo-about` + `pnpm licenses`), shipped in the zip.
 - Bundled assets (sounds, fonts, icons) must have redistributable licenses (CC0, CC-BY, OFL, etc.), with source and license recorded in `assets/CREDITS.md`. Assets users import themselves never go into the repo.
