@@ -18,6 +18,8 @@ use crate::{admin, obs, overlay, templates};
         admin::set_client_id,
         admin::login,
         admin::logout,
+        admin::general,
+        admin::set_general,
         admin::list_modules,
         admin::set_module,
         admin::simulate_chat,

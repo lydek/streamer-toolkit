@@ -2,6 +2,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { h } from 'vue'
+import { RouterView, createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '../i18n'
 import type { Incoming } from '../overlay/chat/chat'
 import { ApiError } from './api'
@@ -33,9 +35,21 @@ beforeEach(() => {
 })
 
 async function setup() {
-  const wrapper = mount(TemplateEditor, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
+  // Rendered by a router, as on the full page, so its leave guard is active.
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { render: () => null } },
+      { path: '/chat', component: TemplateEditor },
+    ],
+  })
+  await router.push('/chat')
+  const wrapper = mount({ render: () => h(RouterView) }, {
+    global: { plugins: [i18n, PrimeVue, router] },
+    attachTo: document.body,
+  })
   await flushPromises()
-  return wrapper
+  return Object.assign(wrapper, { router })
 }
 
 describe('TemplateEditor', () => {
@@ -110,6 +124,30 @@ describe('TemplateEditor', () => {
     expect((wrapper.get('#template-html').element as HTMLTextAreaElement).value).toBe('typed')
     // Still differs from what was saved, so it can be saved again.
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('asks before leaving with unsaved edits', async () => {
+    const wrapper = await setup()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await wrapper.get('#template-html').setValue('edited')
+    await wrapper.router.push('/')
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(wrapper.router.currentRoute.value.path).toBe('/chat')
+    confirm.mockReturnValue(true)
+    await wrapper.router.push('/')
+    expect(wrapper.router.currentRoute.value.path).toBe('/')
+    confirm.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('leaves without asking when nothing changed', async () => {
+    const wrapper = await setup()
+    const confirm = vi.spyOn(window, 'confirm')
+    await wrapper.router.push('/')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(wrapper.router.currentRoute.value.path).toBe('/')
+    confirm.mockRestore()
     wrapper.unmount()
   })
 

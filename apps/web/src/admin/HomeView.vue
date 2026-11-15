@@ -19,6 +19,14 @@
             :aria-controls="drawerId('connections')"
             @click="toggle('connections', $event.currentTarget)"
           />
+          <Button
+            icon="pi pi-cog"
+            text
+            rounded
+            :aria-label="t('settings.title')"
+            data-page-opener="settings"
+            @click="router.push('/settings')"
+          />
         </div>
       </header>
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
@@ -37,8 +45,14 @@
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
         <div v-else-if="!groups.length" class="stack">
           <p>{{ t('home.empty') }}</p>
-          <!-- TODO(#12): enter arrange mode. Until then the module switches are the way to bring tiles back. -->
-          <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="focusModules" />
+          <!-- TODO(#12): enter arrange mode. Until then the module switches in Settings bring tiles back. -->
+          <Button
+            :label="t('home.arrange')"
+            icon="pi pi-pencil"
+            outlined
+            data-drawer-arrange
+            @click="router.push('/settings#features')"
+          />
         </div>
         <template v-for="g in groups" :key="g.group">
           <h2 :id="`group-${g.group}`">{{ t(`home.groups.${g.group}`) }}</h2>
@@ -57,54 +71,13 @@
           </ul>
         </template>
       </section>
-
-      <!-- TODO(#10): moves to the settings page. -->
-      <section aria-labelledby="modules-heading">
-        <h2 id="modules-heading" ref="modulesHeading" tabindex="-1">{{ t('modules.heading') }}</h2>
-        <ul class="plain">
-          <li v-for="m in modules" :key="m.id" class="module">
-            <Checkbox :input-id="`module-${m.id}`" :model-value="m.enabled" binary :disabled="busy" @update:model-value="toggleModule(m)" />
-            <label :for="`module-${m.id}`">{{ moduleName(m.id) }}</label>
-          </li>
-        </ul>
-      </section>
     </main>
 
     <AppDrawer id="connections" :title="t('home.connections')">
       <template #now>
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
         <h4>{{ t('twitch.heading') }}</h4>
-        <p v-if="!overview">{{ t('app.loading') }}</p>
-
-        <form v-else-if="!overview.client_id || editingClientId" @submit.prevent="saveClientId">
-          <i18n-t keypath="twitch.guide" tag="p">
-            <template #url><code>http://localhost</code></template>
-          </i18n-t>
-          <label for="client-id">{{ t('twitch.clientId') }}</label>
-          <InputText id="client-id" v-model="clientIdInput" autocomplete="off" required />
-          <Button type="submit" :label="t('twitch.save')" :disabled="busy" />
-          <Button v-if="overview.client_id" :label="t('twitch.cancel')" outlined @click="editingClientId = false" />
-        </form>
-
-        <template v-else>
-          <div v-if="overview.status.state === 'signed_in'" class="stack">
-            <p>{{ t('twitch.signedIn') }}<strong>{{ overview.status.login }}</strong></p>
-            <Button :label="t('twitch.logout')" icon="pi pi-sign-out" outlined :disabled="busy" @click="logout" />
-          </div>
-
-          <div v-else-if="overview.status.state === 'pending'" class="stack">
-            <p>{{ t('twitch.enterCode') }}</p>
-            <p class="user-code" aria-live="polite">{{ overview.status.user_code }}</p>
-            <Button :label="t('twitch.openActivate')" icon="pi pi-external-link" @click="openActivate" />
-          </div>
-
-          <div v-else class="stack">
-            <p v-if="overview.status.state === 'failed'" role="alert">{{ errorMessage(overview.status.code) }}</p>
-            <Button :label="t('twitch.login')" icon="pi pi-sign-in" :disabled="busy" @click="login" />
-          </div>
-
-          <Button :label="t('twitch.changeClientId')" text @click="startEditClientId" />
-        </template>
+        <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
 
         <h4>OBS</h4>
         <p>
@@ -114,7 +87,7 @@
       </template>
     </AppDrawer>
 
-    <AppDrawer id="chat" :title="moduleName('chat')">
+    <AppDrawer id="chat" :title="moduleName('chat')" full-page="/chat">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl" />
         <form @submit.prevent="simulateChat">
@@ -135,13 +108,12 @@
 </template>
 
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core'
 import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import AppDrawer from './AppDrawer.vue'
@@ -158,24 +130,24 @@ import {
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
+import { focusReturnTarget } from './page'
 import StatusLight from './StatusLight.vue'
+import TwitchSignIn from './TwitchSignIn.vue'
 
 const { t, te } = useI18n()
 const toast = useToast()
+const router = useRouter()
 
 const overview = ref<Schemas['Overview']>()
 const overviewFailed = ref(false)
 const modules = ref<Schemas['ModuleState'][]>()
 const loadFailed = ref(false)
-const clientIdInput = ref('')
-const editingClientId = ref(false)
 const busy = ref(false)
 const simUser = ref('')
 const simText = ref('')
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
-const modulesHeading = ref<HTMLElement>()
 let timer: number | undefined
 
 const drawer = useDrawer()
@@ -248,17 +220,6 @@ async function run(action: () => Promise<unknown>) {
   }
 }
 
-const saveClientId = () =>
-  run(async () => {
-    await api(client.PUT('/api/admin/twitch/client-id', { body: { client_id: clientIdInput.value } }))
-    editingClientId.value = false
-  })
-const login = () => run(() => api(client.POST('/api/admin/twitch/login')))
-const logout = () => run(() => api(client.POST('/api/admin/twitch/logout')))
-const toggleModule = (m: Schemas['ModuleState']) =>
-  run(() =>
-    api(client.PUT('/api/admin/modules/{id}', { params: { path: { id: m.id } }, body: { enabled: !m.enabled } })),
-  )
 const simulateChat = () =>
   run(async () => {
     await api(client.POST('/api/admin/simulate/chat', { body: { userName: simUser.value, text: simText.value } }))
@@ -278,25 +239,11 @@ async function copyObsUrl() {
   }
 }
 
-async function openActivate() {
-  notice.value = undefined
-  try {
-    await invoke('open_twitch_activate')
-  } catch (code) {
-    notify(errorMessage(String(code)), true)
-  }
-}
-
-function startEditClientId() {
-  clientIdInput.value = overview.value?.client_id ?? ''
-  editingClientId.value = true
-}
-
 const focusTiles = () => tilesEl.value?.focus()
-const focusModules = () => modulesHeading.value?.focus()
 
 onMounted(async () => {
   await run(async () => {})
+  await focusReturnTarget()
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
   // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
   timer = window.setInterval(() => {
@@ -357,17 +304,5 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 h4 {
   margin: 0;
-}
-
-.module {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.user-code {
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
 }
 </style>

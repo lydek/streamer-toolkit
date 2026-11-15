@@ -37,6 +37,7 @@ import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onBeforeRouteLeave } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { type ChatEvent, type ChatState, type Incoming, apply } from '../overlay/chat/chat'
 import { ApiError, type Schemas, api, client } from './api'
@@ -152,6 +153,9 @@ const save = () =>
   })
 
 onMounted(load)
+
+// Saving is explicit (a save can conflict), so leaving with unsaved edits asks instead of losing them silently.
+onBeforeRouteLeave(() => !dirty.value || window.confirm(t('editor.leave')))
 </script>
 
 <style scoped>

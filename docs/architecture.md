@@ -122,7 +122,7 @@ apps/
   - 自訂樣板與 Overlay 絕不在管理視窗裡直接渲染；預覽放在只設 `sandbox="allow-scripts"`（不帶 `allow-same-origin`）的 iframe，樣板裡的程式拿不到管理視窗的 IPC 與 token；有測試確認預覽 iframe 呼叫 `invoke` 會被拒絕。
   - 預覽 iframe 的 origin 是 `null`，無法連 Host；快照與其後的事件由管理視窗用 `postMessage` 傳入。
   - 預覽就是聊天室 Overlay 頁面加上 `?preview`（`/overlay/chat/?preview`）：不連 WebSocket，只接受來自父視窗、且 origin 等於頁面網址 origin 的訊息，格式與 `/ws/overlay` 相同。管理視窗先送一份快照（最近的聊天；沒有聊天時改送標記 `source=simulation` 的範例訊息），之後轉送自己收到的其他事件；重新連線收到新快照、或預覽頁重新載入時，再送一次快照。樣板由預覽頁自己從樣板路由載入，所以預覽顯示的是已存檔的樣板，與 OBS 相同。
-  - 完整頁的樣板編輯用管理 API `/api/admin/templates/chat/source`：`GET` 回傳磁碟上的 `template.html`、`style.css`（不存在時為空字串；無法讀取或不是 UTF-8 時回 422 `template.unreadable`）與 `revision`；`PUT` 帶 `html`、`css` 與讀取時拿到的 `revision`，成功時回傳新的 `revision`；兩個檔案任一在這之後被改過（例如在其他編輯器）就回 409 `template.conflict`，不覆寫；每個檔案最多 1 MB（400 `template.too_large`）；寫檔失敗回 500 `template.save_failed`，存檔前讀不到現有檔案回 500 `template.unreadable`。寫入先把兩個檔案都寫成同目錄的 `.tmp`，再依序改名取代：Overlay 不會讀到寫一半的檔案，寫入失敗（例如磁碟滿）時兩個原檔都不變，只有兩次改名之間失敗才可能只換掉一個。存檔後由樣板輪詢發布 `template.changed`，OBS 與預覽一起重新載入。存檔不檢查標記；樣板缺標記時，照常走下方的備援並顯示錯誤。
+  - 完整頁的樣板編輯用管理 API `/api/admin/templates/chat/source`：`GET` 回傳磁碟上的 `template.html`、`style.css`（不存在時為空字串；無法讀取或不是 UTF-8 時回 422 `template.unreadable`）與 `revision`；`PUT` 帶 `html`、`css` 與讀取時拿到的 `revision`，成功時回傳新的 `revision`；兩個檔案任一在這之後被改過（例如在其他編輯器）就回 409 `template.conflict`，不覆寫；每個檔案最多 1 MB（400 `template.too_large`）；寫檔失敗回 500 `template.save_failed`，存檔前讀不到現有檔案回 500 `template.unreadable`。寫入先把兩個檔案都寫成同目錄的 `.tmp`，再依序改名取代：Overlay 不會讀到寫一半的檔案，寫入失敗（例如磁碟滿）時兩個原檔都不變，只有兩次改名之間失敗才可能只換掉一個。存檔後由樣板輪詢發布 `template.changed`，OBS 與預覽一起重新載入。存檔不檢查標記；樣板缺標記時，照常走下方的備援並顯示錯誤。編輯頁要按「儲存」才寫入，不像設定欄位在離開時自動送出（存檔可能衝突）；有未儲存的修改時，離開頁面前會先確認。
   - Overlay 與樣板路徑的所有回應（含 HTML 與 SVG）都送 Overlay CSP：`script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本類型的檔案（白名單：HTML、CSS、圖片、字型、音效），並加 `X-Content-Type-Options: nosniff`，落實初版只開放 HTML／CSS。
   - 聊天室樣板放在資料夾的 `templates/chat/`：`template.html`（HTML 片段）、`style.css`，以及圖片、字型等檔案。這個目錄不存在時（例如第一次啟動）複製內建預設樣板進去，不覆寫既有檔案；預設樣板的原始檔在 `apps/web/src/overlay/chat/default-template/`，同時內嵌進執行檔。
   - 綁定方式：`template.html` 要有一個 `data-chat-list` 元素（新訊息加在它裡面）與一個 `<template data-chat-message>`（一則訊息的標記），裡面用 `data-field="userName"`、`data-field="text"` 標出填值位置；觀眾有設定名稱顏色時，以 CSS 變數 `--user-color` 設在每則訊息上（樣式要寫後備值，例如 `var(--user-color, #fff)`）。Overlay 用 `fetch` 取得 `template.html`、以 `DOMParser` 解析（解析時不執行任何程式），移除 `script`、`iframe`、`object`、`embed`、`base`、`meta` 等元素與 `on*` 屬性。網址屬性（`src`、`href`、`xlink:href`、`poster`、`action`、`formaction`）只保留 `http:`、`https:`、`data:` 與相對路徑，其餘（例如 `javascript:`）移除；相對路徑改指向樣板目錄（以 `/` 開頭的路徑以 Host 根目錄為準，不指向樣板目錄），`#` 開頭的同頁片段（例如 SVG 的 `<use href="#icon">`）不改。`style` 屬性、`<style>` 與 `srcset` 裡的相對路徑不改寫，會以 Overlay 頁面為基準，所以 `url()` 要寫在 `style.css`。新樣板先隱藏掛上，等樣式表載入（最多 3 秒）才換掉舊樣板，避免閃出沒有樣式的畫面。觀眾輸入一律以 `textContent` 寫入，不當 HTML 解析。
@@ -159,7 +159,7 @@ apps/
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。
 
-按 ✕ 關閉管理視窗時，Rust 一律 `prevent_close()`：`settings.json` 已存「不再提示」就直接隱藏；否則送事件給管理視窗顯示提示，前端用 app 指令 `close_hint` 回報「已顯示」「取消」或「隱藏」，「隱藏」時一併帶「不再提示」的勾選結果，由 Rust 寫入 `settings.json`。2 秒內沒收到「已顯示」，或提示中又按一次 ✕，就直接隱藏，避免按 ✕ 沒反應。
+按 ✕ 關閉管理視窗時，Rust 一律 `prevent_close()`：`settings.json` 已存「不再提示」就直接隱藏；否則送事件給管理視窗顯示提示，前端用 app 指令 `close_hint` 回報「已顯示」「取消」或「隱藏」，「隱藏」時一併帶「不再提示」的勾選結果，由 Rust 寫入 `settings.json`。2 秒內沒收到「已顯示」，或提示中又按一次 ✕，就直接隱藏，避免按 ✕ 沒反應。設定頁「一般」的「關閉視窗前先詢問」改的是同一個值（管理 API `GET`／`PUT /api/admin/general`，`ask_before_close` 與「不再提示」相反）；Rust 每次按 ✕ 都重新讀取 `settings.json`，所以改了立即生效。
 
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。

@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: cc886cb802480749c341b07cf975e7b40ad4e32eba0439055f38afde3c680507 -->
+<!-- source: docs/decisions.md source-sha256: e174a5892dd99476a8f2d094aaddf5758e8080e07923ce59bcde456055356812 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -22,7 +22,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Event format | Envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source` |
 | Host lifecycle | Same process as Tauri; closing the window hides it to the system tray; single instance |
 | Architecture enforcement | Crate dependencies + architecture tests (run in CI) |
-| Testing | First version: Unit + Integration (real SQLite) + Contract (generated files up to date); UI E2E deferred |
+| Testing | First version: Unit + Integration (real SQLite) + Contract (generated files up to date) + UI E2E (Playwright + Chromium) |
 | CI | GitHub Actions, built with the skeleton, Windows only; also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release |
 | Releases | Always built with `tauri build`; never distribute builds without `tauri/custom-protocol` |
 | Overlay customization | First version allows HTML/CSS templates only |
@@ -81,7 +81,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Icons | PrimeIcons 7.0.0 (exact version); no upgrade to 8 (now under a proprietary license) |
 | Frontend routing | vue-router (history mode, base `/admin/`); the dev admin window loads `admin/` (not `admin/index.html`, which would not match any route), and Vite adds a deep-path fallback |
 | Frontend state | Pinia |
-| Frontend tests | Vitest + Vue Test Utils |
+| Frontend tests | Vitest + Vue Test Utils; UI E2E with Playwright (`@playwright/test`, Apache-2.0, dev dependency only) + Chromium (the same engine as WebView2) |
 | Frontend lint | ESLint (flat config + `eslint-plugin-vue` + `@vue/eslint-config-typescript`), correctness-focused rules only; no formatting or stylistic rules |
 | UI strings | `vue-i18n` + `@intlify/unplugin-vue-i18n`: resource files are precompiled at build time, so no `unsafe-eval` at run time |
 | Single instance | `tauri-plugin-single-instance` |
@@ -96,7 +96,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
 | **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
-| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks, UI E2E |
+| **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
 ## Change log
@@ -117,3 +117,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-14 | Added admin UI layout, drawer component, visual style, frontend routing and icons; UI component library set to the Aura preset (fixed dark, palettes overridden with `definePreset`); opening external URLs limited to hard-coded-URL commands; admin window gets zoom hotkeys and a minimum size | UI/UX planning settled: sidebar + card grid looked too much like a generic back-office admin system, so feature tiles are used; PrimeVue Drawer cannot sit side by side, so the drawer is custom; a command that accepts a URL parameter would let an injected script in the admin window open any URL or custom protocol; zoom hotkeys let users enlarge content (WCAG 1.4.4) |
 | 2026-11-14 | PrimeVue pinned to 4.5.5, `@primeuix/themes` to 2.0.3, PrimeIcons to 7.0.0 (exact versions) | PrimeVue 5, `@primeuix/themes` 3 and PrimeIcons 8 moved to the proprietary PrimeUI License (license key required, source may not be extracted), which is not on the allowlist; these are the last MIT versions. v4 gets no further fixes; revisit if a security issue appears |
 | 2026-11-14 | In dev mode, the proxy port is read on every request from the `settings.json` of the dev data folder (`target\debug\data\`); Vite's `server.fs.deny` also covers Cargo's `target` folder | Vite starts before the app, a data folder's first run may switch ports automatically, and the port page may save a new port, so reading it once at startup can be wrong; the `null` origin can read the files Vite serves, and the dev data folder (settings, logs, WebView2 data) is inside `target` |
+| 2026-11-15 | UI E2E moved from after the MVP into the MVP, with Playwright + Chromium; the manual checklist in dev.md keeps only what automation cannot do | The manual drawer, dialog and layout checks had to be repeated for every slice, and jsdom cannot test them; Chromium is the same engine as WebView2, so the results hold. Real Twitch/OBS connections, the native window ✕, the system tray and actual OBS visuals stay manual |
