@@ -157,7 +157,7 @@ apps/
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。
 
-按 ✕ 關閉管理視窗時，Rust 一律 `prevent_close()`：`settings.json` 已存「不再提示」就直接隱藏；否則送事件給管理視窗顯示提示，前端用 app 指令 `close_hint` 回報「已顯示」「取消」或「隱藏」，「隱藏」時一併帶「不再提示」的勾選結果，由 Rust 寫入 `settings.json`。2 秒內沒收到「已顯示」，或提示中又按一次 ✕，就直接隱藏，避免按 ✕ 沒反應。
+按 ✕ 關閉管理視窗時，Rust 一律 `prevent_close()`：`settings.json` 已存「不再提示」就直接隱藏；否則送事件給管理視窗顯示提示，前端用 app 指令 `close_hint` 回報「已顯示」「取消」或「隱藏」，「隱藏」時一併帶「不再提示」的勾選結果，由 Rust 寫入 `settings.json`。2 秒內沒收到「已顯示」，或提示中又按一次 ✕，就直接隱藏，避免按 ✕ 沒反應。設定頁「一般」的「關閉視窗前先詢問」改的是同一個值（管理 API `GET`／`PUT /api/admin/general`，`ask_before_close` 與「不再提示」相反）；Rust 每次按 ✕ 都重新讀取 `settings.json`，所以改了立即生效。
 
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。

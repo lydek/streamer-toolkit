@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: d98c2c737fa1b1460dc9aea63c7304cf11a75a1c94949a149562bdc89e039db0 -->
+<!-- source: docs/architecture.md source-sha256: d703d6b7a49ba2ee0790889b924b0d2c334f31b454d08d98586c737327439631 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -158,7 +158,7 @@ Twitch's official documentation is the source for these numbers; update this sec
 ## 6. Host lifecycle
 The Host runs in the Tauri process. Closing the admin window only hides it to the system tray and overlays keep running; closing the small port-change page also keeps the app in the tray; only Quit in the tray stops the Host.
 
-When ✕ is clicked on the admin window, Rust always calls `prevent_close()`: if "Don't show again" is already stored in `settings.json`, the window is hidden right away; otherwise Rust sends an event to the admin window to show a hint, and the frontend reports "shown", "cancel" or "hide" with the app command `close_hint`; "hide" also carries the "Don't show again" checkbox value, which Rust writes to `settings.json`. If "shown" does not arrive within 2 seconds, or ✕ is clicked again while the hint is open, the window is hidden directly so that ✕ never appears to do nothing.
+When ✕ is clicked on the admin window, Rust always calls `prevent_close()`: if "Don't show again" is already stored in `settings.json`, the window is hidden right away; otherwise Rust sends an event to the admin window to show a hint, and the frontend reports "shown", "cancel" or "hide" with the app command `close_hint`; "hide" also carries the "Don't show again" checkbox value, which Rust writes to `settings.json`. If "shown" does not arrive within 2 seconds, or ✕ is clicked again while the hint is open, the window is hidden directly so that ✕ never appears to do nothing. "Ask before closing the window" under Settings → General changes the same value (admin API `GET`/`PUT /api/admin/general`; `ask_before_close` is the opposite of "Don't show again"); Rust rereads `settings.json` on every ✕, so a change applies immediately.
 
 ### Data directory
 Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. The app ships as a portable package only, so data defaults to the `data` folder next to the executable.

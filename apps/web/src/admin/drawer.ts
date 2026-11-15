@@ -13,7 +13,7 @@ import { ApiError } from './api'
  *   when one fails, so its error stays visible. The router guard calls `close()` on every navigation.
  * - Focus returns to the opener on close, else to `[data-drawer-tile="<id>"]`, the first `[data-drawer-tile]`,
  *   then `[data-drawer-arrange]` ("Arrange tiles"). Tiles and that button carry these attributes.
- * - Settings inside a drawer use `useDrawerSetting`; PrimeVue overlays inside it (Select, DatePicker…) need
+ * - Settings inside a drawer or on a full page (FullPage.vue shows `error` there) use `useDrawerSetting`; PrimeVue overlays inside it (Select, DatePicker…) need
  *   `appendTo="self"`, because a modal `<dialog>` is in the top layer and covers anything appended to `body`.
  */
 
@@ -82,9 +82,10 @@ function close(): Promise<boolean> {
 
 async function doClose(): Promise<boolean> {
   const id = current.value
-  if (!id) return true
+  // No drawer: the submits are a full page's settings (FullPage.vue), so leaving the page saves them too.
   if (!(await submitAll(submits))) return false
   error.value = ''
+  if (!id) return true
   current.value = null
   await nextTick()
   focusTarget(document, id, opener)?.focus()
