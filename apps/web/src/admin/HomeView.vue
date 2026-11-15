@@ -100,7 +100,7 @@
 
     <AppDrawer id="chat" :title="moduleName('chat')" full-page="/chat">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl" />
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('chat')" />
         <form @submit.prevent="simulateChat">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-user">{{ t('simulate.userName') }}</label>
@@ -118,6 +118,7 @@
 
     <AppDrawer id="alerts" :title="moduleName('alerts')">
       <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('alerts')" />
         <form @submit.prevent="simulateAlert">
           <p>{{ t('simulate.hint') }}</p>
           <span id="sim-kind">{{ t('simulate.kind') }}</span>
@@ -299,12 +300,12 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl() {
+async function copyObsUrl(overlay: 'chat' | 'alerts') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.
     // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/chat/`)
+    await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)
     notify(t('chat.copied'), false)
   } catch {
     notify(t('chat.copyFailed'), true)

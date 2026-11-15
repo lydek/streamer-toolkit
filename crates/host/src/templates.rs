@@ -36,6 +36,11 @@ use crate::{
 #[folder = "../../apps/web/src/overlay/chat/templates"]
 struct BuiltIn;
 
+/// The alert overlay's built-in templates, one folder per ID; there are no user alert templates.
+#[derive(Embed)]
+#[folder = "../../apps/web/src/overlay/alerts/templates"]
+struct AlertsBuiltIn;
+
 /// Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -267,6 +272,13 @@ pub(crate) async fn serve_built_in(UrlPath((id, path)): UrlPath<(String, String)
         Some(t) if t != ChatTemplate::Custom => file_response(&path, |path| built_in(t, path)),
         _ => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+/// `GET /templates/alerts/{*path}`: the alert overlay's template.
+pub(crate) async fn serve_alerts(UrlPath(path): UrlPath<String>) -> Response {
+    file_response(&path, |path| {
+        AlertsBuiltIn::get(&format!("default/{path}")).map(|f| f.data.into_owned())
+    })
 }
 
 /// Every answer under `/templates`, including the ones axum or the guard produce before [`serve`] runs

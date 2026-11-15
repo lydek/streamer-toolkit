@@ -1,5 +1,7 @@
 //! Maps the internal alert to the external `alert` payload.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use toolkit_core::events::{Alert, AlertKind, Source};
@@ -45,6 +47,8 @@ pub struct AlertPayload {
     /// Raw viewer text of a `resubscribe` or `cheer`, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// How long the overlay shows it; the next alert comes after this and a short pause.
+    pub duration_ms: u64,
 }
 
 /// An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in
@@ -69,8 +73,9 @@ pub enum AlertType {
     Alert,
 }
 
-pub(crate) fn payload(alert: Alert) -> Value {
+pub(crate) fn payload(alert: Alert, show: Duration) -> Value {
     let base = AlertPayload {
+        duration_ms: show.as_millis() as u64,
         kind: AlertKindName::Follow,
         user_name: alert.user_name,
         tier: None,

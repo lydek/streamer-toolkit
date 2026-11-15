@@ -1,0 +1,62 @@
+.stage {
+  display: flex;
+  justify-content: center;
+  padding-top: 6vh;
+  font-family: sans-serif;
+}
+
+.alert {
+  --accent: #d8b7ff;
+  max-width: 80vw;
+  padding: 0.6em 1.4em;
+  border: 4px solid var(--accent);
+  border-radius: 16px;
+  background: #1b1730;
+  color: #fff;
+  text-align: center;
+  animation: alert var(--duration, 6000ms) ease-out both;
+}
+
+.alert[data-kind='cheer'] {
+  --accent: #ffc94d;
+}
+
+.alert[data-kind='raid'] {
+  --accent: #7ee0ff;
+}
+
+.title {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: bold;
+  text-shadow: 0 2px 4px #000;
+}
+
+.message {
+  margin: 0.4em 0 0;
+  font-size: 1.5rem;
+  overflow-wrap: anywhere;
+}
+
+/* Pops in, holds, then fades up and out just before the overlay removes it. */
+@keyframes alert {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  6% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  10% {
+    transform: scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1em);
+  }
+}

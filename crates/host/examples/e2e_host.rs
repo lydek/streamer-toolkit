@@ -2,9 +2,12 @@
 //! Usage: `E2E_ADMIN_TOKEN=<random> e2e_host <port> <data-dir>`. Secrets live in memory only and Twitch
 //! points at an address nothing listens on, so no real account or credential is ever touched.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use host::{HostConfig, TwitchEndpoints};
+use host::{AlertTiming, HostConfig, TwitchEndpoints};
 use integrations::secrets::{SecretStore, SecretStoreError};
 
 #[derive(Default)]
@@ -50,6 +53,12 @@ async fn main() {
             eventsub: format!("ws://{unreachable}"),
         },
         obs_secrets: Arc::new(MemorySecret::default()),
+        // Short enough for a queue of alerts to play within a test, long enough to see each one.
+        alert_timing: AlertTiming {
+            show: Duration::from_millis(1500),
+            show_with_message: Duration::from_millis(2000),
+            gap: Duration::from_millis(200),
+        },
     })
     .await
     .expect("bind the E2E Host");

@@ -1,0 +1,19 @@
+<!--
+  Alert overlay template. HTML and CSS only: scripts are removed and never run.
+  - data-alert-stage: where the alert playing now is shown (one at a time).
+  - <template data-alert>: the markup for one alert. Its top element gets data-kind="follow", "subscribe",
+    "resubscribe", "gift", "cheer" or "raid", and the CSS variable --duration (how long it shows, e.g. 6000ms);
+    it is removed when that time is up, so animations should end by then.
+  - data-field="title": what happened, e.g. "Viewer 送了 20 份訂閱！", as plain text.
+  - data-field="message": the viewer's message of a resub or cheer, as plain text; removed when there is none.
+  Relative src/href paths point into this folder.
+-->
+<link rel="stylesheet" href="style.css" />
+<div class="stage" data-alert-stage>
+  <template data-alert>
+    <div class="alert">
+      <p class="title" data-field="title"></p>
+      <p class="message" data-field="message"></p>
+    </div>
+  </template>
+</div>
