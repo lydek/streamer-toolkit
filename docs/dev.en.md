@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: c5d0565d8a15ac94aeef2d4702f65b4ba64269e36ffbc111881f18700230a1af -->
+<!-- source: docs/dev.md source-sha256: 30bea44163ebc12b124b21d6d859a301fd026c9c6dead662ab123a2fb5c9f4f1 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -8,6 +8,7 @@
 - Node: 24 LTS, in `.nvmrc`. Tauri CLI and lefthook are pnpm devDependencies, run with `pnpm tauri …` and `pnpm lefthook …`. pnpm: install once with `npm i -g pnpm`; it then switches versions according to `packageManager` in `package.json`, without Corepack; dependencies are locked by the lockfile; install with `pnpm install --frozen-lockfile`.
 - Visual Studio Build Tools (MSVC) and WebView2 Runtime (required by Tauri).
 - `cargo-deny`: `cargo install --locked cargo-deny` (the pre-push hook and CI both run `cargo deny check`).
+- Playwright's Chromium (for UI E2E): `pnpm --filter web exec playwright install chromium`, once; the browser goes in the user profile, not the repo.
 
 Principle: another Windows PC can get it running by following this document.
 
@@ -16,7 +17,7 @@ Principle: another Windows PC can get it running by following this document.
 - Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
 - API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
-- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push`
+- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `pnpm web:e2e`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push`
 - Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>` (the Vite proxy of `pnpm tauri dev` reads the port only from `target\debug\data\`, so that data's port must match it). Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
@@ -26,38 +27,46 @@ Principle: another Windows PC can get it running by following this document.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
-  - `pre-push` runs the full check in CI order (translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
+  - `pre-push` runs the full check in CI order (translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, UI E2E, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
 
 ## Before every commit (CI runs the same set, Windows only)
 Order: build the frontend first (`dist/` is not under version control, and `rust-embed` needs it to compile), then run the Rust checks.
-Formatting, lint, type checks, tests, architecture tests and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
+Formatting, lint, type checks, tests, architecture tests, UI E2E and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
 Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release (for checking only; nothing is distributed). Releases always use `tauri build`.
 
 ## Testing baseline
 - Test only the behavior we own, not Twitch/OBS themselves.
-- Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date. UI E2E deferred.
+- Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date; UI E2E for browser behavior jsdom cannot test.
+- UI E2E (`apps/web/e2e/`, Playwright + Chromium, `pnpm web:e2e`; build the frontend first):
+  - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain only a dummy token, never a real token or secret; Vite sends the same CSP as the Host, so E2E runs under it (the header the Host actually sends is covered by the `crates/host` Rust tests). Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
+  - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on).
+  - Logic that unit tests can cover still gets unit tests; E2E does not repeat them.
 - Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
 - Migration test: merged versions are globally unique and sorted.
 - Must test: redemption deduplication and state transitions, restoring a backup actually works, migrations lose no data.
 - Test with simulated events instead of real Twitch triggers. Simulated events are tagged `source=simulation` and must never be written to any real business records (redemption records, check-in records).
-- For actual OBS visuals and audio, one live-stream test per completed slice is sufficient.
-- a11y baseline (checked manually once per finished slice): every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), control boundaries and informative icons reach 3:1 (WCAG 1.4.11), and status is never conveyed by color alone.
-  - How to check: walk through with the keyboard; compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; with a 1280px-wide window zoomed to 200% and 400% (equivalent to 640px and 320px wide), there is no horizontal scrollbar, no text is clipped (except deliberate "…" truncation), and every button can be pressed. No screen reader testing, but semantic markup and ARIA are still done properly.
-  - Drawer and dialog (`<dialog>`) behavior cannot be tested in jsdom, so walk through it manually in a real Tauri window:
-    - Wider than 1000px, the drawer (380px wide) sits side by side with the tiles, which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
-    - After crossing the 1000px width threshold, the drawer stays open and focus, input values and scroll positions are preserved.
-    - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it; if that item is gone, it falls back in order to its tile, the first tile, then "Arrange tiles".
-    - After typing without pressing Enter, leaving the drawer in each of these ways has saved the value: ✕, Esc and "Open full page" (once side by side and once modal), plus another tile when side by side and a backdrop click when modal.
-    - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
-    - When the drawer is modal, error messages and their buttons are visible and can be pressed.
-    - With a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
-    - Arranging tiles: dragging with the mouse reorders tiles within a group, and dropping on another group does nothing; below 600px the tiles form a single column and their buttons wrap; pressing ✎ with a drawer open submits the drawer's changes before closing it; with a drawer opened in arrange mode, the first Esc closes only the drawer and the second leaves arrange mode.
-    - The close-window hint: Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
-    - Full pages (e.g. ⚙ Settings): entering focuses "← Home"; it and Alt+← both return home, and history does not grow (pressing Alt+← again on home leaves the page as it is); back on home, focus returns to the tile or ⚙ used to enter, falling back to the first tile, then "Arrange tiles", when that item is gone; the drawer does not reopen.
-    - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Alt+←; when the save fails, the page stays and shows the error.
-    - With the settings page open, check "Don't show again" in the close hint to hide the window, then bring the window back: "Ask before closing the window" is now unchecked.
-  - Logic that can be extracted into pure functions still gets unit tests; the Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
+- a11y baseline: every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), control boundaries and informative icons reach 3:1 (WCAG 1.4.11), and status is never conveyed by color alone. No screen reader testing, but semantic markup and ARIA are still done properly.
+- Checked automatically by UI E2E (CI runs it every time):
+  - Drawer: at window widths above 1000px, the drawer (380px wide) sits side by side with the tiles, which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
+  - After crossing the 1000px width threshold, the drawer stays open and focus, input values and scroll positions are preserved.
+  - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it (the home page has no pending items yet, so a stand-in on the test page is used); if that item is gone, it falls back to its tile (the further fallbacks, the first tile and then "Arrange tiles", are covered by unit tests).
+  - After typing without pressing Enter, leaving the drawer in each of these ways has saved the value: ✕, Esc and "Open full page" (once side by side and once modal), plus another tile when side by side and a backdrop click when modal.
+  - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
+  - When the drawer is modal, error messages and its buttons are visible and can be pressed; with a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
+  - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page's keyboard path works end to end: skip link, chat tile, open the drawer, send a simulated chat, close the drawer (1280px and 800px).
+  - The close-hint `<dialog>` (with fake IPC): the actions sent to Rust are correct when pressing Esc to cancel, clicking "Got it", and checking "Don't show again".
+  - Arranging tiles: an emptied home stays empty after a reload, and "Arrange tiles" brings a tile back; focus on entering, removing, adding and leaving; with a drawer opened in arrange mode (side by side and modal), the first Esc closes only the drawer and the second leaves arrange mode; no horizontal scrollbar at 1280px, 640px and 320px; when a save fails, the tile goes back where it was and the error is shown.
+  - Full pages (⚙ Settings): entering focuses "← Home"; it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
+  - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Back; when the save fails, the page stays and shows the error; when the window gets focus again, "Ask before closing the window" is read again.
+  - Overlay (real Host): editing the chat template applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
+- Checked manually once per finished slice:
+  - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.
+  - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly; when the window is hidden this way with the settings page open and then brought back, "Ask before closing the window" is now unchecked.
+  - Compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; focus is visible; at 200% and 400% zoom no text is clipped (except deliberate "…" truncation) and every button can be pressed.
+  - Arranging tiles: dragging with the mouse reorders tiles within a group, and dropping on another group does nothing; below 600px the tiles form a single column and their buttons wrap; pressing ✎ with a drawer open submits the drawer's changes before closing it.
+  - New pages or flows, and controls the path above does not cover (status lights, "Arrange tiles", other tiles): walk through them with the keyboard first, then add E2E.
+- The Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.
 

@@ -273,15 +273,16 @@ function saveTiles(next: string[] | null): Promise<boolean> | undefined {
     .finally(() => (savingTiles = false))
 }
 
-// Esc leaves arrange mode, but an open drawer or dialog (the close hint) takes it first; a drawer's close is
-// still pending when this runs.
+// Esc leaves arrange mode, but an open drawer or dialog (the close hint) takes it first. Listens in the capture
+// phase: browsers run microtasks between listeners, so the drawer's own Esc listener may have finished closing it
+// before a bubbling listener here would run.
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape' || e.defaultPrevented || !arranging.value) return
   if (!drawer.current.value && !document.querySelector('dialog[open]')) leaveArrange()
 }
 
 onMounted(async () => {
-  document.addEventListener('keydown', onKeydown)
+  document.addEventListener('keydown', onKeydown, true)
   await run(async () => {})
   await focusReturnTarget()
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
@@ -293,7 +294,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   window.clearInterval(timer)
-  document.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('keydown', onKeydown, true)
 })
 </script>
 

@@ -9,6 +9,9 @@ node_modules/
 dist/
 dist-port/
 *.tsbuildinfo
+# Playwright results and traces
+test-results/
+playwright-report/
 
 # Tauri generated schemas
 apps/desktop/**/gen/schemas/

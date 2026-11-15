@@ -171,8 +171,10 @@ function remove(id: string) {
   apply(
     order.filter((other) => other !== id),
     async () => {
-      if (neighbour) await focusOn('data-tile', neighbour, ['remove'])
-      else root.value?.querySelector<HTMLElement>('#available-heading')?.focus()
+      if (neighbour) return focusOn('data-tile', neighbour, ['remove'])
+      // The "Available" section may only render now that the tile is in it.
+      await nextTick()
+      root.value?.querySelector<HTMLElement>('#available-heading')?.focus()
     },
     () => t('arrange.removed', { name: props.name(id) }),
     () => focusOn('data-tile', id, ['remove']),
