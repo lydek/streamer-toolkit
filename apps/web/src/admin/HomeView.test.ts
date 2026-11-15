@@ -147,7 +147,8 @@ describe('HomeView arrange mode', () => {
     await flushPromises()
     document.querySelector<HTMLButtonElement>('[data-tile="chat"] [data-action="remove"]')!.click()
     await flushPromises()
-    expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', { body: [] })
+    // The alerts tile stays in the order, hidden while its module is off.
+    expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', { body: ['alerts'] })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()
     expect(document.querySelector('[data-drawer-tile="chat"]')).toBeNull()

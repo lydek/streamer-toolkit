@@ -6,4 +6,4 @@ mod domain;
 mod infrastructure;
 
 pub use application::AlertsService;
-pub use infrastructure::AlertEvent;
+pub use infrastructure::{AlertEvent, AlertKindName};

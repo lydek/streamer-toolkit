@@ -567,6 +567,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn simulated_alert_answers_bad_bodies_with_an_error_code() {
+        let send = |body: &'static str| {
+            get_req("/api/admin/simulate/alert", "127.0.0.1:47810")
+                .method(Method::POST)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap()
+        };
+        for (body, code) in [
+            (r#"{"kind":"nope"}"#, Some("simulate.invalid_alert")),
+            (
+                r#"{"kind":"raid","amount":"many"}"#,
+                Some("simulate.invalid_alert"),
+            ),
+            (
+                r#"{"kind":"raid","amount":0}"#,
+                Some("simulate.invalid_amount"),
+            ),
+            (r#"{"kind":"raid","amount":5}"#, None),
+        ] {
+            let res = app().oneshot(send(body)).await.unwrap();
+            match code {
+                Some(code) => {
+                    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{body}");
+                    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                        .await
+                        .unwrap();
+                    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    assert_eq!(json["code"], code, "{body}");
+                }
+                None => assert_eq!(res.status(), StatusCode::NO_CONTENT, "{body}"),
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn module_switch_rejects_unknown_modules() {
         let req = get_req("/api/admin/modules/nope", "127.0.0.1:47810")
             .method(Method::PUT)

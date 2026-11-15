@@ -47,6 +47,8 @@ export interface LiveState {
   lastSeq: number
   obs?: Schemas['ObsStatusPayload']
   lastChat?: Schemas['ChatMessageEvent']
+  /** Since this connection opened: alerts are not in snapshots. */
+  lastAlert?: Schemas['AlertEvent']
 }
 
 export function applyLive(state: LiveState, msg: Incoming): LiveState {
@@ -63,6 +65,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   const next = { ...state, lastSeq: msg.seq }
   if (msg.type === 'obs.status') next.obs = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
+  if (msg.type === 'alert') next.lastAlert = msg
   return next
 }
 
@@ -126,7 +129,10 @@ export interface Tile {
 }
 
 /** Default home tiles, one per module; a disabled module shows no tile. */
-export const TILES: Tile[] = [{ id: 'chat', group: 'live', icon: 'pi pi-comments' }]
+export const TILES: Tile[] = [
+  { id: 'chat', group: 'live', icon: 'pi pi-comments' },
+  { id: 'alerts', group: 'live', icon: 'pi pi-bell' },
+]
 
 /** Non-empty groups in display order. */
 export function groupTiles(tiles: Tile[]) {

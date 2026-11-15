@@ -263,6 +263,37 @@
         }
       }
     },
+    "/api/admin/simulate/alert": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sends a follow, sub, resub, gift, cheer or raid tagged `source=simulation` through the same path as Twitch.",
+        "operationId": "simulate_alert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatedAlert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/simulate/chat": {
       "post": {
         "tags": [
@@ -1039,6 +1070,34 @@
           },
           "status": {
             "$ref": "#/components/schemas/AuthStatus"
+          }
+        }
+      },
+      "SimulatedAlert": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "amount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Months (`resubscribe`), subs (`gift`, 1 to 100), Bits (`cheer`) or raiders (`raid`), 1 to 100000;\nignored for the other kinds.",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AlertKindName"
+          },
+          "message": {
+            "type": "string",
+            "description": "Up to 500 characters (`resubscribe`, `cheer`); ignored for the other kinds."
+          },
+          "userName": {
+            "type": "string",
+            "description": "Up to 25 characters; empty means \"Simulator\"."
           }
         }
       },

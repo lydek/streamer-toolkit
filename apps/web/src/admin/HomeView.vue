@@ -115,17 +115,55 @@
         <ChatNow v-model:log="chatLog" :broadcaster-id="broadcasterId" :disconnected="live.status === 'failed'" />
       </template>
     </AppDrawer>
+
+    <AppDrawer id="alerts" :title="moduleName('alerts')">
+      <template #actions>
+        <form @submit.prevent="simulateAlert">
+          <p>{{ t('simulate.hint') }}</p>
+          <span id="sim-kind">{{ t('simulate.kind') }}</span>
+          <SelectButton
+            v-model="simAlert.kind"
+            :options="ALERT_KINDS"
+            :option-label="(k: AlertKind) => t(`alerts.kinds.${k}`)"
+            :allow-empty="false"
+            aria-labelledby="sim-kind"
+          />
+          <label for="sim-alert-user">{{ t('simulate.userName') }}</label>
+          <InputText id="sim-alert-user" v-model="simAlert.userName" autocomplete="off" maxlength="25" />
+          <template v-if="simAlert.kind in AMOUNT_MAX">
+            <label for="sim-amount">{{ t(`alerts.amount.${simAlert.kind}`) }}</label>
+            <InputNumber
+              v-model="simAlert.amount"
+              input-id="sim-amount"
+              :min="1"
+              :max="AMOUNT_MAX[simAlert.kind]"
+              :use-grouping="false"
+              required
+            />
+          </template>
+          <template v-if="simAlert.kind === 'resubscribe' || simAlert.kind === 'cheer'">
+            <label for="sim-alert-message">{{ t('simulate.message') }}</label>
+            <InputText id="sim-alert-message" v-model="simAlert.message" autocomplete="off" maxlength="500" />
+          </template>
+          <Button type="submit" :label="t('simulate.sendAlert')" icon="pi pi-send" :disabled="busy" />
+        </form>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
+import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { errorMessage } from '../i18n'
+import { ALERT_KINDS, type AlertKind, alertTitle } from '../overlay/alerts/alerts'
 import { ApiError, type Schemas, api, client } from './api'
 import AppDrawer from './AppDrawer.vue'
 import ArrangeTiles from './ArrangeTiles.vue'
@@ -158,6 +196,9 @@ const loadFailed = ref(false)
 const busy = ref(false)
 const simUser = ref('')
 const simText = ref('')
+// The Host's limits for the kinds that take an amount (crates/host/src/admin.rs).
+const AMOUNT_MAX: Partial<Record<AlertKind, number>> = { resubscribe: 100000, gift: 100, cheer: 100000, raid: 100000 }
+const simAlert = reactive({ kind: 'follow' as AlertKind, userName: '', amount: 5 as number | null, message: '' })
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
@@ -183,11 +224,15 @@ const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(save
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
 
 const lines = computed<Record<string, Line>>(() => {
-  const { status, lastChat } = live.value
+  const { status, lastChat, lastAlert } = live.value
   return {
     chat:
       status === 'open'
         ? { state: 'ready', text: lastChat ? `${lastChat.payload.userName}：${lastChat.payload.text}` : t('home.chatEmpty') }
+        : { state: status },
+    alerts:
+      status === 'open'
+        ? { state: 'ready', text: lastAlert ? alertTitle(lastAlert.payload) : t('alerts.empty') }
         : { state: status },
   }
 })
@@ -245,6 +290,13 @@ const simulateChat = () =>
     await api(client.POST('/api/admin/simulate/chat', { body: { userName: simUser.value, text: simText.value } }))
     simText.value = ''
     notify(t('simulate.sent'), false)
+  })
+
+const simulateAlert = () =>
+  run(async () => {
+    const { kind, userName, amount, message } = simAlert
+    await api(client.POST('/api/admin/simulate/alert', { body: { kind, userName, amount, message } }))
+    notify(t('simulate.alertSent'), false)
   })
 
 async function copyObsUrl() {

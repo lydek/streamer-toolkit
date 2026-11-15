@@ -118,6 +118,23 @@ describe('applyLive', () => {
     s = applyLive(s, chat(7, 'hi'))
     expect(s).toMatchObject({ lastSeq: 7, obs: { state: 'error' }, lastChat: { payload: { text: 'hi' } } })
   })
+
+  it('keeps the latest alert until a new snapshot, which never holds alerts', () => {
+    const alert = (seq: number): Schemas['AlertEvent'] => ({
+      id: `a${seq}`,
+      type: 'alert',
+      version: 1,
+      seq,
+      occurredAt: '',
+      source: 'simulation',
+      payload: { kind: 'follow', userName: 'Fan', durationMs: 6000 },
+    })
+    let s = applyLive(start, snapshot(1, {}))
+    s = applyLive(s, alert(2))
+    expect(s.lastAlert?.id).toBe('a2')
+    expect(applyLive(s, alert(2))).toBe(s)
+    expect(applyLive(s, snapshot(3, {})).lastAlert).toBeUndefined()
+  })
 })
 
 describe('useLiveEvents', () => {

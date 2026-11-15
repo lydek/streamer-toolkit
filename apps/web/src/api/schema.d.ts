@@ -90,6 +90,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/simulate/alert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sends a follow, sub, resub, gift, cheer or raid tagged `source=simulation` through the same path as Twitch. */
+        post: operations["simulate_alert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/chat": {
         parameters: {
             query?: never;
@@ -373,6 +390,19 @@ export interface components {
             client_id: string;
             status: components["schemas"]["AuthStatus"];
         };
+        SimulatedAlert: {
+            /**
+             * Format: int32
+             * @description Months (`resubscribe`), subs (`gift`, 1 to 100), Bits (`cheer`) or raiders (`raid`), 1 to 100000;
+             *     ignored for the other kinds.
+             */
+            amount?: number | null;
+            kind: components["schemas"]["AlertKindName"];
+            /** @description Up to 500 characters (`resubscribe`, `cheer`); ignored for the other kinds. */
+            message?: string;
+            /** @description Up to 25 characters; empty means "Simulator". */
+            userName?: string;
+        };
         SimulatedChat: {
             text: string;
             userName?: string;
@@ -655,6 +685,35 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    simulate_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulatedAlert"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
