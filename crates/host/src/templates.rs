@@ -1,15 +1,16 @@
-//! User chat templates in `<data>/templates/chat/`: served read-only to overlays and watched for changes
+//! Chat overlay templates: the built-in ones shipped with the app, or the user's own in `<data>/templates/chat/`
+//! (selected as `custom`), served read-only to overlays; the user folder is watched for changes
 //! (docs/architecture.md §本機 API 安全 → 使用者樣板).
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
 
 use axum::{
     Json, Router,
-    extract::{Path as UrlPath, Request, State},
+    extract::{Path as UrlPath, Request, State, rejection::JsonRejection},
     http::{HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -20,15 +21,51 @@ use serde::{Deserialize, Serialize};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
+    settings,
 };
 use utoipa::ToSchema;
 
-use crate::OVERLAY_CSP;
+use crate::{
+    OVERLAY_CSP,
+    admin::{ErrorBody, error},
+};
 
-/// The shipped default; also what overlays get while the user template is missing or broken.
+/// The built-in templates, one folder per [`ChatTemplate`] ID. `default` is also what overlays get while the
+/// user template is missing or broken.
 #[derive(Embed)]
-#[folder = "../../apps/web/src/overlay/chat/default-template"]
-struct DefaultChat;
+#[folder = "../../apps/web/src/overlay/chat/templates"]
+struct BuiltIn;
+
+/// Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ChatTemplate {
+    Default,
+    Compact,
+    Bubble,
+    Custom,
+}
+
+impl ChatTemplate {
+    const ALL: [Self; 4] = [Self::Default, Self::Compact, Self::Bubble, Self::Custom];
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Compact => "compact",
+            Self::Bubble => "bubble",
+            Self::Custom => "custom",
+        }
+    }
+
+    /// A hand-edited `settings.json` may hold anything; unknown values mean the default.
+    fn from_id(id: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|t| t.id() == id)
+            .unwrap_or(Self::Default)
+    }
+}
 
 const ENTRY: &str = "template.html";
 const MAX_ENTRY_BYTES: u64 = 1024 * 1024;
@@ -66,63 +103,101 @@ pub(crate) struct TemplateChangedPayload {
 /// `GET /api/admin/templates/chat`.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct TemplateStatus {
-    /// `template.missing`, `template.unreadable` or `template.invalid` while overlays get the default
-    /// template instead of the user's; `null` when the user template is in use.
+    selected: ChatTemplate,
+    /// With `custom` selected: `template.missing`, `template.unreadable` or `template.invalid` while overlays
+    /// get the default template instead of the user's; otherwise `null`.
     #[schema(required)]
     error: Option<String>,
 }
 
+/// `PUT /api/admin/templates/chat`.
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct TemplateChoice {
+    selected: ChatTemplate,
+}
+
 pub(crate) struct Templates {
+    data_dir: PathBuf,
     dir: PathBuf,
-    /// Why the user template is not in use (an error code), or `None` when it is.
+    bus: Arc<EventBus>,
+    selected: RwLock<ChatTemplate>,
+    switching: Mutex<()>,
+    /// Why the user template is not usable (an error code), or `None` when it is.
     error: RwLock<Option<&'static str>>,
 }
 
 impl Templates {
-    /// Copies the default template on first run, checks the user template and starts watching it.
+    /// Reads the selection, checks the user template and starts watching it.
     pub(crate) fn start(data_dir: &Path, bus: Arc<EventBus>) -> Arc<Self> {
         let dir = data_dir.join("templates").join("chat");
-        if !dir.exists() {
-            // A failed copy shows up as `template.missing`; overlays still get the default.
-            let _ = write_defaults(&dir);
-        }
         // Fingerprint before the check, so an edit in between is caught by the first poll.
         let seen = fingerprint(&dir);
         let templates = Arc::new(Self {
+            data_dir: data_dir.to_path_buf(),
+            selected: RwLock::new(ChatTemplate::from_id(
+                &settings::load(data_dir).chat_template,
+            )),
+            switching: Mutex::new(()),
             error: RwLock::new(check(&dir).err()),
             dir,
+            bus,
         });
-        tokio::spawn(watch(templates.clone(), bus, seen));
+        tokio::spawn(watch(templates.clone(), seen));
         templates
     }
 
-    pub(crate) fn error(&self) -> Option<&'static str> {
-        *self.error.read().unwrap()
+    fn selected(&self) -> ChatTemplate {
+        *self.selected.read().unwrap()
     }
 
+    /// Why the selected template is not in use; only the user's can fail.
+    pub(crate) fn error(&self) -> Option<&'static str> {
+        match self.selected() {
+            ChatTemplate::Custom => *self.error.read().unwrap(),
+            _ => None,
+        }
+    }
+
+    /// A file of the selected template.
     fn file(&self, path: &str) -> Response {
-        let Some(content_type) = allowed_type(path) else {
-            // Scripts and anything else outside the allowlist are never served.
-            return StatusCode::NOT_FOUND.into_response();
-        };
-        if !path.split('/').all(plain_segment) {
-            return StatusCode::BAD_REQUEST.into_response();
-        }
-        let data = match self.error() {
-            None => read_inside(&self.dir, path),
-            Some(_) => DefaultChat::get(path).map(|f| f.data.into_owned()),
-        };
-        match data {
-            Some(data) => ([(header::CONTENT_TYPE, content_type)], data).into_response(),
-            None => StatusCode::NOT_FOUND.into_response(),
-        }
+        // Read once, so a switch in the middle cannot mix two selections.
+        let selected = self.selected();
+        file_response(path, |path| match selected {
+            ChatTemplate::Custom => match *self.error.read().unwrap() {
+                None => read_inside(&self.dir, path),
+                Some(_) => built_in(ChatTemplate::Default, path),
+            },
+            t => built_in(t, path),
+        })
+    }
+}
+
+fn built_in(t: ChatTemplate, path: &str) -> Option<Vec<u8>> {
+    BuiltIn::get(&format!("{}/{path}", t.id())).map(|f| f.data.into_owned())
+}
+
+/// Checks `path` against the allowlist and its segments, then answers with what `read` finds.
+fn file_response(path: &str, read: impl FnOnce(&str) -> Option<Vec<u8>>) -> Response {
+    let Some(content_type) = allowed_type(path) else {
+        // Scripts and anything else outside the allowlist are never served.
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if !path.split('/').all(plain_segment) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    match read(path) {
+        Some(data) => ([(header::CONTENT_TYPE, content_type)], data).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
 /// Admin routes; the caller adds the token check.
 pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
     Router::new()
-        .route("/api/admin/templates/chat", get(chat_template))
+        .route(
+            "/api/admin/templates/chat",
+            get(chat_template).put(select_chat_template),
+        )
         .with_state(t)
 }
 
@@ -134,11 +209,48 @@ pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
 )]
 pub(crate) async fn chat_template(State(t): State<Arc<Templates>>) -> Json<TemplateStatus> {
     Json(TemplateStatus {
+        selected: t.selected(),
         error: t.error().map(Into::into),
     })
 }
 
-/// `GET /templates/chat/{*path}`; the headers come from [`headers`].
+/// Switches the chat overlay template and saves the choice; overlays reload it at once (`template.changed`).
+#[utoipa::path(
+    put,
+    path = "/api/admin/templates/chat",
+    tag = "admin",
+    request_body = TemplateChoice,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 500, body = ErrorBody),
+    )
+)]
+pub(crate) async fn select_chat_template(
+    State(t): State<Arc<Templates>>,
+    body: Result<Json<TemplateChoice>, JsonRejection>,
+) -> Response {
+    // Unknown IDs and malformed bodies get one error code instead of axum's plain-text rejection.
+    let Ok(Json(TemplateChoice { selected })) = body else {
+        return error(StatusCode::BAD_REQUEST, "template.unknown");
+    };
+    let saved = tokio::task::spawn_blocking(move || {
+        // One switch at a time, so the file and memory never disagree; readers of `selected` never wait on
+        // the save.
+        let _turn = t.switching.lock().unwrap();
+        settings::update(&t.data_dir, |s| s.chat_template = selected.id().into())?;
+        *t.selected.write().unwrap() = selected;
+        publish_changed(&t.bus);
+        std::io::Result::Ok(())
+    })
+    .await;
+    match saved {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        _ => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
+    }
+}
+
+/// `GET /templates/chat/{*path}`, the selected template; the headers come from [`headers`].
 pub(crate) async fn serve(
     State(t): State<Arc<Templates>>,
     UrlPath(path): UrlPath<String>,
@@ -147,6 +259,14 @@ pub(crate) async fn serve(
     tokio::task::spawn_blocking(move || t.file(&path))
         .await
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+/// `GET /templates/built-in/chat/{id}/{*path}`: any built-in template, for the admin UI's previews.
+pub(crate) async fn serve_built_in(UrlPath((id, path)): UrlPath<(String, String)>) -> Response {
+    match ChatTemplate::ALL.into_iter().find(|t| t.id() == id) {
+        Some(t) if t != ChatTemplate::Custom => file_response(&path, |path| built_in(t, path)),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// Every answer under `/templates`, including the ones axum or the guard produce before [`serve`] runs
@@ -215,15 +335,6 @@ fn read_inside(base: &Path, rel: &str) -> Option<Vec<u8>> {
     std::fs::read(path).ok()
 }
 
-fn write_defaults(dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    for name in DefaultChat::iter() {
-        let file = DefaultChat::get(&name).expect("listed by iter");
-        std::fs::write(dir.join(&*name), file.data)?;
-    }
-    Ok(())
-}
-
 /// Checks for the markers the overlay binds to (`apps/web/src/overlay/chat/template.ts`).
 fn check(dir: &Path) -> Result<(), &'static str> {
     let path = dir.join(ENTRY);
@@ -289,7 +400,7 @@ fn fingerprint(dir: &Path) -> Vec<FileStamp> {
 }
 
 /// Polls instead of using OS file events: no extra dependency, and a 1 s scan of a small folder is cheap.
-async fn watch(t: Arc<Templates>, bus: Arc<EventBus>, mut last: Vec<FileStamp>) {
+async fn watch(t: Arc<Templates>, mut last: Vec<FileStamp>) {
     loop {
         tokio::time::sleep(POLL).await;
         let dir = t.dir.clone();
@@ -302,7 +413,10 @@ async fn watch(t: Arc<Templates>, bus: Arc<EventBus>, mut last: Vec<FileStamp>) 
                 .await
                 .unwrap_or(Some("template.unreadable"));
             *t.error.write().unwrap() = error;
-            publish_changed(&bus);
+            // Overlays showing a built-in template have nothing to reload.
+            if t.selected() == ChatTemplate::Custom {
+                publish_changed(&t.bus);
+            }
         }
         last = now;
     }
@@ -323,8 +437,46 @@ fn publish_changed(bus: &EventBus) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// A user template folder holding a copy of the built-in default.
+    pub(crate) fn write_default(dir: &Path) {
+        std::fs::create_dir_all(dir).unwrap();
+        for name in ["template.html", "style.css"] {
+            std::fs::write(
+                dir.join(name),
+                built_in(ChatTemplate::Default, name).unwrap(),
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn every_built_in_template_is_usable_and_listed() {
+        let mut folders: Vec<String> = BuiltIn::iter()
+            .map(|f| f.split('/').next().unwrap().to_owned())
+            .collect();
+        folders.sort();
+        folders.dedup();
+        let listed: Vec<&str> = ChatTemplate::ALL
+            .into_iter()
+            .filter(|t| *t != ChatTemplate::Custom)
+            .map(ChatTemplate::id)
+            .collect();
+        let mut sorted = listed.clone();
+        sorted.sort();
+        assert_eq!(folders, sorted);
+        for id in listed {
+            let t = ChatTemplate::from_id(id);
+            assert_eq!(t.id(), id);
+            let html = String::from_utf8(built_in(t, "template.html").unwrap()).unwrap();
+            assert!(has_markers(&html), "{id}");
+            assert!(built_in(t, "style.css").is_some(), "{id}");
+        }
+        assert_eq!(ChatTemplate::from_id("nope"), ChatTemplate::Default);
+        assert_eq!(ChatTemplate::from_id("custom"), ChatTemplate::Custom);
+    }
 
     #[tokio::test]
     async fn changed_event_type_matches_the_bus() {
@@ -351,6 +503,44 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn switching_saves_and_tells_overlays() {
+        let dir = std::env::temp_dir().join(format!("st-tpl-select-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(EventBus::default());
+        let t = Templates::start(&dir, bus.clone());
+        let (_, mut events) = bus.subscribe();
+        let choice = TemplateChoice {
+            selected: ChatTemplate::Compact,
+        };
+        let res = select_chat_template(State(t.clone()), Ok(Json(choice))).await;
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert_eq!(t.selected(), ChatTemplate::Compact);
+        assert_eq!(settings::load(&dir).chat_template, "compact");
+        let wire: serde_json::Value = serde_json::from_str(&events.recv().await.unwrap()).unwrap();
+        assert_eq!(wire["type"], CHANGED_EVENT);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_failed_save_keeps_the_template_and_tells_nobody() {
+        let dir = std::env::temp_dir().join(format!("st-tpl-save-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // A folder where the temp settings file goes makes the save fail.
+        std::fs::create_dir_all(dir.join("settings.json.tmp")).unwrap();
+        let bus = Arc::new(EventBus::default());
+        let t = Templates::start(&dir, bus.clone());
+        let (_, mut events) = bus.subscribe();
+        let choice = TemplateChoice {
+            selected: ChatTemplate::Bubble,
+        };
+        let res = select_chat_template(State(t.clone()), Ok(Json(choice))).await;
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(t.selected(), ChatTemplate::Default);
+        assert!(events.try_recv().is_err(), "no template.changed");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -389,7 +579,7 @@ mod tests {
         assert_eq!(check(&dir), Err("template.invalid"));
         std::fs::write(dir.join(ENTRY), [0xff, 0xfe, 0x00]).unwrap();
         assert_eq!(check(&dir), Err("template.unreadable"));
-        write_defaults(&dir).unwrap();
+        write_default(&dir);
         assert_eq!(check(&dir), Ok(()));
         // The default's header comment names both markers; without the real elements it is still invalid.
         let default = std::fs::read_to_string(dir.join(ENTRY)).unwrap();

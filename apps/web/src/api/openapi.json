@@ -311,6 +311,44 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Switches the chat overlay template and saves the choice; overlays reload it at once (`template.changed`).",
+        "operationId": "select_chat_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/admin/twitch": {
@@ -640,6 +678,16 @@
         "type": "string",
         "enum": [
           "chat.message"
+        ]
+      },
+      "ChatTemplate": {
+        "type": "string",
+        "description": "Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.",
+        "enum": [
+          "default",
+          "compact",
+          "bubble",
+          "custom"
         ]
       },
       "ClientIdBody": {
@@ -1004,10 +1052,23 @@
           "template.changed"
         ]
       },
+      "TemplateChoice": {
+        "type": "object",
+        "description": "`PUT /api/admin/templates/chat`.",
+        "required": [
+          "selected"
+        ],
+        "properties": {
+          "selected": {
+            "$ref": "#/components/schemas/ChatTemplate"
+          }
+        }
+      },
       "TemplateStatus": {
         "type": "object",
         "description": "`GET /api/admin/templates/chat`.",
         "required": [
+          "selected",
           "error"
         ],
         "properties": {
@@ -1016,7 +1077,10 @@
               "string",
               "null"
             ],
-            "description": "`template.missing`, `template.unreadable` or `template.invalid` while overlays get the default\ntemplate instead of the user's; `null` when the user template is in use."
+            "description": "With `custom` selected: `template.missing`, `template.unreadable` or `template.invalid` while overlays\nget the default template instead of the user's; otherwise `null`."
+          },
+          "selected": {
+            "$ref": "#/components/schemas/ChatTemplate"
           }
         }
       }

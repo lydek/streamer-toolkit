@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 37289bed69dbe43af9c3644f38e03d2d974bd6a1ea92cfeda6ba862388eb6703 -->
+<!-- source: docs/dev.md source-sha256: a6fa66b4fb5045399ff2dabe855ba6a04ca298eb6f527536ef864fc645d5b3d9 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -34,7 +34,7 @@ Principle: another Windows PC can get it running by following this document.
   - `pre-push` runs the checks in CI order (which steps it skips is below; translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, UI E2E, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
   - `pre-push` runs only the steps the pushed files can affect (CI skips nothing and always runs the full check):
     - Docs only (root `*.md`, `docs/`): only the translation check; a change to `docs/decisions.md` also runs the script tests and the frontend license check (the license allowlist lives in that file).
-    - Frontend only (`apps/web/`): skips `cargo fmt`, both `cargo clippy` runs and `cargo deny check`; the rest runs. Changes limited to the admin UI (`apps/web/src/admin/`) or E2E (`apps/web/e2e/`) also skip `cargo test`; other frontend changes run it, because the Host embeds and tests `apps/web/dist` and the overlay's default template.
+    - Frontend only (`apps/web/`): skips `cargo fmt`, both `cargo clippy` runs and `cargo deny check`; the rest runs. Changes limited to the admin UI (`apps/web/src/admin/`) or E2E (`apps/web/e2e/`) also skip `cargo test`; other frontend changes run it, because the Host embeds `apps/web/dist`, and the Rust tests also check the overlay page and the built-in templates (`apps/web/src/overlay/chat/templates/`).
     - Any other file (Rust, `Cargo.*`, `lefthook.yml`, `.github/`, `package.json`, `pnpm-lock.yaml`, `rust-toolchain.toml`, `scripts/` and so on): everything runs.
     - Files are compared with the remote branch (for a new branch, `origin`'s default branch); lefthook does not list paths that no longer exist (a renamed file may not appear at all), so a push that only deletes or renames files may skip checks, and CI catches it.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
@@ -68,7 +68,8 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - Arranging tiles: an emptied home stays empty after a reload, and "Arrange tiles" brings a tile back; focus on entering, removing, adding and leaving; with a drawer opened in arrange mode (side by side and modal), the first Esc closes only the drawer and the second leaves arrange mode; no horizontal scrollbar at 1280px, 640px and 320px; when a save fails, the tile goes back where it was and the error is shown.
   - Full pages (⚙ Settings): entering focuses "← Home"; it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
   - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Back; when the save fails, the page stays and shows the error; when the window gets focus again, "Ask before closing the window" is read again.
-  - Overlay (real Host): editing the chat template applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
+  - The template picker on the chat full page: clicking a preview picks that template and saves it; arrow keys move the pick; a failed save goes back to the template in use and shows the error; no sideways scroll at 1280px and 320px.
+  - Overlay (real Host): picking a built-in template applies at once, without a reload; editing the folder's custom template (`custom`) applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
 - Checked manually once per finished slice:
   - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.
   - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly; when the window is hidden this way with the settings page open and then brought back, "Ask before closing the window" is now unchecked.

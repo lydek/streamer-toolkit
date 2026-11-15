@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 87bb0be3d6539ff5a43e352b2d1289b3c6d4b7b16d9b7f9dab347b1db29e475e -->
+<!-- source: docs/scope.md source-sha256: d65f60fd8647f523058486dccf3cdbe6fb680759f7486dd324c8ccdd655076fd -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -18,7 +18,7 @@ Build in order. Try each slice on a real stream when it is done, and move on onl
 | # | Slice | What you can see when it is done |
 |---|---|---|
 | 0 | Walking skeleton | First-run setup guides registering a Twitch app and entering its Client ID, logs in with the Device Code Flow, stores tokens in keyring and refreshes them automatically; the Tauri window starts the local Host (if the port is taken, it says so and lets you change it); an OBS Browser Source loads a local URL and shows Twitch chat; every foundation marked "Build with the skeleton" in [decisions.en.md](decisions.en.md) is in place |
-| 1 | Custom chat overlay | Editing the HTML/CSS template applies in OBS immediately; on disconnect the overlay shows the status and reconnects automatically; the admin UI shows Twitch and OBS (OBS WebSocket) connection status |
+| 1 | Custom chat overlay | Picking a built-in template applies in OBS immediately; on disconnect the overlay shows the status and reconnects automatically; the admin UI shows Twitch and OBS (OBS WebSocket) connection status |
 | 2 | Follow and subscription alerts | Events trigger overlay animations and sounds; testable with the event simulator, without waiting for a real follow |
 | 3 | Redemption records | Every channel-point redemption is stored (deduplicated by redemption ID) and searchable in the UI; the first complex module |
 | 4 | Daily check-in | Viewers check in by redeeming channel points or with a chat command; the streamer can manually register or backfill check-ins in the UI; one check-in per viewer per business day, with the day boundary set by the streamer's time zone; old check-in data can be imported (preview before import, deduplication, original file untouched; supported formats to be confirmed) |

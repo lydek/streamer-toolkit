@@ -24,6 +24,9 @@ pub struct Settings {
     /// is written); `Some([])`: the broadcaster removed every tile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_tiles: Option<Vec<String>>,
+    /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
+    /// checks it; an unknown value means the default.
+    pub chat_template: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +54,7 @@ impl Default for Settings {
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,
+            chat_template: "default".into(),
         }
     }
 }

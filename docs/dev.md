@@ -33,7 +33,7 @@
   - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
   - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
     - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
-    - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌並測試 `apps/web/dist` 與 Overlay 的預設樣板。
+    - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`）。
     - 改到其他任何檔案（Rust、`Cargo.*`、`lefthook.yml`、`.github/`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`scripts/` 等）：全部照跑。
     - 比對對象是遠端分支（新分支則是 `origin` 的預設分支）；lefthook 不列出已經不存在的路徑（改名的檔案可能完全不出現），所以只刪除或改名檔案的推送可能跳過檢查，由 CI 把關。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
@@ -67,7 +67,8 @@
   - 整理功能磚：清空首頁後重新載入仍是空的，再從「整理功能磚」加回功能磚；進入、移除、加入、離開時的焦點；整理模式中打開抽屜（並排與 modal），第一次按 Esc 只關抽屜，再按一次才離開整理模式；1280px、640px、320px 沒有橫向捲軸；儲存失敗時功能磚回到原處並顯示錯誤。
   - 完整頁（⚙ 設定）：進入時焦點在「← 回首頁」；按它或上一頁（Alt+←）都回到首頁，且歷史紀錄沒有變長；回首頁後焦點回到 ⚙（從抽屜的「開啟完整頁」進入時回到功能磚，以及再往下的退回順序，由單元測試涵蓋），抽屜不會重新打開。
   - 設定頁的欄位打字後不按 Enter，直接按「← 回首頁」或上一頁離開，值都已寫入；儲存失敗時留在設定頁並顯示錯誤；視窗重新取得焦點時，重新讀取「關閉視窗前先詢問」。
-  - Overlay（真的 Host）：改聊天樣板後立即套用；樣板裡的 `<script>`、事件屬性與 `.js` 檔都不會執行；壞掉的樣板退回預設樣板。
+  - 聊天室完整頁的樣板選擇器：點預覽就選定那一款並送出；方向鍵移動選擇；儲存失敗時退回原本的樣板並顯示錯誤；1280px、320px 沒有橫向捲軸。
+  - Overlay（真的 Host）：選擇內建樣板後立即套用，不重新載入；改資料夾的自訂樣板（`custom`）後立即套用；樣板裡的 `<script>`、事件屬性與 `.js` 檔都不會執行；壞掉的樣板退回預設樣板。
 - 每個切片完成時人工檢查一次：
   - 真的 OBS 連線與實際畫面、音效（直播試用一次）；動到 Twitch 登入或聊天的切片，另測真的 Twitch 登入與聊天。
   - 原生視窗 ✕ 與系統匣：按 ✕ 出現提示；按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣；設定頁開著時這樣隱藏視窗，再叫出視窗，「關閉視窗前先詢問」已變成未勾選。

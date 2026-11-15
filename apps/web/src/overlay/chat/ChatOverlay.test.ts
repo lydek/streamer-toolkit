@@ -5,10 +5,12 @@ import { i18n } from '../../i18n'
 import type { ChatEvent, Incoming } from './chat'
 import ChatOverlay from './ChatOverlay.vue'
 
+const bases = vi.hoisted(() => [] as string[])
+
 vi.mock('./template', async (original) => {
   const real = await original<typeof import('./template')>()
   const html = '<ul data-chat-list></ul><template data-chat-message><li data-field="text"></li></template>'
-  return { ...real, loadTemplate: async (base: string, rev: string) => real.parseTemplate(html, base, rev)! }
+  return { ...real, loadTemplate: async (base: string, rev: string) => (bases.push(base), real.parseTemplate(html, base, rev)!) }
 })
 
 const chat = (n: number): ChatEvent => ({
@@ -54,6 +56,23 @@ describe('ChatOverlay preview mode', () => {
     await flushPromises()
     expect(wrapper.findAll('li').map((li) => li.text())).toEqual(['m3', 'm4'])
     wrapper.unmount()
+  })
+
+  it('previews the built-in template named in the URL, and only a well-formed name', async () => {
+    vi.stubGlobal('WebSocket', vi.fn())
+    for (const [query, base] of [
+      ['?preview&template=bubble', '/templates/built-in/chat/bubble/'],
+      ['?preview&template=../x', '/templates/chat/'],
+      ['?preview', '/templates/chat/'],
+    ]) {
+      history.replaceState(null, '', `/overlay/chat/${query}`)
+      bases.length = 0
+      const wrapper = mount(ChatOverlay, { global: { plugins: [i18n] } })
+      post(snapshot())
+      await flushPromises()
+      expect(bases).toEqual([`${location.origin}${base}`])
+      wrapper.unmount()
+    }
   })
 
   it('connects to the Host outside preview mode', () => {

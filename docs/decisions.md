@@ -24,7 +24,7 @@
 | 測試 | 首版：Unit＋Integration（真 SQLite）＋Contract（產物是否最新）＋UI E2E（Playwright＋Chromium） |
 | CI | GitHub Actions，skeleton 就建，只跑 Windows；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼 |
 | 正式發佈 | 一律用 `tauri build`；不得散布沒有開啟 `tauri/custom-protocol` 的建置產物 |
-| Overlay 自訂 | 初版只開放 HTML／CSS 樣板 |
+| Overlay 自訂 | 初版只開放 HTML／CSS 樣板；聊天室樣板在管理 UI 從內建款式選擇，不做線上編輯、上傳，也不做字型與顏色調整；資料夾裡的自訂樣板（`custom`）管理 UI 不提供入口，要手動在 `settings.json` 指定，重新啟動後生效 |
 | 平台 | Windows 優先；macOS 列入 MVP 後；Linux 不支援 |
 | 決策紀錄 | 本檔＋architecture.md，不寫 ADR |
 | 文件結構 | README＋`docs/` 四份（scope／architecture／decisions／dev）；複雜模組另寫 `docs/modules/<模組>.md` |
@@ -51,7 +51,7 @@
 | 本機 API 安全 | 每次啟動的隨機管理 token，經 IPC 指令交給管理視窗、只放記憶體；Host 標頭白名單；Origin 檢查（拒絕 `Origin: null`）；Overlay 唯讀、不帶 token，Overlay 與樣板路徑的所有回應都送 `script-src 'self'; object-src 'none'`；樣板目錄只提供非腳本檔案並加 `nosniff`；樣板預覽放在 sandbox iframe，資料用 `postMessage` 傳入（細節見 architecture.md） |
 | Port | 固定預設 port `47810`；被佔用時不自動換 port，改開 port 修改小頁面讓使用者修改並重試；例外是資料夾第一次啟動時預設 port 被佔用，自動挑空的 port 並存下來 |
 | 資料夾 | 每個資料夾是一個執行單位，以 `instance-id` 識別：`--data-dir` 指定的資料夾，沒有指定就用執行檔旁的 `data`；設定、記錄檔、快取、WebView2 資料都在裡面；一個資料夾同時只跑一份，不同資料夾可同時執行；Twitch 登入依資料夾分開；無法寫入時顯示錯誤並結束（細節見 architecture.md §6） |
-| 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板目錄送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
+| 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
 | 開發模式 | Vite dev server＋proxy（`/api`、`/ws`、`/templates`，目標 `http://127.0.0.1:<port>`，port 每個請求都從 dev 資料夾的 `settings.json` 讀取，`changeOrigin: true`、`ws: true`）到 Host；Tauri `build.devUrl` 設為 Vite 網址，Vite `server.strictPort: true`；Vite 送出與 Host 相同的 CSP（`/admin` 或 Overlay 的）；dev 模式下 Vite 除了 `/api`、`/ws`、`/templates` 以外都允許 `null` origin（`server.cors: false`＋middleware），`server.fs.deny` 另加 Cargo 的 `target` 資料夾（dev 資料夾在裡面，`null` origin 不得讀到）；dev 模式的 Origin 白名單加入 Vite origin |
 | 管理 UI 版面 | 功能磚首頁＋抽屜＋完整頁（`/admin/<功能>`），不用側欄。抽屜依序分「動作」「現在」「常改的設定」「開啟完整頁」四段，功能用不到的段省略。功能磚分「直播中」「功能」兩組，使用者可整理（組內排序、移除、加入），清單與順序存在 `settings.json`（「沒存過」與「已清空」要能區分），會一併備份還原 |
 | 抽屜元件 | 自製：Vue `Teleport` 在並排的 `<aside>`（視窗 > 1000px）與 modal 的原生 `<dialog>`（≤ 1000px）之間移動同一份內容，不重新掛載；不用 PrimeVue Drawer（只有覆蓋模式）；抽屜內的 PrimeVue 浮層元件設 `appendTo="self"`；換位置前記下焦點與各捲動容器的 `scrollTop`，換完還原 |
@@ -118,3 +118,4 @@
 | 2026-11-14 | 開發模式的 proxy port 改為每個請求從 dev 資料夾（`target\debug\data\`）的 `settings.json` 讀取；Vite `server.fs.deny` 另加 Cargo 的 `target` 資料夾 | Vite 比 app 先啟動，資料夾第一次啟動可能自動換 port，port 修改小頁面也可能存下新的 port，只在啟動時讀一次會對不上；`null` origin 讀得到 Vite 提供的檔案，而 dev 資料夾（設定、記錄檔、WebView2 資料）在 `target` 裡 |
 | 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |
 | 2026-11-15 | pre-push 依推送的檔案跳過不受影響的檢查；Rust 編譯可選用 sccache | 每個 worktree 有自己的 `target\`，第一次編譯很慢，只改文件或前端也要等完整的 Rust 檢查；CI 每次仍跑完整檢查 |
+| 2026-11-15 | 聊天室樣板改為從內建款式選擇（預設、精簡單行、泡泡），資料夾樣板變成手動指定的 `custom`，不再自動複製預設樣板 | 多數實況主不會寫 HTML；資料夾裡一直有一份有效樣板時，選擇器會沒有作用 |
