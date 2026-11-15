@@ -22,7 +22,9 @@ export function twitchLight(overview: Schemas['Overview'] | undefined, failed: b
     case 'pending':
       return { state: 'reconnecting', key: 'home.status.twitch.pending' }
     case 'failed':
-      return { state: 'error', key: 'home.status.twitch.failed' }
+      return overview.status.code === 'twitch.scopes_missing'
+        ? { state: 'error', key: 'home.status.twitch.relogin' }
+        : { state: 'error', key: 'home.status.twitch.failed' }
     case 'signed_out':
       return { state: 'error', key: 'home.status.twitch.signedOut' }
   }

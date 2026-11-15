@@ -156,6 +156,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
+    let alerts = Arc::new(alerts::AlertsService::new(bus.clone(), modules.clone()));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -166,6 +167,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.twitch,
         tls,
         chat,
+        alerts,
         modules,
     ));
     Ok(Router::new()

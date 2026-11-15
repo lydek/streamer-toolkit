@@ -4,10 +4,12 @@ pub mod auth;
 pub mod eventsub;
 pub mod helix;
 
-/// Scopes requested at first login so later MVP slices never force a re-login.
+/// Scopes requested at login. A stored token missing any of them (issued before one was added) asks the user
+/// to sign in again.
 pub const MVP_SCOPES: &[&str] = &[
     "user:read:chat",
     "moderator:read:followers",
     "channel:read:subscriptions",
     "channel:read:redemptions",
+    "bits:read",
 ];

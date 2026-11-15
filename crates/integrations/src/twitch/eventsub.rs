@@ -1,4 +1,5 @@
-//! EventSub over WebSocket: one session per signed-in account, reconnecting with backoff. Chat only for now.
+//! EventSub over WebSocket: one session per signed-in account, reconnecting with backoff. Chat plus the
+//! follow, subscription, cheer and raid alerts.
 
 use std::{collections::VecDeque, convert::Infallible, sync::Arc, time::Duration};
 
@@ -7,7 +8,7 @@ use rustls::ClientConfig;
 use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
-use toolkit_core::events::{ChatMessage, Fragment};
+use toolkit_core::events::{Alert, AlertKind, ChatMessage, Fragment};
 
 use super::{
     auth::AuthError,
@@ -20,6 +21,25 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Twitch sends something at least every keepalive interval; this much extra silence means the link is dead.
 const KEEPALIVE_GRACE: Duration = Duration::from_secs(10);
 const SEEN_CAPACITY: usize = 256;
+
+/// Alert subscriptions: type, version and the scope it needs. Raids need none, so they cost 1 of the
+/// `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
+const ALERT_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
+    ("channel.follow", "2", Some("moderator:read:followers")),
+    ("channel.subscribe", "1", Some("channel:read:subscriptions")),
+    (
+        "channel.subscription.message",
+        "1",
+        Some("channel:read:subscriptions"),
+    ),
+    (
+        "channel.subscription.gift",
+        "1",
+        Some("channel:read:subscriptions"),
+    ),
+    ("channel.cheer", "1", Some("bits:read")),
+    ("channel.raid", "1", None),
+];
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -47,6 +67,7 @@ pub struct EventSub {
     pub helix: Helix,
     pub tls: Arc<ClientConfig>,
     pub deliver: Arc<dyn Fn(ChatMessage) + Send + Sync>,
+    pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
 }
 
 impl EventSub {
@@ -165,25 +186,76 @@ impl EventSub {
         if seen.len() == SEEN_CAPACITY {
             seen.pop_front();
         }
-        seen.push_back(id);
-        if message.metadata.subscription_type.as_deref() != Some("channel.chat.message") {
-            return;
-        }
-        let Some(event) = message.payload.event else {
+        seen.push_back(id.clone());
+        let (Some(kind), Some(event)) = (message.metadata.subscription_type, message.payload.event)
+        else {
             return;
         };
-        match serde_json::from_value::<ChatEvent>(event) {
-            Ok(chat) => (self.deliver)(chat.into_message(message.metadata.message_timestamp)),
-            Err(e) => tracing::warn!(error = %e, "unreadable chat notification"),
+        let sent_at = message.metadata.message_timestamp;
+        if kind == "channel.chat.message" {
+            match serde_json::from_value::<ChatEvent>(event) {
+                Ok(chat) => (self.deliver)(chat.into_message(sent_at)),
+                Err(e) => tracing::warn!(error = %e, "unreadable chat notification"),
+            }
+            return;
+        }
+        match serde_json::from_value::<AlertEvent>(event)
+            .ok()
+            .and_then(|e| e.into_alert(&kind, id, sent_at))
+        {
+            Some(alert) => (self.deliver_alert)(alert),
+            None => tracing::warn!(subscription = %kind, "unreadable alert notification"),
         }
     }
 
     /// One session subscribes once; a reconnect URL keeps its subscriptions and does not count as a new connection.
     async fn subscribe(&self, user_id: &str, session_id: &str) -> Result<(), EventSubError> {
+        let chat = serde_json::json!({ "broadcaster_user_id": user_id, "user_id": user_id });
+        self.create("channel.chat.message", "1", chat, session_id)
+            .await?;
+        let granted = self
+            .helix
+            .auth()
+            .token()
+            .map(|t| t.scopes)
+            .unwrap_or_default();
+        for &(kind, version, scope) in ALERT_SUBSCRIPTIONS {
+            // A token from before the scope was added; the admin UI asks to sign in again.
+            if scope.is_some_and(|s| !granted.iter().any(|g| g == s)) {
+                continue;
+            }
+            let condition = match kind {
+                "channel.follow" => {
+                    serde_json::json!({ "broadcaster_user_id": user_id, "moderator_user_id": user_id })
+                }
+                "channel.raid" => serde_json::json!({ "to_broadcaster_user_id": user_id }),
+                _ => serde_json::json!({ "broadcaster_user_id": user_id }),
+            };
+            match self.create(kind, version, condition, session_id).await {
+                // E.g. a channel Twitch does not offer it to, or an EventSub limit (a 429); chat and the other
+                // alerts carry on. Sign-in failures still end the session.
+                Err(EventSubError::Helix(
+                    e @ (HelixError::Refused(_) | HelixError::RateLimited(_)),
+                )) => {
+                    tracing::warn!(subscription = kind, error = ?e, "EventSub subscription refused");
+                }
+                other => other?,
+            }
+        }
+        Ok(())
+    }
+
+    async fn create(
+        &self,
+        kind: &str,
+        version: &str,
+        condition: serde_json::Value,
+        session_id: &str,
+    ) -> Result<(), EventSubError> {
         let body = serde_json::json!({
-            "type": "channel.chat.message",
-            "version": "1",
-            "condition": { "broadcaster_user_id": user_id, "user_id": user_id },
+            "type": kind,
+            "version": version,
+            "condition": condition,
             "transport": { "method": "websocket", "session_id": session_id },
         });
         Ok(self
@@ -348,6 +420,88 @@ impl ChatEvent {
     }
 }
 
+/// The fields of the six alert notifications this adapter reads; each type has only some of them.
+#[derive(Deserialize)]
+struct AlertEvent {
+    #[serde(default)]
+    user_name: Option<String>,
+    #[serde(default)]
+    from_broadcaster_user_name: Option<String>,
+    #[serde(default)]
+    is_anonymous: bool,
+    #[serde(default)]
+    tier: Option<String>,
+    #[serde(default)]
+    is_gift: bool,
+    #[serde(default)]
+    total: Option<u32>,
+    #[serde(default)]
+    cumulative_months: Option<u32>,
+    #[serde(default)]
+    message: Option<AlertText>,
+    #[serde(default)]
+    bits: Option<u32>,
+    #[serde(default)]
+    viewers: Option<u32>,
+}
+
+/// A cheer message is a string; a resub message is an object with its text and emotes.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AlertText {
+    Plain(String),
+    Rich { text: String },
+}
+
+impl AlertEvent {
+    /// `None` when a field the type needs is missing.
+    fn into_alert(self, subscription: &str, id: String, occurred_at: String) -> Option<Alert> {
+        let tier = match self.tier.as_deref() {
+            Some("2000") => 2,
+            Some("3000") => 3,
+            _ => 1,
+        };
+        let message = match self.message {
+            Some(AlertText::Plain(text) | AlertText::Rich { text }) => text,
+            None => String::new(),
+        };
+        let kind = match subscription {
+            "channel.follow" => AlertKind::Follow,
+            "channel.subscribe" => AlertKind::Subscribe {
+                tier,
+                gifted: self.is_gift,
+            },
+            "channel.subscription.message" => AlertKind::Resubscribe {
+                tier,
+                months: self.cumulative_months?,
+                message,
+            },
+            "channel.subscription.gift" => AlertKind::Gift {
+                tier,
+                count: self.total?,
+            },
+            "channel.cheer" => AlertKind::Cheer {
+                bits: self.bits?,
+                message,
+            },
+            "channel.raid" => AlertKind::Raid {
+                viewers: self.viewers?,
+            },
+            _ => return None,
+        };
+        let user_name = match self.is_anonymous {
+            true => None,
+            false => self.from_broadcaster_user_name.or(self.user_name),
+        };
+        Some(Alert {
+            id,
+            user_name,
+            kind,
+            occurred_at,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,10 +573,80 @@ mod tests {
         })
     }
 
+    fn notification(message_id: &str, kind: &str, event: Value) -> String {
+        json!({"metadata":{"message_type":"notification","message_id":message_id,
+                           "message_timestamp":"2026-11-16T10:00:00Z","subscription_type":kind},
+               "payload":{"event":event}})
+        .to_string()
+    }
+
+    /// The six alert types as Twitch sends them, plus one of the per-recipient subs of a gift.
+    fn alert_notifications() -> Vec<String> {
+        let user =
+            |name: &str| json!({"user_id":"7","user_login":name.to_lowercase(),"user_name":name});
+        let with = |mut base: Value, extra: Value| {
+            base.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            base
+        };
+        vec![
+            notification(
+                "a1",
+                "channel.follow",
+                with(user("Fan"), json!({"followed_at":"2026-11-16T10:00:00Z"})),
+            ),
+            notification(
+                "a2",
+                "channel.subscribe",
+                with(user("Sub"), json!({"tier":"2000","is_gift":false})),
+            ),
+            notification(
+                "a3",
+                "channel.subscription.message",
+                with(
+                    user("Resub"),
+                    json!({"tier":"1000","cumulative_months":12,"streak_months":null,
+                           "message":{"text":"<b>12</b> months","emotes":null}}),
+                ),
+            ),
+            notification(
+                "a4",
+                "channel.subscription.gift",
+                json!({"user_id":null,"user_login":null,"user_name":null,"is_anonymous":true,
+                       "tier":"3000","total":20,"cumulative_total":null}),
+            ),
+            notification(
+                "a5",
+                "channel.subscribe",
+                with(user("Lucky"), json!({"tier":"3000","is_gift":true})),
+            ),
+            notification(
+                "a6",
+                "channel.cheer",
+                with(
+                    user("Cheerer"),
+                    json!({"is_anonymous":false,"bits":100,"message":"Cheer100 hi"}),
+                ),
+            ),
+            notification(
+                "a7",
+                "channel.raid",
+                json!({"from_broadcaster_user_id":"9","from_broadcaster_user_login":"raider",
+                       "from_broadcaster_user_name":"Raider","viewers":42}),
+            ),
+            // Missing its required field: dropped with a warning, not delivered half-filled.
+            notification("a8", "channel.cheer", user("Broken")),
+        ]
+    }
+
     async fn second(ws: WebSocketUpgrade) -> Response {
         ws.on_upgrade(|mut socket| async move {
             send(&mut socket, welcome("s2")).await;
             send(&mut socket, chat("n2", "c2", "red; background:url(x)")).await;
+            for n in alert_notifications() {
+                send(&mut socket, n).await;
+            }
             hold_open(socket).await;
         })
     }
@@ -436,8 +660,14 @@ mod tests {
             .get("Client-Id")
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
+        let status = match body["type"].as_str() {
+            Some("channel.follow") => StatusCode::FORBIDDEN,
+            // An EventSub limit: a 429 without Ratelimit-Reset.
+            Some("channel.subscription.gift") => StatusCode::TOO_MANY_REQUESTS,
+            _ => StatusCode::ACCEPTED,
+        };
         f.subscriptions.lock().unwrap().push((client_id, body));
-        StatusCode::ACCEPTED
+        status
     }
 
     async fn fake_twitch() -> (String, Fake) {
@@ -454,17 +684,20 @@ mod tests {
         (base, fake)
     }
 
+    /// Signed in before `bits:read` was added.
     fn signed_in_auth(http: HttpsClient) -> TwitchAuth {
         let store = Arc::new(MemoryStore::default());
+        let mut scopes = crate::twitch::MVP_SCOPES.to_vec();
+        scopes.retain(|s| *s != "bits:read");
         *store.value.lock().unwrap() = Some(
             json!({"access_token":"access-1","refresh_token":"refresh-1","user_id":"42",
-                   "login":"streamer","scopes":["user:read:chat"]})
+                   "login":"streamer","scopes":scopes})
             .to_string(),
         );
         TwitchAuth::new("cid".into(), "http://127.0.0.1:9", http, store)
     }
 
-    async fn next(rx: &mut mpsc::UnboundedReceiver<ChatMessage>) -> ChatMessage {
+    async fn next<T>(rx: &mut mpsc::UnboundedReceiver<T>) -> T {
         tokio::time::timeout(Duration::from_secs(5), rx.recv())
             .await
             .unwrap()
@@ -472,17 +705,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delivers_chat_once_and_follows_reconnect() {
+    async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
         let (base, fake) = fake_twitch().await;
         let config = tls::client_config().unwrap();
         let http = tls::https_client(config.clone());
         let (tx, mut rx) = mpsc::unbounded_channel();
+        let (alert_tx, mut alerts) = mpsc::unbounded_channel();
         let task = tokio::spawn(
             EventSub {
                 url: format!("{}/ws", base.replace("http://", "ws://")),
                 helix: Helix::new(&format!("{base}/helix"), signed_in_auth(http.clone()), http),
                 tls: config,
                 deliver: Arc::new(move |m| tx.send(m).unwrap()),
+                deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
             }
             .run(),
         );
@@ -506,8 +741,89 @@ mod tests {
         assert_eq!(second.id, "c2");
         assert_eq!(second.color, None, "invalid colors are dropped");
 
+        let mut received = Vec::new();
+        for _ in 0..7 {
+            received.push(next(&mut alerts).await);
+        }
+        let named = |name: &str| Some(name.to_owned());
+        let expected = [
+            ("a1", named("Fan"), AlertKind::Follow),
+            (
+                "a2",
+                named("Sub"),
+                AlertKind::Subscribe {
+                    tier: 2,
+                    gifted: false,
+                },
+            ),
+            (
+                "a3",
+                named("Resub"),
+                AlertKind::Resubscribe {
+                    tier: 1,
+                    months: 12,
+                    message: "<b>12</b> months".into(),
+                },
+            ),
+            ("a4", None, AlertKind::Gift { tier: 3, count: 20 }),
+            (
+                "a5",
+                named("Lucky"),
+                AlertKind::Subscribe {
+                    tier: 3,
+                    gifted: true,
+                },
+            ),
+            (
+                "a6",
+                named("Cheerer"),
+                AlertKind::Cheer {
+                    bits: 100,
+                    message: "Cheer100 hi".into(),
+                },
+            ),
+            ("a7", named("Raider"), AlertKind::Raid { viewers: 42 }),
+        ];
+        for (alert, (id, user_name, kind)) in received.iter().zip(expected) {
+            assert_eq!(alert.id, id);
+            assert_eq!(alert.user_name, user_name, "{id}");
+            assert_eq!(alert.kind, kind, "{id}");
+            assert_eq!(alert.occurred_at, "2026-11-16T10:00:00Z");
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), alerts.recv())
+                .await
+                .is_err(),
+            "the broken cheer is not delivered"
+        );
+
         let subs = fake.subscriptions.lock().unwrap().clone();
-        assert_eq!(subs.len(), 1, "subscriptions carry over a reconnect");
+        let types: Vec<&str> = subs
+            .iter()
+            .map(|(_, b)| b["type"].as_str().unwrap())
+            .collect();
+        // Subscriptions carry over a reconnect; cheer needs bits:read, which this token lacks; the refused
+        // follow and the rate-limited gift did not stop the rest.
+        assert_eq!(
+            types,
+            [
+                "channel.chat.message",
+                "channel.follow",
+                "channel.subscribe",
+                "channel.subscription.message",
+                "channel.subscription.gift",
+                "channel.raid"
+            ]
+        );
+        assert_eq!(
+            subs[1].1["condition"],
+            json!({"broadcaster_user_id":"42","moderator_user_id":"42"})
+        );
+        assert_eq!(subs[1].1["version"], "2");
+        assert_eq!(
+            subs[5].1["condition"],
+            json!({"to_broadcaster_user_id":"42"})
+        );
         let (client_id, body) = &subs[0];
         assert_eq!(client_id.as_deref(), Some("cid"));
         assert_eq!(body["type"], "channel.chat.message");
