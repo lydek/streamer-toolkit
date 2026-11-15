@@ -27,6 +27,8 @@ pub struct Settings {
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
+    /// The alert overlay's built-in template. The Host checks it; an unknown value means the default.
+    pub alert_template: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,6 +57,7 @@ impl Default for Settings {
             skip_close_hint: false,
             home_tiles: None,
             chat_template: "default".into(),
+            alert_template: "default".into(),
         }
     }
 }

@@ -12,6 +12,7 @@ export interface AdminState {
   overview: Schemas['Overview']
   modules: Schemas['ModuleState'][]
   template: Schemas['TemplateStatus']
+  alertTemplate: Schemas['AlertTemplateChoice']
   general: Schemas['GeneralSettings']
   obs: Schemas['ObsOverview']
   /** Saved home tile order; `null` = the defaults. PUT stores it. */
@@ -90,6 +91,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     overview: { client_id: '', status: { state: 'signed_out' } },
     modules: [{ id: 'chat', enabled: true }],
     template: { selected: 'default', error: null },
+    alertTemplate: { selected: 'default' },
     general: { ask_before_close: true },
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     homeTiles: null,
@@ -104,6 +106,11 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   await page.route('**/api/admin/templates/chat', (r) => {
     if (r.request().method() !== 'PUT') return r.fulfill({ json: s.template })
     s.template = { ...s.template, ...r.request().postDataJSON() }
+    return r.fulfill({ status: 204 })
+  })
+  await page.route('**/api/admin/templates/alerts', (r) => {
+    if (r.request().method() !== 'PUT') return r.fulfill({ json: s.alertTemplate })
+    s.alertTemplate = r.request().postDataJSON()
     return r.fulfill({ status: 204 })
   })
   await page.route('**/api/admin/general', get(() => s.general))

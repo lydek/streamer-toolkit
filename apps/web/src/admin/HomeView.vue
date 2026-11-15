@@ -116,7 +116,7 @@
       </template>
     </AppDrawer>
 
-    <AppDrawer id="alerts" :title="moduleName('alerts')">
+    <AppDrawer id="alerts" :title="moduleName('alerts')" full-page="/alerts">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('alerts')" />
         <form @submit.prevent="simulateAlert">

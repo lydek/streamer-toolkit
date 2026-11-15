@@ -62,7 +62,9 @@ async function applyTemplate() {
 
 function receive(msg: Incoming) {
   // On every snapshot too: the template may have changed while disconnected.
-  if (msg.type === 'snapshot' || msg.type === 'template.changed') void applyTemplate()
+  if (msg.type === 'snapshot' || (msg.type === 'template.changed' && msg.payload.overlay === 'chat')) {
+    void applyTemplate()
+  }
   state = apply(state, msg)
   render?.(state.messages)
 }

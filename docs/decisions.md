@@ -24,7 +24,7 @@
 | 測試 | 首版：Unit＋Integration（真 SQLite）＋Contract（產物是否最新）＋UI E2E（Playwright＋Chromium） |
 | CI | GitHub Actions，skeleton 就建，只跑 Windows；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼 |
 | 正式發佈 | 一律用 `tauri build`；不得散布沒有開啟 `tauri/custom-protocol` 的建置產物 |
-| Overlay 自訂 | 初版只開放 HTML／CSS 樣板；聊天室樣板在管理 UI 從內建款式選擇，不做線上編輯、上傳，也不做字型與顏色調整；資料夾裡的自訂樣板（`custom`）管理 UI 不提供入口，要手動在 `settings.json` 指定，重新啟動後生效 |
+| Overlay 自訂 | 初版只開放 HTML／CSS 樣板；聊天室與特效樣板在管理 UI 從內建款式選擇（特效沒有資料夾樣板），不做線上編輯、上傳，也不做字型與顏色調整；聊天室的資料夾自訂樣板（`custom`）管理 UI 不提供入口，要手動在 `settings.json` 指定，重新啟動後生效 |
 | 平台 | Windows 優先；macOS 列入 MVP 後；Linux 不支援 |
 | 決策紀錄 | 本檔＋architecture.md，不寫 ADR |
 | 文件結構 | README＋`docs/` 四份（scope／architecture／decisions／dev）；複雜模組另寫 `docs/modules/<模組>.md` |
@@ -65,7 +65,7 @@
 | 錯誤處理 | `thiserror`（domain／application，對應錯誤碼）＋`anyhow`（只用在 host 組合根與啟動流程）；錯誤碼格式 `<區域>.<原因>`（例：`twitch.sign_in_required`），API 回 `{"code": …}`，UI 以資源鍵 `errors.<錯誤碼>` 顯示，記錄檔欄位也叫 `code` |
 | 時間 | `chrono`＋`chrono-tz` |
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
-| Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message` |
+| Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message`，特效的追隨、訂閱、小奇點、揪團也走 EventSub（訂閱清單見 architecture.md） |
 | 對外 HTTPS | `hyper-util`＋`hyper-rustls`＋`rustls`（`ring`）＋`rustls-platform-verifier`：憑證走 Windows 憑證庫；EventSub 的 `wss://` 共用同一組 TLS 設定 |
 | OBS | `obws`；MVP 就接，先顯示 OBS 連線狀態 |
 | 憑證 | `keyring-core`＋`windows-native-keyring-store`（keyring 4 建議 app 直接連結的組合），只在 Windows 編譯；不會落到 mock 儲存 |

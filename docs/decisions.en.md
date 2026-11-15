@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 9c8306e0ffd0c9854ece83b1d8fb856ee2e898063c3290071cf586ad101f4880 -->
+<!-- source: docs/decisions.md source-sha256: f00eb927a906fb869fac20a6cd9dfcde06de98e507b30fd200e40158e98c0248 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -25,7 +25,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Testing | First version: Unit + Integration (real SQLite) + Contract (generated files up to date) + UI E2E (Playwright + Chromium) |
 | CI | GitHub Actions, built with the skeleton, Windows only; also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release |
 | Releases | Always built with `tauri build`; never distribute builds without `tauri/custom-protocol` |
-| Overlay customization | First version allows HTML/CSS templates only; the chat template is picked from built-in styles in the admin UI, with no in-app editing, uploads or font and color adjustments; the admin UI has no entry for a custom template in the data folder (`custom`); it is set by hand in `settings.json` and takes effect after a restart |
+| Overlay customization | First version allows HTML/CSS templates only; the chat and alert templates are picked from built-in styles in the admin UI (alerts have no folder template), with no in-app editing, uploads or font and color adjustments; the admin UI has no entry for the chat's custom template in the data folder (`custom`); it is set by hand in `settings.json` and takes effect after a restart |
 | Platforms | Windows first; macOS after the MVP; Linux not supported |
 | Decision records | This file + architecture.en.md; no ADRs |
 | Document structure | README + four files under `docs/` (scope/architecture/decisions/dev); complex modules also get `docs/modules/<module>.md` |
@@ -66,7 +66,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup); error codes use `<area>.<reason>` (e.g. `twitch.sign_in_required`), the API returns `{"code": …}`, the UI shows the resource key `errors.<code>`, and logs use a `code` field too |
 | Time | `chrono` + `chrono-tz` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
-| Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message` |
+| Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message`, and the follow, sub, Bits and raid alerts via EventSub too (subscription list in architecture.en.md) |
 | Outgoing HTTPS | `hyper-util` + `hyper-rustls` + `rustls` (`ring`) + `rustls-platform-verifier`: certificates checked against the Windows store; EventSub `wss://` shares the same TLS config |
 | OBS | `obws`; connected in the MVP, starting with OBS connection status |
 | Credentials | `keyring-core` + `windows-native-keyring-store` (the combination keyring 4 recommends apps link directly), compiled on Windows only; never falls back to a mock store |
