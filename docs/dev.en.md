@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: a6fa66b4fb5045399ff2dabe855ba6a04ca298eb6f527536ef864fc645d5b3d9 -->
+<!-- source: docs/dev.md source-sha256: 670f18ac28b871f503f983e89cc215c6f4a60aa62038996f26d15513138c1bc6 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -27,7 +27,11 @@ Principle: another Windows PC can get it running by following this document.
 ## Git
 - The repo is public: anyone can see the code and commit history.
 - Commit author email uses the GitHub noreply address: `git config user.email "<id>+<username>@users.noreply.github.com"` (this repo only).
-- Branches: `main` is the default branch; each slice gets `feat/<slice>`, opens a PR, and is squash-merged after CI passes.
+- Branches and PRs: `main` is the default branch; work on a branch, open a PR, and rebase-merge it after CI passes (`gh pr merge <number> --rebase`). The repo allows only rebase-merge, so `main` stays one straight line.
+  - Exactly one Conventional Commit per issue. Before pushing, combine an issue's work into one commit locally, leaving no fixup or review-fix commits in the PR: use `git reset --soft`, or `git commit --fixup` then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash` (the environment does not support interactive rebase).
+  - An issue must fit in one commit. A broad issue becomes a parent issue with GitHub sub-issues: each sub-issue is one commit, and the parent gets no commit and closes once all sub-issues are done. If an issue turns out too big partway through, stop and propose a split to the user instead of letting the commit grow.
+  - One PR may hold several independent issues from the same stage, one commit each, with the PR description listing `Closes #…` for each. Issues that touch the same files are done in sequence on the same branch, never in parallel.
+  - To keep a branch current with `main`, use `git rebase origin/main` then `git push --force-with-lease` (on your own branch only); never merge `main` into the branch, because merge commits make rebase-merge fail.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
