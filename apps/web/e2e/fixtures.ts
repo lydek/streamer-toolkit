@@ -14,6 +14,8 @@ export interface AdminState {
   template: Schemas['TemplateStatus']
   general: Schemas['GeneralSettings']
   obs: Schemas['ObsOverview']
+  /** Saved home tile order; `null` = the defaults. PUT stores it. */
+  homeTiles: string[] | null
 }
 
 export interface Invoke {
@@ -90,6 +92,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     template: { error: null },
     general: { ask_before_close: true },
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
+    homeTiles: null,
     ...state,
   }
   await mockIpc(page)
@@ -101,6 +104,11 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   await page.route('**/api/admin/templates/chat', get(() => s.template))
   await page.route('**/api/admin/general', get(() => s.general))
   await page.route('**/api/admin/obs', get(() => s.obs))
+  await page.route('**/api/admin/home-tiles', (r) => {
+    if (r.request().method() !== 'PUT') return r.fulfill({ json: s.homeTiles })
+    s.homeTiles = r.request().postDataJSON()
+    return r.fulfill({ status: 204 })
+  })
   const snapshot: Schemas['Snapshot'] = {
     type: 'snapshot',
     version: 1,

@@ -20,6 +20,10 @@ pub struct Settings {
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
     pub skip_close_hint: bool,
+    /// Admin home tile IDs in display order. `None`: never arranged, the admin UI shows its defaults (and nothing
+    /// is written); `Some([])`: the broadcaster removed every tile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_tiles: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +50,7 @@ impl Default for Settings {
             disabled_modules: Vec::new(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
+            home_tiles: None,
         }
     }
 }
@@ -140,6 +145,26 @@ mod tests {
         fs::write(path(&dir), "{").unwrap();
         assert!(back_up(&path(&dir)), "a different broken file is copied");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn home_tiles_tell_never_arranged_from_emptied() {
+        let never = serde_json::to_string(&Settings::default()).unwrap();
+        assert!(!never.contains("home_tiles"), "None writes nothing");
+        let emptied = Settings {
+            home_tiles: Some(Vec::new()),
+            ..Settings::default()
+        };
+        let text = serde_json::to_string(&emptied).unwrap();
+        assert!(text.contains(r#""home_tiles":[]"#), "{text}");
+        assert_eq!(
+            serde_json::from_str::<Settings>(&text).unwrap().home_tiles,
+            Some(Vec::new())
+        );
+        assert_eq!(
+            serde_json::from_str::<Settings>(&never).unwrap().home_tiles,
+            None
+        );
     }
 
     #[test]

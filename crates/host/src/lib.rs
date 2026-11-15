@@ -1,6 +1,7 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+mod home_tiles;
 mod obs;
 mod openapi;
 mod overlay;
@@ -144,6 +145,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
+    let home_tiles = home_tiles::routes(config.data_dir.clone());
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,
@@ -161,6 +163,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                 .with_state(bus),
         )
         .merge(obs::routes(obs).layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(home_tiles.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -554,6 +560,82 @@ mod tests {
             .body(Body::from(r#"{"enabled":false}"#))
             .unwrap();
         assert_eq!(status(req).await, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn home_tiles_persist_and_reject_bad_bodies() {
+        let dir = std::env::temp_dir().join(format!("st-host-tiles-{}", std::process::id()));
+        let app_for = |dir: &PathBuf| {
+            let mut config = test_config();
+            config.data_dir = dir.clone();
+            router(config).unwrap()
+        };
+        let put = |body: &str| {
+            get_req("/api/admin/home-tiles", "127.0.0.1:47810")
+                .method(Method::PUT)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_owned()))
+                .unwrap()
+        };
+        let get = |app: Router| async move {
+            let res = app
+                .oneshot(
+                    get_req("/api/admin/home-tiles", "127.0.0.1:47810")
+                        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+        };
+
+        let app = app_for(&dir);
+        assert_eq!(get(app.clone()).await, serde_json::Value::Null);
+        let res = app.clone().oneshot(put("[]")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        // A new router on the same data folder stands in for a restart.
+        assert_eq!(get(app_for(&dir)).await, serde_json::json!([]));
+
+        let res = app
+            .clone()
+            .oneshot(put(r#"["chat","chat"]"#))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert_eq!(get(app.clone()).await, serde_json::json!(["chat"]));
+
+        let res = app.clone().oneshot(put("null")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert_eq!(get(app.clone()).await, serde_json::Value::Null);
+        let saved = std::fs::read_to_string(settings::path(&dir)).unwrap();
+        assert!(!saved.contains("home_tiles"), "{saved}");
+
+        let too_many = serde_json::to_string(&vec!["a"; 51]).unwrap();
+        for bad in [r#"["Chat"]"#, r#"[1]"#, "{}", "not json", too_many.as_str()] {
+            let res = app.clone().oneshot(put(bad)).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+            let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["code"], "home.invalid_tiles", "{bad}");
+        }
+        assert_eq!(
+            get(app.clone()).await,
+            serde_json::Value::Null,
+            "bad bodies change nothing"
+        );
+        let unauthorized = get_req("/api/admin/home-tiles", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.oneshot(unauthorized).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn get_req(uri: &str, host: &str) -> axum::http::request::Builder {

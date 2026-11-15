@@ -119,12 +119,57 @@ export interface Tile {
 /** Default home tiles, one per module; a disabled module shows no tile. */
 export const TILES: Tile[] = [{ id: 'chat', group: 'live', icon: 'pi pi-comments' }]
 
+/** Non-empty groups in display order. */
+export function groupTiles(tiles: Tile[]) {
+  return (['live', 'features'] as const)
+    .map((group) => ({ group, tiles: tiles.filter((t) => t.group === group) }))
+    .filter((g) => g.tiles.length > 0)
+}
+
 /** Non-empty groups in display order, each with the tiles of its enabled modules. */
 export function tileGroups(modules: Schemas['ModuleState'][], tiles = TILES) {
   const enabled = new Set(modules.filter((m) => m.enabled).map((m) => m.id))
-  return (['live', 'features'] as const)
-    .map((group) => ({ group, tiles: tiles.filter((t) => t.group === group && enabled.has(t.id)) }))
-    .filter((g) => g.tiles.length > 0)
+  return groupTiles(tiles.filter((t) => enabled.has(t.id)))
+}
+
+/** The home's tiles in saved order (`null`: never arranged, the defaults). Unknown and repeated IDs are skipped. */
+export function arrangedTiles(saved: string[] | null, tiles = TILES): Tile[] {
+  if (!saved) return tiles
+  const byId = new Map(tiles.map((t) => [t.id, t]))
+  return [...new Set(saved)].flatMap((id) => byId.get(id) ?? [])
+}
+
+/** Tiles not on the home: removed ones and features added since the last arrange (never inserted on their own). */
+export function availableTiles(arranged: Tile[], tiles = TILES): Tile[] {
+  const shown = new Set(arranged.map((t) => t.id))
+  return tiles.filter((t) => !shown.has(t.id))
+}
+
+/** IDs with `id` swapped with its nearest tile of the same group (`step` -1: earlier, 1: later). */
+export function moveTile(arranged: Tile[], id: string, step: -1 | 1): string[] {
+  const ids = arranged.map((t) => t.id)
+  const from = ids.indexOf(id)
+  let to = from + step
+  while (arranged[to] && arranged[to].group !== arranged[from].group) to += step
+  if (from >= 0 && arranged[to]) [ids[from], ids[to]] = [ids[to], ids[from]]
+  return ids
+}
+
+/** IDs with `id` dragged onto `target` (same group): it takes the target's place. */
+export function dropTile(arranged: Tile[], id: string, target: string): string[] {
+  const ids = arranged.map((t) => t.id)
+  const from = ids.indexOf(id)
+  const to = ids.indexOf(target)
+  if (from < 0 || to < 0) return ids
+  ids.splice(from, 1)
+  ids.splice(to, 0, id)
+  return ids
+}
+
+/** 1-based position of tile `id` within its group, for announcements. */
+export function groupPosition(arranged: Tile[], id: string): number {
+  const group = arranged.find((t) => t.id === id)?.group
+  return arranged.filter((t) => t.group === group).findIndex((t) => t.id === id) + 1
 }
 
 /** Toast rules: success dismisses itself; failure stays until the user closes it (no `life`). */
