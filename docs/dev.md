@@ -8,6 +8,10 @@
 - Visual Studio Build Tools（MSVC）與 WebView2 Runtime（Tauri 需要）。
 - `cargo-deny`：`cargo install --locked cargo-deny`（pre-push hook 與 CI 都會跑 `cargo deny check`）。
 - Playwright 的 Chromium（UI E2E 用）：`pnpm --filter web exec playwright install chromium`，裝一次即可；瀏覽器放在使用者資料夾，不進 repo。
+- sccache（可選）：讓所有 worktree 共用 Rust 相依套件的編譯結果，新 worktree 第一次編譯會比較快（同一份相依套件不必重編；各 worktree 自己的 crate 與 build script 產生的程式碼仍要編）。不裝也能編譯。
+  - 安裝：`cargo install --locked sccache`，再在 PowerShell 執行 `[Environment]::SetEnvironmentVariable('RUSTC_WRAPPER', 'sccache', 'User')`，重開終端機後生效；用 `sccache --show-stats` 看命中率。
+  - 只設在自己的環境變數，不寫進 repo 的 `.cargo/config.toml`。移除 sccache 前先在 PowerShell 執行 `[Environment]::SetEnvironmentVariable('RUSTC_WRAPPER', $null, 'User')` 並重開終端機，否則 cargo 會找不到它而編譯失敗。
+  - 快取預設在 `%LOCALAPPDATA%\Mozilla\sccache`，上限 10 GB（`SCCACHE_CACHE_SIZE` 可改）。每個 worktree 仍有自己的 `target\`（dev 資料在 `target\debug\data\`），只共用快取。
 
 原則：另一台 Windows 電腦照這份文件就能跑起來。
 
@@ -16,7 +20,7 @@
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
 - API 契約：改了 Host 的 HTTP API 或 WebSocket 事件後執行 `pnpm api:gen`（需要先建置前端），由 Rust（`utoipa`）產生 `apps/web/src/api/openapi.json`，再由 `openapi-typescript` 產生 `schema.d.ts`，兩個檔案一起 commit；CI 重新產生後有差異就失敗。WebSocket 的快照與事件型別也放在 OpenAPI components，測試會拿實際送出的 JSON 比對；新增對外事件或快照保留的事件種類時，要一起在 `crates/host/src/openapi.rs` 的 components 加型別。
-- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`pnpm web:e2e`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push`
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`pnpm web:e2e`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`（`pnpm tauri dev` 的 Vite proxy 只讀 `target\debug\data\` 的 port，所以那份資料的 port 要和它相同）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
@@ -26,7 +30,12 @@
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
-  - `pre-push` 依 CI 的順序跑完整檢查（翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
+  - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
+  - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
+    - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
+    - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌並測試 `apps/web/dist` 與 Overlay 的預設樣板。
+    - 改到其他任何檔案（Rust、`Cargo.*`、`lefthook.yml`、`.github/`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`scripts/` 等）：全部照跑。
+    - 比對對象是遠端分支（新分支則是 `origin` 的預設分支）；lefthook 不列出已經不存在的路徑（改名的檔案可能完全不出現），所以只刪除或改名檔案的推送可能跳過檢查，由 CI 把關。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 
 ## 每次提交前（CI 也跑同一套，只跑 Windows）

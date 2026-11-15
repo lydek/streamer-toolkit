@@ -1,6 +1,9 @@
 # Fail the commit instead of silently skipping hooks when lefthook is not installed.
 assert_lefthook_installed: true
 
+# Bash-style globs: `**` also matches zero directories.
+glob_matcher: doublestar
+
 # Full Rust and frontend checks run on pre-push (below); pre-commit stays fast.
 # shortcut: checks the working tree, not the staged snapshot; CI re-runs it on the pushed commit.
 pre-commit:
@@ -12,6 +15,16 @@ pre-commit:
 # Same steps and order as .github/workflows/ci.yml; stops at the first failure to catch red pushes before CI.
 # shortcut: checks the working tree, not the pushed commits; CI re-runs on the pushed commit.
 # Keep this list in sync with ci.yml. The frontend must build first: the host embeds apps/web/dist.
+#
+# Each job except translations is skipped when every pushed file ({push_files}) matches its `exclude`;
+# CI always runs everything. Exclude lists name only what a job provably ignores, so any other file
+# (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
+# - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
+# - Rust-only jobs ignore apps/web/, except cargo-test: the Host embeds dist/ and the overlay's
+#   default template and tests them, so only admin UI and E2E changes skip it.
+# shortcut: lefthook drops paths that no longer exist from {push_files}, so a push that only deletes or renames files may skip
+# checks; CI still catches it.
+# Full run regardless of files: pnpm lefthook run pre-push --force
 pre-push:
   piped: true
   jobs:
@@ -19,28 +32,54 @@ pre-push:
       run: node scripts/check-translations.mjs
     - name: script-tests
       run: pnpm test:scripts
+      exclude: &docs-but-decisions
+        - "*.md"
+        - "docs/{architecture,dev,scope}.md"
+        - "docs/**/*.en.md"
+        - "docs/modules/**"
     - name: frontend-licenses
       run: pnpm check:licenses
+      exclude: *docs-but-decisions
     - name: web-lint
       run: pnpm web:lint
+      exclude: &docs
+        - "*.md"
+        - "docs/**"
     - name: web-test
       run: pnpm web:test
+      exclude: *docs
     - name: web-build
       run: pnpm web:build
+      exclude: *docs
     - name: api-gen
       run: pnpm api:gen
+      exclude: *docs
     - name: api-fresh
       run: git diff --exit-code HEAD -- apps/web/src/api
+      exclude: *docs
     - name: cargo-fmt
       run: cargo fmt --all --check
+      exclude: &docs-and-web
+        - "*.md"
+        - "docs/**"
+        - "apps/web/**"
     - name: clippy
       run: cargo clippy --workspace --all-targets -- -D warnings
+      exclude: *docs-and-web
     - name: clippy-release
       run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
+      exclude: *docs-and-web
     - name: cargo-test
       run: cargo test --workspace
+      exclude:
+        - "*.md"
+        - "docs/**"
+        - "apps/web/src/admin/**"
+        - "apps/web/e2e/**"
     # Needs Playwright's Chromium once: pnpm --filter web exec playwright install chromium (docs/dev.md).
     - name: ui-e2e
       run: pnpm web:e2e
+      exclude: *docs
     - name: cargo-deny
       run: cargo deny check
+      exclude: *docs-and-web
