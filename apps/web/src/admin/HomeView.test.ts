@@ -52,6 +52,44 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
+describe('HomeView skip link', () => {
+  const skip = () => document.querySelector<HTMLAnchorElement>('a.skip-link')!
+
+  it('focuses the first tile', async () => {
+    await home()
+    skip().click()
+    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
+  })
+
+  it('focuses "Arrange tiles" on an emptied home', async () => {
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(path === '/api/admin/home-tiles' ? [] : responses[path])) as never)
+    await home()
+    skip().click()
+    expect(document.activeElement).toBe(document.querySelector('[data-drawer-arrange]'))
+  })
+
+  it('focuses the tiles section while there is no tile yet: loading, then load failed', async () => {
+    let fail!: () => void
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      path === '/api/admin/modules'
+        ? new Promise((resolve) => {
+            fail = () => resolve({ error: { code: 'x' }, response: new Response(null, { status: 500 }) })
+          })
+        : ok(responses[path])) as never)
+    await home()
+    skip().click()
+    expect(document.activeElement).toBe(document.getElementById('tiles'))
+
+    ;(document.activeElement as HTMLElement).blur()
+    fail()
+    await flushPromises()
+    expect(document.getElementById('tiles')!.textContent).toContain('載入失敗')
+    skip().click()
+    expect(document.activeElement).toBe(document.getElementById('tiles'))
+  })
+})
+
 describe('HomeView arrange mode', () => {
   it('enters only after the open drawer submitted and closed, and moves focus between ✎ and Done', async () => {
     await home()

@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 670f18ac28b871f503f983e89cc215c6f4a60aa62038996f26d15513138c1bc6 -->
+<!-- source: docs/dev.md source-sha256: 83aae507f5314d00ee5010fbd0a5adce077b8ca1656252953548e9aa151b9a76 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -67,7 +67,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - After typing without pressing Enter, leaving the drawer in each of these ways has saved the value: ✕, Esc and "Open full page" (once side by side and once modal), plus another tile when side by side and a backdrop click when modal.
   - When a save fails, the drawer stays open, the field returns to the old value and the error is shown; if the failure happened when the field lost focus, the first ✕ press afterwards still keeps the drawer open (a second press closes it).
   - When the drawer is modal, error messages and its buttons are visible and can be pressed; with a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
-  - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page's keyboard path works end to end: skip link, chat tile, open the drawer, send a simulated chat, close the drawer (1280px and 800px).
+  - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page's keyboard path works end to end: skip link (focus lands on the first tile), open the drawer, send a simulated chat, close the drawer (1280px and 800px).
   - The close-hint `<dialog>` (with fake IPC): the actions sent to Rust are correct when pressing Esc to cancel, clicking "Got it", and checking "Don't show again".
   - Arranging tiles: an emptied home stays empty after a reload, and "Arrange tiles" brings a tile back; focus on entering, removing, adding and leaving; with a drawer opened in arrange mode (side by side and modal), the first Esc closes only the drawer and the second leaves arrange mode; no horizontal scrollbar at 1280px, 640px and 320px; when a save fails, the tile goes back where it was and the error is shown.
   - Full pages (⚙ Settings): entering focuses "← Home"; it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
