@@ -14,7 +14,7 @@ const URL_ATTRS = new Set(['src', 'href', 'xlink:href', 'poster', 'action', 'for
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'data:'])
 
 /** Removes active content and points relative URLs into the template folder (`base`), tagged with `rev`. */
-function clean(root: ParentNode, base: string, rev: string) {
+export function clean(root: ParentNode, base: string, rev: string) {
   root.querySelectorAll(BLOCKED).forEach((el) => el.remove())
   for (const el of root.querySelectorAll('*')) {
     for (const attr of [...el.attributes]) {

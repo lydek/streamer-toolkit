@@ -22,7 +22,13 @@ export default defineConfig(({ mode }) => ({
   // Every dev page, incl. the E2E harness: with build inputs set, Vite would scan only those at startup and reload
   // all open pages when another page brings a new dependency ("optimized dependencies changed").
   optimizeDeps: {
-    entries: ['admin/index.html', 'overlay/chat/index.html', 'port/index.html', 'e2e/harness/index.html'],
+    entries: [
+      'admin/index.html',
+      'overlay/chat/index.html',
+      'overlay/alerts/index.html',
+      'port/index.html',
+      'e2e/harness/index.html',
+    ],
   },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.
   build:
@@ -33,6 +39,7 @@ export default defineConfig(({ mode }) => ({
             input: {
               admin: resolve(import.meta.dirname, 'admin/index.html'),
               'overlay-chat': resolve(import.meta.dirname, 'overlay/chat/index.html'),
+              'overlay-alerts': resolve(import.meta.dirname, 'overlay/alerts/index.html'),
             },
           },
         },

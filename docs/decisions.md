@@ -121,3 +121,4 @@
 | 2026-11-15 | 聊天室樣板改為從內建款式選擇（預設、精簡單行、泡泡），資料夾樣板變成手動指定的 `custom`，不再自動複製預設樣板 | 多數實況主不會寫 HTML；資料夾裡一直有一份有效樣板時，選擇器會沒有作用 |
 | 2026-11-15 | 合併方式由 squash 改為 rebase-merge；每個 issue 固定一個 commit，一個 PR 可放多個獨立 issue；太大的 issue 拆成 sub-issue | `main` 保持一條直線，每個 issue 一個 commit，同時減少 PR 數量 |
 | 2026-11-16 | Twitch scope 加上 `bits:read` | 切片 2 的特效包含小奇點；舊的登入會被提示重新登入一次 |
+| 2026-11-16 | 特效的預設音效由 `scripts/generate-chime.mjs` 用 Node 內建模組合成 | 不必找可再散布的音檔，授權單純（本專案 MIT）；腳本與產物一起 commit，測試確認兩者一致 |

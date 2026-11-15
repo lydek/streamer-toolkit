@@ -9,6 +9,7 @@ mod templates;
 
 pub use openapi::openapi;
 
+pub use alerts::Timing as AlertTiming;
 pub use toolkit_core::{DEFAULT_PORT, settings};
 
 use std::{
@@ -67,6 +68,8 @@ pub struct HostConfig {
     pub twitch: TwitchEndpoints,
     /// Where the obs-websocket password lives (Windows Credential Manager in production).
     pub obs_secrets: Arc<dyn SecretStore>,
+    /// How long alerts show; the default except in tests.
+    pub alert_timing: AlertTiming,
 }
 
 /// Twitch addresses; tests point them at fake services.
@@ -156,7 +159,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
-    let alerts = Arc::new(alerts::AlertsService::new(bus.clone(), modules.clone()));
+    let alerts = Arc::new(alerts::AlertsService::new(
+        bus.clone(),
+        modules.clone(),
+        config.alert_timing,
+    ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -198,6 +205,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                     "/templates/built-in/chat/{id}/{*path}",
                     get(templates::serve_built_in),
                 )
+                .route("/templates/alerts/{*path}", get(templates::serve_alerts))
                 .with_state(templates),
         )
         .merge(admin::routes(admin))
@@ -311,6 +319,7 @@ mod tests {
                 eventsub: "ws://127.0.0.1:1".into(),
             },
             obs_secrets: Arc::new(NoSecrets),
+            alert_timing: AlertTiming::default(),
         }
     }
 
@@ -393,6 +402,7 @@ mod tests {
                 eventsub: "ws://127.0.0.1:1".into(),
             },
             obs_secrets: Arc::new(NoSecrets),
+            alert_timing: AlertTiming::default(),
         })
         .unwrap();
 
@@ -777,15 +787,18 @@ mod tests {
 
     #[tokio::test]
     async fn overlay_gets_overlay_csp_and_assets_get_cors() {
-        let res = app()
-            .oneshot(
-                get_req("/overlay/chat", "127.0.0.1:47810")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(res.headers()[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
+        for page in ["/overlay/chat", "/overlay/alerts"] {
+            let res = app()
+                .oneshot(
+                    get_req(page, "127.0.0.1:47810")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::OK, "{page}");
+            assert_eq!(res.headers()[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
+        }
 
         let asset = Web::iter()
             .find(|p| p.starts_with("assets/"))
@@ -821,6 +834,30 @@ mod tests {
         settings::update(&dir, |s| s.chat_template = "custom".into()).unwrap();
         templates::tests::write_default(&dir.join("templates/chat"));
         (template_router(&dir), dir)
+    }
+
+    #[tokio::test]
+    async fn alert_template_is_served_like_the_chat_ones() {
+        let app = app();
+        let (status, headers, html) = get_body(&app, "/templates/alerts/template.html").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        // The markers apps/web/src/overlay/alerts/template.ts binds to.
+        assert!(html.contains("data-alert-stage") && html.contains("<template data-alert>"));
+        let (status, headers, _) = get_body(&app, "/templates/alerts/style.css").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers[header::CONTENT_TYPE], "text/css; charset=utf-8");
+        for (uri, expected) in [
+            ("/templates/alerts/evil.js", StatusCode::NOT_FOUND),
+            (
+                "/templates/alerts/../chat/template.html",
+                StatusCode::BAD_REQUEST,
+            ),
+            ("/templates/alerts/%2E%2E/x.css", StatusCode::BAD_REQUEST),
+        ] {
+            assert_eq!(get_body(&app, uri).await.0, expected, "{uri}");
+        }
     }
 
     fn put_template(id: &str) -> Request {

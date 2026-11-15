@@ -556,7 +556,8 @@
         "description": "The `payload` of an `alert` event. Fields the kind does not have are left out.",
         "required": [
           "kind",
-          "userName"
+          "userName",
+          "durationMs"
         ],
         "properties": {
           "bits": {
@@ -574,6 +575,12 @@
             ],
             "format": "int32",
             "description": "Subs gifted: `gift`.",
+            "minimum": 0
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How long the overlay shows it; the next alert comes after this and a short pause.",
             "minimum": 0
           },
           "kind": {

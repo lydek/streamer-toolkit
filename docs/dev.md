@@ -37,7 +37,7 @@
   - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
   - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
     - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
-    - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`）。
+    - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`、`apps/web/src/overlay/alerts/templates/`）。
     - 改到其他任何檔案（Rust、`Cargo.*`、`lefthook.yml`、`.github/`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`scripts/` 等）：全部照跑。
     - 比對對象是遠端分支（新分支則是 `origin` 的預設分支）；lefthook 不列出已經不存在的路徑（改名的檔案可能完全不出現），所以只刪除或改名檔案的推送可能跳過檢查，由 CI 把關。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
@@ -73,9 +73,10 @@
   - 設定頁的欄位打字後不按 Enter，直接按「← 回首頁」或上一頁離開，值都已寫入；儲存失敗時留在設定頁並顯示錯誤；視窗重新取得焦點時，重新讀取「關閉視窗前先詢問」。
   - 聊天室完整頁的樣板選擇器：點預覽就選定那一款並送出；方向鍵移動選擇；儲存失敗時退回原本的樣板並顯示錯誤；1280px、320px 沒有橫向捲軸。
   - 特效模擬器：六種事件各送一次，送出的名稱、數量與留言正確；被拒絕時在抽屜顯示原因；1280px、640px、320px 沒有橫向捲軸；真的 Host 把每種模擬事件都以 `alert` 送到 `/ws/overlay` 並標記 `source=simulation`，數量超出範圍回 400，沒有管理 token 回 401。
+  - 特效 Overlay（真的 Host，播放時間縮短）：六種事件依送出順序一次播一則，每則都有音效，時間到就消失；送 3 份的送禮訂閱只播一則。
   - Overlay（真的 Host）：選擇內建樣板後立即套用，不重新載入；改資料夾的自訂樣板（`custom`）後立即套用；樣板裡的 `<script>`、事件屬性與 `.js` 檔都不會執行；壞掉的樣板退回預設樣板；斷線時狀態文字的顏色、字型、字級和陰影，與目前內建樣板的聊天文字相同（三款各測一次）。
 - 每個切片完成時人工檢查一次：
-  - 真的 OBS 連線與實際畫面、音效（直播試用一次）；動到 Twitch 登入或聊天的切片，另測真的 Twitch 登入與聊天。
+  - 真的 OBS 連線與實際畫面、音效（直播試用一次）；動到 Twitch 登入或聊天的切片，另測真的 Twitch 登入與聊天。特效：OBS 瀏覽器來源勾選「透過 OBS 控制音訊」後，混音器出現該來源且聽得到音效；真的追隨、訂閱、小奇點、揪團各觸發一次。
   - 原生視窗 ✕ 與系統匣：按 ✕ 出現提示；按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣；設定頁開著時這樣隱藏視窗，再叫出視窗，「關閉視窗前先詢問」已變成未勾選。
   - 對比用公式實算，不用眼睛判斷；用 Edge／Chrome DevTools 的 Emulate vision deficiencies 看紅色盲、綠色盲、藍黃色盲下，顏色分不出來的地方（例如綠／黃／紅燈）仍能靠形狀或文字辨認；焦點看得見；放大到 200%、400% 時文字沒被裁掉（刻意以「……」省略的除外）、按鈕都按得到。
   - 整理功能磚：用滑鼠拖曳可在同一組內換位置，拖到另一組無效；< 600px 時功能磚排成單欄、按鈕自動換行；抽屜開著時按 ✎，先送出抽屜的變更再關抽屜。

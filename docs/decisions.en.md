@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 7de8a94e72a61a5b9aa6d8f29065d93ed2051c8db292f607ba876f218f6d7518 -->
+<!-- source: docs/decisions.md source-sha256: 9c8306e0ffd0c9854ece83b1d8fb856ee2e898063c3290071cf586ad101f4880 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -122,3 +122,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-15 | Chat templates are picked from built-in styles (default, compact single line, bubble); the folder template becomes `custom`, set by hand, and the default template is no longer copied into the folder | Most streamers do not write HTML; while the folder always held a valid template, the picker would have no effect |
 | 2026-11-15 | Merging changed from squash to rebase-merge; exactly one commit per issue, and one PR may hold several independent issues; issues too big for one commit are split into sub-issues | `main` stays one straight line with one commit per issue, and there are fewer PRs |
 | 2026-11-16 | Added `bits:read` to the Twitch scopes | Slice 2 alerts include Bits; existing sign-ins are asked to sign in again once |
+| 2026-11-16 | The default alert sound is synthesised by `scripts/generate-chime.mjs` with Node's built-in modules | No need to find a redistributable sound file, and the license stays simple (this project's MIT); the script and its output are committed together and a test checks they match |

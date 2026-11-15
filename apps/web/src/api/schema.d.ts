@@ -235,6 +235,11 @@ export interface components {
              * @description Subs gifted: `gift`.
              */
             count?: number | null;
+            /**
+             * Format: int64
+             * @description How long the overlay shows it; the next alert comes after this and a short pause.
+             */
+            durationMs: number;
             kind: components["schemas"]["AlertKindName"];
             /** @description Raw viewer text of a `resubscribe` or `cheer`, when there is one. */
             message?: string | null;

@@ -1,4 +1,5 @@
-// Alerts: the simulator in the admin UI (API mocked) and the alert events a real Host sends for it.
+// Alerts: the simulator in the admin UI (API mocked), and the events and overlay of a real Host.
+import { randomUUID } from 'node:crypto'
 import { type Page, expect, test } from '@playwright/test'
 import { openAdmin, scrollsSideways, zh } from './fixtures'
 import { HOST_PORT } from './ports'
@@ -106,8 +107,9 @@ test('the Host sends every simulated kind as an alert marked source=simulation',
         (m) => m.type === 'alert',
       ),
     )
+  // The Host plays them one at a time (the E2E Host shows each for 1.5 to 2 s).
   await expect
-    .poll(async () => [...new Set((await alerts()).map((a) => a.payload.kind))])
+    .poll(async () => [...new Set((await alerts()).map((a) => a.payload.kind))], { timeout: 20_000 })
     .toEqual(['follow', 'subscribe', 'resubscribe', 'gift', 'cheer', 'raid'])
   expect((await alerts()).every((a) => a.source === 'simulation')).toBe(true)
 
@@ -123,4 +125,58 @@ test('the Host sends every simulated kind as an alert marked source=simulation',
     data: { kind: 'follow' },
   })
   expect(anonymous.status()).toBe(401)
+})
+
+test('the overlay plays every kind in order, one at a time with a sound, and a gift of 3 once', async ({
+  page,
+  request,
+}) => {
+  // Alerts other tests queued on the shared Host may play first; only this test's name counts.
+  test.setTimeout(60_000)
+  const name = `e2e-${randomUUID().slice(0, 8)}`
+  await page.addInitScript(() => {
+    const w = window as unknown as { shown: string[]; sounds: number; most: number }
+    Object.assign(w, { shown: [], sounds: 0, most: 0 })
+    // Headless Chromium refuses autoplay; count the attempts instead.
+    HTMLMediaElement.prototype.play = () => (w.sounds++, Promise.resolve())
+    new MutationObserver(() => {
+      const titles = [...document.querySelectorAll('[data-alert-stage] [data-field="title"]')]
+      w.most = Math.max(w.most, titles.length)
+      for (const t of titles) if (w.shown.at(-1) !== t.textContent) w.shown.push(t.textContent!)
+    }).observe(document, { childList: true, subtree: true })
+  })
+  await page.goto(`${HOST}/overlay/alerts/`)
+  await expect(page.locator('[data-alert-stage]')).toBeAttached()
+
+  for (const data of [
+    { kind: 'gift', amount: 3 },
+    { kind: 'follow' },
+    { kind: 'subscribe' },
+    { kind: 'resubscribe', amount: 12, message: 'hi' },
+    { kind: 'cheer', amount: 100 },
+    { kind: 'raid', amount: 42 },
+  ]) {
+    const res = await request.post(`${HOST}/api/admin/simulate/alert`, { headers: admin, data: { ...data, userName: name } })
+    expect(res.status()).toBe(204)
+  }
+  const seen = () =>
+    page.evaluate(() => {
+      const { shown, sounds, most } = window as unknown as { shown: string[]; sounds: number; most: number }
+      return { shown, sounds, most }
+    })
+  await expect
+    .poll(async () => (await seen()).shown.filter((t) => t.includes(name)), { timeout: 40_000 })
+    .toEqual([
+      `${name} 送了 3 份訂閱！`,
+      `${name} 追隨了！`,
+      `${name} 訂閱了！`,
+      `${name} 續訂了 12 個月！`,
+      `${name} 送出 100 小奇點！`,
+      `${name} 帶著 42 人揪團來了！`,
+    ])
+  const { shown, sounds, most } = await seen()
+  expect(most, 'one alert at a time').toBe(1)
+  expect(sounds, 'a sound per alert').toBe(shown.length)
+  // Each alert leaves once its time is up.
+  await expect(page.locator('[data-alert-stage] [data-field="title"]')).toHaveCount(0, { timeout: 5_000 })
 })
