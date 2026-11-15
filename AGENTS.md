@@ -25,6 +25,10 @@ Streamer Toolkit: a local-first Twitch streaming toolkit for Windows. Goal: feat
 - Write Chinese only while working. Before committing docs, create or update each `<name>.en.md`, set its `source-sha256` header, have the user review it, and run `node scripts/check-translations.mjs` (details in `docs/dev.md`).
 - Code identifiers, comments, API/DB fields and error codes: English.
 - Commits: English Conventional Commits, e.g. `feat(checkin): add daily check-in rule`.
-- Branches: work on `feat/<slice>`, open a PR, squash-merge into `main` after CI passes.
+- Branches and PRs: work on a branch, open a PR, rebase-merge into `main` (`gh pr merge <n> --rebase`) after CI passes; the repo allows only rebase-merge, so `main` stays linear.
+  - Exactly one Conventional Commit per issue, always. Squash an issue's work locally before pushing (no fixup or review commits left in the PR): `git reset --soft`, or `git commit --fixup` then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash` (interactive rebase is not available).
+  - An issue must fit in one commit. A broad issue becomes a parent issue with GitHub sub-issues: each sub-issue is one commit, the parent gets none and closes when all sub-issues are done. If an issue turns out too big while working on it, stop and propose the split instead of growing the commit.
+  - One PR may hold several independent issues from the same stage, one commit each; the PR body lists `Closes #…` for each. Issues that touch the same files go in sequence on the same branch, never in parallel.
+  - Keep the branch current with `git rebase origin/main` and `git push --force-with-lease` (own branch only); never merge `main` into it, since merge commits break rebase-merge.
 - Backlog lives in GitHub Issues, not in docs.
 - When behavior, layer rules or tech choices change, update the matching doc (see `docs/dev.md`).

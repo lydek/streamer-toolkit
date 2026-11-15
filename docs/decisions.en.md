@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: d0e6403337f809b8ba47dff04464948b14a1a25ab89e4dd32b2ee62089797d4d -->
+<!-- source: docs/decisions.md source-sha256: 0d765153a33c6a7b2f76ca67d9fc6d5cfcee521de27a09fd1f4fec4a452260ba -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -39,7 +39,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
 | Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the portable zip and the About screen |
 | Bundled assets | Only redistributable assets (CC0, CC-BY, OFL for fonts, etc.), with source and license recorded in `assets/CREDITS.md`; user-imported assets never go into the repo |
-| Branches | Default `main`; each slice gets a short-lived `feat/<slice>` branch, squash-merged by PR after CI passes |
+| Branches | Default `main`; work happens on short-lived branches, rebase-merged by PR after CI passes (the only merge method the repo allows), so `main` stays one straight line; exactly one commit per issue, and one PR may hold several independent issues from the same stage |
 | Line endings | `.gitattributes`: LF everywhere; CRLF for `.ps1`/`.bat`/`.cmd`; images, sounds, videos and fonts marked binary |
 | Git hooks | lefthook (`lefthook.yml`) |
 | Commit identity | GitHub noreply email, set for this repo only |
@@ -120,3 +120,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-15 | UI E2E moved from after the MVP into the MVP, with Playwright + Chromium; the manual checklist in dev.md keeps only what automation cannot do | The manual drawer, dialog and layout checks had to be repeated for every slice, and jsdom cannot test them; Chromium is the same engine as WebView2, so the results hold. Real Twitch/OBS connections, the native window ✕, the system tray and actual OBS visuals stay manual |
 | 2026-11-15 | pre-push skips checks the pushed files cannot affect; Rust builds can use sccache | Each worktree has its own `target\`, so its first build is slow, and docs-only or frontend-only changes still waited for the full Rust check; CI still runs the full check every time |
 | 2026-11-15 | Chat templates are picked from built-in styles (default, compact single line, bubble); the folder template becomes `custom`, set by hand, and the default template is no longer copied into the folder | Most streamers do not write HTML; while the folder always held a valid template, the picker would have no effect |
+| 2026-11-15 | Merging changed from squash to rebase-merge; exactly one commit per issue, and one PR may hold several independent issues; issues too big for one commit are split into sub-issues | `main` stays one straight line with one commit per issue, and there are fewer PRs |

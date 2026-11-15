@@ -26,7 +26,11 @@
 ## Git
 - Repo 是 public：任何人都看得到程式碼與 commit 紀錄。
 - Commit 作者 email 用 GitHub noreply：`git config user.email "<id>+<帳號>@users.noreply.github.com"`（只設本 repo）。
-- 分支：`main` 為預設分支；每個切片開 `feat/<切片>`，發 PR，CI 通過後 squash 合併。
+- 分支與 PR：`main` 為預設分支；在分支上工作，發 PR，CI 通過後用 rebase-merge 合併（`gh pr merge <編號> --rebase`）。Repo 只開放 rebase-merge，`main` 保持一條直線。
+  - 每個 issue 固定一個 Conventional Commit。push 前先在本機把同一個 issue 的工作併成一個 commit，PR 裡不留 fixup 或 review 修正的 commit：用 `git reset --soft`，或 `git commit --fixup` 再 `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash`（環境不支援互動式 rebase）。
+  - 一個 issue 必須放得進一個 commit。範圍廣的 issue 改成母 issue，底下開 GitHub sub-issue：每個 sub-issue 一個 commit，母 issue 沒有 commit，所有 sub-issue 完成後關閉。做到一半發現 issue 太大時，先停下來向使用者提出拆分方式，不要把 commit 越做越大。
+  - 一個 PR 可以放同一階段的多個獨立 issue，每個 issue 一個 commit，PR 說明逐一列出 `Closes #…`。會改到相同檔案的 issue 在同一個分支上依序做，不平行進行。
+  - 分支要跟上 `main` 時，用 `git rebase origin/main` 再 `git push --force-with-lease`（只用在自己的分支）；不要把 `main` merge 進分支，merge commit 會讓 rebase-merge 失敗。
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。

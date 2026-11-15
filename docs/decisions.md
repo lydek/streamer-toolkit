@@ -38,7 +38,7 @@
 | 相依套件授權 | Rust（`cargo-deny`）允許清單：MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0。前端另設清單，只檢查會打包進產物的相依套件：上述加上 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。GPL／LGPL／AGPL 一律擋下 |
 | 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）合成 `THIRD_PARTY_LICENSES`，放進可攜版 zip 與關於畫面 |
 | 內建素材 | 只收可再散布的素材（CC0、CC-BY、字型 OFL 等），來源與授權記在 `assets/CREDITS.md`；使用者匯入的素材不進 repo |
-| 分支 | 預設 `main`；每個切片開 `feat/<切片>` 短命分支，PR 經 CI 通過後 squash 合併 |
+| 分支 | 預設 `main`；工作在短命分支進行，PR 經 CI 通過後 rebase-merge（repo 只開放這種合併方式），`main` 保持一條直線；每個 issue 固定一個 commit，一個 PR 可以放同一階段的多個獨立 issue |
 | 換行 | `.gitattributes`：一律 LF；`.ps1`／`.bat`／`.cmd` 用 CRLF；圖片、音效、影片、字型標為 binary |
 | Git hook | lefthook（`lefthook.yml`） |
 | Commit 身分 | GitHub noreply email，只對本 repo 設定 |
@@ -119,3 +119,4 @@
 | 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |
 | 2026-11-15 | pre-push 依推送的檔案跳過不受影響的檢查；Rust 編譯可選用 sccache | 每個 worktree 有自己的 `target\`，第一次編譯很慢，只改文件或前端也要等完整的 Rust 檢查；CI 每次仍跑完整檢查 |
 | 2026-11-15 | 聊天室樣板改為從內建款式選擇（預設、精簡單行、泡泡），資料夾樣板變成手動指定的 `custom`，不再自動複製預設樣板 | 多數實況主不會寫 HTML；資料夾裡一直有一份有效樣板時，選擇器會沒有作用 |
+| 2026-11-15 | 合併方式由 squash 改為 rebase-merge；每個 issue 固定一個 commit，一個 PR 可放多個獨立 issue；太大的 issue 拆成 sub-issue | `main` 保持一條直線，每個 issue 一個 commit，同時減少 PR 數量 |
