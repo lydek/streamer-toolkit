@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: f155e12c83a7bddbfd83b99542731d180ff083c65b483e4def70f24e362143c8 -->
+<!-- source: docs/dev.md source-sha256: 37289bed69dbe43af9c3644f38e03d2d974bd6a1ea92cfeda6ba862388eb6703 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -9,6 +9,10 @@
 - Visual Studio Build Tools (MSVC) and WebView2 Runtime (required by Tauri).
 - `cargo-deny`: `cargo install --locked cargo-deny` (the pre-push hook and CI both run `cargo deny check`).
 - Playwright's Chromium (for UI E2E): `pnpm --filter web exec playwright install chromium`, once; the browser goes in the user profile, not the repo.
+- sccache (optional): shares compiled Rust dependencies across all worktrees, so a new worktree's first build is faster (shared dependencies are not rebuilt; each worktree's own crates and build-script output still compile). Builds work without it.
+  - Install: `cargo install --locked sccache`, then in PowerShell run `[Environment]::SetEnvironmentVariable('RUSTC_WRAPPER', 'sccache', 'User')`; it takes effect in a new terminal. `sccache --show-stats` shows the hit rate.
+  - Set it only in your own environment variables, never in the repo's `.cargo/config.toml`. Before removing sccache, run `[Environment]::SetEnvironmentVariable('RUSTC_WRAPPER', $null, 'User')` in PowerShell and open a new terminal, or cargo fails to find it and builds break.
+  - The cache defaults to `%LOCALAPPDATA%\Mozilla\sccache`, capped at 10 GB (change with `SCCACHE_CACHE_SIZE`). Each worktree still has its own `target\` (dev data lives in `target\debug\data\`); only the cache is shared.
 
 Principle: another Windows PC can get it running by following this document.
 
@@ -17,7 +21,7 @@ Principle: another Windows PC can get it running by following this document.
 - Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
 - API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
-- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `pnpm web:e2e`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push`
+- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `pnpm web:e2e`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push --force` (without `--force` it skips steps based on the pushed files; see "Git" below)
 - Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>` (the Vite proxy of `pnpm tauri dev` reads the port only from `target\debug\data\`, so that data's port must match it). Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
@@ -27,7 +31,12 @@ Principle: another Windows PC can get it running by following this document.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
-  - `pre-push` runs the full check in CI order (translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, UI E2E, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
+  - `pre-push` runs the checks in CI order (which steps it skips is below; translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, UI E2E, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
+  - `pre-push` runs only the steps the pushed files can affect (CI skips nothing and always runs the full check):
+    - Docs only (root `*.md`, `docs/`): only the translation check; a change to `docs/decisions.md` also runs the script tests and the frontend license check (the license allowlist lives in that file).
+    - Frontend only (`apps/web/`): skips `cargo fmt`, both `cargo clippy` runs and `cargo deny check`; the rest runs. Changes limited to the admin UI (`apps/web/src/admin/`) or E2E (`apps/web/e2e/`) also skip `cargo test`; other frontend changes run it, because the Host embeds and tests `apps/web/dist` and the overlay's default template.
+    - Any other file (Rust, `Cargo.*`, `lefthook.yml`, `.github/`, `package.json`, `pnpm-lock.yaml`, `rust-toolchain.toml`, `scripts/` and so on): everything runs.
+    - Files are compared with the remote branch (for a new branch, `origin`'s default branch); lefthook does not list paths that no longer exist (a renamed file may not appear at all), so a push that only deletes or renames files may skip checks, and CI catches it.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
 
 ## Before every commit (CI runs the same set, Windows only)

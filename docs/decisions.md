@@ -87,7 +87,7 @@
 | 開啟外部網址 | `tauri-plugin-opener`，只在 Rust 端呼叫，於系統瀏覽器開外部網址：管理視窗要開的每個外部網址（Twitch 驗證頁、新版下載頁等）各做一個網址寫死、不接受參數的指令；缺少 WebView2 時由啟動流程直接開微軟下載頁。不做接受網址參數的通用指令，也不授予任何視窗 opener plugin 的權限 |
 | 散布 | 只出可攜版 zip（`tauri build --no-bundle` 產生執行檔，再打包成 zip），不出安裝檔；程式不簽章，說明文件附 SmartScreen「仍要執行」與 zip「解除封鎖」的步驟；更新：啟動時查 GitHub Releases 的最新版本，有新版就在管理 UI 提示，並附按鈕開啟下載頁（網址寫死的指令），使用者自己解壓縮覆蓋；zip 絕不包含 `data` 資料夾，覆蓋時不會動到資料；只能升級，舊版程式遇到較新的資料時拒絕開啟 |
 | WebView2 | 使用系統的 Evergreen WebView2 Runtime（Windows 11 內建）；啟動時偵測，缺少就顯示說明並開啟微軟下載頁，Host、Overlay 與系統匣照常運作；不隨附固定版 |
-| 開發工具 | `@tauri-apps/cli` 與 `lefthook` 為 pnpm devDependencies，版本由 lockfile 鎖定，不需全域安裝 |
+| 開發工具 | `@tauri-apps/cli` 與 `lefthook` 為 pnpm devDependencies，版本由 lockfile 鎖定，不需全域安裝；sccache 可選，由開發者自己安裝並設定環境變數，repo 不設定 |
 | 套件管理 | Node 24 LTS（寫在 `.nvmrc`）；pnpm 用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本；不依賴 Corepack |
 
 ## 導入時機
@@ -117,3 +117,4 @@
 | 2026-11-14 | PrimeVue 固定在 4.5.5、`@primeuix/themes` 2.0.3、PrimeIcons 7.0.0（版本寫死） | PrimeVue 5、`@primeuix/themes` 3、PrimeIcons 8 改用專有的 PrimeUI License（需授權金鑰、不得拆出原始程式碼），不在允許清單內；以上是最後的 MIT 版本。v4 不會再有修正，出現安全問題時重新評估 |
 | 2026-11-14 | 開發模式的 proxy port 改為每個請求從 dev 資料夾（`target\debug\data\`）的 `settings.json` 讀取；Vite `server.fs.deny` 另加 Cargo 的 `target` 資料夾 | Vite 比 app 先啟動，資料夾第一次啟動可能自動換 port，port 修改小頁面也可能存下新的 port，只在啟動時讀一次會對不上；`null` origin 讀得到 Vite 提供的檔案，而 dev 資料夾（設定、記錄檔、WebView2 資料）在 `target` 裡 |
 | 2026-11-15 | UI E2E 從 MVP 之後移進 MVP，用 Playwright＋Chromium；dev.md 人工檢查清單只留自動化做不到的項目 | 抽屜、對話方塊與版面的手動檢查每個切片都要重走一遍，jsdom 又測不了；Chromium 與 WebView2 同引擎，結果可信。真的 Twitch／OBS 連線、原生視窗 ✕、系統匣與 OBS 實際畫面仍要人工 |
+| 2026-11-15 | pre-push 依推送的檔案跳過不受影響的檢查；Rust 編譯可選用 sccache | 每個 worktree 有自己的 `target\`，第一次編譯很慢，只改文件或前端也要等完整的 Rust 檢查；CI 每次仍跑完整檢查 |
