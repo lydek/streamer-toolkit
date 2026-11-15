@@ -91,6 +91,21 @@ export function stylesheetsLoaded(root: ParentNode, timeoutMs = 3000): Promise<v
   return Promise.race([Promise.all(pending).then(() => {}), new Promise<void>((done) => setTimeout(done, timeoutMs))])
 }
 
+/**
+ * The look of a message's text in a mounted template, for plain text shown outside it (the connection status).
+ * Measured on a throwaway message, since a template may style the text through the message (bubble) and none may
+ * be shown yet.
+ */
+export function textStyle({ list, item }: ChatTemplate) {
+  const probe = item.content.cloneNode(true) as DocumentFragment
+  const nodes = [...probe.childNodes]
+  const text = probe.querySelector('[data-field="text"]') ?? list
+  list.append(probe)
+  const { color, fontFamily, fontSize, textShadow } = getComputedStyle(text)
+  nodes.forEach((n) => n.remove())
+  return { color, fontFamily, fontSize, textShadow }
+}
+
 /** Mounts `template` into `host`; the returned renderer adds and removes only the messages that changed. */
 export function mount(host: Element, { nodes, list, item }: ChatTemplate): (messages: ChatEvent[]) => void {
   host.replaceChildren(...nodes)

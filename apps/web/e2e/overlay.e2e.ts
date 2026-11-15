@@ -3,7 +3,8 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
+import { type APIRequestContext, type Page, type WebSocketRoute, expect, test } from '@playwright/test'
+import { zh } from './fixtures'
 import { HOST_PORT } from './ports'
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`
@@ -57,6 +58,47 @@ test('picking a built-in template applies live, without reloading the overlay', 
   expect(await page.evaluate(() => 'notReloaded' in window)).toBe(true)
   const status = await request.get(`${HOST}/api/admin/templates/chat`, { headers: admin })
   expect(await status.json()).toEqual({ selected: 'compact', error: null })
+})
+
+test('the connection status takes the look of each built-in template\'s chat text', async ({ page, request }) => {
+  // Proxies the overlay's WebSocket to the Host, so the test can drop it and refuse reconnects.
+  let down = false
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+    if (down) return ws.close()
+    ws.connectToServer()
+    sockets.push(ws)
+  })
+  await select(request, 'default')
+  await page.goto(`${HOST}/overlay/chat/`)
+  const text = await say(request)
+  const status = page.getByRole('status')
+  const look = (el: Element) =>
+    (({ color, fontFamily, fontSize, textShadow }) => ({ color, fontFamily, fontSize, textShadow }))(getComputedStyle(el))
+
+  const looks: string[] = []
+  for (const [id, list] of [
+    ['default', 'ul.chat:not(.bubble):not(.compact)'],
+    ['bubble', 'ul.bubble'],
+    ['compact', 'ul.compact'],
+  ]) {
+    await select(request, id)
+    // A reconnect's snapshot mounts the template again, hidden until its CSS is in.
+    const message = page.locator(`${list} li.message`, { hasText: text }).filter({ visible: true })
+    await expect(message).toBeVisible()
+    down = true
+    sockets.splice(0).forEach((ws) => ws.close())
+    await expect(status).toHaveText(zh.overlay.status.closed)
+    const expected = await message.locator('[data-field="text"]').evaluate(look)
+    // White on the black scene, as each built-in template's chat text is.
+    expect(expected.color).toBe('rgb(255, 255, 255)')
+    expect(await status.evaluate(look)).toEqual(expected)
+    looks.push(JSON.stringify(expected))
+    down = false
+    await expect(status).toHaveCount(0)
+  }
+  // The status changed with the template: the three looks differ (shadow, font size).
+  expect(new Set(looks).size).toBe(3)
 })
 
 test('a template edit applies live, without reloading the overlay', async ({ page, request }) => {
