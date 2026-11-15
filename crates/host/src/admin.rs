@@ -104,6 +104,7 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .route("/api/admin/twitch/client-id", put(set_client_id))
         .route("/api/admin/twitch/login", post(login))
         .route("/api/admin/twitch/logout", post(logout))
+        .route("/api/admin/general", get(general).put(set_general))
         .route("/api/admin/modules", get(list_modules))
         .route("/api/admin/modules/{id}", put(set_module))
         .route("/api/admin/simulate/chat", post(simulate_chat))
@@ -227,6 +228,39 @@ async fn logout(State(s): State<Arc<AdminState>>) -> Response {
     match s.twitch.read().await.logout() {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => auth_error(e),
+    }
+}
+
+/// Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub(crate) struct GeneralSettings {
+    /// Show the close hint on ✕; the hint's "Don't show again" turns it off.
+    ask_before_close: bool,
+}
+
+#[utoipa::path(get, path = "/api/admin/general", tag = "admin", responses((status = 200, body = GeneralSettings)))]
+async fn general(State(s): State<Arc<AdminState>>) -> Json<GeneralSettings> {
+    Json(GeneralSettings {
+        ask_before_close: !settings::load(&s.data_dir).skip_close_hint,
+    })
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/general",
+    tag = "admin",
+    request_body = GeneralSettings,
+    responses((status = 204), (status = 500, body = ErrorBody))
+)]
+async fn set_general(
+    State(s): State<Arc<AdminState>>,
+    Json(body): Json<GeneralSettings>,
+) -> Response {
+    match settings::update(&s.data_dir, |set| {
+        set.skip_close_hint = !body.ask_before_close
+    }) {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
     }
 }
 

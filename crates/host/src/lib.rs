@@ -474,6 +474,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ask_before_close_is_the_inverse_of_skip_close_hint() {
+        let dir = std::env::temp_dir().join(format!("st-host-general-{}", std::process::id()));
+        settings::update(&dir, |s| s.skip_close_hint = true).unwrap();
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        let app = router(config).unwrap();
+        let get = || {
+            get_req("/api/admin/general", "127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+        let read = |res: axum::response::Response| async {
+            let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["ask_before_close"].clone()
+        };
+
+        assert_eq!(read(app.clone().oneshot(get()).await.unwrap()).await, false);
+        let put = get_req("/api/admin/general", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"ask_before_close":true}"#))
+            .unwrap();
+        let res = app.clone().oneshot(put).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert!(!settings::load(&dir).skip_close_hint);
+        assert_eq!(read(app.oneshot(get()).await.unwrap()).await, true);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
     async fn port_zero_binds_a_free_port_and_allows_it() {
         let mut config = test_config();
         config.port = 0;

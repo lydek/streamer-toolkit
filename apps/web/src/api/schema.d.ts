@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/admin/general": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["general"];
+        put: operations["set_general"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/home-tiles": {
         parameters: {
             query?: never;
@@ -245,6 +261,11 @@ export interface components {
         ErrorBody: {
             code: string;
         };
+        /** @description Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window. */
+        GeneralSettings: {
+            /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
+            ask_before_close: boolean;
+        };
         ModuleBody: {
             enabled: boolean;
         };
@@ -357,6 +378,54 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    general: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralSettings"];
+                };
+            };
+        };
+    };
+    set_general: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeneralSettings"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     home_tiles: {
         parameters: {
             query?: never;
