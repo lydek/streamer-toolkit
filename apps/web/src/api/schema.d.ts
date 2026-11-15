@@ -124,6 +124,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/templates/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["alert_template"];
+        /** Switches the alert overlay template and saves the choice; overlays reload it at once (`template.changed`). */
+        put: operations["select_alert_template"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/templates/chat": {
         parameters: {
             query?: never;
@@ -260,6 +277,15 @@ export interface components {
              * @description Raiders: `raid`.
              */
             viewers?: number | null;
+        };
+        /**
+         * @description Which built-in template the alert overlay shows.
+         * @enum {string}
+         */
+        AlertTemplate: "default" | "banner" | "text";
+        /** @description `GET` and `PUT /api/admin/templates/alerts`. */
+        AlertTemplateChoice: {
+            selected: components["schemas"]["AlertTemplate"];
         };
         /** @enum {string} */
         AlertType: "alert";
@@ -446,7 +472,7 @@ export interface components {
             version: number;
         };
         TemplateChangedPayload: {
-            /** @description Which overlay's template changed; only `chat` for now. */
+            /** @description Which overlay's template changed: `chat` or `alerts`. */
             overlay: string;
         };
         /** @enum {string} */
@@ -748,6 +774,62 @@ export interface operations {
                 content?: never;
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    alert_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTemplateChoice"];
+                };
+            };
+        };
+    };
+    select_alert_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertTemplateChoice"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

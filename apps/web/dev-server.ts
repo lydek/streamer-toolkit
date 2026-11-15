@@ -8,11 +8,13 @@ export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
 export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
-export const PREVIEW_PATH = '/overlay/chat/'
+export const PREVIEW_PATHS = ['/overlay/chat/', '/overlay/alerts/']
 
-/** The admin CSP for a page served as `host`: only the template preview page may be framed, as the Host does. */
+/** The admin CSP for a page served as `host`: only the template preview pages may be framed, as the Host does. */
 export const adminCsp = (host = '') =>
-  `${ADMIN_CSP}; frame-src ${/^[\w.-]+(:\d+)?$/.test(host) ? `http://${host}${PREVIEW_PATH}` : "'none'"}`
+  `${ADMIN_CSP}; frame-src ${
+    /^[\w.-]+(:\d+)?$/.test(host) ? PREVIEW_PATHS.map((p) => `http://${host}${p}`).join(' ') : "'none'"
+  }`
 
 /** The CSP the Host sends for the page at `url`, so violations show up while developing. */
 export const devCsp = (url = '', host = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : adminCsp(host))

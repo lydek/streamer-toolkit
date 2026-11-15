@@ -95,7 +95,11 @@ describe('ChatPreview', () => {
     expect(calls.get).toHaveBeenCalledWith('/api/admin/templates/chat')
     expect(wrapper.get('[role="alert"]').text()).toBe(i18n.global.t('errors.template.invalid'))
     expect(wrapper.findAll('input:checked')).toHaveLength(0)
-    calls.listener!({ type: 'template.changed', id: 't', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { overlay: 'chat' } })
+    // Another overlay's change is not this picker's business.
+    calls.listener!({ type: 'template.changed', id: 't', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { overlay: 'alerts' } })
+    await flushPromises()
+    expect(calls.get).toHaveBeenCalledTimes(1)
+    calls.listener!({ type: 'template.changed', id: 't', version: 1, seq: 3, occurredAt: '', source: 'system', payload: { overlay: 'chat' } })
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     wrapper.unmount()

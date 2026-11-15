@@ -1,7 +1,7 @@
 // Alerts: the simulator in the admin UI (API mocked), and the events and overlay of a real Host.
 import { randomUUID } from 'node:crypto'
 import { type Page, expect, test } from '@playwright/test'
-import { openAdmin, scrollsSideways, zh } from './fixtures'
+import { mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
 import { HOST_PORT } from './ports'
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`
@@ -56,7 +56,7 @@ test('the simulator sends each kind with its name, amount and message', async ({
   expect(bodies[2]).toEqual({ kind: 'resubscribe', userName: 'Viewer', amount: 12, message: 'hello' })
 })
 
-test('a refused simulation shows why inside the drawer', async ({ page }) => {
+test('a refused simulation shows why', async ({ page }) => {
   const drawer = await openSimulator(page)
   await page.route('**/api/admin/simulate/alert', (r) =>
     r.fulfill({ status: 400, json: { code: 'simulate.invalid_amount' } }),
@@ -75,6 +75,56 @@ test('the simulator drawer never scrolls sideways at 1280px, 640px and 320px', a
     expect(await scrollsSideways(page), `${width}px, page`).toBe(false)
     expect(await scrollsSideways(page.locator('#drawer-alerts')), `${width}px, drawer`).toBe(false)
   }
+})
+
+test('the alerts page picks a template; each preview plays the sample alert', async ({ page }) => {
+  const s = await mockAdmin(page, { modules })
+  await page.goto('/admin/alerts')
+  const option = (id: keyof typeof zh.alerts.templates) => page.getByRole('radio', { name: zh.alerts.templates[id] })
+  await expect(option('default')).toBeChecked()
+  // The sample is a resub with a message, in every preview.
+  for (const id of ['default', 'banner', 'text'] as const) {
+    const frame = page.frameLocator(`iframe[title="${zh.alerts.templates[id]}"]`)
+    await expect(frame.locator('[data-field="title"]')).toHaveText('Viewer 續訂了 12 個月！')
+    await expect(frame.locator('[data-field="message"]')).toHaveText(zh.alerts.sample)
+  }
+  // The iframe ignores the pointer, so a click on the preview reaches its radio.
+  await page.getByTitle(zh.alerts.templates.banner).click({ force: true })
+  await expect(option('banner')).toBeChecked()
+  await expect.poll(() => s.alertTemplate.selected).toBe('banner')
+  await option('banner').focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(option('text')).toBeChecked()
+  await expect.poll(() => s.alertTemplate.selected).toBe('text')
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 800 })
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+  }
+})
+
+test('picking an alert template switches the overlay at once, without reloading it', async ({ page, request }) => {
+  const select = async (selected: string) => {
+    const res = await request.put(`${HOST}/api/admin/templates/alerts`, { headers: admin, data: { selected } })
+    expect(res.status()).toBe(204)
+  }
+  await select('default')
+  await page.goto(`${HOST}/overlay/alerts/`)
+  await expect(page.locator('.card[data-alert-stage]')).toBeAttached()
+  await page.evaluate(() => Object.assign(window, { notReloaded: true }))
+  for (const [id, stage] of [
+    ['banner', '.banner'],
+    ['text', '.text'],
+  ]) {
+    await select(id)
+    await expect(page.locator(`${stage}[data-alert-stage]`)).toBeAttached()
+    await expect(page.locator('[data-alert-stage]')).toHaveCount(1)
+  }
+  expect(await page.evaluate(() => 'notReloaded' in window)).toBe(true)
+  const status = await request.get(`${HOST}/api/admin/templates/alerts`, { headers: admin })
+  expect(await status.json()).toEqual({ selected: 'text' })
+  const unknown = await request.put(`${HOST}/api/admin/templates/alerts`, { headers: admin, data: { selected: 'x' } })
+  expect(unknown.status()).toBe(400)
+  await select('default')
 })
 
 test('the Host sends every simulated kind as an alert marked source=simulation', async ({ page, request }) => {

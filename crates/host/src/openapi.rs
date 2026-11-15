@@ -30,6 +30,8 @@ use crate::{admin, home_tiles, obs, overlay, templates};
         obs::update_obs,
         templates::chat_template,
         templates::select_chat_template,
+        templates::alert_template,
+        templates::select_alert_template,
     ),
     components(schemas(
         overlay::Snapshot,

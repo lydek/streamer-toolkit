@@ -1,0 +1,54 @@
+.text {
+  display: flex;
+  justify-content: center;
+  padding-top: 30vh;
+  font-family: sans-serif;
+}
+
+.text .alert {
+  max-width: 90vw;
+  color: #fff;
+  text-align: center;
+  /* An outline that reads on any scene. */
+  text-shadow:
+    0 0 3px #000,
+    0 0 3px #000,
+    0 3px 6px #000;
+  animation: rise var(--duration, 6000ms) ease-out both;
+}
+
+.text .title {
+  margin: 0;
+  font-size: max(1.75rem, 3.2vw);
+  font-weight: 900;
+}
+
+.text .alert[data-kind='cheer'] .title {
+  color: #ffd166;
+}
+
+.text .alert[data-kind='raid'] .title {
+  color: #8be9fd;
+}
+
+.text .message {
+  margin: 0.3em 0 0;
+  font-size: max(1.1rem, 1.6vw);
+  overflow-wrap: anywhere;
+}
+
+/* Rises into place, holds, then fades out just before the overlay removes it. */
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(1em);
+  }
+  8%,
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}

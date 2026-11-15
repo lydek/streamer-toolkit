@@ -1,0 +1,52 @@
+.banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 8vh;
+  font-family: sans-serif;
+}
+
+.banner .alert {
+  --accent: #9146ff;
+  max-width: 70vw;
+  padding: 0.5em 1.5em 0.5em 1em;
+  border-left: 0.6em solid #fff;
+  border-radius: 0 999px 999px 0;
+  background: var(--accent);
+  color: #fff;
+  animation: slide var(--duration, 6000ms) ease-out both;
+}
+
+.banner .alert[data-kind='cheer'] {
+  --accent: #c27c0e;
+}
+
+.banner .alert[data-kind='raid'] {
+  --accent: #0e7490;
+}
+
+.banner .title {
+  margin: 0;
+  font-size: max(1.25rem, 2.2vw);
+  font-weight: bold;
+}
+
+.banner .message {
+  margin: 0.2em 0 0;
+  font-size: max(1rem, 1.3vw);
+  overflow-wrap: anywhere;
+}
+
+/* Slides in from the left, holds, then slides back out just before the overlay removes it. */
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  8%,
+  92% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}

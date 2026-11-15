@@ -37,15 +37,15 @@ use tokio::net::TcpListener;
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
 style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:";
 const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
-/// The only page the admin window may frame: the chat overlay as the template preview, which the admin UI puts in
-/// a `sandbox="allow-scripts"` iframe. The release IPC capability covers the whole Host origin, so no other
+/// The only pages the admin window may frame: the chat and alert overlays as template previews, which the admin UI
+/// puts in `sandbox="allow-scripts"` iframes. The release IPC capability covers the whole Host origin, so no other
 /// same-origin page may be framed.
-const PREVIEW_PATH: &str = "/overlay/chat/";
+const PREVIEW_PATHS: [&str; 2] = ["/overlay/chat/", "/overlay/alerts/"];
 
 fn admin_csp(hosts: &[String]) -> HeaderValue {
     let frames: Vec<String> = hosts
         .iter()
-        .map(|h| format!("http://{h}{PREVIEW_PATH}"))
+        .flat_map(|h| PREVIEW_PATHS.map(|p| format!("http://{h}{p}")))
         .collect();
     HeaderValue::from_str(&format!("{ADMIN_CSP}; frame-src {}", frames.join(" ")))
         .expect("hosts are ASCII")
@@ -206,6 +206,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                     get(templates::serve_built_in),
                 )
                 .route("/templates/alerts/{*path}", get(templates::serve_alerts))
+                .route(
+                    "/templates/built-in/alerts/{id}/{*path}",
+                    get(templates::serve_built_in_alerts),
+                )
                 .with_state(templates),
         )
         .merge(admin::routes(admin))
@@ -778,7 +782,8 @@ mod tests {
                 res.headers()[header::CONTENT_SECURITY_POLICY],
                 format!(
                     "{ADMIN_CSP}; frame-src http://127.0.0.1:47810/overlay/chat/ \
-                     http://localhost:47810/overlay/chat/"
+                     http://127.0.0.1:47810/overlay/alerts/ http://localhost:47810/overlay/chat/ \
+                     http://localhost:47810/overlay/alerts/"
                 )
             );
         }

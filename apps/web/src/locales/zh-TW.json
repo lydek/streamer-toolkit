@@ -76,6 +76,12 @@
   "alerts": {
     "empty": "還沒有特效",
     "anonymous": "匿名觀眾",
+    "sample": "這是預覽用的範例留言",
+    "templates": {
+      "default": "預設",
+      "banner": "橫幅",
+      "text": "純文字"
+    },
     "kinds": {
       "follow": "追隨",
       "subscribe": "新訂閱",

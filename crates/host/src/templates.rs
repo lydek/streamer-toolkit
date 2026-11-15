@@ -36,10 +36,44 @@ use crate::{
 #[folder = "../../apps/web/src/overlay/chat/templates"]
 struct BuiltIn;
 
-/// The alert overlay's built-in templates, one folder per ID; there are no user alert templates.
+/// The alert overlay's built-in templates, one folder per [`AlertTemplate`] ID; there are no user alert
+/// templates.
 #[derive(Embed)]
 #[folder = "../../apps/web/src/overlay/alerts/templates"]
 struct AlertsBuiltIn;
+
+/// Which built-in template the alert overlay shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum AlertTemplate {
+    Default,
+    Banner,
+    Text,
+}
+
+impl AlertTemplate {
+    const ALL: [Self; 3] = [Self::Default, Self::Banner, Self::Text];
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Banner => "banner",
+            Self::Text => "text",
+        }
+    }
+
+    /// A hand-edited `settings.json` may hold anything; unknown values mean the default.
+    fn from_id(id: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|t| t.id() == id)
+            .unwrap_or(Self::Default)
+    }
+
+    fn file(self, path: &str) -> Option<Vec<u8>> {
+        AlertsBuiltIn::get(&format!("{}/{path}", self.id())).map(|f| f.data.into_owned())
+    }
+}
 
 /// Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -101,7 +135,7 @@ enum TemplateChangedType {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub(crate) struct TemplateChangedPayload {
-    /// Which overlay's template changed; only `chat` for now.
+    /// Which overlay's template changed: `chat` or `alerts`.
     overlay: String,
 }
 
@@ -121,11 +155,18 @@ pub(crate) struct TemplateChoice {
     selected: ChatTemplate,
 }
 
+/// `GET` and `PUT /api/admin/templates/alerts`.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub(crate) struct AlertTemplateChoice {
+    selected: AlertTemplate,
+}
+
 pub(crate) struct Templates {
     data_dir: PathBuf,
     dir: PathBuf,
     bus: Arc<EventBus>,
     selected: RwLock<ChatTemplate>,
+    alert_selected: RwLock<AlertTemplate>,
     switching: Mutex<()>,
     /// Why the user template is not usable (an error code), or `None` when it is.
     error: RwLock<Option<&'static str>>,
@@ -137,11 +178,11 @@ impl Templates {
         let dir = data_dir.join("templates").join("chat");
         // Fingerprint before the check, so an edit in between is caught by the first poll.
         let seen = fingerprint(&dir);
+        let saved = settings::load(data_dir);
         let templates = Arc::new(Self {
             data_dir: data_dir.to_path_buf(),
-            selected: RwLock::new(ChatTemplate::from_id(
-                &settings::load(data_dir).chat_template,
-            )),
+            selected: RwLock::new(ChatTemplate::from_id(&saved.chat_template)),
+            alert_selected: RwLock::new(AlertTemplate::from_id(&saved.alert_template)),
             switching: Mutex::new(()),
             error: RwLock::new(check(&dir).err()),
             dir,
@@ -203,7 +244,56 @@ pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
             "/api/admin/templates/chat",
             get(chat_template).put(select_chat_template),
         )
+        .route(
+            "/api/admin/templates/alerts",
+            get(alert_template).put(select_alert_template),
+        )
         .with_state(t)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/admin/templates/alerts",
+    tag = "admin",
+    responses((status = 200, body = AlertTemplateChoice))
+)]
+pub(crate) async fn alert_template(State(t): State<Arc<Templates>>) -> Json<AlertTemplateChoice> {
+    Json(AlertTemplateChoice {
+        selected: *t.alert_selected.read().unwrap(),
+    })
+}
+
+/// Switches the alert overlay template and saves the choice; overlays reload it at once (`template.changed`).
+#[utoipa::path(
+    put,
+    path = "/api/admin/templates/alerts",
+    tag = "admin",
+    request_body = AlertTemplateChoice,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 500, body = ErrorBody),
+    )
+)]
+pub(crate) async fn select_alert_template(
+    State(t): State<Arc<Templates>>,
+    body: Result<Json<AlertTemplateChoice>, JsonRejection>,
+) -> Response {
+    let Ok(Json(AlertTemplateChoice { selected })) = body else {
+        return error(StatusCode::BAD_REQUEST, "template.unknown");
+    };
+    let saved = tokio::task::spawn_blocking(move || {
+        let _turn = t.switching.lock().unwrap();
+        settings::update(&t.data_dir, |s| s.alert_template = selected.id().into())?;
+        *t.alert_selected.write().unwrap() = selected;
+        publish_changed(&t.bus, "alerts");
+        std::io::Result::Ok(())
+    })
+    .await;
+    match saved {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        _ => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
+    }
 }
 
 #[utoipa::path(
@@ -245,7 +335,7 @@ pub(crate) async fn select_chat_template(
         let _turn = t.switching.lock().unwrap();
         settings::update(&t.data_dir, |s| s.chat_template = selected.id().into())?;
         *t.selected.write().unwrap() = selected;
-        publish_changed(&t.bus);
+        publish_changed(&t.bus, "chat");
         std::io::Result::Ok(())
     })
     .await;
@@ -274,11 +364,23 @@ pub(crate) async fn serve_built_in(UrlPath((id, path)): UrlPath<(String, String)
     }
 }
 
-/// `GET /templates/alerts/{*path}`: the alert overlay's template.
-pub(crate) async fn serve_alerts(UrlPath(path): UrlPath<String>) -> Response {
-    file_response(&path, |path| {
-        AlertsBuiltIn::get(&format!("default/{path}")).map(|f| f.data.into_owned())
-    })
+/// `GET /templates/alerts/{*path}`: the selected alert template.
+pub(crate) async fn serve_alerts(
+    State(t): State<Arc<Templates>>,
+    UrlPath(path): UrlPath<String>,
+) -> Response {
+    let selected = *t.alert_selected.read().unwrap();
+    file_response(&path, |path| selected.file(path))
+}
+
+/// `GET /templates/built-in/alerts/{id}/{*path}`: any alert template, for the admin UI's previews.
+pub(crate) async fn serve_built_in_alerts(
+    UrlPath((id, path)): UrlPath<(String, String)>,
+) -> Response {
+    match AlertTemplate::ALL.into_iter().find(|t| t.id() == id) {
+        Some(t) => file_response(&path, |path| t.file(path)),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// Every answer under `/templates`, including the ones axum or the guard produce before [`serve`] runs
@@ -427,14 +529,14 @@ async fn watch(t: Arc<Templates>, mut last: Vec<FileStamp>) {
             *t.error.write().unwrap() = error;
             // Overlays showing a built-in template have nothing to reload.
             if t.selected() == ChatTemplate::Custom {
-                publish_changed(&t.bus);
+                publish_changed(&t.bus, "chat");
             }
         }
         last = now;
     }
 }
 
-fn publish_changed(bus: &EventBus) {
+fn publish_changed(bus: &EventBus, overlay: &str) {
     bus.publish(Event {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: CHANGED_EVENT,
@@ -442,7 +544,7 @@ fn publish_changed(bus: &EventBus) {
         occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         source: Source::System,
         payload: serde_json::to_value(TemplateChangedPayload {
-            overlay: "chat".into(),
+            overlay: overlay.into(),
         })
         .expect("payload serializes"),
     });
@@ -494,7 +596,7 @@ pub(crate) mod tests {
     async fn changed_event_type_matches_the_bus() {
         let bus = EventBus::default();
         let (_, mut events) = bus.subscribe();
-        publish_changed(&bus);
+        publish_changed(&bus, "chat");
         let wire: serde_json::Value = serde_json::from_str(&events.recv().await.unwrap()).unwrap();
         // No missing, extra or renamed fields.
         let typed: TemplateChangedEvent = serde_json::from_value(wire.clone()).unwrap();
@@ -533,6 +635,61 @@ pub(crate) mod tests {
         assert_eq!(settings::load(&dir).chat_template, "compact");
         let wire: serde_json::Value = serde_json::from_str(&events.recv().await.unwrap()).unwrap();
         assert_eq!(wire["type"], CHANGED_EVENT);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn every_alert_template_is_usable_and_listed() {
+        let mut folders: Vec<String> = AlertsBuiltIn::iter()
+            .map(|f| f.split('/').next().unwrap().to_owned())
+            .collect();
+        folders.sort();
+        folders.dedup();
+        let mut listed: Vec<&str> = AlertTemplate::ALL
+            .into_iter()
+            .map(AlertTemplate::id)
+            .collect();
+        listed.sort();
+        assert_eq!(folders, listed);
+        for t in AlertTemplate::ALL {
+            assert_eq!(AlertTemplate::from_id(t.id()), t);
+            // The markers apps/web/src/overlay/alerts/template.ts binds to.
+            let html = String::from_utf8(t.file("template.html").unwrap()).unwrap();
+            assert!(
+                html.contains("data-alert-stage") && html.contains("<template data-alert>"),
+                "{t:?}"
+            );
+            assert!(t.file("style.css").is_some(), "{t:?}");
+        }
+        assert_eq!(AlertTemplate::from_id("nope"), AlertTemplate::Default);
+    }
+
+    #[tokio::test]
+    async fn switching_the_alert_template_saves_and_tells_overlays() {
+        let dir = std::env::temp_dir().join(format!("st-tpl-alerts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(EventBus::default());
+        let t = Templates::start(&dir, bus.clone());
+        let (_, mut events) = bus.subscribe();
+        let choice = AlertTemplateChoice {
+            selected: AlertTemplate::Banner,
+        };
+        let res = select_alert_template(State(t.clone()), Ok(Json(choice))).await;
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            alert_template(State(t)).await.0.selected,
+            AlertTemplate::Banner
+        );
+        assert_eq!(settings::load(&dir).alert_template, "banner");
+        let wire: serde_json::Value = serde_json::from_str(&events.recv().await.unwrap()).unwrap();
+        assert_eq!(wire["type"], CHANGED_EVENT);
+        assert_eq!(wire["payload"]["overlay"], "alerts");
+        // Read again at startup.
+        let restarted = Templates::start(&dir, bus);
+        assert_eq!(
+            *restarted.alert_selected.read().unwrap(),
+            AlertTemplate::Banner
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

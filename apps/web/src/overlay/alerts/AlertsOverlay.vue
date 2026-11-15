@@ -12,7 +12,17 @@ import { stylesheetsLoaded } from '../chat/template'
 import { type AlertTemplate, fillAlert, loadAlertTemplate } from './template'
 
 const RETRY_MS = 2000
-const TEMPLATE_BASE = `${location.origin}/templates/alerts/`
+// A preview replays its alert after this pause.
+const REPLAY_MS = 600
+const params = new URLSearchParams(location.search)
+// `?preview`: the admin UI's template preview (see onPreviewMessage); `&template=<id>` previews that built-in
+// template instead of the selected one.
+const preview = params.has('preview')
+const builtIn = preview ? params.get('template') : null
+const TEMPLATE_BASE =
+  builtIn && /^[a-z0-9-]{1,32}$/.test(builtIn)
+    ? `${location.origin}/templates/built-in/alerts/${builtIn}/`
+    : `${location.origin}/templates/alerts/`
 
 const host = ref<HTMLElement>()
 let template: AlertTemplate | undefined
@@ -20,6 +30,8 @@ let ready = Promise.resolve()
 let loads = 0
 let lastSeq = 0
 let hide: ReturnType<typeof setTimeout> | undefined
+/** The alert on screen, kept across a template change. */
+let current: { p: AlertPayload; until: number } | undefined
 let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
@@ -38,20 +50,37 @@ async function applyTemplate() {
   box.hidden = false
   while (host.value.firstChild !== box) host.value.firstChild!.remove()
   template = next
+  // An alert playing when the template changed carries on in the new one for the rest of its time.
+  if (current && current.until > Date.now()) show(current.p, current.until - Date.now())
 }
 
 const reload = () => (ready = applyTemplate())
 
-/** Shows one alert for its duration with the sound. The Host paces them, so a new one only replaces a stale one. */
+/**
+ * Shows one alert for its duration with the sound. The Host paces them, so a new one only replaces a stale one.
+ * A preview plays it silently, over and over.
+ */
 async function play(p: AlertPayload) {
-  await ready
+  // The newest load: a template change during a load supersedes it.
+  for (let r: Promise<void> | undefined; r !== ready; ) await (r = ready)
+  if (!template) return
+  show(p, p.durationMs)
+  // OBS lets browser sources play sound without a click; elsewhere a refused play() only means silence.
+  if (!preview) new Audio(chimeUrl).play()?.catch(() => {})
+}
+
+/** Draws `p` in the current template for `ms`. */
+function show(p: AlertPayload, ms: number) {
   if (!template) return
   clearTimeout(hide)
   const { stage } = template
-  stage.replaceChildren(fillAlert(template.item, p))
-  hide = setTimeout(() => stage.replaceChildren(), p.durationMs)
-  // OBS lets browser sources play sound without a click; elsewhere a refused play() only means silence.
-  new Audio(chimeUrl).play()?.catch(() => {})
+  stage.replaceChildren(fillAlert(template.item, { ...p, durationMs: ms }))
+  current = { p, until: Date.now() + ms }
+  hide = setTimeout(() => {
+    stage.replaceChildren()
+    current = undefined
+    if (preview) hide = setTimeout(() => void play(p), REPLAY_MS)
+  }, ms)
 }
 
 function receive(msg: Incoming) {
@@ -59,8 +88,11 @@ function receive(msg: Incoming) {
     // The template may have changed while disconnected. Alerts are never in snapshots, so none replays.
     lastSeq = msg.seq
     reload()
-  } else if (msg.type === 'alert' && msg.seq > lastSeq) {
-    lastSeq = msg.seq
+  } else if (msg.type === 'template.changed' && msg.payload.overlay === 'alerts') {
+    reload()
+  } else if (msg.type === 'alert' && (preview || msg.seq > lastSeq)) {
+    // The admin window posts a preview's sample and live alerts in order, without a fitting `seq`.
+    lastSeq = Math.max(lastSeq, msg.seq)
     void play(msg.payload)
   }
 }
@@ -73,12 +105,21 @@ function connect() {
   }
 }
 
-connect()
+// `?preview`: in a sandbox="allow-scripts" iframe its origin is `null`, so it cannot reach the Host's WebSocket;
+// the admin window posts the same messages instead (docs/architecture.md §5). location.origin is still the page
+// URL's origin, which is the admin window's.
+function onPreviewMessage(e: MessageEvent) {
+  if (e.source === window.parent && e.origin === location.origin) receive(e.data as Incoming)
+}
+
+if (preview) window.addEventListener('message', onPreviewMessage)
+else connect()
 reload()
 onBeforeUnmount(() => {
   stopped = true
   clearTimeout(retry)
   clearTimeout(hide)
   ws?.close()
+  window.removeEventListener('message', onPreviewMessage)
 })
 </script>

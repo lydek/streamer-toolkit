@@ -325,6 +325,63 @@
         }
       }
     },
+    "/api/admin/templates/alerts": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "alert_template",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertTemplateChoice"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Switches the alert overlay template and saves the choice; overlays reload it at once (`template.changed`).",
+        "operationId": "select_alert_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertTemplateChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/templates/chat": {
       "get": {
         "tags": [
@@ -626,6 +683,27 @@
             "format": "int32",
             "description": "Raiders: `raid`.",
             "minimum": 0
+          }
+        }
+      },
+      "AlertTemplate": {
+        "type": "string",
+        "description": "Which built-in template the alert overlay shows.",
+        "enum": [
+          "default",
+          "banner",
+          "text"
+        ]
+      },
+      "AlertTemplateChoice": {
+        "type": "object",
+        "description": "`GET` and `PUT /api/admin/templates/alerts`.",
+        "required": [
+          "selected"
+        ],
+        "properties": {
+          "selected": {
+            "$ref": "#/components/schemas/AlertTemplate"
           }
         }
       },
@@ -1236,7 +1314,7 @@
         "properties": {
           "overlay": {
             "type": "string",
-            "description": "Which overlay's template changed; only `chat` for now."
+            "description": "Which overlay's template changed: `chat` or `alerts`."
           }
         }
       },

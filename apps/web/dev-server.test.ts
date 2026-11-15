@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, resolveConfig, type ViteDevServer } from 'vite'
-import { ADMIN_CSP, OVERLAY_CSP, PREVIEW_PATH, devCsp, hostPort } from './dev-server.ts'
+import { ADMIN_CSP, OVERLAY_CSP, PREVIEW_PATHS, devCsp, hostPort } from './dev-server.ts'
 
 const portOf = (s: { address(): unknown }) => (s.address() as AddressInfo).port
 
@@ -23,19 +23,24 @@ describe('hostPort', () => {
   })
 })
 
+const hostSource = () => readFileSync(resolve(import.meta.dirname, '../../crates/host/src/lib.rs'), 'utf8')
+
 it.each([
   ['ADMIN_CSP', ADMIN_CSP],
   ['OVERLAY_CSP', OVERLAY_CSP],
-  ['PREVIEW_PATH', PREVIEW_PATH],
 ])('%s matches the Host', (name, csp) => {
-  const rust = readFileSync(resolve(import.meta.dirname, '../../crates/host/src/lib.rs'), 'utf8')
-  const literal = new RegExp(`const ${name}: &str = "((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(rust)?.[1]
+  const literal = new RegExp(`const ${name}: &str = "((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(hostSource())?.[1]
   // A trailing backslash continues a Rust string literal and drops the newline and leading spaces.
   expect(literal?.replace(/\\\r?\n\s*/g, '')).toBe(csp)
 })
 
+it('PREVIEW_PATHS matches the Host', () => {
+  const list = /const PREVIEW_PATHS: \[&str; \d+\] = \[([^\]]*)\];/.exec(hostSource())?.[1]
+  expect(list?.match(/"[^"]*"/g)?.map((s) => s.slice(1, -1))).toEqual(PREVIEW_PATHS)
+})
+
 it('picks the CSP the Host sends for each page', () => {
-  const admin = `${ADMIN_CSP}; frame-src http://localhost:5173/overlay/chat/`
+  const admin = `${ADMIN_CSP}; frame-src http://localhost:5173/overlay/chat/ http://localhost:5173/overlay/alerts/`
   expect(devCsp('/admin/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/port/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/overlay/chat/', 'localhost:5173')).toBe(OVERLAY_CSP)

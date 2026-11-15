@@ -1,11 +1,11 @@
-.stage {
+.card {
   display: flex;
   justify-content: center;
   padding-top: 6vh;
   font-family: sans-serif;
 }
 
-.alert {
+.card .alert {
   --accent: #d8b7ff;
   max-width: 80vw;
   padding: 0.6em 1.4em;
@@ -17,24 +17,25 @@
   animation: alert var(--duration, 6000ms) ease-out both;
 }
 
-.alert[data-kind='cheer'] {
+.card .alert[data-kind='cheer'] {
   --accent: #ffc94d;
 }
 
-.alert[data-kind='raid'] {
+.card .alert[data-kind='raid'] {
   --accent: #7ee0ff;
 }
 
-.title {
+/* Scales with the browser source's width, so small previews stay readable too. */
+.card .title {
   margin: 0;
-  font-size: 2.5rem;
+  font-size: max(1.5rem, 2.4vw);
   font-weight: bold;
   text-shadow: 0 2px 4px #000;
 }
 
-.message {
+.card .message {
   margin: 0.4em 0 0;
-  font-size: 1.5rem;
+  font-size: max(1rem, 1.4vw);
   overflow-wrap: anywhere;
 }
 
