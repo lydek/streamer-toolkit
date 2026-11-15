@@ -192,6 +192,55 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in
+         *     snapshots, so a reloaded overlay never replays one.
+         */
+        AlertEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["AlertPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["AlertType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        AlertKindName: "follow" | "subscribe" | "resubscribe" | "gift" | "cheer" | "raid";
+        /** @description The `payload` of an `alert` event. Fields the kind does not have are left out. */
+        AlertPayload: {
+            /** Format: int32 */
+            bits?: number | null;
+            /**
+             * Format: int32
+             * @description Subs gifted: `gift`.
+             */
+            count?: number | null;
+            kind: components["schemas"]["AlertKindName"];
+            /** @description Raw viewer text of a `resubscribe` or `cheer`, when there is one. */
+            message?: string | null;
+            /**
+             * Format: int32
+             * @description Months subscribed in total: `resubscribe`.
+             */
+            months?: number | null;
+            /**
+             * Format: int32
+             * @description Subscription tier, 1 to 3: `subscribe`, `resubscribe`, `gift`.
+             */
+            tier?: number | null;
+            /** @description Raw viewer text; `null` for an anonymous gift or cheer. Overlays escape it when rendering. */
+            userName: string | null;
+            /**
+             * Format: int32
+             * @description Raiders: `raid`.
+             */
+            viewers?: number | null;
+        };
+        /** @enum {string} */
+        AlertType: "alert";
         /** @description What the admin UI may see; never contains tokens. */
         AuthStatus: {
             /** @enum {string} */

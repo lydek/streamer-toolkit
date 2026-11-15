@@ -44,7 +44,7 @@
 | Commit 身分 | GitHub noreply email，只對本 repo 設定 |
 | Twitch OAuth | Device Code Flow（public client，不需要 client secret） |
 | Twitch app | 每位使用者自己在 Twitch Console 註冊 app（Public client；表單要求的 Redirect URL 填 `http://localhost`），首次設定時引導並填入 Client ID，存在設定；不內建共用 Client ID |
-| Twitch scope | 第一次登入就申請 MVP 全部：`user:read:chat`、`moderator:read:followers`、`channel:read:subscriptions`、`channel:read:redemptions` |
+| Twitch scope | 第一次登入就申請 MVP 全部：`user:read:chat`、`moderator:read:followers`、`channel:read:subscriptions`、`channel:read:redemptions`、`bits:read`；已存的登入缺少其中任何一項時，管理 UI 提示重新登入一次，重新登入前聊天室照常運作，缺少權限的事件不訂閱 |
 | Token 刷新 | 同時只允許一個 refresh；新 refresh token 先寫進 keyring 再使用新 access token，寫入失敗時新 token 留在記憶體並重試寫入（若程式在重試成功前關閉，下次需重新登入）；refresh 失敗（400／401）就重新走 Device Code Flow，UI 顯示「需重新登入」。Public client 的 refresh token 30 天後過期，長時間沒使用需重新登入 |
 | 管理視窗 | 載入 Host 網址 `http://127.0.0.1:<port>/admin`（與 API 同源，不開 CORS）；只能導向 `/admin` 路徑，開新視窗一律拒絕；`/admin` 送嚴格 CSP；Twitch 驗證頁由 Rust 指令用系統瀏覽器開啟；開啟縮放快速鍵（`zoom_hotkeys_enabled(true)`：`Ctrl` 加 `+`／`-`、`Ctrl` 加滾輪）；視窗內容區最小 360×480（寬×高） |
 | Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 Host origin，路徑由 `on_navigation` 限制）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
@@ -120,3 +120,4 @@
 | 2026-11-15 | pre-push 依推送的檔案跳過不受影響的檢查；Rust 編譯可選用 sccache | 每個 worktree 有自己的 `target\`，第一次編譯很慢，只改文件或前端也要等完整的 Rust 檢查；CI 每次仍跑完整檢查 |
 | 2026-11-15 | 聊天室樣板改為從內建款式選擇（預設、精簡單行、泡泡），資料夾樣板變成手動指定的 `custom`，不再自動複製預設樣板 | 多數實況主不會寫 HTML；資料夾裡一直有一份有效樣板時，選擇器會沒有作用 |
 | 2026-11-15 | 合併方式由 squash 改為 rebase-merge；每個 issue 固定一個 commit，一個 PR 可放多個獨立 issue；太大的 issue 拆成 sub-issue | `main` 保持一條直線，每個 issue 一個 commit，同時減少 PR 數量 |
+| 2026-11-16 | Twitch scope 加上 `bits:read` | 切片 2 的特效包含小奇點；舊的登入會被提示重新登入一次 |

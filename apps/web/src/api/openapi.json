@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `ObsStatusEvent` and `TemplateChangedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent` and `TemplateChangedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -469,6 +469,134 @@
   },
   "components": {
     "schemas": {
+      "AlertEvent": {
+        "type": "object",
+        "description": "An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in\nsnapshots, so a reloaded overlay never replays one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AlertPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AlertType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AlertKindName": {
+        "type": "string",
+        "enum": [
+          "follow",
+          "subscribe",
+          "resubscribe",
+          "gift",
+          "cheer",
+          "raid"
+        ]
+      },
+      "AlertPayload": {
+        "type": "object",
+        "description": "The `payload` of an `alert` event. Fields the kind does not have are left out.",
+        "required": [
+          "kind",
+          "userName"
+        ],
+        "properties": {
+          "bits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Subs gifted: `gift`.",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AlertKindName"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Raw viewer text of a `resubscribe` or `cheer`, when there is one."
+          },
+          "months": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Months subscribed in total: `resubscribe`.",
+            "minimum": 0
+          },
+          "tier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Subscription tier, 1 to 3: `subscribe`, `resubscribe`, `gift`.",
+            "minimum": 0
+          },
+          "userName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Raw viewer text; `null` for an anonymous gift or cheer. Overlays escape it when rendering."
+          },
+          "viewers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Raiders: `raid`.",
+            "minimum": 0
+          }
+        }
+      },
+      "AlertType": {
+        "type": "string",
+        "enum": [
+          "alert"
+        ]
+      },
       "AuthStatus": {
         "oneOf": [
           {

@@ -9,7 +9,8 @@ use crate::settings;
 
 /// Modules that exist in this build. A module is enabled unless the broadcaster turned it off.
 pub const CHAT: &str = "chat";
-pub const ALL: &[&str] = &[CHAT];
+pub const ALERTS: &str = "alerts";
+pub const ALL: &[&str] = &[CHAT, ALERTS];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {

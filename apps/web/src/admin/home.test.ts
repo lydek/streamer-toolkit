@@ -67,6 +67,10 @@ describe('twitchLight', () => {
       'reconnecting',
     )
     expect(twitchLight(overview({ state: 'failed', code: 'twitch.unreachable' }), false).state).toBe('error')
+    expect(twitchLight(overview({ state: 'failed', code: 'twitch.scopes_missing' }), false)).toEqual({
+      state: 'error',
+      key: 'home.status.twitch.relogin',
+    })
     expect(twitchLight(overview({ state: 'signed_out' }), false).key).toBe('home.status.twitch.signedOut')
   })
 
@@ -75,6 +79,7 @@ describe('twitchLight', () => {
       { state: 'signed_in', user_id: '1', login: 'me' },
       { state: 'pending', user_code: 'X', verification_uri: 'u' },
       { state: 'failed', code: 'x' },
+      { state: 'failed', code: 'twitch.scopes_missing' },
       { state: 'signed_out' },
     ]
     const keys = [

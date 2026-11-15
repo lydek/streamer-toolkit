@@ -38,7 +38,8 @@
         "setup": "尚未設定",
         "pending": "等待登入",
         "signedOut": "未登入",
-        "failed": "登入失敗"
+        "failed": "登入失敗",
+        "relogin": "需要重新登入"
       },
       "obs": {
         "reconnecting": "重新連線中",
@@ -100,7 +101,8 @@
   },
   "modules": {
     "names": {
-      "chat": "聊天室"
+      "chat": "聊天室",
+      "alerts": "特效"
     }
   },
   "settings": {
@@ -173,7 +175,8 @@
       "sign_in_refused": "Twitch 拒絕了登入，請確認 Client ID 與 app 類別（Public）。",
       "unreachable": "連不到 Twitch，請檢查網路。",
       "invalid_response": "Twitch 回應無法辨識，請稍後再試。",
-      "storage_failed": "無法把登入資料存進 Windows 認證管理員。"
+      "storage_failed": "無法把登入資料存進 Windows 認證管理員。",
+      "scopes_missing": "新版本需要多一項 Twitch 權限（小奇點），請重新登入 Twitch 一次。聊天室在重新登入前照常運作。"
     },
     "obs": {
       "unreachable": "連不到 OBS，請確認 OBS 已開啟，並在「工具 → WebSocket 伺服器設定」啟用伺服器。",

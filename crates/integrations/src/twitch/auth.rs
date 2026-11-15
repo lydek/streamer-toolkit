@@ -208,6 +208,16 @@ impl TwitchAuth {
             return s.clone();
         }
         match &state.token {
+            // Still signed in (chat keeps working), but the newer scopes need one more sign-in.
+            Some(t)
+                if !super::MVP_SCOPES
+                    .iter()
+                    .all(|s| t.scopes.iter().any(|g| g == s)) =>
+            {
+                AuthStatus::Failed {
+                    code: "twitch.scopes_missing".into(),
+                }
+            }
             Some(t) => AuthStatus::SignedIn {
                 user_id: t.user_id.clone(),
                 login: t.login.clone(),
@@ -515,7 +525,7 @@ mod tests {
                     }
                 }
             }))
-            .route("/validate", get(|| async { Json(json!({"user_id":"42","login":"streamer","scopes":["user:read:chat"]})) }));
+            .route("/validate", get(|| async { Json(json!({"user_id":"42","login":"streamer","scopes":crate::twitch::MVP_SCOPES})) }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -660,6 +670,48 @@ mod tests {
                 "the entry is never deleted here"
             );
         }
+    }
+
+    /// Signing in again as the same user (to grant a newer scope) must still wake EventSub, so it subscribes
+    /// with the new token; `send_if_modified` would skip an unchanged user ID.
+    #[tokio::test]
+    async fn signing_in_again_as_the_same_user_tells_watchers() {
+        let store = store_with(
+            json!({"client_id":"client","access_token":"old","refresh_token":"r",
+                                      "user_id":"42","login":"streamer","scopes":[]}),
+        );
+        let auth = auth(&fake_oauth(StatusCode::OK).await, store);
+        let mut account = auth.account();
+        assert_eq!(account.borrow_and_update().as_deref(), Some("42"));
+        auth.start_login(crate::twitch::MVP_SCOPES).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), account.changed())
+            .await
+            .expect("watchers are told about the new sign-in")
+            .unwrap();
+        assert_eq!(account.borrow().as_deref(), Some("42"));
+        wait_signed_in(&auth).await;
+    }
+
+    #[tokio::test]
+    async fn token_without_a_newer_scope_asks_to_sign_in_again() {
+        let mut scopes = crate::twitch::MVP_SCOPES.to_vec();
+        scopes.retain(|s| *s != "bits:read");
+        let auth = TwitchAuth::new(
+            "client".into(),
+            "http://127.0.0.1:1",
+            tls::https_client(tls::client_config().unwrap()),
+            store_with(
+                json!({"client_id":"client","access_token":"a","refresh_token":"r",
+                              "user_id":"42","login":"streamer","scopes":scopes}),
+            ),
+        );
+        assert_eq!(
+            auth.status(),
+            AuthStatus::Failed {
+                code: "twitch.scopes_missing".into()
+            }
+        );
+        assert!(auth.token().is_some(), "chat keeps using the old token");
     }
 
     #[tokio::test]

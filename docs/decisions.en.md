@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 0d765153a33c6a7b2f76ca67d9fc6d5cfcee521de27a09fd1f4fec4a452260ba -->
+<!-- source: docs/decisions.md source-sha256: 7de8a94e72a61a5b9aa6d8f29065d93ed2051c8db292f607ba876f218f6d7518 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -45,7 +45,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Commit identity | GitHub noreply email, set for this repo only |
 | Twitch OAuth | Device Code Flow (public client, no client secret needed) |
 | Twitch app | Each user registers their own app (Public client; enter `http://localhost` for the Redirect URL the form requires) in the Twitch Console; first-run setup guides them through registering the app and entering the Client ID, which is stored in settings; no shared built-in Client ID |
-| Twitch scopes | Request all MVP scopes at first login: `user:read:chat`, `moderator:read:followers`, `channel:read:subscriptions`, `channel:read:redemptions` |
+| Twitch scopes | Request all MVP scopes at first login: `user:read:chat`, `moderator:read:followers`, `channel:read:subscriptions`, `channel:read:redemptions`, `bits:read`; when a stored sign-in lacks any of them, the admin UI asks to sign in again once; until then chat keeps working and events needing a missing scope are not subscribed |
 | Token refresh | Only one refresh at a time; write the new refresh token to keyring before using the new access token, and if that write fails, keep the new tokens in memory and retry the write (if the app closes before the retry succeeds, the next start requires logging in again); if refresh fails (400/401), restart the Device Code Flow and show "login required" in the UI. Public-client refresh tokens expire after 30 days, so long inactivity requires logging in again |
 | Admin window | Loads the Host URL `http://127.0.0.1:<port>/admin` (same origin as the API, no CORS); may only navigate to `/admin` paths, and opening new windows is always denied; `/admin` sends a strict CSP; the Twitch verification page is opened in the system browser by a Rust command; zoom hotkeys enabled (`zoom_hotkeys_enabled(true)`: `Ctrl` with `+`/`-`, `Ctrl` with the mouse wheel); minimum content area 360×480 (width×height) |
 | Tauri IPC permissions | App commands declared with `AppManifest`; three capabilities: small port-change page (`port` window only), admin window dev (local, `admin` window only), admin window release build (remote, created at startup for the actual port, URLs limited to the Host origin, path restricted by `on_navigation`); "dev" means the `tauri/custom-protocol` feature is off (`cfg(dev)`): `tauri build` turns it on and is the only distributable build; `tauri dev` and plain cargo commands are dev; `apps/desktop` decides and tells the Host through runtime configuration |
@@ -121,3 +121,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-15 | pre-push skips checks the pushed files cannot affect; Rust builds can use sccache | Each worktree has its own `target\`, so its first build is slow, and docs-only or frontend-only changes still waited for the full Rust check; CI still runs the full check every time |
 | 2026-11-15 | Chat templates are picked from built-in styles (default, compact single line, bubble); the folder template becomes `custom`, set by hand, and the default template is no longer copied into the folder | Most streamers do not write HTML; while the folder always held a valid template, the picker would have no effect |
 | 2026-11-15 | Merging changed from squash to rebase-merge; exactly one commit per issue, and one PR may hold several independent issues; issues too big for one commit are split into sub-issues | `main` stays one straight line with one commit per issue, and there are fewer PRs |
+| 2026-11-16 | Added `bits:read` to the Twitch scopes | Slice 2 alerts include Bits; existing sign-ins are asked to sign in again once |

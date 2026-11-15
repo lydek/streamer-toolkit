@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use alerts::AlertsService;
 use axum::{
     Json, Router,
     extract::{Path, Request, State},
@@ -45,6 +46,7 @@ pub(crate) struct AdminState {
     http: HttpsClient,
     tls: Arc<ClientConfig>,
     chat: Arc<ChatService>,
+    alerts: Arc<AlertsService>,
     modules: Arc<Modules>,
     twitch: RwLock<TwitchAuth>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
@@ -52,6 +54,8 @@ pub(crate) struct AdminState {
 }
 
 impl AdminState {
+    // One argument per dependency the composition root hands over; a wrapper struct would only rename them.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         token: SecretString,
         data_dir: PathBuf,
@@ -59,6 +63,7 @@ impl AdminState {
         endpoints: TwitchEndpoints,
         tls: Arc<ClientConfig>,
         chat: Arc<ChatService>,
+        alerts: Arc<AlertsService>,
         modules: Arc<Modules>,
     ) -> Self {
         let http = integrations::tls::https_client(tls.clone());
@@ -72,6 +77,7 @@ impl AdminState {
             http,
             tls,
             chat,
+            alerts,
             modules,
             twitch: RwLock::new(twitch.clone()),
             eventsub: Mutex::new(None),
@@ -80,15 +86,17 @@ impl AdminState {
         state
     }
 
-    /// Connects chat for `auth` (it waits until signed in) and stops the task of the previous auth.
+    /// Connects chat and alerts for `auth` (it waits until signed in) and stops the task of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
+        let alerts = self.alerts.clone();
         let task = tokio::spawn(
             EventSub {
                 url: self.endpoints.eventsub.clone(),
                 helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
                 tls: self.tls.clone(),
                 deliver: Arc::new(move |m| chat.receive(m, Source::Twitch)),
+                deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
             }
             .run(),
         );
