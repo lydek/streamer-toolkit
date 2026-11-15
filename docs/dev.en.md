@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 83aae507f5314d00ee5010fbd0a5adce077b8ca1656252953548e9aa151b9a76 -->
+<!-- source: docs/dev.md source-sha256: f401939afedb246ee9ef0d6e10a3dfe42c97a8f644a4273d914117c10c7a384c -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -73,7 +73,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - Full pages (⚙ Settings): entering focuses "← Home"; it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
   - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Back; when the save fails, the page stays and shows the error; when the window gets focus again, "Ask before closing the window" is read again.
   - The template picker on the chat full page: clicking a preview picks that template and saves it; arrow keys move the pick; a failed save goes back to the template in use and shows the error; no sideways scroll at 1280px and 320px.
-  - Overlay (real Host): picking a built-in template applies at once, without a reload; editing the folder's custom template (`custom`) applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
+  - Overlay (real Host): picking a built-in template applies at once, without a reload; editing the folder's custom template (`custom`) applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one; when disconnected, the status text has the same color, font, font size and shadow as the current built-in template's chat text (tested once for each of the three).
 - Checked manually once per finished slice:
   - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.
   - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly; when the window is hidden this way with the settings page open and then brought back, "Ask before closing the window" is now unchecked.

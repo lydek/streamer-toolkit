@@ -1,6 +1,9 @@
 <template>
   <div>
-    <p v-if="status !== 'open'" class="status" role="status">{{ t(`overlay.status.${status}`) }}</p>
+    <!-- Styled like the template's chat text, so it shows on the scenes the template is made for. -->
+    <p v-if="status !== 'open'" class="status" role="status" :style="statusStyle">
+      {{ t(`overlay.status.${status}`) }}
+    </p>
     <!-- The user template is mounted here; messages are rendered by template.ts as plain text. -->
     <div ref="host"></div>
   </div>
@@ -10,7 +13,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type ChatEvent, type ChatState, type Incoming, apply } from './chat'
-import { loadTemplate, mount, stylesheetsLoaded } from './template'
+import { loadTemplate, mount, stylesheetsLoaded, textStyle } from './template'
 
 const RETRY_MS = 2000
 const params = new URLSearchParams(location.search)
@@ -26,6 +29,7 @@ const TEMPLATE_BASE =
 const { t } = useI18n()
 const status = ref<'connecting' | 'open' | 'closed'>('connecting')
 const host = ref<HTMLElement>()
+const statusStyle = ref<ReturnType<typeof textStyle>>()
 let state: ChatState = { messages: [], lastSeq: 0 }
 let render: ((messages: ChatEvent[]) => void) | undefined
 let loads = 0
@@ -48,9 +52,12 @@ async function applyTemplate() {
   await stylesheetsLoaded(next)
   if (load !== loads || !host.value) return next.remove()
   next.hidden = false
-  host.value.replaceChildren(next)
+  // Not replaceChildren(next): re-inserting `next` would load its stylesheets again.
+  while (host.value.firstChild !== next) host.value.firstChild!.remove()
   render = renderNext
   render(state.messages)
+  // Only now: the previous template's stylesheets are gone and no longer apply.
+  statusStyle.value = textStyle(template)
 }
 
 function receive(msg: Incoming) {
@@ -83,6 +90,8 @@ if (preview) {
   window.addEventListener('message', onPreviewMessage)
 } else {
   connect()
+  // Not only on the first snapshot: the status shows (styled by the template) until a connection opens.
+  void applyTemplate()
 }
 onBeforeUnmount(() => {
   stopped = true
