@@ -33,7 +33,7 @@ for (const width of [1280, 800]) {
     await expect(skip).toBeFocused()
     await expect(skip).toBeInViewport()
     await page.keyboard.press('Enter')
-    await page.keyboard.press('Tab')
+    // The skip link lands on the first tile, which shows a focus ring.
     await expect(chatTile(page)).toBeFocused()
 
     await page.keyboard.press('Enter')

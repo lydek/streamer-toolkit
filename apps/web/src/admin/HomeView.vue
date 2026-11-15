@@ -259,7 +259,9 @@ async function copyObsUrl() {
   }
 }
 
-const focusTiles = () => tilesEl.value?.focus()
+// The section itself shows no focus ring, so it only takes focus while it has nothing focusable (loading, failed).
+const focusTiles = () =>
+  (tilesEl.value?.querySelector<HTMLElement>('[data-drawer-tile], [data-drawer-arrange]') ?? tilesEl.value)?.focus()
 
 /** Closes an open drawer first (submitting its changes); a failed submit keeps the drawer and the normal home. */
 async function enterArrange() {
