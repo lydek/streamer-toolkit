@@ -23,6 +23,7 @@ use crate::{admin, home_tiles, obs, overlay, templates};
         admin::list_modules,
         admin::set_module,
         admin::simulate_chat,
+        admin::simulate_alert,
         home_tiles::home_tiles,
         home_tiles::set_home_tiles,
         obs::obs_overview,

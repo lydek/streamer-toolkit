@@ -73,6 +73,32 @@
     "copied": "已複製 OBS 網址。",
     "copyFailed": "無法複製到剪貼簿。"
   },
+  "alerts": {
+    "empty": "還沒有特效",
+    "anonymous": "匿名觀眾",
+    "kinds": {
+      "follow": "追隨",
+      "subscribe": "新訂閱",
+      "resubscribe": "續訂",
+      "gift": "送禮訂閱",
+      "cheer": "小奇點",
+      "raid": "揪團"
+    },
+    "amount": {
+      "resubscribe": "訂閱月數",
+      "gift": "訂閱份數",
+      "cheer": "小奇點數量",
+      "raid": "揪團人數"
+    },
+    "text": {
+      "follow": "{name} 追隨了！",
+      "subscribe": "{name} 訂閱了！",
+      "resubscribe": "{name} 續訂了 {months} 個月！",
+      "gift": "{name} 送了 {count} 份訂閱！",
+      "cheer": "{name} 送出 {bits} 小奇點！",
+      "raid": "{name} 帶著 {viewers} 人揪團來了！"
+    }
+  },
   "preview": {
     "heading": "樣板",
     "templates": {
@@ -129,7 +155,11 @@
     "userName": "名稱",
     "text": "聊天訊息",
     "send": "送出模擬聊天",
-    "sent": "已送出模擬聊天。"
+    "sent": "已送出模擬聊天。",
+    "kind": "事件",
+    "message": "留言",
+    "sendAlert": "送出模擬特效",
+    "alertSent": "已送出模擬特效。"
   },
   "port": {
     "heading": "連接埠被佔用",
@@ -160,7 +190,10 @@
       "save_failed": "模組設定儲存失敗。"
     },
     "simulate": {
-      "invalid_text": "請輸入 1 到 500 字的訊息。"
+      "invalid_text": "請輸入 1 到 500 字的訊息。",
+      "invalid_name": "名稱最多 25 個字。",
+      "invalid_alert": "模擬特效的內容格式不正確。",
+      "invalid_amount": "數量超出範圍：送禮訂閱 1 到 100 份，其他 1 到 100000。"
     },
     "template": {
       "unknown": "沒有這款聊天室樣板。",

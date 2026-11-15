@@ -4,6 +4,7 @@ export type ChatEvent = components['schemas']['ChatMessageEvent']
 export type Incoming =
   | components['schemas']['Snapshot']
   | ChatEvent
+  | components['schemas']['AlertEvent']
   | components['schemas']['ObsStatusEvent']
   | components['schemas']['TemplateChangedEvent']
 

@@ -6,10 +6,7 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
-const extra: Tile[] = [
-  { id: 'alerts', group: 'live', icon: '' },
-  { id: 'checkin', group: 'features', icon: '' },
-]
+const extra: Tile[] = [{ id: 'checkin', group: 'features', icon: '' }]
 const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', checkin: '打卡' }
 
 // What the page's save does: shows `next` at once, puts the previous order back on failure (`outcome` false),
@@ -40,7 +37,7 @@ const button = (tile: string, action: string) =>
 const live = () => document.querySelector('[aria-live="polite"]')!.textContent
 
 beforeEach(() => {
-  // Tests need several tiles in a group; only chat exists so far.
+  // Tests need tiles in both groups; only the live group (chat, alerts) exists so far.
   TILES.push(...extra)
   outcome = true
 })

@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: f401939afedb246ee9ef0d6e10a3dfe42c97a8f644a4273d914117c10c7a384c -->
+<!-- source: docs/dev.md source-sha256: f43ba0a8b71bf3e7d4e43c4ebdfd309e268c03bc42bcd8a6016351cfbdb1c291 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -73,6 +73,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - Full pages (⚙ Settings): entering focuses "← Home"; it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
   - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Back; when the save fails, the page stays and shows the error; when the window gets focus again, "Ask before closing the window" is read again.
   - The template picker on the chat full page: clicking a preview picks that template and saves it; arrow keys move the pick; a failed save goes back to the template in use and shows the error; no sideways scroll at 1280px and 320px.
+  - Alert simulator: each of the six kinds is sent once with the right name, amount and message; a refusal shows its reason in the drawer; no sideways scrolling at 1280px, 640px and 320px; the real Host sends every simulated kind to `/ws/overlay` as an `alert` marked `source=simulation`, answers 400 to an amount out of range and 401 without the admin token.
   - Overlay (real Host): picking a built-in template applies at once, without a reload; editing the folder's custom template (`custom`) applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one; when disconnected, the status text has the same color, font, font size and shadow as the current built-in template's chat text (tested once for each of the three).
 - Checked manually once per finished slice:
   - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.

@@ -1,5 +1,6 @@
 // Arrange mode of the admin home (ArrangeTiles.vue) with the admin API mocked. Move order, drag and the focus
-// rules themselves are unit-tested in src/admin/ArrangeTiles.test.ts; only chat exists, so there is nothing to drag.
+// rules themselves are unit-tested in src/admin/ArrangeTiles.test.ts; with the alerts module off only chat shows
+// on the home.
 import { type Page, expect, test } from '@playwright/test'
 import { openAdmin, scrollsSideways, zh } from './fixtures'
 
@@ -11,10 +12,19 @@ const chatAction = (page: Page, key: 'remove' | 'add') =>
   page.getByRole('button', { name: `${zh.arrange[key]}：${zh.modules.names.chat}` })
 
 test('an emptied home stays empty after a reload, and "Arrange tiles" brings the tile back', async ({ page }) => {
-  const state = await openAdmin(page)
+  const state = await openAdmin(page, {
+    modules: [
+      { id: 'chat', enabled: true },
+      { id: 'alerts', enabled: false },
+    ],
+  })
   await pencil(page).click()
   await expect(done(page)).toBeFocused()
   await chatAction(page, 'remove').click()
+  // Arrange mode lists the alerts tile too, marked as not enabled; focus moves to it.
+  const removeAlerts = page.getByRole('button', { name: `${zh.arrange.remove}：${zh.modules.names.alerts}` })
+  await expect(removeAlerts).toBeFocused()
+  await removeAlerts.click()
   await expect.poll(() => state.homeTiles).toEqual([])
   await expect(page.getByRole('heading', { name: zh.arrange.available })).toBeFocused()
   await done(page).click()
