@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import ChatPage from './ChatPage.vue'
 import { useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
 import NotFoundView from './NotFoundView.vue'
@@ -11,6 +12,7 @@ export const router = createRouter({
   routes: [
     { path: '/', component: HomeView },
     { path: '/settings', component: SettingsView },
+    { path: '/chat', component: ChatPage },
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

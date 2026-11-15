@@ -64,15 +64,22 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   return next
 }
 
-/** Connects to `/ws/overlay` (read-only, no token) and reconnects until the calling scope ends. */
-export function useLiveEvents(retryMs = 2000) {
+/**
+ * Connects to `/ws/overlay` (read-only, no token) and reconnects until the calling scope ends.
+ * `onMessage` also gets every message, snapshots after a reconnect included.
+ */
+export function useLiveEvents(retryMs = 2000, onMessage?: (msg: Incoming) => void) {
   const state = shallowRef<LiveState>({ status: 'loading', lastSeq: 0 })
   let ws: WebSocket | undefined
   let retry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   function connect() {
     ws = new WebSocket(`ws://${location.host}/ws/overlay`)
-    ws.onmessage = (e) => (state.value = applyLive(state.value, JSON.parse(e.data) as Incoming))
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data) as Incoming
+      state.value = applyLive(state.value, msg)
+      onMessage?.(msg)
+    }
     ws.onclose = () => {
       // Drop what was known: the reconnect snapshot brings the current values.
       state.value = { status: 'failed', lastSeq: 0 }

@@ -45,27 +45,42 @@ async function applyTemplate() {
   render(state.messages)
 }
 
+function receive(msg: Incoming) {
+  // On every snapshot too: the template may have changed while disconnected.
+  if (msg.type === 'snapshot' || msg.type === 'template.changed') void applyTemplate()
+  state = apply(state, msg)
+  render?.(state.messages)
+}
+
 function connect() {
   status.value = 'connecting'
   ws = new WebSocket(`ws://${location.host}/ws/overlay`)
   ws.onopen = () => (status.value = 'open')
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data) as Incoming
-    // On every snapshot too: the template may have changed while disconnected.
-    if (msg.type === 'snapshot' || msg.type === 'template.changed') void applyTemplate()
-    state = apply(state, msg)
-    render?.(state.messages)
-  }
+  ws.onmessage = (e) => receive(JSON.parse(e.data) as Incoming)
   ws.onclose = () => {
     status.value = 'closed'
     if (!stopped) retry = setTimeout(connect, RETRY_MS)
   }
 }
 
-connect()
+// `?preview`: the admin UI's template preview, in a sandbox="allow-scripts" iframe. Its origin is `null`, so it
+// cannot reach the Host's WebSocket; the admin window posts the same messages instead (docs/architecture.md §5).
+// location.origin is still the page URL's origin, which is the admin window's.
+function onPreviewMessage(e: MessageEvent) {
+  if (e.source === window.parent && e.origin === location.origin) receive(e.data as Incoming)
+}
+
+const preview = new URLSearchParams(location.search).has('preview')
+if (preview) {
+  status.value = 'open'
+  window.addEventListener('message', onPreviewMessage)
+} else {
+  connect()
+}
 onBeforeUnmount(() => {
   stopped = true
   clearTimeout(retry)
   ws?.close()
+  window.removeEventListener('message', onPreviewMessage)
 })
 </script>

@@ -61,6 +61,25 @@
     "added": "{name}已加到{group}第 {position} 個",
     "restored": "已還原預設功能磚"
   },
+  "chat": {
+    "log": "聊天紀錄",
+    "pause": "暫停",
+    "jump": "跳到最新",
+    "paused": "已暫停 · {n} 則新訊息",
+    "disconnected": "已斷線，正在重新連線……",
+    "broadcaster": "實況主",
+    "copyObsUrl": "複製 OBS 網址",
+    "copied": "已複製 OBS 網址。",
+    "copyFailed": "無法複製到剪貼簿。"
+  },
+  "preview": {
+    "heading": "預覽",
+    "sample": {
+      "first": "哈囉！這是預覽用的範例訊息。",
+      "second": "沒有設定名稱顏色的觀眾",
+      "third": "OBS 裡的聊天室會長這樣。"
+    }
+  },
   "twitch": {
     "heading": "Twitch 連線",
     "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",

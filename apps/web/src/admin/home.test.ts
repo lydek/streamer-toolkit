@@ -131,10 +131,12 @@ describe('useLiveEvents', () => {
       },
     )
     const scope = effectScope()
-    const live = scope.run(() => useLiveEvents(2000))!
+    const heard: string[] = []
+    const live = scope.run(() => useLiveEvents(2000, (msg) => heard.push(msg.type)))!
 
     sockets[0].onmessage!({ data: JSON.stringify(snapshot(3, { 'obs.status': [obsEvent(2, 'connected')] })) })
     expect(live.value).toMatchObject({ status: 'open', obs: { state: 'connected' } })
+    expect(heard).toEqual(['snapshot'])
     sockets[0].onclose!()
     expect(live.value).toEqual({ status: 'failed', lastSeq: 0 })
     vi.advanceTimersByTime(2000)

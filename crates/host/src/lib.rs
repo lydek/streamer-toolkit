@@ -32,11 +32,23 @@ use axum::{
 use rust_embed::Embed;
 use tokio::net::TcpListener;
 
-// frame-src 'none': the release IPC capability covers the whole Host origin, so no same-origin page may be framed
-// inside the admin window.
+// frame-src is added per port by `admin_csp`.
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
-style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'none'";
+style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:";
 const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
+/// The only page the admin window may frame: the chat overlay as the template preview, which the admin UI puts in
+/// a `sandbox="allow-scripts"` iframe. The release IPC capability covers the whole Host origin, so no other
+/// same-origin page may be framed.
+const PREVIEW_PATH: &str = "/overlay/chat/";
+
+fn admin_csp(hosts: &[String]) -> HeaderValue {
+    let frames: Vec<String> = hosts
+        .iter()
+        .map(|h| format!("http://{h}{PREVIEW_PATH}"))
+        .collect();
+    HeaderValue::from_str(&format!("{ADMIN_CSP}; frame-src {}", frames.join(" ")))
+        .expect("hosts are ASCII")
+}
 
 #[derive(Embed)]
 #[folder = "../../apps/web/dist"]
@@ -137,6 +149,7 @@ impl Guard {
 
 pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let guard_state = Guard::new(&config);
+    let csp = admin_csp(&guard_state.hosts);
     let tls = integrations::tls::client_config().map_err(std::io::Error::other)?;
     let bus = Arc::new(toolkit_core::bus::EventBus::default());
     let modules = Arc::new(toolkit_core::modules::Modules::load(
@@ -182,7 +195,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                 .with_state(templates),
         )
         .merge(admin::routes(admin))
-        .fallback(static_file)
+        .fallback(move |uri: Uri| std::future::ready(static_file(&uri, &csp)))
         .layer(middleware::from_fn_with_state(guard_state, guard))
         .layer(middleware::from_fn(templates::headers)))
 }
@@ -210,7 +223,7 @@ async fn guard(State(g): State<Guard>, req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
-async fn static_file(uri: Uri) -> Response {
+fn static_file(uri: &Uri, admin_csp: &HeaderValue) -> Response {
     let path = uri.path().trim_start_matches('/').trim_end_matches('/');
     let candidates = [path.to_owned(), format!("{path}/index.html")];
     let found = candidates
@@ -238,10 +251,7 @@ async fn static_file(uri: Uri) -> Response {
         HeaderValue::from_static("nosniff"),
     );
     if file_path.starts_with("admin/") {
-        headers.insert(
-            header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static(ADMIN_CSP),
-        );
+        headers.insert(header::CONTENT_SECURITY_POLICY, admin_csp.clone());
     } else if file_path.starts_with("overlay/") {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
@@ -709,10 +719,16 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(res.status(), StatusCode::OK, "{uri}");
-            assert_eq!(res.headers()[header::CONTENT_SECURITY_POLICY], ADMIN_CSP);
+            // Same-origin pages could reach the admin IPC capability if framed: only the preview page may be.
+            assert_eq!(
+                res.headers()[header::CONTENT_SECURITY_POLICY],
+                format!(
+                    "{ADMIN_CSP}; frame-src http://127.0.0.1:47810/overlay/chat/ \
+                     http://localhost:47810/overlay/chat/"
+                )
+            );
         }
-        // Same-origin pages could reach the admin IPC capability if framed.
-        assert!(ADMIN_CSP.contains("frame-src 'none'"));
+        assert!(!ADMIN_CSP.contains("frame-src"));
     }
 
     #[tokio::test]

@@ -3,14 +3,19 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Plugin, ProxyOptions } from 'vite'
 
-// Both must match crates/host/src/lib.rs (dev-server.test.ts checks them).
+// All three must match crates/host/src/lib.rs (dev-server.test.ts checks them).
 export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
-  "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'none'"
+  "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
 export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
+export const PREVIEW_PATH = '/overlay/chat/'
+
+/** The admin CSP for a page served as `host`: only the template preview page may be framed, as the Host does. */
+export const adminCsp = (host = '') =>
+  `${ADMIN_CSP}; frame-src ${/^[\w.-]+(:\d+)?$/.test(host) ? `http://${host}${PREVIEW_PATH}` : "'none'"}`
 
 /** The CSP the Host sends for the page at `url`, so violations show up while developing. */
-export const devCsp = (url = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : ADMIN_CSP)
+export const devCsp = (url = '', host = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : adminCsp(host))
 
 const DEFAULT_PORT = 47810
 // Vite's proxy matches these as plain prefixes, so the null-origin rule uses the same test.
@@ -61,7 +66,7 @@ export function devServer(): Plugin {
       server.middlewares.use((req, res, next) => {
         if (!isHostPath(req.url)) {
           // Set here, not in server.headers: Vite applies server.headers last, which would replace the overlay CSP.
-          res.setHeader('Content-Security-Policy', devCsp(req.url))
+          res.setHeader('Content-Security-Policy', devCsp(req.url, req.headers.host))
           // Sandboxed preview iframes have the null origin and load /@vite/client, /src/... as CORS module scripts.
           res.setHeader('Vary', 'Origin')
           if (req.headers.origin === 'null') res.setHeader('Access-Control-Allow-Origin', 'null')
