@@ -13,7 +13,15 @@ import { type ChatEvent, type ChatState, type Incoming, apply } from './chat'
 import { loadTemplate, mount, stylesheetsLoaded } from './template'
 
 const RETRY_MS = 2000
-const TEMPLATE_BASE = `${location.origin}/templates/chat/`
+const params = new URLSearchParams(location.search)
+// `?preview`: the admin UI's template preview (see onPreviewMessage); `&template=<id>` previews that built-in
+// template instead of the selected one.
+const preview = params.has('preview')
+const builtIn = preview ? params.get('template') : null
+const TEMPLATE_BASE =
+  builtIn && /^[a-z0-9-]{1,32}$/.test(builtIn)
+    ? `${location.origin}/templates/built-in/chat/${builtIn}/`
+    : `${location.origin}/templates/chat/`
 
 const { t } = useI18n()
 const status = ref<'connecting' | 'open' | 'closed'>('connecting')
@@ -70,7 +78,6 @@ function onPreviewMessage(e: MessageEvent) {
   if (e.source === window.parent && e.origin === location.origin) receive(e.data as Incoming)
 }
 
-const preview = new URLSearchParams(location.search).has('preview')
 if (preview) {
   status.value = 'open'
   window.addEventListener('message', onPreviewMessage)

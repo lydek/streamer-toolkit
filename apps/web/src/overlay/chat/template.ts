@@ -1,5 +1,5 @@
 import type { ChatEvent } from './chat'
-import fallbackHtml from './default-template/template.html?raw'
+import fallbackHtml from './templates/default/template.html?raw'
 
 /** A parsed user template: the nodes to mount, where messages go, and the markup for one message. */
 export interface ChatTemplate {

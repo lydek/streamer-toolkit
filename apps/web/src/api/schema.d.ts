@@ -115,7 +115,8 @@ export interface paths {
             cookie?: never;
         };
         get: operations["chat_template"];
-        put?: never;
+        /** Switches the chat overlay template and saves the choice; overlays reload it at once (`template.changed`). */
+        put: operations["select_chat_template"];
         post?: never;
         delete?: never;
         options?: never;
@@ -245,6 +246,11 @@ export interface components {
         };
         /** @enum {string} */
         ChatMessageType: "chat.message";
+        /**
+         * @description Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
+         * @enum {string}
+         */
+        ChatTemplate: "default" | "compact" | "bubble" | "custom";
         ClientIdBody: {
             client_id: string;
         };
@@ -361,13 +367,18 @@ export interface components {
         };
         /** @enum {string} */
         TemplateChangedType: "template.changed";
+        /** @description `PUT /api/admin/templates/chat`. */
+        TemplateChoice: {
+            selected: components["schemas"]["ChatTemplate"];
+        };
         /** @description `GET /api/admin/templates/chat`. */
         TemplateStatus: {
             /**
-             * @description `template.missing`, `template.unreadable` or `template.invalid` while overlays get the default
-             *     template instead of the user's; `null` when the user template is in use.
+             * @description With `custom` selected: `template.missing`, `template.unreadable` or `template.invalid` while overlays
+             *     get the default template instead of the user's; otherwise `null`.
              */
             error: string | null;
+            selected: components["schemas"]["ChatTemplate"];
         };
     };
     responses: never;
@@ -648,6 +659,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateStatus"];
+                };
+            };
+        };
+    };
+    select_chat_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateChoice"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

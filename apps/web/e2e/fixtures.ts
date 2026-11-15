@@ -89,7 +89,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   const s: AdminState = {
     overview: { client_id: '', status: { state: 'signed_out' } },
     modules: [{ id: 'chat', enabled: true }],
-    template: { error: null },
+    template: { selected: 'default', error: null },
     general: { ask_before_close: true },
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     homeTiles: null,
@@ -101,7 +101,11 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     r.request().method() === 'GET' ? r.fulfill({ json: pick() }) : r.fallback()
   await page.route('**/api/admin/twitch', get(() => s.overview))
   await page.route('**/api/admin/modules', get(() => s.modules))
-  await page.route('**/api/admin/templates/chat', get(() => s.template))
+  await page.route('**/api/admin/templates/chat', (r) => {
+    if (r.request().method() !== 'PUT') return r.fulfill({ json: s.template })
+    s.template = { ...s.template, ...r.request().postDataJSON() }
+    return r.fulfill({ status: 204 })
+  })
   await page.route('**/api/admin/general', get(() => s.general))
   await page.route('**/api/admin/obs', get(() => s.obs))
   await page.route('**/api/admin/home-tiles', (r) => {

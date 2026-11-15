@@ -1,12 +1,15 @@
-// The chat overlay against a real Host (crates/host/examples/e2e_host.rs) and its watched template folder.
+// The chat overlay against a real Host (crates/host/examples/e2e_host.rs): built-in templates picked through the
+// admin API, and the watched user template folder (`custom`).
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { HOST_PORT } from './ports'
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`
 const TEMPLATE_DIR = join(process.env.E2E_DATA_DIR!, 'templates', 'chat')
+// The Host never creates the user folder.
+mkdirSync(TEMPLATE_DIR, { recursive: true })
 const admin = { Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}`, Origin: HOST }
 
 // The tests share one Host and template folder; they run one after another as long as fullyParallel stays off.
@@ -24,14 +27,37 @@ async function say(request: APIRequestContext) {
   return text
 }
 
-/** Each test starts from its own template, so it passes alone and in any order. */
+/** Picks the overlay's template, as the admin UI's picker does (`custom` has no UI entry). */
+async function select(request: APIRequestContext, selected: string) {
+  const res = await request.put(`${HOST}/api/admin/templates/chat`, { headers: admin, data: { selected } })
+  expect(res.status()).toBe(204)
+}
+
+/** Each test starts from its own user template, so it passes alone and in any order. */
 async function start(page: Page, request: APIRequestContext, itemClass: string) {
   writeTemplate(template(`<li class="${itemClass}"><span data-field="text"></span></li>`))
+  await select(request, 'custom')
   await page.goto(`${HOST}/overlay/chat/`)
   const text = await say(request)
   await expect(page.locator(`li.${itemClass}`, { hasText: text })).toBeVisible()
   return text
 }
+
+test('picking a built-in template applies live, without reloading the overlay', async ({ page, request }) => {
+  await select(request, 'default')
+  await page.goto(`${HOST}/overlay/chat/`)
+  const text = await say(request)
+  await expect(page.locator('ul.chat:not(.bubble):not(.compact) li.message', { hasText: text })).toBeVisible()
+  await page.evaluate(() => Object.assign(window, { notReloaded: true }))
+
+  for (const id of ['bubble', 'compact']) {
+    await select(request, id)
+    await expect(page.locator(`ul.${id} li.message`, { hasText: text })).toBeVisible()
+  }
+  expect(await page.evaluate(() => 'notReloaded' in window)).toBe(true)
+  const status = await request.get(`${HOST}/api/admin/templates/chat`, { headers: admin })
+  expect(await status.json()).toEqual({ selected: 'compact', error: null })
+})
 
 test('a template edit applies live, without reloading the overlay', async ({ page, request }) => {
   const text = await start(page, request, 'first')
@@ -77,5 +103,5 @@ test('a broken template falls back to the default one', async ({ page, request }
   await expect(page.locator('li.message', { hasText: text })).toBeVisible()
   await expect(page.locator('.broken, li.custom')).toHaveCount(0)
   const status = await request.get(`${HOST}/api/admin/templates/chat`, { headers: admin })
-  expect(await status.json()).toEqual({ error: 'template.invalid' })
+  expect(await status.json()).toEqual({ selected: 'custom', error: 'template.invalid' })
 })

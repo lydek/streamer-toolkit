@@ -21,7 +21,7 @@ pre-commit:
 # (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
 # - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
 # - Rust-only jobs ignore apps/web/, except cargo-test: the Host embeds dist/ and the overlay's
-#   default template and tests them, so only admin UI and E2E changes skip it.
+#   built-in templates and tests them, so only admin UI and E2E changes skip it.
 # shortcut: lefthook drops paths that no longer exist from {push_files}, so a push that only deletes or renames files may skip
 # checks; CI still catches it.
 # Full run regardless of files: pnpm lefthook run pre-push --force
