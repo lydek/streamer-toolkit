@@ -57,16 +57,12 @@
     "copied": "已複製 OBS 網址。",
     "copyFailed": "無法複製到剪貼簿。"
   },
-  "editor": {
-    "save": "儲存",
-    "saved": "已儲存，OBS 會在一秒內套用。",
-    "reload": "重新載入檔案",
-    "leave": "樣板有尚未儲存的修改，離開後會遺失。確定要離開嗎？",
-    "preview": "預覽",
+  "preview": {
+    "heading": "預覽",
     "sample": {
       "first": "哈囉！這是預覽用的範例訊息。",
       "second": "沒有設定名稱顏色的觀眾",
-      "third": "改完按「儲存」，OBS 會一起更新。"
+      "third": "OBS 裡的聊天室會長這樣。"
     }
   },
   "twitch": {
@@ -144,10 +140,7 @@
     "template": {
       "missing": "找不到聊天室樣板 templates/chat/template.html，Overlay 暫時使用預設樣板。",
       "unreadable": "無法讀取聊天室樣板（必須是 UTF-8 文字檔），Overlay 暫時使用預設樣板。",
-      "invalid": "聊天室樣板缺少 data-chat-list 或 data-chat-message，或檔案超過 1 MB，Overlay 暫時使用預設樣板。",
-      "conflict": "樣板檔案在其他地方被修改過，沒有儲存。請先重新載入檔案（會放棄這裡的修改）。",
-      "too_large": "每個檔案最多 1 MB。",
-      "save_failed": "樣板儲存失敗，可能只寫入了其中一個檔案。重新載入前請先複製這裡的內容。"
+      "invalid": "聊天室樣板缺少 data-chat-list 或 data-chat-message，或檔案超過 1 MB，Overlay 暫時使用預設樣板。"
     },
     "twitch": {
       "client_id_required": "請先設定 Client ID。",

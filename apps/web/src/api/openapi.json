@@ -244,88 +244,6 @@
         }
       }
     },
-    "/api/admin/templates/chat/source": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "operationId": "chat_source",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemplateSource"
-                }
-              }
-            }
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "admin"
-        ],
-        "operationId": "save_chat_source",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TemplateSource"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemplateSource"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/admin/twitch": {
       "get": {
         "tags": [
@@ -1016,28 +934,6 @@
         "enum": [
           "template.changed"
         ]
-      },
-      "TemplateSource": {
-        "type": "object",
-        "description": "`GET`/`PUT /api/admin/templates/chat/source`: the user's `template.html` and `style.css` as they are on disk.",
-        "required": [
-          "html",
-          "css",
-          "revision"
-        ],
-        "properties": {
-          "css": {
-            "type": "string"
-          },
-          "html": {
-            "type": "string",
-            "description": "Empty when the file does not exist."
-          },
-          "revision": {
-            "type": "string",
-            "description": "Changes whenever either file changes. A save carries the revision it was based on and is refused with\n409 `template.conflict` when the files changed since (e.g. edited in another editor)."
-          }
-        }
       },
       "TemplateStatus": {
         "type": "object",

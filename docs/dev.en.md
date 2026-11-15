@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 8a87524528d36e8faa0f44996605aac7eee2373c6b29400b49b65f0c705f3cf2 -->
+<!-- source: docs/dev.md source-sha256: 10244e674c3168393bfd5c7478dab13f18825c58693eec745e37fa21db7259d8 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -67,7 +67,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - The Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.
   - A unit test checks that the preview iframe's `sandbox` is `allow-scripts` only; Host and Vite dev server tests check that the `/admin` `frame-src` allows only the preview page.
-  - The actual rejection is checked in the Tauri window: the preview iframe still has part of `__TAURI_INTERNALS__` (Tauri injects plugin scripts into every frame), but its origin is `null`, so Tauri rejects `invoke` with `Origin header is not a valid URL`; as a control, the admin window itself can call it. Check script: start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`, open the chat template editor page, and run `node scripts/check-preview-ipc.mjs 9333`; the script only checks that the call is rejected, not the message, and passes only with exit code 0. It needs the real app, so it does not run in CI; run it whenever the preview, the CSP or the Tauri capabilities change.
+  - The actual rejection is checked in the Tauri window: the preview iframe still has part of `__TAURI_INTERNALS__` (Tauri injects plugin scripts into every frame), but its origin is `null`, so Tauri rejects `invoke` with `Origin header is not a valid URL`; as a control, the admin window itself can call it. Check script: start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`, open the chat full page (`/admin/chat`), and run `node scripts/check-preview-ipc.mjs 9333`; the script only checks that the call is rejected, not the message, and passes only with exit code 0. It needs the real app, so it does not run in CI; run it whenever the preview, the CSP or the Tauri capabilities change.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.
 
 ## Hard security and data constraints (never skip)

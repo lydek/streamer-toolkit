@@ -1,6 +1,6 @@
 // Security check (docs/dev.md 安全測試): `invoke` from the template preview iframe must be rejected.
-// Needs the real app, so it is not part of CI. Start it with WebView2's DevTools port and open the chat template
-// editor (the page with the preview), then run:
+// Needs the real app, so it is not part of CI. Start it with WebView2's DevTools port and open the chat full page
+// (/admin/chat, the page with the preview), then run:
 //   set WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333
 //   node scripts/check-preview-ipc.mjs 9333
 // Exit code 0: rejected in the preview, allowed in the admin window (control). 1: anything else.
@@ -54,7 +54,7 @@ if (own) {
   const frame = frameTree.childFrames?.find((c) => c.frame.url.includes(PREVIEW))?.frame
   const ctx = frame && main.contexts.find((c) => c.auxData?.frameId === frame.id && c.auxData?.isDefault)
   if (!ctx) {
-    console.error('No preview iframe: open the chat template editor first.')
+    console.error('No preview iframe: open the chat full page (/admin/chat) first.')
     process.exit(1)
   }
   inPreview = (expr) => main.evaluate(expr, ctx.id)

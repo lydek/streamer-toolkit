@@ -2,15 +2,14 @@
 //! (docs/architecture.md §本機 API 安全 → 使用者樣板).
 
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     time::{Duration, SystemTime},
 };
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path as UrlPath, Request, State},
+    extract::{Path as UrlPath, Request, State},
     http::{HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -24,10 +23,7 @@ use toolkit_core::{
 };
 use utoipa::ToSchema;
 
-use crate::{
-    OVERLAY_CSP,
-    admin::{ErrorBody, error},
-};
+use crate::OVERLAY_CSP;
 
 /// The shipped default; also what overlays get while the user template is missing or broken.
 #[derive(Embed)]
@@ -35,7 +31,6 @@ use crate::{
 struct DefaultChat;
 
 const ENTRY: &str = "template.html";
-const STYLE: &str = "style.css";
 const MAX_ENTRY_BYTES: u64 = 1024 * 1024;
 const POLL: Duration = Duration::from_secs(1);
 const CHANGED_EVENT: &str = "template.changed";
@@ -77,23 +72,10 @@ pub(crate) struct TemplateStatus {
     error: Option<String>,
 }
 
-/// `GET`/`PUT /api/admin/templates/chat/source`: the user's `template.html` and `style.css` as they are on disk.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub(crate) struct TemplateSource {
-    /// Empty when the file does not exist.
-    html: String,
-    css: String,
-    /// Changes whenever either file changes. A save carries the revision it was based on and is refused with
-    /// 409 `template.conflict` when the files changed since (e.g. edited in another editor).
-    revision: String,
-}
-
 pub(crate) struct Templates {
     dir: PathBuf,
     /// Why the user template is not in use (an error code), or `None` when it is.
     error: RwLock<Option<&'static str>>,
-    /// Makes a save's revision check and its writes one step.
-    saving: Mutex<()>,
 }
 
 impl Templates {
@@ -106,71 +88,16 @@ impl Templates {
         }
         // Fingerprint before the check, so an edit in between is caught by the first poll.
         let seen = fingerprint(&dir);
-        let templates = Arc::new(Self::new(dir));
+        let templates = Arc::new(Self {
+            error: RwLock::new(check(&dir).err()),
+            dir,
+        });
         tokio::spawn(watch(templates.clone(), bus, seen));
         templates
     }
 
-    fn new(dir: PathBuf) -> Self {
-        Self {
-            error: RwLock::new(check(&dir).err()),
-            dir,
-            saving: Mutex::new(()),
-        }
-    }
-
     pub(crate) fn error(&self) -> Option<&'static str> {
         *self.error.read().unwrap()
-    }
-
-    /// The raw bytes of `name`; a missing file reads as empty.
-    fn raw(&self, name: &str) -> std::io::Result<Vec<u8>> {
-        match std::fs::read(self.dir.join(name)) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-            other => other,
-        }
-    }
-
-    fn revision(&self) -> std::io::Result<String> {
-        Ok(revision(&self.raw(ENTRY)?, &self.raw(STYLE)?))
-    }
-
-    fn source(&self) -> Result<TemplateSource, &'static str> {
-        let text = |name| {
-            let bytes = self.raw(name).map_err(|_| "template.unreadable")?;
-            String::from_utf8(bytes).map_err(|_| "template.unreadable")
-        };
-        let (html, css) = (text(ENTRY)?, text(STYLE)?);
-        Ok(TemplateSource {
-            revision: revision(html.as_bytes(), css.as_bytes()),
-            html,
-            css,
-        })
-    }
-
-    /// Writes both files unless they changed since `body.revision`. The watcher then reports
-    /// `template.changed`, so overlays and the preview reload as they do for edits made elsewhere.
-    fn save(&self, body: TemplateSource) -> Result<TemplateSource, (StatusCode, &'static str)> {
-        if [&body.html, &body.css]
-            .iter()
-            .any(|s| s.len() as u64 > MAX_ENTRY_BYTES)
-        {
-            return Err((StatusCode::BAD_REQUEST, "template.too_large"));
-        }
-        let _saving = self.saving.lock().unwrap();
-        let current = self
-            .revision()
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "template.unreadable"))?;
-        if current != body.revision {
-            return Err((StatusCode::CONFLICT, "template.conflict"));
-        }
-        let failed = |_| (StatusCode::INTERNAL_SERVER_ERROR, "template.save_failed");
-        std::fs::create_dir_all(&self.dir).map_err(failed)?;
-        write_both(&self.dir, &body.html, &body.css).map_err(failed)?;
-        Ok(TemplateSource {
-            revision: revision(body.html.as_bytes(), body.css.as_bytes()),
-            ..body
-        })
     }
 
     fn file(&self, path: &str) -> Response {
@@ -196,51 +123,7 @@ impl Templates {
 pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
     Router::new()
         .route("/api/admin/templates/chat", get(chat_template))
-        .route(
-            "/api/admin/templates/chat/source",
-            get(chat_source)
-                .put(save_chat_source)
-                // Two files of up to 1 MB each, plus JSON escaping (axum's default limit is 2 MB).
-                .layer(DefaultBodyLimit::max(8 * MAX_ENTRY_BYTES as usize)),
-        )
         .with_state(t)
-}
-
-#[utoipa::path(
-    get,
-    path = "/api/admin/templates/chat/source",
-    tag = "admin",
-    responses((status = 200, body = TemplateSource), (status = 422, body = ErrorBody))
-)]
-pub(crate) async fn chat_source(State(t): State<Arc<Templates>>) -> Response {
-    match tokio::task::spawn_blocking(move || t.source()).await {
-        Ok(Ok(source)) => Json(source).into_response(),
-        Ok(Err(code)) => error(StatusCode::UNPROCESSABLE_ENTITY, code),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-#[utoipa::path(
-    put,
-    path = "/api/admin/templates/chat/source",
-    tag = "admin",
-    request_body = TemplateSource,
-    responses(
-        (status = 200, body = TemplateSource),
-        (status = 400, body = ErrorBody),
-        (status = 409, body = ErrorBody),
-        (status = 500, body = ErrorBody),
-    )
-)]
-pub(crate) async fn save_chat_source(
-    State(t): State<Arc<Templates>>,
-    Json(body): Json<TemplateSource>,
-) -> Response {
-    match tokio::task::spawn_blocking(move || t.save(body)).await {
-        Ok(Ok(source)) => Json(source).into_response(),
-        Ok(Err((status, code))) => error(status, code),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
 }
 
 #[utoipa::path(
@@ -330,37 +213,6 @@ fn read_inside(base: &Path, rel: &str) -> Option<Vec<u8>> {
         return None;
     }
     std::fs::read(path).ok()
-}
-
-/// Stable within one Host run, which is all a revision needs (the editor reloads with the admin window).
-fn revision(html: &[u8], css: &[u8]) -> String {
-    let mut h = DefaultHasher::new();
-    (html, css).hash(&mut h);
-    format!("{:016x}", h.finish())
-}
-
-/// Writes both files as sibling `.tmp` files first, then renames them over the originals, so readers never see
-/// a half-written file and a failed write (disk full) changes neither. Only the two renames can split a save.
-/// `.tmp` is outside the served types, so the watcher ignores it.
-fn write_both(dir: &Path, html: &str, css: &str) -> std::io::Result<()> {
-    let files = [(dir.join(ENTRY), html), (dir.join(STYLE), css)];
-    let tmps: Vec<PathBuf> = files.iter().map(|(p, _)| p.with_extension("tmp")).collect();
-    let result = files
-        .iter()
-        .zip(&tmps)
-        .try_for_each(|((_, text), tmp)| std::fs::write(tmp, text))
-        .and_then(|()| {
-            files
-                .iter()
-                .zip(&tmps)
-                .try_for_each(|((path, _), tmp)| std::fs::rename(tmp, path))
-        });
-    if result.is_err() {
-        for tmp in &tmps {
-            let _ = std::fs::remove_file(tmp);
-        }
-    }
-    result
 }
 
 fn write_defaults(dir: &Path) -> std::io::Result<()> {
@@ -499,83 +351,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn save_writes_both_files_and_refuses_stale_or_oversized_edits() {
-        let dir = std::env::temp_dir().join(format!("st-tpl-save-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let t = Templates::new(dir.clone());
-        // Nothing on disk yet: both files read as empty.
-        let empty = t.source().unwrap();
-        assert_eq!((empty.html.as_str(), empty.css.as_str()), ("", ""));
-
-        let saved = t
-            .save(TemplateSource {
-                html: "<ul data-chat-list></ul>".into(),
-                css: ".a{}".into(),
-                revision: empty.revision.clone(),
-            })
-            .unwrap();
-        assert_eq!(
-            std::fs::read_to_string(dir.join(ENTRY)).unwrap(),
-            "<ul data-chat-list></ul>"
-        );
-        assert_eq!(std::fs::read_to_string(dir.join(STYLE)).unwrap(), ".a{}");
-        assert_eq!(t.source().unwrap().revision, saved.revision);
-        assert!(!dir.join("template.tmp").exists());
-
-        // Saving from the old revision would drop the first save (or an edit made in another editor).
-        let stale = TemplateSource {
-            html: "x".into(),
-            css: String::new(),
-            revision: empty.revision,
-        };
-        assert_eq!(
-            t.save(stale).unwrap_err(),
-            (StatusCode::CONFLICT, "template.conflict")
-        );
-        std::fs::write(dir.join(STYLE), ".b{}").unwrap();
-        let outside = TemplateSource {
-            html: "x".into(),
-            css: String::new(),
-            revision: saved.revision,
-        };
-        assert_eq!(
-            t.save(outside).unwrap_err(),
-            (StatusCode::CONFLICT, "template.conflict")
-        );
-        assert_eq!(std::fs::read_to_string(dir.join(STYLE)).unwrap(), ".b{}");
-
-        let big = TemplateSource {
-            html: "x".repeat(MAX_ENTRY_BYTES as usize + 1),
-            css: String::new(),
-            revision: t.source().unwrap().revision,
-        };
-        assert_eq!(
-            t.save(big).unwrap_err(),
-            (StatusCode::BAD_REQUEST, "template.too_large")
-        );
-
-        // A failed write (here: style.tmp is taken by a folder) changes neither file and leaves no .tmp behind.
-        std::fs::create_dir_all(dir.join("style.tmp")).unwrap();
-        let before = t.source().unwrap();
-        let blocked = TemplateSource {
-            html: "new".into(),
-            css: "new".into(),
-            revision: before.revision.clone(),
-        };
-        assert_eq!(
-            t.save(blocked).unwrap_err(),
-            (StatusCode::INTERNAL_SERVER_ERROR, "template.save_failed")
-        );
-        assert_eq!(t.source().unwrap().html, before.html);
-        assert!(!dir.join("template.tmp").exists());
-        std::fs::remove_dir(dir.join("style.tmp")).unwrap();
-
-        std::fs::write(dir.join(ENTRY), [0xff, 0xfe]).unwrap();
-        assert_eq!(t.source().unwrap_err(), "template.unreadable");
-        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
