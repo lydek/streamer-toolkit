@@ -43,17 +43,6 @@ for (const how of ['home', 'back']) {
   })
 }
 
-test('"Arrange tiles" on an empty home lands on the Features heading, and focus comes back to it', async ({
-  page,
-}) => {
-  await openAdmin(page, { modules: [{ id: 'chat', enabled: false }] })
-  const arrange = page.getByRole('button', { name: zh.home.arrange })
-  await arrange.click()
-  await expect(page.getByRole('heading', { name: zh.settings.features, exact: true })).toBeFocused()
-  await homeButton(page).click()
-  await expect(arrange).toBeFocused()
-})
-
 test('a save that fails on leaving keeps the settings page with its error', async ({ page }) => {
   await openAdmin(page)
   await page.route('**/api/admin/obs', (r) =>

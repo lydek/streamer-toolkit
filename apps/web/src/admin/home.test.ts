@@ -9,7 +9,13 @@ import {
   type Line,
   type LiveState,
   applyLive,
+  arrangedTiles,
+  availableTiles,
+  dropTile,
   errorToast,
+  groupPosition,
+  groupTiles,
+  moveTile,
   obsLight,
   successToast,
   tileGroups,
@@ -183,6 +189,44 @@ describe('tileGroups', () => {
       { group: 'live', tiles: [tiles[0]] },
     ])
     expect(tileGroups([{ id: 'chat', enabled: false }], tiles)).toEqual([])
+  })
+})
+
+describe('tile arrangement', () => {
+  const tiles = [
+    { id: 'chat', group: 'live' as const, icon: '' },
+    { id: 'checkin', group: 'features' as const, icon: '' },
+    { id: 'alerts', group: 'live' as const, icon: '' },
+  ]
+  const ids = (list: { id: string }[]) => list.map((t) => t.id)
+
+  it('uses the defaults until saved, skips unknown and repeated IDs, keeps an emptied home empty', () => {
+    expect(arrangedTiles(null, tiles)).toBe(tiles)
+    expect(ids(arrangedTiles(['alerts', 'gone', 'chat', 'alerts'], tiles))).toEqual(['alerts', 'chat'])
+    expect(arrangedTiles([], tiles)).toEqual([])
+    expect(ids(availableTiles(arrangedTiles(['alerts'], tiles), tiles))).toEqual(['chat', 'checkin'])
+  })
+
+  it('moves within a group, past tiles of other groups, and not past the edge', () => {
+    expect(moveTile(tiles, 'alerts', -1)).toEqual(['alerts', 'checkin', 'chat'])
+    expect(moveTile(tiles, 'chat', 1)).toEqual(['alerts', 'checkin', 'chat'])
+    expect(moveTile(tiles, 'chat', -1)).toEqual(['chat', 'checkin', 'alerts'])
+    expect(moveTile(tiles, 'checkin', 1)).toEqual(['chat', 'checkin', 'alerts'])
+  })
+
+  it('drops a dragged tile into the target place and reports group positions', () => {
+    expect(dropTile(tiles, 'alerts', 'chat')).toEqual(['alerts', 'chat', 'checkin'])
+    expect(dropTile(tiles, 'chat', 'alerts')).toEqual(['checkin', 'alerts', 'chat'])
+    expect(groupPosition(tiles, 'alerts')).toBe(2)
+    expect(groupPosition(tiles, 'checkin')).toBe(1)
+  })
+
+  it('groups tiles in display order without empty groups', () => {
+    expect(groupTiles(tiles)).toEqual([
+      { group: 'live', tiles: [tiles[0], tiles[2]] },
+      { group: 'features', tiles: [tiles[1]] },
+    ])
+    expect(groupTiles([])).toEqual([])
   })
 })
 
