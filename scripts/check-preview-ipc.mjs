@@ -25,7 +25,8 @@ async function session(target) {
   const contexts = []
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data)
-    if (m.id) pending.get(m.id)?.(m.result)
+    // A CDP error (e.g. a stale context) is reported like a thrown exception, with its message.
+    if (m.id) pending.get(m.id)?.(m.result ?? { exceptionDetails: { exception: { description: m.error?.message } } })
     else if (m.method === 'Runtime.executionContextCreated') contexts.push(m.params.context)
   }
   const send = (method, params = {}) =>
@@ -69,6 +70,7 @@ const origin = await inPreview('self.origin')
 const fromPreview = await inPreview(call)
 const fromAdmin = await main.evaluate(call)
 console.log({ origin, fromPreview, fromAdmin })
-const ok = origin === 'null' && !String(fromPreview).startsWith('resolved') && fromAdmin === 'resolved true'
+// Only an explicit rejection passes: a timeout could be a delayed answer that still hands over the token.
+const ok = origin === 'null' && String(fromPreview).startsWith('rejected') && fromAdmin === 'resolved true'
 console.log(ok ? 'PASS: invoke is rejected in the preview' : 'FAIL')
 process.exit(ok ? 0 : 1)

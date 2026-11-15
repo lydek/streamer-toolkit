@@ -98,9 +98,13 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-/* Empty it takes no height; not display:none, which would drop it from the accessibility tree. */
+/* Empty, it cancels its flex gap instead of display:none, which would drop it from the accessibility tree. */
 .connection {
   margin: 0;
+}
+
+.connection:empty {
+  margin-block-end: -0.5rem;
 }
 
 .bar {

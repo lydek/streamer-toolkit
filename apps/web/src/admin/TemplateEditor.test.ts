@@ -98,6 +98,21 @@ describe('TemplateEditor', () => {
     wrapper.unmount()
   })
 
+  it('keeps what is typed while a save is in flight', async () => {
+    const wrapper = await setup()
+    await wrapper.get('#template-html').setValue('first')
+    let finish!: (v: object) => void
+    calls.put.mockReturnValueOnce(new Promise((r) => (finish = r)))
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('#template-html').setValue('typed')
+    finish({ html: 'first', css: source.css, revision: 'r2' })
+    await flushPromises()
+    expect((wrapper.get('#template-html').element as HTMLTextAreaElement).value).toBe('typed')
+    // Still differs from what was saved, so it can be saved again.
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('keeps CRLF line endings of files saved with them', async () => {
     calls.get.mockImplementation(async (path: string) =>
       path === '/api/admin/templates/chat/source' ? { html: 'a\r\nb', css: 'c\nd', revision: 'r1' } : { error: null },

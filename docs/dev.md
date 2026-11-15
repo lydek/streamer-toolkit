@@ -54,8 +54,8 @@
     - 關閉視窗時的提示：按 Esc 取消後視窗留著；按「知道了」後隱藏到系統匣；勾「不再提示」後，下次直接隱藏到系統匣。
   - 能抽成純函式的判斷照樣寫單元測試；關閉提示的 Rust 狀態流程（已顯示／取消／隱藏、2 秒逾時、提示中再按 ✕）寫 Rust 單元測試。
 - 安全測試：樣板預覽 iframe 呼叫 `invoke` 必須被拒絕。
-  - 單元測試確認預覽 iframe 的 `sandbox` 只有 `allow-scripts`；Host 測試確認 `/admin` 的 `frame-src` 只放行預覽頁。
-  - 實際拒絕要在 Tauri 視窗確認：預覽 iframe 裡仍有部分 `__TAURI_INTERNALS__`（Tauri 注入所有 frame 的 plugin 腳本），但它的 origin 是 `null`，呼叫 `invoke` 會被 Tauri 以 `Origin header is not a valid URL` 拒絕，對照組是管理視窗本身可以呼叫。檢查腳本：設 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` 啟動程式並開啟聊天室樣板編輯頁，執行 `node scripts/check-preview-ipc.mjs 9333`，結束碼 0 才算通過。它需要實際的程式，所以不在 CI 裡跑；每次改動預覽、CSP 或 Tauri capability 時執行一次。
+  - 單元測試確認預覽 iframe 的 `sandbox` 只有 `allow-scripts`；Host 與 Vite dev server 的測試確認 `/admin` 的 `frame-src` 只放行預覽頁。
+  - 實際拒絕要在 Tauri 視窗確認：預覽 iframe 裡仍有部分 `__TAURI_INTERNALS__`（Tauri 注入所有 frame 的 plugin 腳本），但它的 origin 是 `null`，呼叫 `invoke` 會被 Tauri 以 `Origin header is not a valid URL` 拒絕，對照組是管理視窗本身可以呼叫。檢查腳本：設 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` 啟動程式並開啟聊天室樣板編輯頁，執行 `node scripts/check-preview-ipc.mjs 9333`，腳本只確認被拒絕，不比對訊息；結束碼 0 才算通過。它需要實際的程式，所以不在 CI 裡跑；每次改動預覽、CSP 或 Tauri capability 時執行一次。
 - AI 協作：可以改實作、加測試；不得為了讓測試通過而放寬驗收條件、刪除測試或修改 CI 檢查。
 
 ## 安全與資料硬約束（不可省略）

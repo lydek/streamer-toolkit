@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 6bb04c28817c494f9c33880055c9ef22bc1fdb779f9672bce3cc5dd75ea3d3a0 -->
+<!-- source: docs/dev.md source-sha256: f4a802ea2230d715c2f380417b836389c95261b1169b893c552a82caac8fc202 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -55,8 +55,8 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
     - The close-window hint: Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
   - Logic that can be extracted into pure functions still gets unit tests; the Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.
 - Security test: `invoke` from the template preview iframe must be rejected.
-  - A unit test checks that the preview iframe's `sandbox` is `allow-scripts` only; a Host test checks that the `/admin` `frame-src` allows only the preview page.
-  - The actual rejection is checked in the Tauri window: the preview iframe still has part of `__TAURI_INTERNALS__` (Tauri injects plugin scripts into every frame), but its origin is `null`, so Tauri rejects `invoke` with `Origin header is not a valid URL`; as a control, the admin window itself can call it. Check script: start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`, open the chat template editor page, and run `node scripts/check-preview-ipc.mjs 9333`; it passes only with exit code 0. It needs the real app, so it does not run in CI; run it whenever the preview, the CSP or the Tauri capabilities change.
+  - A unit test checks that the preview iframe's `sandbox` is `allow-scripts` only; Host and Vite dev server tests check that the `/admin` `frame-src` allows only the preview page.
+  - The actual rejection is checked in the Tauri window: the preview iframe still has part of `__TAURI_INTERNALS__` (Tauri injects plugin scripts into every frame), but its origin is `null`, so Tauri rejects `invoke` with `Origin header is not a valid URL`; as a control, the admin window itself can call it. Check script: start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`, open the chat template editor page, and run `node scripts/check-preview-ipc.mjs 9333`; the script only checks that the call is rejected, not the message, and passes only with exit code 0. It needs the real app, so it does not run in CI; run it whenever the preview, the CSP or the Tauri capabilities change.
 - AI collaboration: may change implementation and add tests; must never loosen acceptance criteria, delete tests or change CI checks to make tests pass.
 
 ## Hard security and data constraints (never skip)

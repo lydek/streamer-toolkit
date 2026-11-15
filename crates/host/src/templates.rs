@@ -557,6 +557,22 @@ mod tests {
             (StatusCode::BAD_REQUEST, "template.too_large")
         );
 
+        // A failed write (here: style.tmp is taken by a folder) changes neither file and leaves no .tmp behind.
+        std::fs::create_dir_all(dir.join("style.tmp")).unwrap();
+        let before = t.source().unwrap();
+        let blocked = TemplateSource {
+            html: "new".into(),
+            css: "new".into(),
+            revision: before.revision.clone(),
+        };
+        assert_eq!(
+            t.save(blocked).unwrap_err(),
+            (StatusCode::INTERNAL_SERVER_ERROR, "template.save_failed")
+        );
+        assert_eq!(t.source().unwrap().html, before.html);
+        assert!(!dir.join("template.tmp").exists());
+        std::fs::remove_dir(dir.join("style.tmp")).unwrap();
+
         std::fs::write(dir.join(ENTRY), [0xff, 0xfe]).unwrap();
         assert_eq!(t.source().unwrap_err(), "template.unreadable");
         let _ = std::fs::remove_dir_all(dir);
