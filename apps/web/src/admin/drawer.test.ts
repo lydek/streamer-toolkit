@@ -92,6 +92,18 @@ describe('useDrawer', () => {
     expect(drawer.current.value).toBe('chat')
   })
 
+  it("with no drawer open, submits a full page's settings and fails when one fails", async () => {
+    let ok = false
+    const save = vi.fn(async () => ok)
+    submit(save)
+
+    expect(await drawer.close()).toBe(false)
+    expect(save).toHaveBeenCalledTimes(1)
+    ok = true
+    expect(await drawer.close()).toBe(true)
+    expect(drawer.current.value).toBeNull()
+  })
+
   it('shares a pending close instead of submitting twice', async () => {
     let release!: () => void
     const save = vi.fn(() => new Promise<boolean>((r) => (release = () => r(true))))

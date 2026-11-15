@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 100910df309054fcd257a4c316b002a5fd80ce23b85a00a68e6e81a4cf3e11b0 -->
+<!-- source: docs/dev.md source-sha256: 812839129f26633a7a9f891866acf78a43455d5befc71c631b40cc1cbc0ceee3 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -56,10 +56,12 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - When the drawer is modal, error messages and its buttons are visible and can be pressed; with a dropdown open inside the drawer, Esc closes only the dropdown, not the drawer.
   - At window widths of 1280px, 640px and 320px (equivalent to 1280px zoomed to 200% and 400%) there is no horizontal scrollbar; the home page's keyboard path works end to end: skip link, chat tile, open the drawer, send a simulated chat, close the drawer (1280px and 800px).
   - The close-hint `<dialog>` (with fake IPC): the actions sent to Rust are correct when pressing Esc to cancel, clicking "Got it", and checking "Don't show again".
+  - Full pages (⚙ Settings): entering focuses "← Home" (entering from "Arrange tiles" focuses the "Features" heading); it and Back (Alt+←) both return home, and history does not grow; back on home, focus returns to ⚙ or "Arrange tiles" (returning to the tile after a drawer's "Open full page", and the further fallbacks, are covered by unit tests), and the drawer does not reopen.
+  - On the settings page, a field typed into without pressing Enter is saved when leaving with "← Home" or Back; when the save fails, the page stays and shows the error; when the window gets focus again, "Ask before closing the window" is read again.
   - Overlay (real Host): editing the chat template applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one.
 - Checked manually once per finished slice:
   - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat.
-  - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly.
+  - Native window ✕ and system tray: ✕ shows the hint; Esc cancels and the window stays; "Got it" hides it to the tray; with "Don't show again" checked, the next close hides it to the tray directly; when the window is hidden this way with the settings page open and then brought back, "Ask before closing the window" is now unchecked.
   - Compute contrast with the formula rather than judging by eye; use Emulate vision deficiencies in Edge/Chrome DevTools to confirm that under protanopia, deuteranopia and tritanopia, anything the colors no longer distinguish (such as green/yellow/red lights) can still be told apart by shape or text; focus is visible; at 200% and 400% zoom no text is clipped (except deliberate "…" truncation) and every button can be pressed.
   - New pages or flows, and controls the path above does not cover (status lights, "Arrange tiles", other tiles): walk through them with the keyboard first, then add E2E.
 - The Rust close-hint state flow (shown/cancel/hide, the 2-second timeout, ✕ clicked again while the hint is open) gets Rust unit tests.

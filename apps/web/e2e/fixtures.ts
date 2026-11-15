@@ -12,6 +12,8 @@ export interface AdminState {
   overview: Schemas['Overview']
   modules: Schemas['ModuleState'][]
   template: Schemas['TemplateStatus']
+  general: Schemas['GeneralSettings']
+  obs: Schemas['ObsOverview']
 }
 
 export interface Invoke {
@@ -86,6 +88,8 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     overview: { client_id: '', status: { state: 'signed_out' } },
     modules: [{ id: 'chat', enabled: true }],
     template: { error: null },
+    general: { ask_before_close: true },
+    obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     ...state,
   }
   await mockIpc(page)
@@ -95,6 +99,8 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   await page.route('**/api/admin/twitch', get(() => s.overview))
   await page.route('**/api/admin/modules', get(() => s.modules))
   await page.route('**/api/admin/templates/chat', get(() => s.template))
+  await page.route('**/api/admin/general', get(() => s.general))
+  await page.route('**/api/admin/obs', get(() => s.obs))
   const snapshot: Schemas['Snapshot'] = {
     type: 'snapshot',
     version: 1,

@@ -60,10 +60,27 @@
     "changeClientId": "變更 Client ID"
   },
   "modules": {
-    "heading": "模組",
     "names": {
       "chat": "聊天室"
     }
+  },
+  "settings": {
+    "title": "設定",
+    "general": "一般",
+    "askBeforeClose": "關閉視窗前先詢問",
+    "obs": {
+      "host": "主機",
+      "port": "連接埠",
+      "password": "密碼",
+      "passwordSet": "已儲存密碼；輸入新密碼即可取代。",
+      "passwordNone": "尚未設定密碼。",
+      "removePassword": "移除密碼"
+    },
+    "features": "功能",
+    "backup": "備份與還原",
+    "backupLater": "之後的版本才會提供。",
+    "about": "關於",
+    "license": "以 MIT 授權釋出。"
   },
   "simulate": {
     "heading": "事件模擬器",
@@ -122,7 +139,7 @@
       "password_required": "OBS WebSocket 需要密碼，請先設定密碼。",
       "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",
       "invalid_address": "OBS 位址格式不正確。",
-      "secret_store_failed": "無法從 Windows 認證管理員讀取 OBS 密碼。",
+      "secret_store_failed": "無法存取 Windows 認證管理員中的 OBS 密碼。",
       "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。"
     },
     "port": {

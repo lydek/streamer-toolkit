@@ -10,6 +10,53 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/general": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "general",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneralSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_general",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneralSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/modules": {
       "get": {
         "tags": [
@@ -567,6 +614,19 @@
         "properties": {
           "code": {
             "type": "string"
+          }
+        }
+      },
+      "GeneralSettings": {
+        "type": "object",
+        "description": "Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window.",
+        "required": [
+          "ask_before_close"
+        ],
+        "properties": {
+          "ask_before_close": {
+            "type": "boolean",
+            "description": "Show the close hint on ✕; the hint's \"Don't show again\" turns it off."
           }
         }
       },
