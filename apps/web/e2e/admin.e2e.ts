@@ -39,6 +39,8 @@ for (const width of [1280, 800]) {
     await page.keyboard.press('Enter')
     await expect(page.getByRole('button', { name: zh.drawer.close })).toBeFocused()
     await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: zh.chat.copyObsUrl })).toBeFocused()
+    await page.keyboard.press('Tab')
     await expect(page.getByLabel(zh.simulate.userName)).toBeFocused()
     await page.keyboard.press('Tab')
     await page.keyboard.type('hello from the keyboard')
