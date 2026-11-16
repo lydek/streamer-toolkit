@@ -20,6 +20,7 @@ const GETS: Record<string, unknown> = {
   '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
   '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
   '/api/admin/checkin/outbox': { pending: 0, oldest_pending_at: null, dead_letters: [] },
+  '/api/admin/sounds': { sounds: [], slots: {} },
 }
 
 async function mountSettings() {

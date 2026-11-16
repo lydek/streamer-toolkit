@@ -1,3 +1,4 @@
+import type { ComposerTranslation } from 'vue-i18n'
 import { ApiError, api, client } from './api'
 
 /** The Host's limit (crates/modules/sound); checked here first so a large file is never sent. */
@@ -15,4 +16,13 @@ export function importSound(file: File) {
       headers: { 'Content-Type': 'application/octet-stream' },
     }),
   )
+}
+
+/** Where a slot is, for the "used by" list: e.g. `alert.follow` → 特效：追隨. */
+export function slotLabel(slot: string, t: ComposerTranslation): string {
+  const [area, rest] = slot.split(/\.(.*)/)
+  if (area === 'alert') return t('sound.where.alert', { kind: t(`alerts.kinds.${rest}`) })
+  if (slot === 'checkin') return t('sound.where.checkin')
+  if (slot === 'checkin.full') return t('sound.where.checkinFull')
+  return slot
 }

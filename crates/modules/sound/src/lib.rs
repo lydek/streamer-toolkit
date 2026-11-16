@@ -5,5 +5,5 @@ mod domain;
 mod infrastructure;
 
 pub use application::{SoundError, SoundService};
-pub use domain::MAX_BYTES;
-pub use infrastructure::{file_routes, openapi, routes};
+pub use domain::{Cue, MAX_BYTES};
+pub use infrastructure::{AlertSound, PlaySound, file_routes, openapi, routes};

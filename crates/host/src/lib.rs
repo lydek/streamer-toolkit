@@ -165,10 +165,15 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
+    let sounds = Arc::new(sound::SoundService::new(
+        config.data_dir.clone(),
+        modules.clone(),
+    ));
     let alerts = Arc::new(alerts::AlertsService::new(
         bus.clone(),
         modules.clone(),
         config.alert_timing,
+        sounds.clone(),
     ));
     let http = integrations::tls::https_client(tls.clone());
     let twitch = Arc::new(tokio::sync::RwLock::new(
@@ -190,6 +195,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.data_dir.clone(),
         profiles,
+        sounds.clone(),
         config.checkin_timing,
     ));
     let outbox = toolkit_core::outbox::Outbox::new(
@@ -207,7 +213,6 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
-    let sounds = Arc::new(sound::SoundService::new(config.data_dir.clone()));
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,

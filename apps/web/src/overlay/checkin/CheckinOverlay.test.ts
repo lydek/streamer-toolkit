@@ -6,6 +6,9 @@ import { i18n } from '../../i18n'
 import CheckinOverlay from './CheckinOverlay.vue'
 import { twitchImage } from './checkin'
 
+const played = vi.hoisted(() => [] as [string, number][])
+vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]) }))
+
 const AVATAR = 'https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png'
 
 function stamped(seq: number, over: Record<string, unknown> = {}) {
@@ -16,7 +19,17 @@ function stamped(seq: number, over: Record<string, unknown> = {}) {
     seq,
     occurredAt: '2026-11-16T10:00:00.000Z',
     source: 'twitch' as const,
-    payload: { userName: 'Ann', avatarUrl: AVATAR, stamps: 3, slots: 10, total: 13, full: false, durationMs: 5000, ...over },
+    payload: {
+      userName: 'Ann',
+      avatarUrl: AVATAR,
+      stamps: 3,
+      slots: 10,
+      total: 13,
+      full: false,
+      durationMs: 5000,
+      sound: null,
+      ...over,
+    },
   }
 }
 
@@ -53,6 +66,15 @@ describe('CheckinOverlay', () => {
     vi.advanceTimersByTime(5000)
     await nextTick()
     expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
+  })
+
+  it('plays the card’s sound at its volume, and nothing without one', () => {
+    played.length = 0
+    const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
+    const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }
+    vm.receive(stamped(1))
+    vm.receive(stamped(2, { full: true, sound: { url: '/sounds/s1', volume: 40 } }))
+    expect(played).toEqual([['/sounds/s1', 40]])
   })
 
   it('marks a full card and drops images from anywhere but Twitch', async () => {

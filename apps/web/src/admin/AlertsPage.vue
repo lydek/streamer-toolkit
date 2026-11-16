@@ -1,14 +1,20 @@
 <template>
   <FullPage :title="t('modules.names.alerts')">
     <TemplatePicker overlay="alerts" :ids="BUILT_IN" :label="(id) => t(`alerts.templates.${id}`)" :start="start" />
+    <section aria-labelledby="alert-sounds">
+      <h2 id="alert-sounds">{{ t('modules.names.sound') }}</h2>
+      <SoundSlots built-in :slots="ALERT_KINDS.map((k) => ({ slot: `alert.${k}`, label: t(`alerts.kinds.${k}`) }))" />
+    </section>
   </FullPage>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { ALERT_KINDS } from '../overlay/alerts/alerts'
 import type { Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 import FullPage from './FullPage.vue'
+import SoundSlots from './SoundSlots.vue'
 import TemplatePicker from './TemplatePicker.vue'
 
 // Keys of a full record, so a template added to the Host's list fails the typecheck until it is listed here.
@@ -33,6 +39,7 @@ const start = (): Incoming[] => [
       months: 12,
       message: t('alerts.sample'),
       durationMs: 4000,
+      sound: { kind: 'built_in' },
     },
   },
 ]

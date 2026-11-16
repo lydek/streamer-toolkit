@@ -27,6 +27,7 @@ import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { components } from '../../api/schema'
 import type { Incoming } from '../chat/chat'
+import { playSound } from '../sound'
 import { twitchImage } from './checkin'
 
 type Stamped = components['schemas']['CheckinStampedPayload']
@@ -43,12 +44,13 @@ let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
-/** Shows one card for its duration; the Host paces them, so a new one only replaces a stale one. */
+/** Shows one card for its duration with its sound; the Host paces them, so a new one only replaces a stale one. */
 function show(p: Stamped) {
   clearTimeout(hide)
   card.value = p
   key.value++
   hide = setTimeout(() => (card.value = undefined), p.durationMs)
+  if (p.sound) playSound(p.sound.url, p.sound.volume)
 }
 
 function receive(msg: Incoming) {

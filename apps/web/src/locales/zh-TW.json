@@ -256,7 +256,16 @@
     "notUsed": "沒有地方用到這個音效。",
     "imported": "已匯入「{label}」。",
     "deleted": "已刪除「{label}」。",
-    "loadFailed": "無法載入音效。"
+    "loadFailed": "無法載入音效。",
+    "builtIn": "內建音效",
+    "silent": "靜音",
+    "checkinNormal": "打卡時的音效",
+    "checkinFull": "集滿時的音效",
+    "where": {
+      "alert": "特效：{kind}",
+      "checkin": "打卡：一般打卡",
+      "checkinFull": "打卡：集滿"
+    }
   },
   "simulate": {
     "heading": "事件模擬器",
@@ -369,7 +378,8 @@
       "too_large": "檔案超過 10 MB。",
       "not_found": "找不到這個音效，可能已經刪除。",
       "invalid": "名稱不能空白，音量是 0 到 100%。",
-      "save_failed": "無法儲存音效。"
+      "save_failed": "無法儲存音效。",
+      "unknown_slot": "這裡不能選音效。"
     }
   }
 }
