@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     application::{CheckinRepository, Outcome, RepositoryError},
-    domain::{CheckIn, Trigger, Viewer},
+    domain::{CheckIn, Trigger, TwitchUserId, Viewer},
 };
 
 /// This module's migrations; the host merges them with the other modules'.
@@ -22,6 +22,97 @@ impl SqliteCheckins {
     }
 }
 
+/// A viewer with their totals, for the list.
+pub(crate) struct ViewerTotals {
+    pub(crate) id: String,
+    pub(crate) user_login: String,
+    pub(crate) user_name: String,
+    pub(crate) total: u64,
+    pub(crate) last_day: Option<String>,
+}
+
+/// One page of viewers, latest check-in first, and how many match in total. `search` matches part of the login
+/// or display name; `%`, `_` and `!` in it are literal.
+pub(crate) async fn list_viewers(
+    pool: &SqlitePool,
+    search: Option<&str>,
+    offset: u32,
+    limit: u32,
+) -> Result<(Vec<ViewerTotals>, u64), RepositoryError> {
+    let pattern = search.map(|t| {
+        let escaped = t.replace('!', "!!").replace('%', "!%").replace('_', "!_");
+        format!("%{escaped}%")
+    });
+    // Every value is bound; `?1` is the pattern, NULL for no search.
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM checkin_viewers v \
+         WHERE (?1 IS NULL OR v.user_login LIKE ?1 ESCAPE '!' OR v.user_name LIKE ?1 ESCAPE '!')",
+    )
+    .bind(&pattern)
+    .fetch_one(pool)
+    .await
+    .map_err(storage)?;
+    let rows: Vec<(String, String, String, i64, Option<String>)> = sqlx::query_as(
+        "SELECT v.id, v.user_login, v.user_name, COUNT(r.id), MAX(r.business_day) \
+         FROM checkin_viewers v LEFT JOIN checkin_records r ON r.viewer_id = v.id \
+         WHERE (?1 IS NULL OR v.user_login LIKE ?1 ESCAPE '!' OR v.user_name LIKE ?1 ESCAPE '!') \
+         GROUP BY v.id ORDER BY MAX(r.business_day) DESC NULLS LAST, v.user_login, v.id LIMIT ?2 OFFSET ?3",
+    )
+    .bind(&pattern)
+    .bind(i64::from(limit))
+    .bind(i64::from(offset))
+    .fetch_all(pool)
+    .await
+    .map_err(storage)?;
+    let items = rows
+        .into_iter()
+        .map(
+            |(id, user_login, user_name, total, last_day)| ViewerTotals {
+                id,
+                user_login,
+                user_name,
+                total: u64::try_from(total).unwrap_or(0),
+                last_day,
+            },
+        )
+        .collect();
+    Ok((items, u64::try_from(total).unwrap_or(0)))
+}
+
+/// How many viewers checked in on `day`, and the latest `recent` of them (viewer ID, name, time).
+pub(crate) async fn day_summary(
+    pool: &SqlitePool,
+    day: chrono::NaiveDate,
+    recent: u32,
+) -> Result<(u64, Vec<(String, String, String)>), RepositoryError> {
+    let day = day.to_string();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM checkin_records WHERE business_day = ?")
+            .bind(&day)
+            .fetch_one(pool)
+            .await
+            .map_err(storage)?;
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT v.id, v.user_name, r.occurred_at FROM checkin_records r JOIN checkin_viewers v ON v.id = r.viewer_id \
+         WHERE r.business_day = ? ORDER BY r.occurred_at DESC, r.id DESC LIMIT ?",
+    )
+    .bind(&day)
+    .bind(i64::from(recent))
+    .fetch_all(pool)
+    .await
+    .map_err(storage)?;
+    let rows = rows
+        .into_iter()
+        .map(|(id, name, at)| {
+            let at = DateTime::parse_from_rfc3339(&at)
+                .map(|t| t.to_utc().to_rfc3339_opts(SecondsFormat::Millis, true))
+                .unwrap_or(at);
+            (id, name, at)
+        })
+        .collect();
+    Ok((u64::try_from(count).unwrap_or(0), rows))
+}
+
 fn storage(e: impl std::fmt::Display) -> RepositoryError {
     RepositoryError(e.to_string())
 }
@@ -35,6 +126,7 @@ fn trigger_text(t: Trigger) -> &'static str {
     match t {
         Trigger::Chat => "chat",
         Trigger::Redemption => "redemption",
+        Trigger::Manual => "manual",
     }
 }
 
@@ -99,11 +191,27 @@ pub(crate) async fn check_in_tx(
         .await
         .map_err(storage)?;
     Ok(Outcome::CheckedIn {
+        viewer_id,
         total: u64::try_from(total).unwrap_or(0),
     })
 }
 
 impl CheckinRepository for SqliteCheckins {
+    async fn find_viewer(&self, id: &str) -> Result<Option<Viewer>, RepositoryError> {
+        let row: Option<(String, String, String)> = sqlx::query_as(
+            "SELECT twitch_user_id, user_login, user_name FROM checkin_viewers WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(row.map(|(twitch_id, login, name)| Viewer {
+            twitch_id: TwitchUserId(twitch_id),
+            login,
+            name,
+        }))
+    }
+
     async fn check_in(&self, viewer: &Viewer, c: &CheckIn) -> Result<Outcome, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let outcome = check_in_tx(&mut tx, viewer, c).await?;
@@ -143,7 +251,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::{
         application::{CheckinService, Config},
-        domain::{BusinessDay, TwitchUserId},
+        domain::BusinessDay,
     };
     use sqlx::sqlite::SqlitePoolOptions;
     use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -207,9 +315,13 @@ pub(crate) mod tests {
             .unwrap()
     }
 
-    async fn check(repo: &SqliteCheckins, rule: &BusinessDay, id: &str, at: &str) -> Outcome {
+    /// The viewer's new total, or `None` for a repeat.
+    async fn check(repo: &SqliteCheckins, rule: &BusinessDay, id: &str, at: &str) -> Option<u64> {
         let c = CheckIn::at(rule, utc(at), Trigger::Chat, utc(at));
-        repo.check_in(&viewer(id), &c).await.unwrap()
+        match repo.check_in(&viewer(id), &c).await.unwrap() {
+            Outcome::CheckedIn { total, .. } => Some(total),
+            Outcome::Repeat => None,
+        }
     }
 
     #[tokio::test]
@@ -220,19 +332,19 @@ pub(crate) mod tests {
         // 08:00 and 23:59 in Taipei on 11-16, then 00:01 on 11-17.
         assert_eq!(
             check(&repo, &taipei, "1", "2026-11-16T00:00:00Z").await,
-            Outcome::CheckedIn { total: 1 }
+            Some(1)
         );
         assert_eq!(
             check(&repo, &taipei, "1", "2026-11-16T15:59:00Z").await,
-            Outcome::Repeat
+            None
         );
         assert_eq!(
             check(&repo, &taipei, "2", "2026-11-16T15:59:00Z").await,
-            Outcome::CheckedIn { total: 1 }
+            Some(1)
         );
         assert_eq!(
             check(&repo, &taipei, "1", "2026-11-16T16:01:00Z").await,
-            Outcome::CheckedIn { total: 2 }
+            Some(2)
         );
         assert_eq!(count(&pool).await, 3);
 
@@ -252,32 +364,30 @@ pub(crate) mod tests {
         let repo = SqliteCheckins::new(pool.clone());
         // Checked in at 01:00 on 11-17 in Taipei (a 11-17 check-in with a midnight reset).
         let midnight = BusinessDay::new("Asia/Taipei", 0).unwrap();
-        assert!(matches!(
-            check(&repo, &midnight, "1", "2026-11-16T17:00:00Z").await,
-            Outcome::CheckedIn { .. }
-        ));
+        assert!(
+            check(&repo, &midnight, "1", "2026-11-16T17:00:00Z")
+                .await
+                .is_some()
+        );
         // The day now starts at 06:00, so 05:00 is still 11-16 – the day the 01:00 check-in falls in.
         let six = BusinessDay::new("Asia/Taipei", 6).unwrap();
-        assert_eq!(
-            check(&repo, &six, "1", "2026-11-16T21:00:00Z").await,
-            Outcome::Repeat
-        );
+        assert_eq!(check(&repo, &six, "1", "2026-11-16T21:00:00Z").await, None);
         // Moving to UTC makes 01:00 Taipei 17:00 on 11-16 UTC: the same day by its window.
         let utc_zone = BusinessDay::new("UTC", 0).unwrap();
         assert_eq!(
             check(&repo, &utc_zone, "1", "2026-11-16T20:00:00Z").await,
-            Outcome::Repeat
+            None
         );
         assert_eq!(count(&pool).await, 1);
         // UTC's 11-17 carries the same label as the first check-in, so it stays refused: never one too many.
         assert_eq!(
             check(&repo, &utc_zone, "1", "2026-11-17T01:00:00Z").await,
-            Outcome::Repeat
+            None
         );
-        assert!(matches!(
+        assert_eq!(
             check(&repo, &utc_zone, "1", "2026-11-18T01:00:00Z").await,
-            Outcome::CheckedIn { total: 2 }
-        ));
+            Some(2)
+        );
     }
 
     #[tokio::test]
@@ -308,8 +418,12 @@ pub(crate) mod tests {
         let dir = data_dir(name);
         let modules = Arc::new(Modules::load(dir.clone()));
         let config = Arc::new(Config::load(dir));
-        let service =
-            CheckinService::start(SqliteCheckins::new(pool.clone()), modules.clone(), config);
+        let service = CheckinService::start(
+            SqliteCheckins::new(pool.clone()),
+            modules.clone(),
+            config,
+            Arc::new(|_| {}),
+        );
         (service, modules)
     }
 

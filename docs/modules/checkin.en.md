@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 656983542290295146b548641b150a270779f5fb9d67639af05436a86563267b -->
+<!-- source: docs/modules/checkin.md source-sha256: 421a8fc7e86361f97acb15dbe0b66337d3c0b08213121609100922926d17b204 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -20,6 +20,11 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - A redemption that keeps failing (5 attempts) moves to the failed list and no longer holds back later ones; the settings page lists it with "retry" (attempts start over) and "skip".
 - Times are stored in UTC; when an event's time cannot be read, the time it was received is used.
 
+## Admin UI
+- The home "check-in" tile and drawer show how many viewers checked in today (the current business day) and the latest few; the full page lists each viewer's total, stamp card and last check-in day, searchable by login or display name.
+- The broadcaster can register a known viewer for today or back-fill a past business day (recorded at the start of that day); future business days are refused. Manual check-ins and back-fills follow the same once-per-business-day rule, and a repeat returns "already checked in" with a notice, not an error.
+- Viewer names are shown as text only. Deleting or editing single records, removing stamps and exporting are not offered.
+
 ## Business day
 - Settings: time zone (IANA, default `Asia/Taipei`) and reset hour (local 0–23, default 0).
 - The business day comes from the time the event happened (`occurredAt`), not from processing time: the date of the local time minus the reset hour. Example: with a 6 o'clock reset, 5 a.m. on 11/17 still counts as 11/16.
@@ -37,5 +42,6 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - One redemption checks in only once (redelivery included); a chat check-in followed by a redemption on the same day counts once; a redemption delivered late counts for the business day it was redeemed.
 - After pausing and re-enabling, redemptions from that period are applied in order, on the day each was redeemed; after closing and re-enabling, they are not applied.
 - Events past the retry limit move to the failed list and do not hold back later events.
+- Manual check-ins and back-fills follow the same once-per-business-day rule; a repeat shows a notice and is not counted again. After the number of card slots changes, every viewer's card is recalculated at once.
 - Simulated events are never written to check-in records; nothing is recorded while the module is disabled.
 - All of the above are tested (the repository against a real SQLite database).

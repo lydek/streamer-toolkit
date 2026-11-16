@@ -11,7 +11,7 @@ use crate::{admin, home_tiles, obs, overlay, templates};
         title = "Streamer Toolkit Host",
         description = "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message \
                        is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, \
-                       `TemplateChangedEvent` and `RedemptionChangedEvent` follow in `seq` order."
+                       `TemplateChangedEvent`, `RedemptionChangedEvent` and `CheckinChangedEvent` follow in `seq` order."
     ),
     paths(
         admin::twitch_overview,
@@ -42,7 +42,8 @@ use crate::{admin, home_tiles, obs, overlay, templates};
         chat::ChatMessageEvent,
         alerts::AlertEvent,
         obs::ObsStatusEvent,
-        templates::TemplateChangedEvent
+        templates::TemplateChangedEvent,
+        checkin::CheckinChangedEvent
     )),
     tags((name = "admin", description = "Requires `Authorization: Bearer <per-launch admin token>`; \
                                          otherwise 401."))

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent` and `RedemptionChangedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent` and `CheckinChangedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -222,6 +222,178 @@
           },
           "500": {
             "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/today": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "today",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinToday"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/viewers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_viewers",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Part of the login or display name; ASCII letters ignore case.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Viewers to skip; default 0.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100; default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinViewerPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.invalid_query`: a bad page size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/viewers/{id}/check-ins": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "manual_check_in",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The viewer's ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualCheckInBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded, or already checked in that day",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualCheckIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.invalid_date`: not a date, or a future business day",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`checkin.viewer_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1264,6 +1436,64 @@
           "custom"
         ]
       },
+      "CheckinChangedEvent": {
+        "type": "object",
+        "description": "A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's\nID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CheckinChangedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CheckinChangedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CheckinChangedPayload": {
+        "type": "object",
+        "required": [
+          "viewer_id"
+        ],
+        "properties": {
+          "viewer_id": {
+            "type": "string",
+            "description": "The viewer's ID, as in `CheckinViewer.id`."
+          }
+        }
+      },
+      "CheckinChangedType": {
+        "type": "string",
+        "enum": [
+          "checkin.changed"
+        ]
+      },
       "CheckinDeadLetter": {
         "type": "object",
         "description": "A redemption the check-in module failed to take five times in a row. `user_name` and `reward_title` are raw\nTwitch text.",
@@ -1335,6 +1565,27 @@
           }
         }
       },
+      "CheckinRecent": {
+        "type": "object",
+        "description": "`user_name` is raw Twitch text.",
+        "required": [
+          "viewer_id",
+          "user_name",
+          "occurred_at"
+        ],
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "viewer_id": {
+            "type": "string"
+          }
+        }
+      },
       "CheckinSettingsBody": {
         "type": "object",
         "description": "The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped.",
@@ -1371,6 +1622,101 @@
           "time_zone": {
             "type": "string",
             "description": "IANA time zone, e.g. `Asia/Taipei`."
+          }
+        }
+      },
+      "CheckinToday": {
+        "type": "object",
+        "description": "Today's check-ins (the business day in force now).",
+        "required": [
+          "business_day",
+          "count",
+          "recent"
+        ],
+        "properties": {
+          "business_day": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`."
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckinRecent"
+            },
+            "description": "The latest few, newest first."
+          }
+        }
+      },
+      "CheckinViewer": {
+        "type": "object",
+        "description": "One viewer with the stamp card derived from the total. `user_login` and `user_name` are raw Twitch text: escape\nthem when rendering.",
+        "required": [
+          "id",
+          "user_login",
+          "user_name",
+          "total",
+          "stamps",
+          "card_slots"
+        ],
+        "properties": {
+          "card_slots": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_check_in": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Business day (`YYYY-MM-DD`) of the latest check-in; `null` when there is none."
+          },
+          "stamps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stamps on the current card, out of `card_slots`.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "user_login": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        }
+      },
+      "CheckinViewerPage": {
+        "type": "object",
+        "description": "`GET /api/admin/checkin/viewers`: latest check-in first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckinViewer"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Viewers matching the search, across all pages.",
+            "minimum": 0
           }
         }
       },
@@ -1430,6 +1776,36 @@
             "description": "Show the close hint on ✕; the hint's \"Don't show again\" turns it off."
           }
         }
+      },
+      "ManualCheckIn": {
+        "type": "object",
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/ManualCheckInResult"
+          }
+        }
+      },
+      "ManualCheckInBody": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A past business day to back-fill (`YYYY-MM-DD`); omitted or `null` registers today."
+          }
+        }
+      },
+      "ManualCheckInResult": {
+        "type": "string",
+        "enum": [
+          "checked_in",
+          "already_checked_in"
+        ]
       },
       "ModuleBody": {
         "type": "object",

@@ -159,6 +159,21 @@
         <RedemptionList v-else-if="recent.state === 'ready'" :records="recent.items" :empty="t('redemption.empty')" />
       </template>
     </AppDrawer>
+
+    <AppDrawer id="checkin" :title="moduleName('checkin')" full-page="/checkin">
+      <template #now>
+        <p v-if="checkinToday.state === 'failed'" role="alert">{{ t('checkin.page.loadFailed') }}</p>
+        <p v-else-if="checkinToday.state === 'loading'">{{ t('app.loading') }}</p>
+        <template v-else-if="checkinToday.state === 'ready'">
+          <p>{{ t('checkin.today', { n: checkinToday.today.count }) }}</p>
+          <ul v-if="checkinToday.today.recent.length" class="recent-checkins">
+            <li v-for="r in checkinToday.today.recent" :key="r.viewer_id">
+              <time :datetime="r.occurred_at">{{ formatTime(r.occurred_at) }}</time> {{ r.user_name }}
+            </li>
+          </ul>
+        </template>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
@@ -190,13 +205,14 @@ import {
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
+import { changesCheckins } from './checkins'
 import { focusReturnTarget } from './page'
 import RedemptionList from './RedemptionList.vue'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import StatusLight from './StatusLight.vue'
 import TwitchSignIn from './TwitchSignIn.vue'
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const toast = useToast()
 const router = useRouter()
 
@@ -239,10 +255,26 @@ async function loadRecent() {
     if (mine === recentRequest) recent.value = { state: 'failed' }
   }
 }
+// Today's check-ins, for the check-in tile and drawer; reloaded on every check-in and reconnect.
+const checkinToday = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; today: Schemas['CheckinToday'] }>({
+  state: 'loading',
+})
+let checkinRequest = 0
+async function loadCheckinToday() {
+  const mine = ++checkinRequest
+  try {
+    const today = await api(client.GET('/api/admin/checkin/today'))
+    if (mine === checkinRequest) checkinToday.value = { state: 'ready', today }
+  } catch {
+    if (mine === checkinRequest) checkinToday.value = { state: 'failed' }
+  }
+}
 const live = useLiveEvents(2000, (msg) => {
   chatLog.value = applyChat(chatLog.value, msg)
   if (changesRecords(msg)) void loadRecent()
+  if (changesCheckins(msg)) void loadCheckinToday()
 })
+const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.value, { timeStyle: 'short' })
 const broadcasterId = computed(() =>
   overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
 )
@@ -263,6 +295,10 @@ const lines = computed<Record<string, Line>>(() => {
         ? { state: 'ready', text: lastAlert ? alertTitle(lastAlert.payload) : t('alerts.empty') }
         : { state: status },
     redemption: recentLine(recent.value),
+    checkin:
+      checkinToday.value.state === 'ready'
+        ? { state: 'ready', text: t('checkin.today', { n: checkinToday.value.today.count }) }
+        : { state: checkinToday.value.state },
   }
 })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
@@ -411,6 +447,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.recent-checkins {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
 .top {
   display: flex;
   flex-wrap: wrap;

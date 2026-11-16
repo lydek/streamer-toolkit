@@ -133,6 +133,7 @@ export const TILES: Tile[] = [
   { id: 'chat', group: 'live', icon: 'pi pi-comments' },
   { id: 'alerts', group: 'live', icon: 'pi pi-bell' },
   { id: 'redemption', group: 'features', icon: 'pi pi-gift' },
+  { id: 'checkin', group: 'features', icon: 'pi pi-check-square' },
 ]
 
 /** Non-empty groups in display order. */

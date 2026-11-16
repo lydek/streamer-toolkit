@@ -7,8 +7,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use chrono::{DateTime, Utc};
-use tokio::sync::mpsc;
+use chrono::{DateTime, NaiveDate, Utc};
+use tokio::sync::{mpsc, oneshot};
 use toolkit_core::{
     events::{ChatMessage, Source},
     modules::{self, Modules},
@@ -24,16 +24,22 @@ use crate::domain::{
 #[error("checkin.storage_failed: {0}")]
 pub(crate) struct RepositoryError(pub(crate) String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Outcome {
-    /// Recorded; the viewer's total check-ins after it.
-    CheckedIn { total: u64 },
+    /// Recorded; the viewer's internal ID and total check-ins after it.
+    CheckedIn { viewer_id: String, total: u64 },
     /// The viewer already checked in on that business day; nothing was written.
     Repeat,
 }
 
 /// Storage port; the SQLite implementation lives in `infrastructure::db`.
 pub(crate) trait CheckinRepository: Send + Sync + 'static {
+    /// A viewer by internal ID.
+    fn find_viewer(
+        &self,
+        id: &str,
+    ) -> impl Future<Output = Result<Option<Viewer>, RepositoryError>> + Send;
+
     /// In one transaction: keeps the viewer's latest names, and records `check_in` unless the viewer already has a
     /// check-in labelled `check_in.day` or happening inside `check_in.window`.
     fn check_in(
@@ -152,33 +158,108 @@ pub(crate) async fn redeemed<R: CheckinRepository>(
         .map(Some)
 }
 
-struct Job {
-    viewer: Viewer,
-    occurred_at: DateTime<Utc>,
-    trigger: Trigger,
+/// A check-in that was recorded, for the screen events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CheckedIn {
+    pub(crate) viewer_id: String,
+    pub(crate) viewer: Viewer,
+    pub(crate) total: u64,
+    pub(crate) stamps: u32,
+    pub(crate) slots: u32,
+}
+
+/// Called after every recorded check-in, whatever triggered it.
+pub(crate) type OnCheckedIn = Arc<dyn Fn(&CheckedIn) + Send + Sync>;
+
+pub(crate) fn checked_in(viewer: &Viewer, outcome: &Outcome, rules: &Rules) -> Option<CheckedIn> {
+    match outcome {
+        Outcome::CheckedIn { viewer_id, total } => Some(CheckedIn {
+            viewer_id: viewer_id.clone(),
+            viewer: viewer.clone(),
+            total: *total,
+            stamps: rules.slots.stamps(*total),
+            slots: rules.slots.get(),
+        }),
+        Outcome::Repeat => None,
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ManualError {
+    #[error("checkin.viewer_not_found")]
+    ViewerNotFound,
+    /// Only today and past business days can be registered.
+    #[error("checkin.invalid_date")]
+    FutureDay,
+    #[error(transparent)]
+    Storage(#[from] RepositoryError),
+}
+
+enum Job {
+    Chat {
+        viewer: Viewer,
+        occurred_at: DateTime<Utc>,
+    },
+    Manual {
+        viewer_id: String,
+        day: Option<NaiveDate>,
+        reply: oneshot::Sender<Result<Outcome, ManualError>>,
+    },
 }
 
 pub struct CheckinService {
     tx: mpsc::UnboundedSender<Job>,
     modules: Arc<Modules>,
     config: Arc<Config>,
+    on_checked_in: OnCheckedIn,
 }
 
 impl CheckinService {
-    /// Spawns the worker that records check-ins in order; needs a Tokio runtime.
+    /// Spawns the worker that records check-ins in order and calls `on_checked_in` after each one; needs a Tokio
+    /// runtime.
     pub(crate) fn start<R: CheckinRepository>(
         repo: R,
         modules: Arc<Modules>,
         config: Arc<Config>,
+        on_checked_in: OnCheckedIn,
     ) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
         let worker_config = config.clone();
+        let notify = on_checked_in.clone();
         tokio::spawn(async move {
             while let Some(job) = rx.recv().await {
                 let rules = worker_config.rules();
-                let check_in = CheckIn::at(&rules.day, job.occurred_at, job.trigger, Utc::now());
-                if let Err(e) = repo.check_in(&job.viewer, &check_in).await {
-                    tracing::error!(code = "checkin.storage_failed", error = %e, "check-in not stored");
+                match job {
+                    Job::Chat {
+                        viewer,
+                        occurred_at,
+                    } => {
+                        let check_in =
+                            CheckIn::at(&rules.day, occurred_at, Trigger::Chat, Utc::now());
+                        match repo.check_in(&viewer, &check_in).await {
+                            Ok(outcome) => {
+                                if let Some(c) = checked_in(&viewer, &outcome, &rules) {
+                                    notify(&c);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(code = "checkin.storage_failed", error = %e, "check-in not stored")
+                            }
+                        }
+                    }
+                    Job::Manual {
+                        viewer_id,
+                        day,
+                        reply,
+                    } => {
+                        let result = manual(&repo, &rules, &viewer_id, day, Utc::now()).await;
+                        if let Ok((viewer, outcome)) = &result
+                            && let Some(c) = checked_in(viewer, outcome, &rules)
+                        {
+                            notify(&c);
+                        }
+                        let _ = reply.send(result.map(|(_, outcome)| outcome));
+                    }
                 }
             }
         });
@@ -186,11 +267,16 @@ impl CheckinService {
             tx,
             modules,
             config,
+            on_checked_in,
         }
     }
 
     pub(crate) fn config(&self) -> &Arc<Config> {
         &self.config
+    }
+
+    pub(crate) fn on_checked_in(&self) -> &OnCheckedIn {
+        &self.on_checked_in
     }
 
     /// A chat message whose first word is the check-in command checks its sender in. Simulated messages never
@@ -209,16 +295,53 @@ impl CheckinService {
         {
             return;
         }
-        let _ = self.tx.send(Job {
+        let _ = self.tx.send(Job::Chat {
             viewer: Viewer {
                 twitch_id: TwitchUserId(message.user_id.clone()),
                 login: message.user_login.clone(),
                 name: message.user_name.clone(),
             },
             occurred_at: parse_time(&message.sent_at),
-            trigger: Trigger::Chat,
         });
     }
+
+    /// The broadcaster registers a known viewer for today (`day: None`) or back-fills a past business day, under
+    /// the same one-per-day rule as the other triggers.
+    pub(crate) async fn check_in_manually(
+        &self,
+        viewer_id: &str,
+        day: Option<NaiveDate>,
+    ) -> Result<Outcome, ManualError> {
+        let (reply, answer) = oneshot::channel();
+        let job = Job::Manual {
+            viewer_id: viewer_id.to_owned(),
+            day,
+            reply,
+        };
+        let stopped = || ManualError::Storage(RepositoryError("check-in worker stopped".into()));
+        self.tx.send(job).map_err(|_| stopped())?;
+        answer.await.map_err(|_| stopped())?
+    }
+}
+
+async fn manual<R: CheckinRepository>(
+    repo: &R,
+    rules: &Rules,
+    viewer_id: &str,
+    day: Option<NaiveDate>,
+    now: DateTime<Utc>,
+) -> Result<(Viewer, Outcome), ManualError> {
+    let viewer = repo
+        .find_viewer(viewer_id)
+        .await?
+        .ok_or(ManualError::ViewerNotFound)?;
+    let check_in = match day {
+        None => CheckIn::at(&rules.day, now, Trigger::Manual, now),
+        Some(day) if day > rules.day.day_of(now) => return Err(ManualError::FutureDay),
+        Some(day) => CheckIn::for_day(&rules.day, day, now),
+    };
+    let outcome = repo.check_in(&viewer, &check_in).await?;
+    Ok((viewer, outcome))
 }
 
 /// The time the event happened; an unreadable one falls back to the time received.

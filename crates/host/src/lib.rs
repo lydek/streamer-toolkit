@@ -169,6 +169,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     ));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
+        bus.clone(),
         modules.clone(),
         config.data_dir.clone(),
     ));
@@ -212,13 +213,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(
-            redemption::routes(config.db).layer(middleware::from_fn_with_state(
+            redemption::routes(config.db.clone()).layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )),
         )
         .merge(
-            checkin::routes(checkin).layer(middleware::from_fn_with_state(
+            checkin::routes(config.db.clone(), checkin).layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )),

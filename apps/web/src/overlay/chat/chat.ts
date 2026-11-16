@@ -8,6 +8,7 @@ export type Incoming =
   | components['schemas']['ObsStatusEvent']
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
+  | components['schemas']['CheckinChangedEvent']
 
 export interface ChatState {
   messages: ChatEvent[]
