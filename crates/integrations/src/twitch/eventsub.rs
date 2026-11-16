@@ -1,5 +1,5 @@
-//! EventSub over WebSocket: one session per signed-in account, reconnecting with backoff. Chat plus the
-//! follow, subscription, cheer and raid alerts.
+//! EventSub over WebSocket: one session per signed-in account, reconnecting with backoff. Chat, the follow,
+//! subscription, cheer and raid alerts, and channel point redemptions.
 
 use std::{collections::VecDeque, convert::Infallible, sync::Arc, time::Duration};
 
@@ -8,7 +8,10 @@ use rustls::ClientConfig;
 use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
-use toolkit_core::events::{Alert, AlertKind, ChatMessage, Fragment};
+use toolkit_core::events::{
+    Alert, AlertKind, ChannelPointsRedemption, ChatMessage, Fragment, RedemptionChange,
+    RedemptionStatus,
+};
 
 use super::{
     auth::AuthError,
@@ -22,9 +25,12 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const KEEPALIVE_GRACE: Duration = Duration::from_secs(10);
 const SEEN_CAPACITY: usize = 256;
 
-/// Alert subscriptions: type, version and the scope it needs. Raids need none, so they cost 1 of the
+const REDEMPTION_ADD: &str = "channel.channel_points_custom_reward_redemption.add";
+const REDEMPTION_UPDATE: &str = "channel.channel_points_custom_reward_redemption.update";
+
+/// Subscriptions besides chat: type, version and the scope it needs. Raids need none, so they cost 1 of the
 /// `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
-const ALERT_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
+const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     ("channel.follow", "2", Some("moderator:read:followers")),
     ("channel.subscribe", "1", Some("channel:read:subscriptions")),
     (
@@ -39,6 +45,8 @@ const ALERT_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     ("channel.cheer", "1", Some("bits:read")),
     ("channel.raid", "1", None),
+    (REDEMPTION_ADD, "1", Some("channel:read:redemptions")),
+    (REDEMPTION_UPDATE, "1", Some("channel:read:redemptions")),
 ];
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -68,6 +76,7 @@ pub struct EventSub {
     pub tls: Arc<ClientConfig>,
     pub deliver: Arc<dyn Fn(ChatMessage) + Send + Sync>,
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
+    pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
 }
 
 impl EventSub {
@@ -199,6 +208,18 @@ impl EventSub {
             }
             return;
         }
+        let change = match kind.as_str() {
+            REDEMPTION_ADD => Some(RedemptionChange::Added),
+            REDEMPTION_UPDATE => Some(RedemptionChange::Updated),
+            _ => None,
+        };
+        if let Some(change) = change {
+            match serde_json::from_value::<RedemptionEvent>(event) {
+                Ok(r) => (self.deliver_redemption)(r.into_redemption(change)),
+                Err(e) => tracing::warn!(error = %e, "unreadable redemption notification"),
+            }
+            return;
+        }
         match serde_json::from_value::<AlertEvent>(event)
             .ok()
             .and_then(|e| e.into_alert(&kind, id, sent_at))
@@ -219,7 +240,7 @@ impl EventSub {
             .token()
             .map(|t| t.scopes)
             .unwrap_or_default();
-        for &(kind, version, scope) in ALERT_SUBSCRIPTIONS {
+        for &(kind, version, scope) in OTHER_SUBSCRIPTIONS {
             // A token from before the scope was added; the admin UI asks to sign in again.
             if scope.is_some_and(|s| !granted.iter().any(|g| g == s)) {
                 continue;
@@ -232,8 +253,8 @@ impl EventSub {
                 _ => serde_json::json!({ "broadcaster_user_id": user_id }),
             };
             match self.create(kind, version, condition, session_id).await {
-                // E.g. a channel Twitch does not offer it to, or an EventSub limit (a 429); chat and the other
-                // alerts carry on. Sign-in failures still end the session.
+                // E.g. a channel Twitch does not offer it to (channel points need Affiliate or Partner), or an
+                // EventSub limit (a 429); chat and the others carry on. Sign-in failures still end the session.
                 Err(EventSubError::Helix(
                     e @ (HelixError::Refused(_) | HelixError::RateLimited(_)),
                 )) => {
@@ -502,6 +523,52 @@ impl AlertEvent {
     }
 }
 
+/// A custom reward redemption; `.add` and `.update` carry the same fields.
+#[derive(Deserialize)]
+struct RedemptionEvent {
+    id: String,
+    user_id: String,
+    user_login: String,
+    user_name: String,
+    #[serde(default)]
+    user_input: String,
+    status: String,
+    reward: RedemptionReward,
+    redeemed_at: String,
+}
+
+#[derive(Deserialize)]
+struct RedemptionReward {
+    id: String,
+    title: String,
+    cost: u32,
+}
+
+impl RedemptionEvent {
+    fn into_redemption(self, change: RedemptionChange) -> ChannelPointsRedemption {
+        // EventSub statuses are lowercase; "cancelled" appears in Twitch's own docs, so both spellings count.
+        let status = match self.status.as_str() {
+            "unfulfilled" => RedemptionStatus::Unfulfilled,
+            "fulfilled" => RedemptionStatus::Fulfilled,
+            "canceled" | "cancelled" => RedemptionStatus::Canceled,
+            _ => RedemptionStatus::Unknown,
+        };
+        ChannelPointsRedemption {
+            id: self.id,
+            change,
+            user_id: self.user_id,
+            user_login: self.user_login,
+            user_name: self.user_name,
+            reward_id: self.reward.id,
+            reward_title: self.reward.title,
+            reward_cost: self.reward.cost,
+            user_input: self.user_input,
+            status,
+            redeemed_at: self.redeemed_at,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -640,11 +707,37 @@ mod tests {
         ]
     }
 
+    /// Redemption notifications as Twitch sends them: an add, its update, an unknown status, and a broken one.
+    fn redemption_notifications() -> Vec<String> {
+        let redemption = |id: &str, status: &str| {
+            json!({"id":id,"broadcaster_user_id":"42","broadcaster_user_login":"streamer",
+                   "broadcaster_user_name":"Streamer","user_id":"9001","user_login":"cooler_user",
+                   "user_name":"Cooler_User","user_input":"pogchamp","status":status,
+                   "reward":{"id":"w-1","title":"Hydrate","cost":100,"prompt":"drink"},
+                   "redeemed_at":"2026-11-16T10:00:00.17106713Z"})
+        };
+        vec![
+            notification("p1", REDEMPTION_ADD, redemption("r-1", "unfulfilled")),
+            notification("p2", REDEMPTION_UPDATE, redemption("r-1", "fulfilled")),
+            notification("p3", REDEMPTION_UPDATE, redemption("r-2", "cancelled")),
+            notification("p4", REDEMPTION_ADD, redemption("r-3", "something_new")),
+            // No reward: dropped with a warning.
+            notification(
+                "p5",
+                REDEMPTION_ADD,
+                json!({"id":"r-4","status":"unfulfilled"}),
+            ),
+        ]
+    }
+
     async fn second(ws: WebSocketUpgrade) -> Response {
         ws.on_upgrade(|mut socket| async move {
             send(&mut socket, welcome("s2")).await;
             send(&mut socket, chat("n2", "c2", "red; background:url(x)")).await;
-            for n in alert_notifications() {
+            for n in alert_notifications()
+                .into_iter()
+                .chain(redemption_notifications())
+            {
                 send(&mut socket, n).await;
             }
             hold_open(socket).await;
@@ -711,6 +804,7 @@ mod tests {
         let http = tls::https_client(config.clone());
         let (tx, mut rx) = mpsc::unbounded_channel();
         let (alert_tx, mut alerts) = mpsc::unbounded_channel();
+        let (redemption_tx, mut redemptions) = mpsc::unbounded_channel();
         let task = tokio::spawn(
             EventSub {
                 url: format!("{}/ws", base.replace("http://", "ws://")),
@@ -718,6 +812,7 @@ mod tests {
                 tls: config,
                 deliver: Arc::new(move |m| tx.send(m).unwrap()),
                 deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
+                deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
             }
             .run(),
         );
@@ -797,6 +892,55 @@ mod tests {
             "the broken cheer is not delivered"
         );
 
+        let first = next(&mut redemptions).await;
+        assert_eq!(
+            first,
+            ChannelPointsRedemption {
+                id: "r-1".into(),
+                change: RedemptionChange::Added,
+                user_id: "9001".into(),
+                user_login: "cooler_user".into(),
+                user_name: "Cooler_User".into(),
+                reward_id: "w-1".into(),
+                reward_title: "Hydrate".into(),
+                reward_cost: 100,
+                user_input: "pogchamp".into(),
+                status: RedemptionStatus::Unfulfilled,
+                redeemed_at: "2026-11-16T10:00:00.17106713Z".into(),
+            }
+        );
+        let mut rest = Vec::new();
+        for _ in 0..3 {
+            let r = next(&mut redemptions).await;
+            rest.push((r.id, r.change, r.status));
+        }
+        assert_eq!(
+            rest,
+            [
+                (
+                    "r-1".into(),
+                    RedemptionChange::Updated,
+                    RedemptionStatus::Fulfilled
+                ),
+                (
+                    "r-2".into(),
+                    RedemptionChange::Updated,
+                    RedemptionStatus::Canceled
+                ),
+                (
+                    "r-3".into(),
+                    RedemptionChange::Added,
+                    RedemptionStatus::Unknown
+                ),
+            ]
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), redemptions.recv())
+                .await
+                .is_err(),
+            "the broken redemption is not delivered"
+        );
+
         let subs = fake.subscriptions.lock().unwrap().clone();
         let types: Vec<&str> = subs
             .iter()
@@ -812,7 +956,9 @@ mod tests {
                 "channel.subscribe",
                 "channel.subscription.message",
                 "channel.subscription.gift",
-                "channel.raid"
+                "channel.raid",
+                REDEMPTION_ADD,
+                REDEMPTION_UPDATE
             ]
         );
         assert_eq!(

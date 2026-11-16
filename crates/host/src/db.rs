@@ -31,7 +31,7 @@ pub enum DbError {
 
 /// Every module's migrations, in one list. Disabled modules are listed too: a missing version fails the start.
 fn modules() -> Vec<&'static Migrator> {
-    vec![]
+    vec![&redemption::MIGRATOR]
 }
 
 /// Merges the modules' migrations in version order; two modules sharing a version is an error.

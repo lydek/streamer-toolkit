@@ -167,6 +167,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.alert_timing,
     ));
+    let redemption = Arc::new(redemption::start(config.db));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -178,6 +179,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         tls,
         chat,
         alerts,
+        redemption,
         modules,
     ));
     Ok(Router::new()

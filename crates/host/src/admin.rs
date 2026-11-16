@@ -25,6 +25,7 @@ use integrations::{
         helix::Helix,
     },
 };
+use redemption::RedemptionService;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::RwLock, task::AbortHandle};
@@ -47,6 +48,7 @@ pub(crate) struct AdminState {
     tls: Arc<ClientConfig>,
     chat: Arc<ChatService>,
     alerts: Arc<AlertsService>,
+    redemption: Arc<RedemptionService>,
     modules: Arc<Modules>,
     twitch: RwLock<TwitchAuth>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
@@ -64,6 +66,7 @@ impl AdminState {
         tls: Arc<ClientConfig>,
         chat: Arc<ChatService>,
         alerts: Arc<AlertsService>,
+        redemption: Arc<RedemptionService>,
         modules: Arc<Modules>,
     ) -> Self {
         let http = integrations::tls::https_client(tls.clone());
@@ -78,6 +81,7 @@ impl AdminState {
             tls,
             chat,
             alerts,
+            redemption,
             modules,
             twitch: RwLock::new(twitch.clone()),
             eventsub: Mutex::new(None),
@@ -86,10 +90,11 @@ impl AdminState {
         state
     }
 
-    /// Connects chat and alerts for `auth` (it waits until signed in) and stops the task of the previous auth.
+    /// Connects chat, alerts and redemptions for `auth` (it waits until signed in) and stops the task of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
         let alerts = self.alerts.clone();
+        let redemption = self.redemption.clone();
         let task = tokio::spawn(
             EventSub {
                 url: self.endpoints.eventsub.clone(),
@@ -97,6 +102,7 @@ impl AdminState {
                 tls: self.tls.clone(),
                 deliver: Arc::new(move |m| chat.receive(m, Source::Twitch)),
                 deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
+                deliver_redemption: Arc::new(move |r| redemption.receive(r, Source::Twitch)),
             }
             .run(),
         );
