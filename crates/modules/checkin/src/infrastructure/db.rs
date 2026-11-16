@@ -34,6 +34,7 @@ pub(crate) fn time_text(t: DateTime<Utc>) -> String {
 fn trigger_text(t: Trigger) -> &'static str {
     match t {
         Trigger::Chat => "chat",
+        Trigger::Redemption => "redemption",
     }
 }
 
@@ -109,6 +110,32 @@ impl CheckinRepository for SqliteCheckins {
         tx.commit().await.map_err(storage)?;
         Ok(outcome)
     }
+
+    async fn check_in_once(
+        &self,
+        event_id: &str,
+        viewer: &Viewer,
+        c: &CheckIn,
+    ) -> Result<Outcome, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let new = sqlx::query(
+            "INSERT INTO checkin_inbox (event_id, processed_at) VALUES (?, ?) ON CONFLICT DO NOTHING",
+        )
+        .bind(event_id)
+        .bind(time_text(c.recorded_at))
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?
+        .rows_affected()
+            == 1;
+        let outcome = if new {
+            check_in_tx(&mut tx, viewer, c).await?
+        } else {
+            Outcome::Repeat
+        };
+        tx.commit().await.map_err(storage)?;
+        Ok(outcome)
+    }
 }
 
 #[cfg(test)]
@@ -138,7 +165,13 @@ pub(crate) mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        MIGRATOR.run(&pool).await.unwrap();
+        let mut all: Vec<_> = MIGRATOR
+            .iter()
+            .chain(toolkit_core::outbox::MIGRATOR.iter())
+            .cloned()
+            .collect();
+        all.sort_by_key(|m| m.version);
+        Migrator::with_migrations(all).run(&pool).await.unwrap();
         pool
     }
 

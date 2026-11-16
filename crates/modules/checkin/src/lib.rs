@@ -9,5 +9,5 @@ pub use application::CheckinService;
 pub use infrastructure::{
     db::MIGRATOR,
     http::{CheckinSettingsBody, routes},
-    openapi, start,
+    openapi, start, subscriptions,
 };

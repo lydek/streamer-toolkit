@@ -180,6 +180,8 @@
     "features": "功能",
     "checkin": {
       "command": "打卡指令",
+      "reward": "打卡用的頻道點數獎勵",
+      "noReward": "不使用（只用聊天指令）",
       "timeZone": "時區",
       "resetHour": "換日時間",
       "cardSlots": "集點卡格數"
@@ -254,6 +256,8 @@
       "sign_in_expired": "驗證碼已過期，請重新登入。",
       "sign_in_refused": "Twitch 拒絕了登入，請確認 Client ID 與 app 類別（Public）。",
       "unreachable": "連不到 Twitch，請檢查網路。",
+      "request_refused": "Twitch 拒絕了這個要求（頻道可能沒有頻道點數）。",
+      "rate_limited": "Twitch 請求太頻繁，請稍後再試。",
       "invalid_response": "Twitch 回應無法辨識，請稍後再試。",
       "storage_failed": "無法把登入資料存進 Windows 認證管理員。",
       "scopes_missing": "新版本需要多一項 Twitch 權限（小奇點），請重新登入 Twitch 一次。聊天室在重新登入前照常運作。"

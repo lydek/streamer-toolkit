@@ -26,6 +26,8 @@ pub struct CheckinSettingsBody {
     pub reset_hour: u32,
     /// Stamp card slots, 1–100.
     pub card_slots: u32,
+    /// Twitch ID of the channel points reward that checks in; `null`: chat only.
+    pub reward_id: Option<String>,
 }
 
 impl From<CheckinSettings> for CheckinSettingsBody {
@@ -35,6 +37,7 @@ impl From<CheckinSettings> for CheckinSettingsBody {
             time_zone: s.time_zone,
             reset_hour: s.reset_hour,
             card_slots: s.card_slots,
+            reward_id: s.reward_id,
         }
     }
 }
@@ -90,6 +93,7 @@ pub(crate) async fn set_checkin_settings(
         time_zone: body.time_zone.trim().to_owned(),
         reset_hour: body.reset_hour,
         card_slots: body.card_slots,
+        reward_id: body.reward_id.filter(|id| !id.trim().is_empty()),
     };
     match s.config().update(&next) {
         Ok(rules) => Json(CheckinSettingsBody::from(settings_of(&rules))).into_response(),

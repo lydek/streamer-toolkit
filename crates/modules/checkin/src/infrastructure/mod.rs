@@ -1,15 +1,23 @@
-//! Adapters: the SQLite repository and the admin API.
+//! Adapters: the SQLite repository, the admin API and the outbox subscription.
 
 pub(crate) mod db;
 pub(crate) mod http;
 
 use std::{path::PathBuf, sync::Arc};
 
+use chrono::Utc;
+use redemption::{REDEMPTION_RECORDED, RedemptionRecorded};
 use sqlx::SqlitePool;
-use toolkit_core::modules::Modules;
+use toolkit_core::{
+    modules::{self, Modules},
+    outbox::{Handled, OutboxEvent, Subscriber, Subscription},
+};
 use utoipa::OpenApi;
 
-use crate::application::{CheckinService, Config};
+use crate::{
+    application::{self, CheckinService, Config, Redeemed},
+    domain::{TwitchUserId, Viewer},
+};
 
 /// Starts check-ins into `pool`, which must already have [`db::MIGRATOR`] applied, with the settings in
 /// `data_dir`; needs a Tokio runtime.
@@ -19,6 +27,46 @@ pub fn start(pool: SqlitePool, modules: Arc<Modules>, data_dir: PathBuf) -> Chec
         modules,
         Arc::new(Config::load(data_dir)),
     )
+}
+
+/// What this module takes from the outbox: redemptions, to check in with the configured reward.
+pub fn subscriptions(pool: SqlitePool, service: &CheckinService) -> Vec<Subscription> {
+    vec![Subscription {
+        module: modules::CHECKIN,
+        event_type: REDEMPTION_RECORDED,
+        handler: Arc::new(RedemptionCheckins {
+            repo: db::SqliteCheckins::new(pool),
+            config: service.config().clone(),
+        }),
+    }]
+}
+
+struct RedemptionCheckins {
+    repo: db::SqliteCheckins,
+    config: Arc<Config>,
+}
+
+impl Subscriber for RedemptionCheckins {
+    fn handle<'a>(&'a self, event: &'a OutboxEvent) -> Handled<'a> {
+        Box::pin(async move {
+            let r: RedemptionRecorded =
+                serde_json::from_value(event.payload.clone()).map_err(|e| e.to_string())?;
+            let redeemed = Redeemed {
+                event_id: event.id.clone(),
+                viewer: Viewer {
+                    twitch_id: TwitchUserId(r.user_id),
+                    login: r.user_login,
+                    name: r.user_name,
+                },
+                reward_id: r.reward_id,
+                occurred_at: event.occurred_at,
+            };
+            application::redeemed(&self.repo, &self.config.rules(), &redeemed, Utc::now())
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    }
 }
 
 #[derive(OpenApi)]
@@ -33,9 +81,141 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::db::tests::{data_dir, pool};
+    use crate::infrastructure::db::tests::{chat, count, data_dir, pool, wait_for_count};
     use axum::{body::Body, http::Request};
+    use chrono::DateTime;
+    use toolkit_core::{events::Source, outbox::Outbox, settings::CheckinSettings};
     use tower::ServiceExt;
+
+    struct Wired {
+        pool: SqlitePool,
+        service: CheckinService,
+        outbox: Arc<Outbox>,
+        dir: PathBuf,
+    }
+
+    /// The check-in module subscribed to a real outbox, with reward `w-1` checking in.
+    async fn wired(name: &str) -> Wired {
+        let pool = pool().await;
+        let dir = data_dir(name);
+        let service = start(
+            pool.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+        );
+        service
+            .config()
+            .update(&CheckinSettings {
+                reward_id: Some("w-1".into()),
+                ..CheckinSettings::default()
+            })
+            .unwrap();
+        let outbox = Outbox::new(pool.clone(), subscriptions(pool.clone(), &service));
+        Wired {
+            pool,
+            service,
+            outbox,
+            dir,
+        }
+    }
+
+    /// Publishes a redemption of `reward` by viewer `user`, redeemed at `at`, as the redemption module does.
+    async fn redeem(w: &Wired, event_id: &str, user: &str, reward: &str, at: &str) {
+        let payload = RedemptionRecorded {
+            redemption_id: format!("rec-{event_id}"),
+            twitch_redemption_id: format!("tw-{event_id}"),
+            user_id: user.into(),
+            user_login: format!("login{user}"),
+            user_name: format!("Viewer {user}"),
+            reward_id: reward.into(),
+            reward_title: "Check in".into(),
+        };
+        let event = OutboxEvent {
+            id: event_id.into(),
+            event_type: REDEMPTION_RECORDED.into(),
+            payload: serde_json::to_value(payload).unwrap(),
+            occurred_at: DateTime::parse_from_rfc3339(at).unwrap().to_utc(),
+        };
+        let mut tx = w.pool.begin().await.unwrap();
+        w.outbox.publish(&mut tx, &event).await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    async fn rows(pool: &SqlitePool) -> Vec<(String, String, String)> {
+        sqlx::query_as(
+            "SELECT v.twitch_user_id, r.business_day, r.trigger_kind FROM checkin_records r              JOIN checkin_viewers v ON v.id = r.viewer_id ORDER BY r.occurred_at",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn redeeming_the_reward_checks_in_for_the_day_it_happened() {
+        let w = wired("redeem-day").await;
+        // Redeemed at 23:50 in Taipei on 11-16, delivered (say, after a restart) the next day.
+        redeem(&w, "e1", "7", "w-1", "2026-11-16T15:50:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        assert_eq!(
+            rows(&w.pool).await,
+            [("7".into(), "2026-11-16".into(), "redemption".into())]
+        );
+        let _ = std::fs::remove_dir_all(&w.dir);
+    }
+
+    #[tokio::test]
+    async fn one_check_in_per_redemption_and_per_day() {
+        let w = wired("redeem-once").await;
+        redeem(&w, "e1", "7", "w-1", "2026-11-16T01:00:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        // Delivered again, e.g. after a crash before the delivery was marked.
+        sqlx::query("UPDATE outbox_deliveries SET state = 'pending'")
+            .execute(&w.pool)
+            .await
+            .unwrap();
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        // A second redemption the same business day.
+        redeem(&w, "e2", "7", "w-1", "2026-11-16T05:00:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        assert_eq!(count(&w.pool).await, 1);
+        let delivered: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM outbox_deliveries WHERE state = 'delivered'")
+                .fetch_one(&w.pool)
+                .await
+                .unwrap();
+        assert_eq!(delivered, 2, "a repeat is handled, not retried");
+        let _ = std::fs::remove_dir_all(&w.dir);
+    }
+
+    #[tokio::test]
+    async fn chat_then_redemption_on_the_same_day_counts_once() {
+        let w = wired("redeem-after-chat").await;
+        w.service
+            .receive_chat(&chat("7", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
+        wait_for_count(&w.pool, 1).await;
+        redeem(&w, "e1", "7", "w-1", "2026-11-16T02:00:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        assert_eq!(
+            rows(&w.pool).await,
+            [("7".into(), "2026-11-16".into(), "chat".into())]
+        );
+        let _ = std::fs::remove_dir_all(&w.dir);
+    }
+
+    #[tokio::test]
+    async fn other_rewards_or_no_reward_never_check_in() {
+        let w = wired("redeem-other").await;
+        redeem(&w, "e1", "7", "w-other", "2026-11-16T01:00:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        w.service
+            .config()
+            .update(&CheckinSettings::default())
+            .unwrap();
+        redeem(&w, "e2", "7", "w-1", "2026-11-16T01:00:00Z").await;
+        w.outbox.dispatch(Utc::now()).await.unwrap();
+        assert_eq!(count(&w.pool).await, 0);
+        let _ = std::fs::remove_dir_all(&w.dir);
+    }
 
     async fn send(
         app: &axum::Router,
@@ -66,7 +246,7 @@ mod tests {
         assert_eq!(status, 200);
         assert_eq!(
             body,
-            serde_json::json!({ "command": "打卡", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 10 })
+            serde_json::json!({ "command": "打卡", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 10, "reward_id": null })
         );
 
         let next = serde_json::json!({ "command": " !Sign ", "time_zone": "Europe/Berlin", "reset_hour": 6, "card_slots": 8 });
