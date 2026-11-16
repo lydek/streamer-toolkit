@@ -12,11 +12,29 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     modules::Modules,
+    outbox::Outbox,
 };
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 use crate::{application::RedemptionService, domain::Redemption};
+
+/// Outbox event type of [`RedemptionRecorded`].
+pub const REDEMPTION_RECORDED: &str = "redemption.recorded";
+
+/// `redemption.recorded` in the outbox: a redemption was stored for the first time (whichever Twitch event created
+/// it). The outbox event's `occurred_at` is the Twitch redemption time. Fields are raw Twitch text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RedemptionRecorded {
+    /// The record's internal ID.
+    pub redemption_id: String,
+    pub twitch_redemption_id: String,
+    pub user_id: String,
+    pub user_login: String,
+    pub user_name: String,
+    pub reward_id: String,
+    pub reward_title: String,
+}
 
 const CHANGED: &str = "redemption.changed";
 const CHANGED_VERSION: u32 = 1;
@@ -65,12 +83,19 @@ fn publish_changed(bus: &EventBus, r: &Redemption) {
     });
 }
 
-/// Starts recording into `pool`, which must already have [`db::MIGRATOR`] applied, and announces changes on
-/// `bus`; needs a Tokio runtime.
-pub fn start(pool: SqlitePool, bus: Arc<EventBus>, modules: Arc<Modules>) -> RedemptionService {
-    RedemptionService::start(db::SqliteRedemptions::new(pool), modules, move |r| {
-        publish_changed(&bus, r)
-    })
+/// Starts recording into `pool`, which must already have [`db::MIGRATOR`] and the outbox's migrations applied,
+/// announces changes on `bus` and publishes new records to `outbox`; needs a Tokio runtime.
+pub fn start(
+    pool: SqlitePool,
+    bus: Arc<EventBus>,
+    modules: Arc<Modules>,
+    outbox: Arc<Outbox>,
+) -> RedemptionService {
+    RedemptionService::start(
+        db::SqliteRedemptions::new(pool, outbox),
+        modules,
+        move |r| publish_changed(&bus, r),
+    )
 }
 
 #[derive(OpenApi)]
@@ -88,10 +113,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::db::{
-        SqliteRedemptions,
-        tests::{event, modules, pool},
-    };
+    use crate::infrastructure::db::tests::{event, modules, pool, repo};
     use axum::{body::Body, http::Request};
     use std::time::Duration;
     use toolkit_core::events::{RedemptionChange, RedemptionStatus};
@@ -110,7 +132,12 @@ mod tests {
         let pool = pool().await;
         let bus = Arc::new(EventBus::default());
         let (_, mut rx) = bus.subscribe();
-        let service = start(pool.clone(), bus.clone(), modules("announce"));
+        let service = start(
+            pool.clone(),
+            bus.clone(),
+            modules("announce"),
+            Outbox::new(pool.clone(), Vec::new()),
+        );
         use RedemptionChange::*;
         use RedemptionStatus::*;
         service.receive(event("r-1", Added, Unfulfilled), Source::Twitch);
@@ -139,7 +166,12 @@ mod tests {
         let pool = pool().await;
         let bus = Arc::new(EventBus::default());
         let (_, mut rx) = bus.subscribe();
-        let service = start(pool, bus, modules("wire"));
+        let service = start(
+            pool.clone(),
+            bus,
+            modules("wire"),
+            Outbox::new(pool, Vec::new()),
+        );
         service.receive(
             event(
                 "r-1",
@@ -198,7 +230,7 @@ mod tests {
     /// Five records an hour apart; the newest is listed first.
     async fn seeded() -> SqlitePool {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         let rows = [
             (
                 "r-1",

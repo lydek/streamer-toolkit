@@ -5,6 +5,7 @@
 pub mod bus;
 pub mod events;
 pub mod modules;
+pub mod outbox;
 pub mod settings;
 
 /// Default Host port; OBS Browser Source URLs depend on it staying stable.

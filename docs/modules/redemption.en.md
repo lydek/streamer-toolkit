@@ -1,4 +1,4 @@
-<!-- source: docs/modules/redemption.md source-sha256: 3bd8a0ffa49228928972e1ac454f5e24c3b35c840632c613fb16c81ccca5133a -->
+<!-- source: docs/modules/redemption.md source-sha256: b801e9eabcfcae1695619d4bcc2099816821d26932d695bb8d1389abaac780b1 -->
 [繁體中文](redemption.md) | **English**
 
 # Redemption records
@@ -13,7 +13,8 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - When a status update arrives before the redemption itself, the update carries the whole redemption and creates the record; the redemption event that arrives later counts as a duplicate and changes nothing.
 - A redemption event received again changes nothing.
 - Simulated events (`source=simulation`) are never stored.
-- Redemptions received while the module is disabled are dropped, like other in-memory events (the outbox that could keep them comes with the check-in slice); stored records are kept.
+- Redemptions received while the module is disabled are dropped, like other in-memory events; stored records are kept.
+- When a record is first stored (whether the redemption event or a status update created it), `RedemptionRecorded` is published through the outbox in the same transaction, with `occurredAt` set to the redemption time; repeated events and status updates publish nothing more.
 - The viewer's text is stored as-is and escaped when shown.
 - Times are stored in UTC; when Twitch's redemption time cannot be read, the time received is used.
 

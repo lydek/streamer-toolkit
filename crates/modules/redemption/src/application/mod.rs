@@ -59,7 +59,7 @@ impl RedemptionService {
     }
 
     /// Simulated redemptions never go into the records. While the module is disabled, redemptions are dropped
-    /// like other in-memory events (the outbox that could keep them comes with the check-in slice).
+    /// like other in-memory events.
     pub fn receive(&self, redemption: ChannelPointsRedemption, source: Source) {
         if source == Source::Simulation || !self.modules.is_enabled(modules::REDEMPTION) {
             return;

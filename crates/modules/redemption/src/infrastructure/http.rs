@@ -1,7 +1,5 @@
 //! Admin API for browsing records. The host puts these routes behind the admin token.
 
-use std::sync::Arc;
-
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -17,7 +15,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::{
     application::ListFilter,
     domain::{Redemption, Status},
-    infrastructure::db::SqliteRedemptions,
+    infrastructure::db,
 };
 
 const DEFAULT_LIMIT: u32 = 50;
@@ -131,7 +129,7 @@ fn error(status: StatusCode, code: &str) -> Response {
 pub fn routes(pool: SqlitePool) -> Router {
     Router::new()
         .route("/api/admin/redemptions", get(list_redemptions))
-        .with_state(Arc::new(SqliteRedemptions::new(pool)))
+        .with_state(pool)
 }
 
 fn filter(q: RedemptionQuery) -> Result<ListFilter, ()> {
@@ -172,13 +170,13 @@ fn filter(q: RedemptionQuery) -> Result<ListFilter, ()> {
     )
 )]
 pub(crate) async fn list_redemptions(
-    State(repo): State<Arc<SqliteRedemptions>>,
+    State(pool): State<SqlitePool>,
     query: Result<Query<RedemptionQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Response {
     let Some(filter) = query.ok().and_then(|Query(q)| filter(q).ok()) else {
         return error(StatusCode::BAD_REQUEST, "redemption.invalid_filter");
     };
-    match repo.list(&filter).await {
+    match db::list(&pool, &filter).await {
         Ok((items, total)) => Json(RedemptionPage {
             items: items.into_iter().map(RedemptionRecord::from).collect(),
             total,

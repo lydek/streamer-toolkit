@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: a50e476a7c91fa3c17a5d81543e9debde334fbde58249c17825457e6b849871d -->
+<!-- source: docs/architecture.md source-sha256: 6e7ae265527fca0886b3778445e33b046726eea70feb765cc7d7682ab04d4b3c -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -10,7 +10,7 @@ Adjust during the skeleton as needed, then update this section.
 
 ```text
 crates/
-  core/            # Shared core (package name `toolkit-core`, avoiding Rust's built-in `core`): settings, module registry and enable/disable controls, internal integration events, event envelope, in-memory event broadcast; outbox (with its own migrations) comes later
+  core/            # Shared core (package name `toolkit-core`, avoiding Rust's built-in `core`): settings, module registry and enable/disable controls, internal integration events, event envelope, in-memory event broadcast, outbox (with its own migrations)
   integrations/    # Twitch (EventSub) and OBS (obws) adapters: turn external events into internal events; handle OAuth, reconnect, backoff, rate limits
   modules/
     chat/          # Chat display (thin)
@@ -60,16 +60,16 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 - **Two kinds of events**:
   - Integration and UI events (chat messages, simulated events, connection status, etc.) are only broadcast in memory and never written to the database.
   - Module domain events (e.g. `RedemptionRecorded`) go through the outbox, and interested modules subscribe to them.
-- **Outbox** (built in the check-in slice, which brings the first subscriber; the redemption records slice does not publish `RedemptionRecorded` yet):
+- **Outbox** (built in the check-in slice): when redemption records first stores a record, it publishes `RedemptionRecorded` in the same transaction (event type `redemption.recorded`, with `occurredAt` set to the redemption time).
   - The event and the business data are written in the same transaction.
-  - The dispatcher takes events from the outbox, retries failures and shows them in the UI, and resends after a restart.
+  - The dispatcher takes events from the outbox in publish order, retries failures and shows them in the UI, and resends after a restart.
   - Delivery state is tracked per subscriber, so one failing subscriber neither re-runs nor blocks the others.
   - Subscribers must be safe to run more than once: processed event IDs go into the subscriber's own inbox table, in the same transaction as the business effect.
   - The outbox table belongs to `core`, which has its own migration folder; writing to the outbox reuses the caller's transaction.
   - The set of subscribers (disabled modules included) is recorded when an event is published; modules added later do not receive past events.
   - Subscribers derive business time (such as the check-in business day) from the event's `occurredAt`, not from processing time, so replayed events never land on the wrong day.
-  - Retries are capped; past the cap, the event moves to a dead-letter queue shown in the UI with "retry" and "skip" actions, so one event cannot block its subscriber forever.
-  - Events delivered to every subscriber are cleaned up periodically, together with pending deliveries for removed modules.
+  - Retries are capped (5 attempts in all, 1, 2, 4 and 8 seconds apart; while retrying, the event holds back the later events for that subscriber); past the cap, the event moves to a dead-letter queue shown in the UI with "retry" and "skip" actions, so one event cannot block its subscriber forever.
+  - Events delivered to every subscriber are cleaned up every 10 minutes (and once at startup), together with pending deliveries for removed modules.
 - **Disabling modules**:
   - From the skeleton on, modules have an enable/disable switch; while a module is disabled, in-memory events (chat, etc.) are dropped, not kept.
   - Once the outbox exists (check-in slice), the streamer chooses when disabling:

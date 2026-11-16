@@ -9,7 +9,7 @@ Skeleton 時依實際情況微調；調整後更新本節。
 
 ```text
 crates/
-  core/            # 共用核心（package 名稱 `toolkit-core`，避開 Rust 內建的 `core`）：設定、模組註冊與啟用開關、內部整合事件、事件 envelope、記憶體事件廣播；之後加 outbox（含自己的 migration）
+  core/            # 共用核心（package 名稱 `toolkit-core`，避開 Rust 內建的 `core`）：設定、模組註冊與啟用開關、內部整合事件、事件 envelope、記憶體事件廣播、outbox（含自己的 migration）
   integrations/    # Twitch（EventSub）、OBS（obws）Adapter：外部事件轉內部事件，處理 OAuth、重連、退避、限流
   modules/
     chat/          # 聊天室顯示（薄）
@@ -59,16 +59,16 @@ apps/
 - **兩種事件**：
   - 整合事件與畫面事件（聊天訊息、模擬事件、連線狀態等）只在記憶體廣播，不寫入資料庫。
   - 模組的 domain event（例：`RedemptionRecorded`）走 outbox，由關心的模組訂閱。
-- **Outbox**（打卡簽到切片建立，那時才有第一個訂閱者；兌換紀錄切片先不發布 `RedemptionRecorded`）：
+- **Outbox**（打卡簽到切片建立）：兌換紀錄第一次存下一筆紀錄時，在同一個交易發布 `RedemptionRecorded`（事件類型 `redemption.recorded`，`occurredAt` 是兌換時間）。
   - 事件與業務資料寫在同一個交易。
-  - dispatcher 從 outbox 取出分派，失敗會重試並在 UI 顯示，重啟後補送。
+  - dispatcher 從 outbox 依發布順序取出分派，失敗會重試並在 UI 顯示，重啟後補送。
   - 每個訂閱者各自追蹤投遞狀態，一個訂閱者失敗不會重跑或卡住其他訂閱者。
   - 訂閱者必須可重複執行：處理過的事件 ID 記在自己的 inbox 表，且與業務效果寫在同一個交易。
   - outbox 表屬於 `core`，`core` 有自己的 migration 目錄；寫入 outbox 時沿用呼叫端的交易。
   - 發布事件時就記下當下有哪些訂閱者（含停用中的模組）；之後新增的模組不會收到過去的事件。
   - 訂閱者依事件的 `occurredAt` 判斷業務時間（例如打卡的營運日），不用處理時間，補送的事件才不會算到錯的日子。
-  - 重試有上限；超過就把事件移入 dead-letter，在 UI 顯示並提供「重試」或「略過」，避免單一事件永久卡住該訂閱者。
-  - 所有訂閱者都投遞完成的事件定期清除；已移除模組的待投遞紀錄一併清除。
+  - 重試有上限（共 5 次，間隔 1、2、4、8 秒；重試期間擋住該訂閱者後面的事件）；超過就把事件移入 dead-letter，在 UI 顯示並提供「重試」或「略過」，避免單一事件永久卡住該訂閱者。
+  - 所有訂閱者都投遞完成的事件每 10 分鐘清除（啟動時也清一次）；已移除模組的待投遞紀錄一併清除。
 - **停用模組**：
   - Skeleton 起就有啟用／停用開關；停用期間記憶體事件（聊天等）直接丟棄，不保留。
   - Outbox 建立後（打卡簽到切片），停用時由實況主選擇：

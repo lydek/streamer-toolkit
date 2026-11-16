@@ -29,9 +29,14 @@ pub enum DbError {
     DuplicateVersion(i64),
 }
 
-/// Every module's migrations, in one list. Disabled modules are listed too: a missing version fails the start.
+/// The core's (outbox) and every module's migrations, in one list. Disabled modules are listed too: a missing
+/// version fails the start.
 fn modules() -> Vec<&'static Migrator> {
-    vec![&redemption::MIGRATOR, &checkin::MIGRATOR]
+    vec![
+        &toolkit_core::outbox::MIGRATOR,
+        &redemption::MIGRATOR,
+        &checkin::MIGRATOR,
+    ]
 }
 
 /// Merges the modules' migrations in version order; two modules sharing a version is an error.

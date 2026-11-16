@@ -1,56 +1,62 @@
 //! SQLite repository for redemption records. Rows map to the domain here; nothing else sees them.
 
+use std::sync::Arc;
+
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqlitePool, migrate::Migrator};
+use toolkit_core::outbox::{Outbox, OutboxEvent};
 use uuid::Uuid;
 
 use crate::{
     application::{ListFilter, RedemptionRepository, RepositoryError},
     domain::{Redemption, RedemptionId, Reward, Status, TwitchRedemptionId, Viewer},
+    infrastructure::{REDEMPTION_RECORDED, RedemptionRecorded},
 };
 
 /// This module's migrations; the host merges them with the other modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
+/// Records redemptions and publishes `redemption.recorded` in the same transaction as a new record.
 pub(crate) struct SqliteRedemptions {
     pool: SqlitePool,
+    outbox: Arc<Outbox>,
 }
 
 impl SqliteRedemptions {
-    pub(crate) fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub(crate) fn new(pool: SqlitePool, outbox: Arc<Outbox>) -> Self {
+        Self { pool, outbox }
     }
+}
 
-    /// One page of records, newest first, and how many match in total.
-    pub(crate) async fn list(
-        &self,
-        filter: &ListFilter,
-    ) -> Result<(Vec<Redemption>, u64), RepositoryError> {
-        let mut count = QueryBuilder::<Sqlite>::new("SELECT COUNT(*) FROM redemption_records");
-        push_filter(&mut count, filter);
-        let total: i64 = count
-            .build_query_scalar()
-            .fetch_one(&self.pool)
-            .await
-            .map_err(storage)?;
+/// One page of records, newest first, and how many match in total.
+pub(crate) async fn list(
+    pool: &SqlitePool,
+    filter: &ListFilter,
+) -> Result<(Vec<Redemption>, u64), RepositoryError> {
+    let mut count = QueryBuilder::<Sqlite>::new("SELECT COUNT(*) FROM redemption_records");
+    push_filter(&mut count, filter);
+    let total: i64 = count
+        .build_query_scalar()
+        .fetch_one(pool)
+        .await
+        .map_err(storage)?;
 
-        let mut page = QueryBuilder::<Sqlite>::new("SELECT * FROM redemption_records");
-        push_filter(&mut page, filter);
-        page.push(" ORDER BY redeemed_at DESC, id DESC LIMIT ")
-            .push_bind(i64::from(filter.limit))
-            .push(" OFFSET ")
-            .push_bind(i64::from(filter.offset));
-        let rows: Vec<RedemptionRow> = page
-            .build_query_as()
-            .fetch_all(&self.pool)
-            .await
-            .map_err(storage)?;
-        let items = rows
-            .into_iter()
-            .map(Redemption::try_from)
-            .collect::<Result<_, _>>()?;
-        Ok((items, u64::try_from(total).unwrap_or(0)))
-    }
+    let mut page = QueryBuilder::<Sqlite>::new("SELECT * FROM redemption_records");
+    push_filter(&mut page, filter);
+    page.push(" ORDER BY redeemed_at DESC, id DESC LIMIT ")
+        .push_bind(i64::from(filter.limit))
+        .push(" OFFSET ")
+        .push_bind(i64::from(filter.offset));
+    let rows: Vec<RedemptionRow> = page
+        .build_query_as()
+        .fetch_all(pool)
+        .await
+        .map_err(storage)?;
+    let items = rows
+        .into_iter()
+        .map(Redemption::try_from)
+        .collect::<Result<_, _>>()?;
+    Ok((items, u64::try_from(total).unwrap_or(0)))
 }
 
 /// `WHERE` for [`ListFilter`]; every value is bound, none is spliced into the SQL.
@@ -87,6 +93,24 @@ fn like_pattern(text: &str) -> String {
         .replace('%', "!%")
         .replace('_', "!_");
     format!("%{escaped}%")
+}
+
+fn recorded(r: &Redemption) -> OutboxEvent {
+    let payload = RedemptionRecorded {
+        redemption_id: r.id.0.to_string(),
+        twitch_redemption_id: r.twitch_id.0.clone(),
+        user_id: r.viewer.id.clone(),
+        user_login: r.viewer.login.clone(),
+        user_name: r.viewer.name.clone(),
+        reward_id: r.reward.id.clone(),
+        reward_title: r.reward.title.clone(),
+    };
+    OutboxEvent {
+        id: Uuid::now_v7().to_string(),
+        event_type: REDEMPTION_RECORDED.into(),
+        payload: serde_json::to_value(payload).expect("serializable"),
+        occurred_at: r.redeemed_at,
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -166,6 +190,7 @@ impl TryFrom<RedemptionRow> for Redemption {
 
 impl RedemptionRepository for SqliteRedemptions {
     async fn insert(&self, r: &Redemption) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
         let result = sqlx::query(
             "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id, \
              reward_title, reward_cost, user_input, status, redeemed_at, updated_at) \
@@ -183,10 +208,21 @@ impl RedemptionRepository for SqliteRedemptions {
         .bind(status_text(r.status))
         .bind(time_text(r.redeemed_at))
         .bind(time_text(r.updated_at))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(storage)?;
-        Ok(result.rows_affected() == 1)
+        let created = result.rows_affected() == 1;
+        if created {
+            self.outbox
+                .publish(&mut tx, &recorded(r))
+                .await
+                .map_err(storage)?;
+        }
+        tx.commit().await.map_err(storage)?;
+        if created {
+            self.outbox.wake();
+        }
+        Ok(created)
     }
 
     async fn find_by_twitch_id(
@@ -240,8 +276,109 @@ pub(crate) mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        MIGRATOR.run(&pool).await.unwrap();
+        let mut all: Vec<_> = MIGRATOR
+            .iter()
+            .chain(toolkit_core::outbox::MIGRATOR.iter())
+            .cloned()
+            .collect();
+        all.sort_by_key(|m| m.version);
+        Migrator::with_migrations(all).run(&pool).await.unwrap();
         pool
+    }
+
+    /// A repository whose outbox has no subscribers; events stay in the table for tests to read.
+    pub(crate) fn repo(pool: &SqlitePool) -> SqliteRedemptions {
+        SqliteRedemptions::new(pool.clone(), Outbox::new(pool.clone(), Vec::new()))
+    }
+
+    /// `redemption.recorded` events in the outbox, oldest first.
+    async fn recorded_events(pool: &SqlitePool) -> Vec<(RedemptionRecorded, String)> {
+        let rows: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT event_type, payload, occurred_at FROM outbox_events ORDER BY published_at, id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap();
+        rows.into_iter()
+            .map(|(kind, payload, at)| {
+                assert_eq!(kind, REDEMPTION_RECORDED);
+                (serde_json::from_str(&payload).unwrap(), at)
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_new_record_publishes_redemption_recorded_once() {
+        let pool = pool().await;
+        let repo = repo(&pool);
+        use RedemptionChange::*;
+        use RedemptionStatus::*;
+        // The update arrives first and creates the record; the late add and later updates publish nothing.
+        record(&repo, event("r-1", Updated, Fulfilled), at(1))
+            .await
+            .unwrap();
+        record(&repo, event("r-1", Added, Unfulfilled), at(2))
+            .await
+            .unwrap();
+        record(&repo, event("r-2", Added, Unfulfilled), at(3))
+            .await
+            .unwrap();
+        record(&repo, event("r-2", Updated, Canceled), at(4))
+            .await
+            .unwrap();
+        let events = recorded_events(&pool).await;
+        assert_eq!(events.len(), 2);
+        let (first, occurred_at) = &events[0];
+        let id: String = sqlx::query_scalar(
+            "SELECT id FROM redemption_records WHERE twitch_redemption_id = 'r-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            first,
+            &RedemptionRecorded {
+                redemption_id: id,
+                twitch_redemption_id: "r-1".into(),
+                user_id: "7".into(),
+                user_login: "viewer".into(),
+                user_name: "Viewer".into(),
+                reward_id: "w-1".into(),
+                reward_title: "Hydrate".into(),
+            }
+        );
+        assert_eq!(
+            occurred_at, "2026-11-16T10:00:00.123456Z",
+            "the Twitch redemption time"
+        );
+        assert_eq!(events[1].0.twitch_redemption_id, "r-2");
+    }
+
+    #[tokio::test]
+    async fn the_event_and_the_record_are_written_together() {
+        let pool = pool().await;
+        let repo = repo(&pool);
+        // Without the outbox table the event cannot be written, so the record is not kept either.
+        sqlx::query("DROP TABLE outbox_deliveries")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DROP TABLE outbox_events")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let result = record(
+            &repo,
+            event(
+                "r-1",
+                RedemptionChange::Added,
+                RedemptionStatus::Unfulfilled,
+            ),
+            at(1),
+        )
+        .await;
+        assert!(result.is_err());
+        assert_eq!(count(&pool).await, 0);
     }
 
     pub(crate) fn event(
@@ -284,7 +421,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn stores_every_field_and_reads_it_back() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         record(
             &repo,
             event(
@@ -322,7 +459,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn same_redemption_id_is_stored_once() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         let add = || {
             event(
                 "r-1",
@@ -352,7 +489,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn status_follows_twitch_and_rejects_invalid_changes() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         use RedemptionChange::*;
         use RedemptionStatus::*;
         record(&repo, event("r-1", Added, Unfulfilled), at(1))
@@ -390,7 +527,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn unknown_status_is_stored_and_later_resolved() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         use RedemptionChange::*;
         use RedemptionStatus::*;
         record(&repo, event("r-1", Added, Unknown), at(1))
@@ -417,7 +554,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn update_before_the_redemption_keeps_the_data() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         use RedemptionChange::*;
         use RedemptionStatus::*;
         record(&repo, event("r-1", Updated, Fulfilled), at(1))
@@ -435,7 +572,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn unreadable_time_falls_back_to_the_time_received() {
         let pool = pool().await;
-        let repo = SqliteRedemptions::new(pool);
+        let repo = repo(&pool);
         let mut e = event(
             "r-1",
             RedemptionChange::Added,
@@ -459,13 +596,12 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn simulated_redemptions_are_never_stored() {
         let pool = pool().await;
-        let service =
-            RedemptionService::start(SqliteRedemptions::new(pool.clone()), modules("sim"), |_| {});
+        let service = RedemptionService::start(repo(&pool), modules("sim"), |_| {});
         use RedemptionChange::*;
         use RedemptionStatus::*;
         service.receive(event("sim", Added, Unfulfilled), Source::Simulation);
         service.receive(event("real", Added, Unfulfilled), Source::Twitch);
-        let repo = SqliteRedemptions::new(pool.clone());
+        let repo = repo(&pool);
         // The simulated one never enters the queue; the real one shows the worker ran.
         wait_for(&repo, "real").await;
         assert!(stored(&repo, "sim").await.is_none());
@@ -476,9 +612,8 @@ pub(crate) mod tests {
     async fn disabled_module_drops_redemptions_and_keeps_the_records() {
         let pool = pool().await;
         let switch = modules("disabled");
-        let service =
-            RedemptionService::start(SqliteRedemptions::new(pool.clone()), switch.clone(), |_| {});
-        let repo = SqliteRedemptions::new(pool.clone());
+        let service = RedemptionService::start(repo(&pool), switch.clone(), |_| {});
+        let repo = repo(&pool);
         use RedemptionChange::*;
         use RedemptionStatus::*;
         service.receive(event("before", Added, Unfulfilled), Source::Twitch);
