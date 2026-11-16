@@ -20,6 +20,8 @@ pub(crate) struct Viewer {
 pub(crate) enum Trigger {
     Chat,
     Redemption,
+    /// Registered or back-filled by the broadcaster.
+    Manual,
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -128,6 +130,15 @@ impl CardSlots {
     pub(crate) fn get(self) -> u32 {
         self.0
     }
+
+    /// Stamps on the current card. A full card shows every slot until the next check-in starts a new one.
+    pub(crate) fn stamps(self, total: u64) -> u32 {
+        if total == 0 {
+            0
+        } else {
+            u32::try_from((total - 1) % u64::from(self.0)).expect("below slots") + 1
+        }
+    }
 }
 
 /// Twitch's ID of the channel points reward that checks in.
@@ -170,6 +181,19 @@ pub(crate) struct CheckIn {
 }
 
 impl CheckIn {
+    /// A back-filled check-in for `day`, placed at the start of that day.
+    pub(crate) fn for_day(rule: &BusinessDay, day: NaiveDate, now: DateTime<Utc>) -> Self {
+        let window = rule.window(day);
+        Self {
+            id: Uuid::now_v7(),
+            day,
+            window,
+            occurred_at: window.0,
+            trigger: Trigger::Manual,
+            recorded_at: now,
+        }
+    }
+
     pub(crate) fn at(
         rule: &BusinessDay,
         occurred_at: DateTime<Utc>,
@@ -275,6 +299,29 @@ mod tests {
         assert!(!cmd.matches("hello !checkin"));
         assert!(!cmd.matches("!checkins"));
         assert!(Command::new("打卡").unwrap().matches("!打卡 嗨"));
+    }
+
+    #[test]
+    fn stamp_card_is_derived_from_the_total() {
+        let ten = CardSlots::new(10).unwrap();
+        let cases = [(0, 0), (1, 1), (9, 9), (10, 10), (11, 1), (20, 10), (23, 3)];
+        for (total, stamps) in cases {
+            assert_eq!(ten.stamps(total), stamps, "total {total}");
+        }
+        assert_eq!(
+            CardSlots::new(3).unwrap().stamps(23),
+            2,
+            "recomputed for a new size"
+        );
+    }
+
+    #[test]
+    fn back_fill_lies_inside_its_day() {
+        let rule = BusinessDay::new("Asia/Taipei", 6).unwrap();
+        let c = CheckIn::for_day(&rule, date("2026-11-10"), utc("2026-11-16T00:00:00Z"));
+        assert_eq!((c.day, c.trigger), (date("2026-11-10"), Trigger::Manual));
+        assert_eq!(c.occurred_at, utc("2026-11-09T22:00:00Z"));
+        assert_eq!(rule.day_of(c.occurred_at), c.day);
     }
 
     #[test]

@@ -192,6 +192,23 @@
     "license": "以 MIT 授權釋出。"
   },
   "checkin": {
+    "today": "今天 {n} 人打卡",
+    "page": {
+      "filters": "搜尋觀眾",
+      "search": "觀眾",
+      "date": "登記日期",
+      "total": "共 {n} 位觀眾",
+      "empty": "還沒有人打卡。",
+      "loadFailed": "無法讀取打卡紀錄。",
+      "totalOf": "累計 {n} 次",
+      "card": "集點卡 {stamps}/{slots}",
+      "last": "最後打卡 {date}",
+      "never": "沒有打卡紀錄",
+      "registerToday": "登記今天",
+      "registerDay": "補登 {date}",
+      "registered": "已登記 {name}（{date}）。",
+      "already": "{name} 在 {date} 已經打過卡了，沒有重複計算。"
+    },
     "disable": {
       "title": "停用打卡",
       "pause": "暫停：保留期間的兌換，重新啟用後依序補打卡。",
@@ -251,6 +268,10 @@
       "not_found": "這筆事件已經處理過了。"
     },
     "checkin": {
+      "invalid_query": "搜尋條件不正確。",
+      "invalid_date": "日期不正確：只能登記今天或過去的營運日。",
+      "viewer_not_found": "找不到這位觀眾。",
+      "storage_failed": "無法讀取或寫入打卡紀錄。",
       "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。"
     },
     "redemption": {

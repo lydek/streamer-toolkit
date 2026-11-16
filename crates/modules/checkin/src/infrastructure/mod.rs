@@ -1,31 +1,88 @@
-//! Adapters: the SQLite repository, the admin API and the outbox subscription.
+//! Adapters: the SQLite repository, the admin API, the outbox subscription and the `checkin.changed` screen event.
 
 pub(crate) mod db;
 pub(crate) mod http;
 
 use std::{path::PathBuf, sync::Arc};
 
-use chrono::Utc;
+use chrono::{SecondsFormat, Utc};
 use redemption::{REDEMPTION_RECORDED, RedemptionRecorded};
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
+    bus::{Event, EventBus},
+    events::Source,
     modules::{self, Modules},
     outbox::{Handled, OutboxEvent, Subscriber, Subscription},
 };
-use utoipa::OpenApi;
+use utoipa::{OpenApi, ToSchema};
+use uuid::Uuid;
 
 use crate::{
-    application::{self, CheckinService, Config, Redeemed},
+    application::{self, CheckedIn, CheckinService, Config, OnCheckedIn, Redeemed},
     domain::{TwitchUserId, Viewer},
 };
 
+const CHANGED: &str = "checkin.changed";
+const CHANGED_VERSION: u32 = 1;
+
+/// A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's
+/// ID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckinChangedEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: CheckinChangedType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: CheckinChangedPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum CheckinChangedType {
+    #[serde(rename = "checkin.changed")]
+    CheckinChanged,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CheckinChangedPayload {
+    /// The viewer's ID, as in `CheckinViewer.id`.
+    viewer_id: String,
+}
+
+fn publish_changed(bus: &EventBus, c: &CheckedIn) {
+    bus.publish(Event {
+        id: Uuid::now_v7().to_string(),
+        event_type: CHANGED,
+        version: CHANGED_VERSION,
+        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        // Simulated check-ins are never recorded, so every recorded one is real.
+        source: Source::Twitch,
+        payload: serde_json::to_value(CheckinChangedPayload {
+            viewer_id: c.viewer_id.clone(),
+        })
+        .expect("serializable"),
+    });
+}
+
 /// Starts check-ins into `pool`, which must already have [`db::MIGRATOR`] applied, with the settings in
-/// `data_dir`; needs a Tokio runtime.
-pub fn start(pool: SqlitePool, modules: Arc<Modules>, data_dir: PathBuf) -> CheckinService {
+/// `data_dir`, announcing each recorded check-in on `bus`; needs a Tokio runtime.
+pub fn start(
+    pool: SqlitePool,
+    bus: Arc<EventBus>,
+    modules: Arc<Modules>,
+    data_dir: PathBuf,
+) -> CheckinService {
+    let on_checked_in: OnCheckedIn = Arc::new(move |c| publish_changed(&bus, c));
     CheckinService::start(
         db::SqliteCheckins::new(pool),
         modules,
         Arc::new(Config::load(data_dir)),
+        on_checked_in,
     )
 }
 
@@ -37,6 +94,7 @@ pub fn subscriptions(pool: SqlitePool, service: &CheckinService) -> Vec<Subscrip
         handler: Arc::new(RedemptionCheckins {
             repo: db::SqliteCheckins::new(pool),
             config: service.config().clone(),
+            notify: service.on_checked_in().clone(),
         }),
     }]
 }
@@ -44,6 +102,7 @@ pub fn subscriptions(pool: SqlitePool, service: &CheckinService) -> Vec<Subscrip
 struct RedemptionCheckins {
     repo: db::SqliteCheckins,
     config: Arc<Config>,
+    notify: OnCheckedIn,
 }
 
 impl Subscriber for RedemptionCheckins {
@@ -61,16 +120,31 @@ impl Subscriber for RedemptionCheckins {
                 reward_id: r.reward_id,
                 occurred_at: event.occurred_at,
             };
-            application::redeemed(&self.repo, &self.config.rules(), &redeemed, Utc::now())
+            let rules = self.config.rules();
+            let outcome = application::redeemed(&self.repo, &rules, &redeemed, Utc::now())
                 .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            if let Some(c) =
+                outcome.and_then(|o| application::checked_in(&redeemed.viewer, &o, &rules))
+            {
+                (self.notify)(&c);
+            }
+            Ok(())
         })
     }
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(http::checkin_settings, http::set_checkin_settings))]
+#[openapi(
+    paths(
+        http::checkin_settings,
+        http::set_checkin_settings,
+        http::list_viewers,
+        http::today,
+        http::manual_check_in
+    ),
+    components(schemas(CheckinChangedEvent))
+)]
 struct CheckinApi;
 
 /// This module's part of the Host's OpenAPI document.
@@ -100,7 +174,12 @@ mod tests {
         let pool = pool().await;
         let dir = data_dir(name);
         let modules = Arc::new(Modules::load(dir.clone()));
-        let service = start(pool.clone(), modules.clone(), dir.clone());
+        let service = start(
+            pool.clone(),
+            Arc::new(EventBus::default()),
+            modules.clone(),
+            dir.clone(),
+        );
         service
             .config()
             .update(&CheckinSettings {
@@ -325,7 +404,14 @@ mod tests {
     async fn settings_are_validated_saved_and_applied() {
         let dir = data_dir("http-settings");
         let modules = Arc::new(Modules::load(dir.clone()));
-        let app = http::routes(Arc::new(start(pool().await, modules, dir.clone())));
+        let pool = pool().await;
+        let service = start(
+            pool.clone(),
+            Arc::new(EventBus::default()),
+            modules,
+            dir.clone(),
+        );
+        let app = http::routes(pool, Arc::new(service));
 
         let (status, body) = send(&app, "GET", None).await;
         assert_eq!(status, 200);
@@ -365,5 +451,267 @@ mod tests {
         let (_, body) = send(&app, "GET", None).await;
         assert_eq!(body["command"], "Sign", "a refused update changes nothing");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A Host-like setup: the module's routes and its bus, with check-ins recorded straight into the database.
+    struct Api {
+        pool: SqlitePool,
+        app: axum::Router,
+        bus: Arc<EventBus>,
+        service: Arc<CheckinService>,
+        dir: PathBuf,
+    }
+
+    async fn api(name: &str) -> Api {
+        let pool = pool().await;
+        let dir = data_dir(name);
+        let bus = Arc::new(EventBus::default());
+        let service = Arc::new(start(
+            pool.clone(),
+            bus.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+        ));
+        let app = http::routes(pool.clone(), service.clone());
+        Api {
+            pool,
+            app,
+            bus,
+            service,
+            dir,
+        }
+    }
+
+    async fn seed(pool: &SqlitePool, user: &str, name: &str, at: &str) {
+        use crate::{
+            application::CheckinRepository,
+            domain::{BusinessDay, CheckIn, Trigger},
+        };
+        let rule = BusinessDay::new("Asia/Taipei", 0).unwrap();
+        let at = DateTime::parse_from_rfc3339(at).unwrap().to_utc();
+        let viewer = Viewer {
+            twitch_id: TwitchUserId(user.into()),
+            login: format!("login{user}"),
+            name: name.into(),
+        };
+        db::SqliteCheckins::new(pool.clone())
+            .check_in(&viewer, &CheckIn::at(&rule, at, Trigger::Chat, at))
+            .await
+            .unwrap();
+    }
+
+    async fn call(
+        app: &axum::Router,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> (u16, serde_json::Value) {
+        let req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(body.map_or_else(Body::empty, |b| Body::from(b.to_string())))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        let status = res.status().as_u16();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    fn names(page: &serde_json::Value) -> Vec<&str> {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["user_name"].as_str().unwrap())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn viewers_are_listed_with_totals_cards_and_search() {
+        let a = api("viewers").await;
+        // Ann checks in on three days, Bob once (latest), <b>Cat</b> once (earliest).
+        for at in [
+            "2026-11-10T01:00:00Z",
+            "2026-11-11T01:00:00Z",
+            "2026-11-12T01:00:00Z",
+        ] {
+            seed(&a.pool, "1", "Ann", at).await;
+        }
+        seed(&a.pool, "2", "Bob", "2026-11-14T01:00:00Z").await;
+        seed(&a.pool, "3", "<b>Cat</b>", "2026-11-01T01:00:00Z").await;
+
+        let (status, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+        assert_eq!(status, 200);
+        assert_eq!(page["total"], 3);
+        assert_eq!(
+            names(&page),
+            ["Bob", "Ann", "<b>Cat</b>"],
+            "latest check-in first; text raw"
+        );
+        let ann = &page["items"][1];
+        assert_eq!(
+            (&ann["total"], &ann["stamps"], &ann["card_slots"]),
+            (&3.into(), &3.into(), &10.into())
+        );
+        assert_eq!(ann["last_check_in"], "2026-11-12");
+        assert_eq!(ann["user_login"], "login1");
+
+        let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers?search=AN", None).await;
+        assert_eq!(names(&page), ["Ann"]);
+        let (_, page) = call(
+            &a.app,
+            "GET",
+            "/api/admin/checkin/viewers?search=login3",
+            None,
+        )
+        .await;
+        assert_eq!(names(&page), ["<b>Cat</b>"]);
+        let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers?search=%25", None).await;
+        assert_eq!(page["total"], 0, "% is literal");
+        let (_, page) = call(
+            &a.app,
+            "GET",
+            "/api/admin/checkin/viewers?limit=1&offset=1",
+            None,
+        )
+        .await;
+        assert_eq!((names(&page), &page["total"]), (vec!["Ann"], &3.into()));
+        for bad in ["?limit=0", "?limit=101", "?offset=-1"] {
+            let (status, body) = call(
+                &a.app,
+                "GET",
+                &format!("/api/admin/checkin/viewers{bad}"),
+                None,
+            )
+            .await;
+            assert_eq!(
+                (status, &body["code"]),
+                (400, &"checkin.invalid_query".into()),
+                "{bad}"
+            );
+        }
+
+        // A new card size recomputes every card at once.
+        let settings = serde_json::json!({ "command": "打卡", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 2, "reward_id": null });
+        assert_eq!(
+            call(&a.app, "PUT", "/api/admin/checkin/settings", Some(settings))
+                .await
+                .0,
+            200
+        );
+        let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers?search=Ann", None).await;
+        assert_eq!(
+            (&page["items"][0]["stamps"], &page["items"][0]["card_slots"]),
+            (&1.into(), &2.into())
+        );
+        let _ = std::fs::remove_dir_all(&a.dir);
+    }
+
+    #[tokio::test]
+    async fn manual_check_ins_follow_the_one_per_day_rule() {
+        let a = api("manual").await;
+        let (_, mut rx) = a.bus.subscribe();
+        seed(&a.pool, "1", "Ann", "2026-11-01T01:00:00Z").await;
+        let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+        let id = page["items"][0]["id"].as_str().unwrap().to_owned();
+        let uri = format!("/api/admin/checkin/viewers/{id}/check-ins");
+
+        let today = serde_json::json!({});
+        assert_eq!(
+            call(&a.app, "POST", &uri, Some(today.clone())).await,
+            (200, serde_json::json!({ "result": "checked_in" }))
+        );
+        assert_eq!(
+            call(&a.app, "POST", &uri, Some(today)).await.1["result"],
+            "already_checked_in"
+        );
+        // Back-fill a past day, then the same day again.
+        let past = serde_json::json!({ "date": "2026-11-05" });
+        assert_eq!(
+            call(&a.app, "POST", &uri, Some(past.clone())).await.1["result"],
+            "checked_in"
+        );
+        assert_eq!(
+            call(&a.app, "POST", &uri, Some(past)).await.1["result"],
+            "already_checked_in"
+        );
+        assert_eq!(count(&a.pool).await, 3);
+        let kinds: Vec<String> =
+            sqlx::query_scalar("SELECT trigger_kind FROM checkin_records ORDER BY business_day")
+                .fetch_all(&a.pool)
+                .await
+                .unwrap();
+        assert_eq!(kinds, ["chat", "manual", "manual"]);
+
+        for (date, code) in [
+            ("2026-13-01", "checkin.invalid_date"),
+            ("2999-01-01", "checkin.invalid_date"),
+        ] {
+            let (status, body) = call(
+                &a.app,
+                "POST",
+                &uri,
+                Some(serde_json::json!({ "date": date })),
+            )
+            .await;
+            assert_eq!((status, &body["code"]), (400, &code.into()), "{date}");
+        }
+        let (status, body) = call(
+            &a.app,
+            "POST",
+            "/api/admin/checkin/viewers/nobody/check-ins",
+            Some(serde_json::json!({})),
+        )
+        .await;
+        assert_eq!(
+            (status, &body["code"]),
+            (404, &"checkin.viewer_not_found".into())
+        );
+
+        // Each recorded one is announced with the viewer ID only; repeats are not.
+        for _ in 0..2 {
+            let wire: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+            assert_eq!(wire["type"], CHANGED);
+            assert_eq!(wire["payload"], serde_json::json!({ "viewer_id": id }));
+            let typed: CheckinChangedEvent = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(
+                serde_json::to_value(typed).unwrap(),
+                wire,
+                "the schema type matches the bus"
+            );
+        }
+        assert!(rx.try_recv().is_err());
+        let _ = std::fs::remove_dir_all(&a.dir);
+    }
+
+    #[tokio::test]
+    async fn today_counts_the_current_business_day() {
+        let a = api("today").await;
+        let now = Utc::now();
+        let today = a.service.config().rules().day.day_of(now);
+        seed(&a.pool, "1", "Ann", &now.to_rfc3339()).await;
+        seed(
+            &a.pool,
+            "2",
+            "Bob",
+            &(now + chrono::Duration::milliseconds(1)).to_rfc3339(),
+        )
+        .await;
+        seed(&a.pool, "3", "Old", "2026-01-01T01:00:00Z").await;
+        let (status, body) = call(&a.app, "GET", "/api/admin/checkin/today", None).await;
+        assert_eq!(status, 200);
+        assert_eq!(body["business_day"], today.to_string());
+        assert_eq!(body["count"], 2);
+        let recent: Vec<&str> = body["recent"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["user_name"].as_str().unwrap())
+            .collect();
+        assert_eq!(recent, ["Bob", "Ann"]);
+        let _ = std::fs::remove_dir_all(&a.dir);
     }
 }

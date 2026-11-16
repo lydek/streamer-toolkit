@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AlertsPage from './AlertsPage.vue'
 import ChatPage from './ChatPage.vue'
+import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
 import NotFoundView from './NotFoundView.vue'
@@ -17,6 +18,7 @@ export const router = createRouter({
     { path: '/chat', component: ChatPage },
     { path: '/alerts', component: AlertsPage },
     { path: '/redemptions', component: RedemptionsPage },
+    { path: '/checkin', component: CheckinsPage },
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

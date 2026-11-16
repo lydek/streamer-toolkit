@@ -90,6 +90,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/checkin/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["today"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/viewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_viewers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/viewers/{id}/check-ins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["manual_check_in"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -451,6 +499,27 @@ export interface components {
          */
         ChatTemplate: "default" | "compact" | "bubble" | "custom";
         /**
+         * @description A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's
+         *     ID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.
+         */
+        CheckinChangedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["CheckinChangedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["CheckinChangedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        CheckinChangedPayload: {
+            /** @description The viewer's ID, as in `CheckinViewer.id`. */
+            viewer_id: string;
+        };
+        /** @enum {string} */
+        CheckinChangedType: "checkin.changed";
+        /**
          * @description A redemption the check-in module failed to take five times in a row. `user_name` and `reward_title` are raw
          *     Twitch text.
          */
@@ -474,6 +543,13 @@ export interface components {
             /** Format: int64 */
             pending: number;
         };
+        /** @description `user_name` is raw Twitch text. */
+        CheckinRecent: {
+            /** @description RFC 3339, UTC. */
+            occurred_at: string;
+            user_name: string;
+            viewer_id: string;
+        };
         /** @description The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped. */
         CheckinSettingsBody: {
             /**
@@ -492,6 +568,44 @@ export interface components {
             reward_id?: string | null;
             /** @description IANA time zone, e.g. `Asia/Taipei`. */
             time_zone: string;
+        };
+        /** @description Today's check-ins (the business day in force now). */
+        CheckinToday: {
+            /** @description `YYYY-MM-DD`. */
+            business_day: string;
+            /** Format: int64 */
+            count: number;
+            /** @description The latest few, newest first. */
+            recent: components["schemas"]["CheckinRecent"][];
+        };
+        /**
+         * @description One viewer with the stamp card derived from the total. `user_login` and `user_name` are raw Twitch text: escape
+         *     them when rendering.
+         */
+        CheckinViewer: {
+            /** Format: int32 */
+            card_slots: number;
+            id: string;
+            /** @description Business day (`YYYY-MM-DD`) of the latest check-in; `null` when there is none. */
+            last_check_in?: string | null;
+            /**
+             * Format: int32
+             * @description Stamps on the current card, out of `card_slots`.
+             */
+            stamps: number;
+            /** Format: int64 */
+            total: number;
+            user_login: string;
+            user_name: string;
+        };
+        /** @description `GET /api/admin/checkin/viewers`: latest check-in first. */
+        CheckinViewerPage: {
+            items: components["schemas"]["CheckinViewer"][];
+            /**
+             * Format: int64
+             * @description Viewers matching the search, across all pages.
+             */
+            total: number;
         };
         ClientIdBody: {
             client_id: string;
@@ -514,6 +628,15 @@ export interface components {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
             ask_before_close: boolean;
         };
+        ManualCheckIn: {
+            result: components["schemas"]["ManualCheckInResult"];
+        };
+        ManualCheckInBody: {
+            /** @description A past business day to back-fill (`YYYY-MM-DD`); omitted or `null` registers today. */
+            date?: string | null;
+        };
+        /** @enum {string} */
+        ManualCheckInResult: "checked_in" | "already_checked_in";
         ModuleBody: {
             /**
              * @description With `enabled: false`: skip the module's outbox events instead of keeping them for later ("close"; the
@@ -901,6 +1024,132 @@ export interface operations {
                 };
             };
             /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    today: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinToday"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_viewers: {
+        parameters: {
+            query?: {
+                /** @description Part of the login or display name; ASCII letters ignore case. */
+                search?: string;
+                /** @description Viewers to skip; default 0. */
+                offset?: number;
+                /** @description Page size, 1 to 100; default 50. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinViewerPage"];
+                };
+            };
+            /** @description `checkin.invalid_query`: a bad page size */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    manual_check_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The viewer's ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualCheckInBody"];
+            };
+        };
+        responses: {
+            /** @description Recorded, or already checked in that day */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualCheckIn"];
+                };
+            };
+            /** @description `checkin.invalid_date`: not a date, or a future business day */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.viewer_not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

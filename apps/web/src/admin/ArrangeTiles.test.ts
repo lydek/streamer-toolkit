@@ -6,8 +6,8 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
-const extra: Tile[] = [{ id: 'checkin', group: 'features', icon: '' }]
-const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', checkin: '打卡' }
+const extra: Tile[] = [{ id: 'sound', group: 'features', icon: '' }]
+const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', sound: '音效' }
 
 // What the page's save does: shows `next` at once, puts the previous order back on failure (`outcome` false),
 // changes nothing while busy (`outcome` undefined).
@@ -37,7 +37,7 @@ const button = (tile: string, action: string) =>
 const live = () => document.querySelector('[aria-live="polite"]')!.textContent
 
 beforeEach(() => {
-  // Tests need two tiles in each group; the features group has only the redemption tile so far.
+  // A tile of a later feature, to test adding one that was never arranged.
   TILES.push(...extra)
   outcome = true
 })
@@ -54,8 +54,8 @@ describe('ArrangeTiles', () => {
     button('chat', 'later').focus()
     button('chat', 'later').click()
     await flushPromises()
-    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin'])
-    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin'])
+    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin', 'sound'])
+    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin', 'sound'])
     expect(document.activeElement).toBe(button('chat', 'earlier'))
     expect(live()).toBe('聊天室移到直播中第 2 個')
   })
@@ -99,16 +99,16 @@ describe('ArrangeTiles', () => {
 
   it('adds to the end of its group and focuses the first enabled button of the new tile', async () => {
     const wrapper = arrange(['chat'])
-    document.querySelector<HTMLButtonElement>('[data-available="checkin"] [data-action="add"]')!.click()
+    document.querySelector<HTMLButtonElement>('[data-available="sound"] [data-action="add"]')!.click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['chat', 'checkin'])
+    expect(wrapper.props('saved')).toEqual(['chat', 'sound'])
     // Alone in its group: both move buttons are disabled.
-    expect(document.activeElement).toBe(button('checkin', 'remove'))
-    expect(live()).toBe('打卡已加到功能第 1 個')
+    expect(document.activeElement).toBe(button('sound', 'remove'))
+    expect(live()).toBe('音效已加到功能第 1 個')
 
     document.querySelector<HTMLButtonElement>('[data-available="alerts"] [data-action="add"]')!.click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['chat', 'checkin', 'alerts'])
+    expect(wrapper.props('saved')).toEqual(['chat', 'sound', 'alerts'])
     expect(document.activeElement).toBe(button('alerts', 'earlier'))
   })
 

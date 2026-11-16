@@ -7,6 +7,7 @@ mod infrastructure;
 
 pub use application::CheckinService;
 pub use infrastructure::{
+    CheckinChangedEvent, CheckinChangedPayload,
     db::MIGRATOR,
     http::{CheckinSettingsBody, routes},
     openapi, start, subscriptions,

@@ -88,7 +88,7 @@ apps/
 
 ## 5. 對外通訊
 - MVP 的用戶端只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制在 MVP 之後。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
