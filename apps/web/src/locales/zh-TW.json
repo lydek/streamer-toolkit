@@ -191,6 +191,25 @@
     "about": "關於",
     "license": "以 MIT 授權釋出。"
   },
+  "checkin": {
+    "disable": {
+      "title": "停用打卡",
+      "pause": "暫停：保留期間的兌換，重新啟用後依序補打卡。",
+      "closeWarning": "關閉：打卡模組會略過停用期間的頻道點數兌換，重新啟用後也不會補打卡。",
+      "pendingSkipped": "目前累積的 {n} 筆兌換也會一起略過。",
+      "pauseButton": "暫停",
+      "closeButton": "關閉"
+    },
+    "outbox": {
+      "paused": "已暫停：累積 {n} 筆兌換，重新啟用後補打卡。",
+      "oldest": "最舊的是 ",
+      "closed": "已關閉：停用期間的兌換不會補打卡。",
+      "switchToClose": "改為關閉",
+      "deadLetters": "一直無法處理的兌換",
+      "retry": "重試",
+      "skip": "略過"
+    }
+  },
   "simulate": {
     "heading": "事件模擬器",
     "hint": "送出的事件標記為模擬（source=simulation），只顯示在 Overlay，不寫入任何正式紀錄。",
@@ -226,6 +245,10 @@
     },
     "home": {
       "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "outbox": {
+      "storage_failed": "無法讀取或更新待處理的事件。",
+      "not_found": "這筆事件已經處理過了。"
     },
     "checkin": {
       "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。"

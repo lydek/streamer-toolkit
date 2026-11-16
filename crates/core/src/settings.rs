@@ -16,6 +16,8 @@ pub struct Settings {
     pub twitch_client_id: String,
     /// Modules the broadcaster turned off; everything else is enabled.
     pub disabled_modules: Vec<String>,
+    /// Disabled modules that skip outbox events instead of keeping them (paused, the default, keeps them).
+    pub closed_modules: Vec<String>,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -82,6 +84,7 @@ impl Default for Settings {
             port: crate::DEFAULT_PORT,
             twitch_client_id: String::new(),
             disabled_modules: Vec::new(),
+            closed_modules: Vec::new(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,

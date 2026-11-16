@@ -14,7 +14,7 @@ const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', che
 let outcome: boolean | undefined
 let save: Mock<(next: string[] | null) => Promise<boolean> | undefined>
 
-function arrange(saved: string[] | null, modules = [{ id: 'chat', enabled: true }]) {
+function arrange(saved: string[] | null, modules = [{ id: 'chat', enabled: true, closed: false }]) {
   save = vi.fn((next: string[] | null) => {
     const ok = outcome
     if (ok === undefined) return undefined
@@ -122,7 +122,7 @@ describe('ArrangeTiles', () => {
   })
 
   it('shows disabled modules as text and tiles as list items with separate buttons', () => {
-    arrange(['chat'], [{ id: 'chat', enabled: false }])
+    arrange(['chat'], [{ id: 'chat', enabled: false, closed: false }])
     const item = document.querySelector('[data-tile="chat"]')!
     expect(item.tagName).toBe('LI')
     expect(item.textContent).toContain('未啟用 · 到設定開啟')

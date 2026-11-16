@@ -91,7 +91,7 @@ const hostPath = (url: URL) => /^\/(api|ws|templates)(\/|$)/.test(url.pathname)
 export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Promise<AdminState> {
   const s: AdminState = {
     overview: { client_id: '', status: { state: 'signed_out' } },
-    modules: [{ id: 'chat', enabled: true }],
+    modules: [{ id: 'chat', enabled: true, closed: false }],
     template: { selected: 'default', error: null },
     alertTemplate: { selected: 'default' },
     general: { ask_before_close: true },
@@ -124,6 +124,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     return r.fulfill({ status: 204 })
   })
   await page.route('**/api/admin/checkin/rewards', get(() => []))
+  await page.route('**/api/admin/checkin/outbox', get(() => ({ pending: 0, oldest_pending_at: null, dead_letters: [] })))
   await page.route('**/api/admin/checkin/settings', (r) => {
     if (r.request().method() === 'PUT') s.checkin = r.request().postDataJSON()
     return r.fulfill({ json: s.checkin })

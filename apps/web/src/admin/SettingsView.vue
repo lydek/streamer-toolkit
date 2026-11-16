@@ -65,7 +65,9 @@
     <section aria-labelledby="checkin">
       <h2 id="checkin" tabindex="-1">{{ t('modules.names.checkin') }}</h2>
       <CheckinSettings @error="report" />
+      <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
     </section>
+    <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" />
 
     <!-- Slice 6 adds backup and restore here. -->
     <section aria-labelledby="backup">
@@ -91,6 +93,8 @@ import { useI18n } from 'vue-i18n'
 import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import CheckinDisableDialog from './CheckinDisableDialog.vue'
+import CheckinOutbox from './CheckinOutbox.vue'
 import CheckinSettings from './CheckinSettings.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
@@ -212,10 +216,19 @@ const reloadGeneral = () => {
   if (document.visibilityState === 'visible') void loadGeneral().catch(() => {})
 }
 
+const disableDialog = ref<InstanceType<typeof CheckinDisableDialog>>()
+const checkinOutbox = ref<InstanceType<typeof CheckinOutbox>>()
+const checkinState = computed(() => modules.value?.find((m) => m.id === 'checkin'))
+
+const putModule = (id: string, enabled: boolean, close = false) =>
+  run(async () => {
+    await api(client.PUT('/api/admin/modules/{id}', { params: { path: { id } }, body: { enabled, close } }))
+    await checkinOutbox.value?.load()
+  })
+// Check-ins take redemptions through the outbox, so turning them off asks whether to keep (pause) or skip them.
 const toggleModule = (m: Schemas['ModuleState']) =>
-  run(() =>
-    api(client.PUT('/api/admin/modules/{id}', { params: { path: { id: m.id } }, body: { enabled: !m.enabled } })),
-  )
+  m.id === 'checkin' && m.enabled ? disableDialog.value?.open() : putModule(m.id, !m.enabled)
+const disableCheckin = (mode: 'pause' | 'close') => putModule('checkin', false, mode === 'close')
 const removePassword = () =>
   run(async () => {
     await putObs({ password: '' })

@@ -56,7 +56,7 @@ async function liveSocket(page: Page) {
   }
 }
 
-const modules = [{ id: 'redemption', enabled: true }]
+const modules = [{ id: 'redemption', enabled: true, closed: false }]
 const tile = (page: Page) => page.locator('[data-drawer-tile="redemption"]')
 
 test('the tile shows the latest redemption; its drawer lists recent ones as text', async ({ page }) => {
