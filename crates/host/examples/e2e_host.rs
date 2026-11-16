@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use host::{AlertTiming, HostConfig, TwitchEndpoints};
+use host::{AlertTiming, CheckinTiming, HostConfig, TwitchEndpoints};
 use integrations::secrets::{SecretStore, SecretStoreError};
 
 #[derive(Default)]
@@ -58,6 +58,10 @@ async fn main() {
         alert_timing: AlertTiming {
             show: Duration::from_millis(1500),
             show_with_message: Duration::from_millis(2000),
+            gap: Duration::from_millis(200),
+        },
+        checkin_timing: CheckinTiming {
+            show: Duration::from_millis(1500),
             gap: Duration::from_millis(200),
         },
         db,

@@ -19,9 +19,75 @@ use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    application::{self, CheckedIn, CheckinService, Config, OnCheckedIn, Redeemed},
+    application::{
+        self, Card, CheckedIn, CheckinService, Config, OnCheckedIn, ProfileImages, Redeemed,
+        Screen, ShowCard, Timing,
+    },
     domain::{TwitchUserId, Viewer},
 };
+
+const STAMPED: &str = "checkin.stamped";
+const STAMPED_VERSION: u32 = 1;
+
+/// A `checkin.stamped` event exactly as `/ws/overlay` sends it: a stamp card to show on `/overlay/checkin/`. The
+/// Host sends them one at a time. Not kept in snapshots, so a reloaded overlay never replays one.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckinStampedEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: CheckinStampedType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: CheckinStampedPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum CheckinStampedType {
+    #[serde(rename = "checkin.stamped")]
+    CheckinStamped,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckinStampedPayload {
+    /// Raw viewer text; overlays escape it when rendering.
+    pub user_name: String,
+    /// Twitch profile image (`https://static-cdn.jtvnw.net/` only); `null` when unknown.
+    #[schema(required)]
+    pub avatar_url: Option<String>,
+    /// Stamps on the current card, out of `slots`.
+    pub stamps: u32,
+    pub slots: u32,
+    pub total: u64,
+    /// This check-in filled the card.
+    pub full: bool,
+    /// How long to show the card.
+    pub duration_ms: u64,
+}
+
+fn publish_card(bus: &EventBus, card: &Card, show: std::time::Duration) {
+    let payload = CheckinStampedPayload {
+        user_name: card.name.clone(),
+        avatar_url: card.avatar.clone(),
+        stamps: card.stamps,
+        slots: card.slots,
+        total: card.total,
+        full: card.full(),
+        duration_ms: u64::try_from(show.as_millis()).unwrap_or(u64::MAX),
+    };
+    bus.publish(Event {
+        id: Uuid::now_v7().to_string(),
+        event_type: STAMPED,
+        version: STAMPED_VERSION,
+        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        source: card.source,
+        payload: serde_json::to_value(payload).expect("serializable"),
+    });
+}
 
 const CHANGED: &str = "checkin.changed";
 const CHANGED_VERSION: u32 = 1;
@@ -70,19 +136,29 @@ fn publish_changed(bus: &EventBus, c: &CheckedIn) {
 }
 
 /// Starts check-ins into `pool`, which must already have [`db::MIGRATOR`] applied, with the settings in
-/// `data_dir`, announcing each recorded check-in on `bus`; needs a Tokio runtime.
+/// `data_dir`. Each recorded check-in is announced on `bus` and gets a stamp card on the overlay, with the viewer's
+/// profile image from `profiles`; needs a Tokio runtime.
 pub fn start(
     pool: SqlitePool,
     bus: Arc<EventBus>,
     modules: Arc<Modules>,
     data_dir: PathBuf,
+    profiles: Arc<dyn ProfileImages>,
+    timing: Timing,
 ) -> CheckinService {
-    let on_checked_in: OnCheckedIn = Arc::new(move |c| publish_changed(&bus, c));
+    let changed_bus = bus.clone();
+    let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
+    let show_card: ShowCard = Arc::new(move |card, show| publish_card(&bus, card, show));
     CheckinService::start(
         db::SqliteCheckins::new(pool),
         modules,
         Arc::new(Config::load(data_dir)),
-        on_checked_in,
+        Screen {
+            changed,
+            show_card,
+            profiles,
+            timing,
+        },
     )
 }
 
@@ -143,7 +219,7 @@ impl Subscriber for RedemptionCheckins {
         http::today,
         http::manual_check_in
     ),
-    components(schemas(CheckinChangedEvent))
+    components(schemas(CheckinChangedEvent, CheckinStampedEvent))
 )]
 struct CheckinApi;
 
@@ -153,8 +229,47 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Knows no profile images.
+    pub(crate) struct NoProfiles;
+    impl ProfileImages for NoProfiles {
+        fn profile_image<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send + 'a>>
+        {
+            Box::pin(async { None })
+        }
+    }
+
+    /// A screen that shows nothing.
+    pub(crate) fn quiet_screen() -> Screen {
+        Screen {
+            changed: Arc::new(|_| {}),
+            show_card: Arc::new(|_, _| {}),
+            profiles: Arc::new(NoProfiles),
+            timing: Timing::default(),
+        }
+    }
+
+    /// `start` with a bus of its own, no profile images and default timing.
+    fn start_quiet(
+        pool: SqlitePool,
+        bus: Arc<EventBus>,
+        modules: Arc<Modules>,
+        dir: PathBuf,
+    ) -> CheckinService {
+        start(
+            pool,
+            bus,
+            modules,
+            dir,
+            Arc::new(NoProfiles),
+            Timing::default(),
+        )
+    }
     use crate::infrastructure::db::tests::{chat, count, data_dir, pool, wait_for_count};
     use axum::{body::Body, http::Request};
     use chrono::DateTime;
@@ -174,7 +289,7 @@ mod tests {
         let pool = pool().await;
         let dir = data_dir(name);
         let modules = Arc::new(Modules::load(dir.clone()));
-        let service = start(
+        let service = start_quiet(
             pool.clone(),
             Arc::new(EventBus::default()),
             modules.clone(),
@@ -405,7 +520,7 @@ mod tests {
         let dir = data_dir("http-settings");
         let modules = Arc::new(Modules::load(dir.clone()));
         let pool = pool().await;
-        let service = start(
+        let service = start_quiet(
             pool.clone(),
             Arc::new(EventBus::default()),
             modules,
@@ -466,7 +581,7 @@ mod tests {
         let pool = pool().await;
         let dir = data_dir(name);
         let bus = Arc::new(EventBus::default());
-        let service = Arc::new(start(
+        let service = Arc::new(start_quiet(
             pool.clone(),
             bus.clone(),
             Arc::new(Modules::load(dir.clone())),
@@ -672,9 +787,15 @@ mod tests {
         );
 
         // Each recorded one is announced with the viewer ID only; repeats are not.
-        for _ in 0..2 {
-            let wire: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
-            assert_eq!(wire["type"], CHANGED);
+        let mut changes = Vec::new();
+        while let Ok(text) = rx.try_recv() {
+            let wire: serde_json::Value = serde_json::from_str(&text).unwrap();
+            if wire["type"] == CHANGED {
+                changes.push(wire);
+            }
+        }
+        assert_eq!(changes.len(), 2, "repeats are not announced");
+        for wire in changes {
             assert_eq!(wire["payload"], serde_json::json!({ "viewer_id": id }));
             let typed: CheckinChangedEvent = serde_json::from_value(wire.clone()).unwrap();
             assert_eq!(
@@ -683,7 +804,6 @@ mod tests {
                 "the schema type matches the bus"
             );
         }
-        assert!(rx.try_recv().is_err());
         let _ = std::fs::remove_dir_all(&a.dir);
     }
 
@@ -713,5 +833,181 @@ mod tests {
             .collect();
         assert_eq!(recent, ["Bob", "Ann"]);
         let _ = std::fs::remove_dir_all(&a.dir);
+    }
+
+    /// Answers every lookup with `url`, counting the lookups.
+    struct FixedProfile {
+        url: &'static str,
+        lookups: std::sync::atomic::AtomicUsize,
+    }
+    impl ProfileImages for FixedProfile {
+        fn profile_image<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send + 'a>>
+        {
+            self.lookups
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Box::pin(async { Some(self.url.to_owned()) })
+        }
+    }
+
+    async fn next_card(
+        rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>,
+    ) -> (serde_json::Value, std::time::Instant) {
+        loop {
+            let text = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            let wire: serde_json::Value = serde_json::from_str(&text).unwrap();
+            if wire["type"] == STAMPED {
+                return (wire, std::time::Instant::now());
+            }
+        }
+    }
+
+    const AVATAR: &str =
+        "https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png";
+
+    fn quick() -> Timing {
+        Timing {
+            show: std::time::Duration::from_millis(80),
+            gap: std::time::Duration::from_millis(20),
+        }
+    }
+
+    #[tokio::test]
+    async fn each_check_in_shows_its_card_once_in_order() {
+        let pool = pool().await;
+        let dir = data_dir("cards");
+        let bus = Arc::new(EventBus::default());
+        let (_, mut rx) = bus.subscribe();
+        let profiles = Arc::new(FixedProfile {
+            url: AVATAR,
+            lookups: Default::default(),
+        });
+        let service = start(
+            pool.clone(),
+            bus.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+            profiles.clone(),
+            quick(),
+        );
+        service
+            .config()
+            .update(&CheckinSettings {
+                card_slots: 2,
+                ..CheckinSettings::default()
+            })
+            .unwrap();
+
+        // Viewer 1 twice on one day (shown once), then on the next day (fills the 2-slot card); viewer 2 once.
+        for (user, at) in [
+            ("1", "2026-11-16T01:00:00Z"),
+            ("1", "2026-11-16T02:00:00Z"),
+            ("2", "2026-11-16T02:30:00Z"),
+            ("1", "2026-11-17T01:00:00Z"),
+        ] {
+            service.receive_chat(&chat(user, "!打卡", at), Source::Twitch);
+        }
+        let (first, t1) = next_card(&mut rx).await;
+        let (second, t2) = next_card(&mut rx).await;
+        let (third, t3) = next_card(&mut rx).await;
+        assert_eq!(first["source"], "twitch");
+        assert_eq!(
+            first["payload"],
+            serde_json::json!({ "userName": "<b>Viewer 1</b>", "avatarUrl": AVATAR, "stamps": 1, "slots": 2, "total": 1, "full": false, "durationMs": 80 })
+        );
+        assert_eq!(second["payload"]["userName"], "<b>Viewer 2</b>");
+        assert_eq!(
+            (&third["payload"]["stamps"], &third["payload"]["full"]),
+            (&2.into(), &true.into())
+        );
+        assert!(
+            t2 - t1 >= quick().show + quick().gap && t3 - t2 >= quick().show + quick().gap,
+            "one at a time"
+        );
+        assert_eq!(
+            profiles.lookups.load(std::sync::atomic::Ordering::Relaxed),
+            2,
+            "stored after the first lookup"
+        );
+        let stored: Option<String> = sqlx::query_scalar(
+            "SELECT profile_image_url FROM checkin_viewers WHERE twitch_user_id = '1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(stored.as_deref(), Some(AVATAR));
+
+        let typed: CheckinStampedEvent = serde_json::from_value(first.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(typed).unwrap(),
+            first,
+            "the schema type matches the bus"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn only_twitch_images_reach_the_overlay() {
+        let pool = pool().await;
+        let dir = data_dir("cards-cdn");
+        let bus = Arc::new(EventBus::default());
+        let (_, mut rx) = bus.subscribe();
+        let profiles = Arc::new(FixedProfile {
+            url: "https://evil.example/x.png",
+            lookups: Default::default(),
+        });
+        let service = start(
+            pool.clone(),
+            bus,
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+            profiles,
+            quick(),
+        );
+        service.receive_chat(&chat("1", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
+        let (card, _) = next_card(&mut rx).await;
+        assert_eq!(card["payload"]["avatarUrl"], serde_json::Value::Null);
+        assert!(application::is_twitch_image(AVATAR));
+        for bad in [
+            "http://static-cdn.jtvnw.net/x.png",
+            "https://static-cdn.jtvnw.net.evil/x",
+            "https://static-cdn.jtvnw.net/a b",
+        ] {
+            assert!(!application::is_twitch_image(bad), "{bad}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn simulated_cards_show_and_record_nothing() {
+        let pool = pool().await;
+        let dir = data_dir("cards-sim");
+        let bus = Arc::new(EventBus::default());
+        let (_, mut rx) = bus.subscribe();
+        let service = start_quiet(
+            pool.clone(),
+            bus,
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+        );
+        assert!(!service.simulate_card("Sim", 0));
+        assert!(!service.simulate_card("Sim", 11), "more than the 10 slots");
+        assert!(service.simulate_card("<i>Sim</i>", 10));
+        let (card, _) = next_card(&mut rx).await;
+        assert_eq!(card["source"], "simulation");
+        assert_eq!(card["payload"]["userName"], "<i>Sim</i>");
+        assert_eq!(card["payload"]["full"], true);
+        assert_eq!(count(&pool).await, 0);
+        let viewers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM checkin_viewers")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(viewers, 0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

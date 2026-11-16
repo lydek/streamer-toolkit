@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 2cf2ccb512c30b58120dba545e126c37a03009b4064a970c37fa61873e33f5f3 -->
+<!-- source: docs/dev.md source-sha256: 4a9528b6352070f013652e79c3c1bd443e78f1a006da93105e7e91f3a08b0888 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -75,6 +75,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - The template picker on the chat full page: clicking a preview picks that template and saves it; arrow keys move the pick; a failed save goes back to the template in use and shows the error; no sideways scroll at 1280px and 320px.
   - Alert simulator: each of the six kinds is sent once with the right name, amount and message; a refusal shows its reason; no sideways scrolling at 1280px, 640px and 320px; the real Host sends every simulated kind to `/ws/overlay` as an `alert` marked `source=simulation`, answers 400 to an amount out of range and 401 without the admin token.
   - Alert overlay (real Host, shorter play time): the six kinds play one at a time in the order sent, each with a sound, and leave when their time is up; a gift of 3 subs plays once; picking a built-in template switches it at once, without a reload.
+  - Stamp card overlay (real Host, shorter show time): simulated check-ins show one card at a time in the order sent, a just-filled card shows the full-card effect, each leaves when its time is up, and nothing is written to check-in records; the check-in simulator in the drawer sends the right name and stamps.
   - Alerts full page template picker: every preview plays the sample alert; clicking a preview picks and sends it; arrow keys move the pick; no sideways scrolling at 1280px and 320px.
   - Redemption records: the tile shows the latest one and the drawer lists the most recent ones, with viewer text never treated as HTML; the full page sends the right filters and pages, and on `redemption.changed` reads again with the same filters and page; with no records it shows an empty state; a rejected query shows why; no horizontal scrollbar at 1280px, 640px and 320px.
   - Check-ins: the tile shows today's count and the drawer lists the latest viewers, with names never treated as HTML, updating on `checkin.changed`; the full page sends the right search and pages, registering today and back-filling a past day send the right date, and a repeat shows a notice; turning check-ins off first asks to pause or close, and Esc changes nothing; no horizontal scrollbar at 1280px, 640px and 320px.

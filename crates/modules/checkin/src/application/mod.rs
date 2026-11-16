@@ -4,7 +4,9 @@
 use std::{
     future::Future,
     path::PathBuf,
+    pin::Pin,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -34,6 +36,18 @@ pub(crate) enum Outcome {
 
 /// Storage port; the SQLite implementation lives in `infrastructure::db`.
 pub(crate) trait CheckinRepository: Send + Sync + 'static {
+    /// The viewer's stored profile image URL.
+    fn profile_image(
+        &self,
+        viewer_id: &str,
+    ) -> impl Future<Output = Result<Option<String>, RepositoryError>> + Send;
+
+    fn set_profile_image(
+        &self,
+        viewer_id: &str,
+        url: &str,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+
     /// A viewer by internal ID.
     fn find_viewer(
         &self,
@@ -171,6 +185,112 @@ pub(crate) struct CheckedIn {
 /// Called after every recorded check-in, whatever triggered it.
 pub(crate) type OnCheckedIn = Arc<dyn Fn(&CheckedIn) + Send + Sync>;
 
+/// How long a stamp card shows on the overlay, and the pause before the next one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timing {
+    pub show: Duration,
+    pub gap: Duration,
+}
+
+impl Default for Timing {
+    fn default() -> Self {
+        Self {
+            show: Duration::from_secs(5),
+            gap: Duration::from_secs(1),
+        }
+    }
+}
+
+/// Looks up a viewer's Twitch profile image URL; the host implements it with Helix. `None` when it cannot.
+pub trait ProfileImages: Send + Sync + 'static {
+    fn profile_image<'a>(
+        &'a self,
+        twitch_user_id: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>>;
+}
+
+/// Only Twitch's image CDN is shown on the overlay.
+pub(crate) fn is_twitch_image(url: &str) -> bool {
+    url.len() <= 512
+        && url.starts_with("https://static-cdn.jtvnw.net/")
+        && !url.contains(|c: char| {
+            c.is_whitespace() || c.is_control() || matches!(c, '"' | '\'' | '<' | '>' | '\\')
+        })
+}
+
+const LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// A stamp card for the OBS overlay. `name` is raw viewer text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Card {
+    pub(crate) name: String,
+    pub(crate) avatar: Option<String>,
+    pub(crate) stamps: u32,
+    pub(crate) slots: u32,
+    pub(crate) total: u64,
+    pub(crate) source: Source,
+}
+
+impl Card {
+    /// This check-in filled the card.
+    pub(crate) fn full(&self) -> bool {
+        self.stamps == self.slots
+    }
+}
+
+/// Shows a card for the given time; the infrastructure publishes it to the overlay.
+pub(crate) type ShowCard = Arc<dyn Fn(&Card, Duration) + Send + Sync>;
+
+/// Where recorded check-ins go besides the database.
+pub(crate) struct Screen {
+    pub(crate) changed: OnCheckedIn,
+    pub(crate) show_card: ShowCard,
+    pub(crate) profiles: Arc<dyn ProfileImages>,
+    pub(crate) timing: Timing,
+}
+
+enum CardJob {
+    Real(CheckedIn),
+    Simulated(Card),
+}
+
+/// The card of a recorded check-in, with the stored profile image or, failing that, one looked up and stored.
+async fn card_for<R: CheckinRepository>(
+    repo: &R,
+    profiles: &dyn ProfileImages,
+    c: &CheckedIn,
+) -> Card {
+    let stored = repo.profile_image(&c.viewer_id).await.ok().flatten();
+    // shortcut: a stored image is never refreshed; look it up again when viewers report stale avatars.
+    let avatar = match stored.filter(|u| is_twitch_image(u)) {
+        Some(url) => Some(url),
+        None => {
+            let found = tokio::time::timeout(
+                LOOKUP_TIMEOUT,
+                profiles.profile_image(&c.viewer.twitch_id.0),
+            )
+            .await
+            .ok()
+            .flatten()
+            .filter(|u| is_twitch_image(u));
+            if let Some(url) = &found
+                && let Err(e) = repo.set_profile_image(&c.viewer_id, url).await
+            {
+                tracing::warn!(code = "checkin.storage_failed", error = %e, "profile image not stored");
+            }
+            found
+        }
+    };
+    Card {
+        name: c.viewer.name.clone(),
+        avatar,
+        stamps: c.stamps,
+        slots: c.slots,
+        total: c.total,
+        source: Source::Twitch,
+    }
+}
+
 pub(crate) fn checked_in(viewer: &Viewer, outcome: &Outcome, rules: &Rules) -> Option<CheckedIn> {
     match outcome {
         Outcome::CheckedIn { viewer_id, total } => Some(CheckedIn {
@@ -209,20 +329,46 @@ enum Job {
 
 pub struct CheckinService {
     tx: mpsc::UnboundedSender<Job>,
+    cards: mpsc::UnboundedSender<CardJob>,
     modules: Arc<Modules>,
     config: Arc<Config>,
     on_checked_in: OnCheckedIn,
 }
 
 impl CheckinService {
-    /// Spawns the worker that records check-ins in order and calls `on_checked_in` after each one; needs a Tokio
-    /// runtime.
+    /// Spawns the worker that records check-ins in order, and the one that shows their stamp cards one at a time;
+    /// needs a Tokio runtime.
     pub(crate) fn start<R: CheckinRepository>(
         repo: R,
         modules: Arc<Modules>,
         config: Arc<Config>,
-        on_checked_in: OnCheckedIn,
+        screen: Screen,
     ) -> Self {
+        let repo = Arc::new(repo);
+        let (cards, mut card_rx) = mpsc::unbounded_channel::<CardJob>();
+        let card_repo = repo.clone();
+        let Screen {
+            changed,
+            show_card,
+            profiles,
+            timing,
+        } = screen;
+        // shortcut: the card queue is unbounded; check-ins come at chat speed, cap it if a raid ever floods it.
+        tokio::spawn(async move {
+            while let Some(job) = card_rx.recv().await {
+                let card = match job {
+                    CardJob::Real(c) => card_for(&*card_repo, &*profiles, &c).await,
+                    CardJob::Simulated(card) => card,
+                };
+                show_card(&card, timing.show);
+                tokio::time::sleep(timing.show + timing.gap).await;
+            }
+        });
+        let card_tx = cards.clone();
+        let on_checked_in: OnCheckedIn = Arc::new(move |c| {
+            changed(c);
+            let _ = card_tx.send(CardJob::Real(c.clone()));
+        });
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
         let worker_config = config.clone();
         let notify = on_checked_in.clone();
@@ -252,7 +398,7 @@ impl CheckinService {
                         day,
                         reply,
                     } => {
-                        let result = manual(&repo, &rules, &viewer_id, day, Utc::now()).await;
+                        let result = manual(&*repo, &rules, &viewer_id, day, Utc::now()).await;
                         if let Ok((viewer, outcome)) = &result
                             && let Some(c) = checked_in(viewer, outcome, &rules)
                         {
@@ -265,10 +411,29 @@ impl CheckinService {
         });
         Self {
             tx,
+            cards,
             modules,
             config,
             on_checked_in,
         }
+    }
+
+    /// Shows a stamp card on the overlay without recording anything (`source=simulation`); `false` when `stamps`
+    /// is not between 1 and the card's slots. A card with every slot stamped shows the full-card effect.
+    pub fn simulate_card(&self, user_name: &str, stamps: u32) -> bool {
+        let slots = self.config.rules().slots.get();
+        if !(1..=slots).contains(&stamps) {
+            return false;
+        }
+        let card = Card {
+            name: user_name.to_owned(),
+            avatar: None,
+            stamps,
+            slots,
+            total: u64::from(stamps),
+            source: Source::Simulation,
+        };
+        self.cards.send(CardJob::Simulated(card)).is_ok()
     }
 
     pub(crate) fn config(&self) -> &Arc<Config> {

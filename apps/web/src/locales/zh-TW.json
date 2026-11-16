@@ -237,7 +237,10 @@
     "kind": "事件",
     "message": "留言",
     "sendAlert": "送出模擬特效",
-    "alertSent": "已送出模擬特效。"
+    "alertSent": "已送出模擬特效。",
+    "stamps": "集點卡格數（已蓋）",
+    "sendCheckin": "送出模擬打卡",
+    "checkinSent": "已送出模擬打卡。"
   },
   "port": {
     "heading": "連接埠被佔用",
@@ -246,6 +249,10 @@
     "retry": "儲存並重試"
   },
   "overlay": {
+    "checkin": {
+      "total": "累計 {n} 次",
+      "full": "集滿了！"
+    },
     "status": {
       "connecting": "連線中……",
       "closed": "已斷線，正在重新連線……"
@@ -283,6 +290,8 @@
       "save_failed": "模組設定儲存失敗。"
     },
     "simulate": {
+      "invalid_checkin": "模擬打卡的內容不正確。",
+      "invalid_stamps": "已蓋的格數要在 1 到集點卡的格數之間。",
       "invalid_text": "請輸入 1 到 500 字的訊息。",
       "invalid_name": "名稱最多 25 個字。",
       "invalid_alert": "模擬特效的內容格式不正確。",

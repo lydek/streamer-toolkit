@@ -274,6 +274,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/simulate/checkin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shows a stamp card on `/overlay/checkin/` tagged `source=simulation`; nothing is recorded. */
+        post: operations["simulate_checkin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/templates/alerts": {
         parameters: {
             query?: never;
@@ -569,6 +586,45 @@ export interface components {
             /** @description IANA time zone, e.g. `Asia/Taipei`. */
             time_zone: string;
         };
+        /**
+         * @description A `checkin.stamped` event exactly as `/ws/overlay` sends it: a stamp card to show on `/overlay/checkin/`. The
+         *     Host sends them one at a time. Not kept in snapshots, so a reloaded overlay never replays one.
+         */
+        CheckinStampedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["CheckinStampedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["CheckinStampedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        CheckinStampedPayload: {
+            /** @description Twitch profile image (`https://static-cdn.jtvnw.net/` only); `null` when unknown. */
+            avatarUrl: string | null;
+            /**
+             * Format: int64
+             * @description How long to show the card.
+             */
+            durationMs: number;
+            /** @description This check-in filled the card. */
+            full: boolean;
+            /** Format: int32 */
+            slots: number;
+            /**
+             * Format: int32
+             * @description Stamps on the current card, out of `slots`.
+             */
+            stamps: number;
+            /** Format: int64 */
+            total: number;
+            /** @description Raw viewer text; overlays escape it when rendering. */
+            userName: string;
+        };
+        /** @enum {string} */
+        CheckinStampedType: "checkin.stamped";
         /** @description Today's check-ins (the business day in force now). */
         CheckinToday: {
             /** @description `YYYY-MM-DD`. */
@@ -771,6 +827,14 @@ export interface components {
         };
         SimulatedChat: {
             text: string;
+            userName?: string;
+        };
+        SimulatedCheckin: {
+            /**
+             * Format: int32
+             * @description Stamps on the card, 1 to its slots; all of them shows the full-card effect.
+             */
+            stamps: number;
             userName?: string;
         };
         /** @description The first message on `/ws/overlay`: the recent retained events of each type. */
@@ -1485,6 +1549,36 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    simulate_checkin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulatedCheckin"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `simulate.invalid_checkin` or `simulate.invalid_stamps` */
             400: {
                 headers: {
                     [name: string]: unknown;

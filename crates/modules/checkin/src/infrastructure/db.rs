@@ -197,6 +197,27 @@ pub(crate) async fn check_in_tx(
 }
 
 impl CheckinRepository for SqliteCheckins {
+    async fn profile_image(&self, viewer_id: &str) -> Result<Option<String>, RepositoryError> {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT profile_image_url FROM checkin_viewers WHERE id = ?",
+        )
+        .bind(viewer_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map(Option::flatten)
+        .map_err(storage)
+    }
+
+    async fn set_profile_image(&self, viewer_id: &str, url: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE checkin_viewers SET profile_image_url = ? WHERE id = ?")
+            .bind(url)
+            .bind(viewer_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(storage)
+    }
+
     async fn find_viewer(&self, id: &str) -> Result<Option<Viewer>, RepositoryError> {
         let row: Option<(String, String, String)> = sqlx::query_as(
             "SELECT twitch_user_id, user_login, user_name FROM checkin_viewers WHERE id = ?",
@@ -422,7 +443,7 @@ pub(crate) mod tests {
             SqliteCheckins::new(pool.clone()),
             modules.clone(),
             config,
-            Arc::new(|_| {}),
+            crate::infrastructure::tests::quiet_screen(),
         );
         (service, modules)
     }

@@ -5,9 +5,9 @@ pub mod application;
 mod domain;
 mod infrastructure;
 
-pub use application::CheckinService;
+pub use application::{CheckinService, ProfileImages, Timing};
 pub use infrastructure::{
-    CheckinChangedEvent, CheckinChangedPayload,
+    CheckinChangedEvent, CheckinChangedPayload, CheckinStampedEvent, CheckinStampedPayload,
     db::MIGRATOR,
     http::{CheckinSettingsBody, routes},
     openapi, start, subscriptions,
