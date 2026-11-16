@@ -71,3 +71,38 @@ pub enum AlertKind {
         viewers: u32,
     },
 }
+
+/// A channel points redemption as Twitch reports it; Twitch's status strings stop at the integration layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelPointsRedemption {
+    /// Twitch's redemption ID.
+    pub id: String,
+    pub change: RedemptionChange,
+    pub user_id: String,
+    pub user_login: String,
+    pub user_name: String,
+    pub reward_id: String,
+    pub reward_title: String,
+    pub reward_cost: u32,
+    /// What the viewer typed; empty when the reward asks for nothing.
+    pub user_input: String,
+    pub status: RedemptionStatus,
+    /// RFC 3339 time of the redemption.
+    pub redeemed_at: String,
+}
+
+/// A new redemption, or a status change of one; both carry the whole redemption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedemptionChange {
+    Added,
+    Updated,
+}
+
+/// `Canceled` means the points were refunded; `Unknown` is a status Twitch did not name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedemptionStatus {
+    Unfulfilled,
+    Fulfilled,
+    Canceled,
+    Unknown,
+}

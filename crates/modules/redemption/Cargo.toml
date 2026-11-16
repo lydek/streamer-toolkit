@@ -1,0 +1,18 @@
+[package]
+name = "redemption"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "macros"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt", "sync"] }
+toolkit-core = { version = "0.1.0", path = "../../core" }
+tracing = "0.1.44"
+uuid = { version = "1.29.2", features = ["v7"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

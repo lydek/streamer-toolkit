@@ -12,6 +12,7 @@ chat = { version = "0.1.0", path = "../modules/chat" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 integrations = { version = "0.1.0", path = "../integrations" }
 mime_guess = "2.0.5"
+redemption = { version = "0.1.0", path = "../modules/redemption" }
 rust-embed = { version = "8.14.0", features = ["debug-embed"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }

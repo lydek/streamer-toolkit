@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 1ab6ffc857a1cfdf8d34ce1636a47da999200f98191cd8c43fd3b3bdea0d610b -->
+<!-- source: docs/architecture.md source-sha256: 408655d968e9e14509e205ba327f5dc9fac8be791451c82b90af87fb085b5bb3 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -60,7 +60,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 - **Two kinds of events**:
   - Integration and UI events (chat messages, simulated events, connection status, etc.) are only broadcast in memory and never written to the database.
   - Module domain events (e.g. `RedemptionRecorded`) go through the outbox, and interested modules subscribe to them.
-- **Outbox** (built in the redemption records slice):
+- **Outbox** (built in the check-in slice, which brings the first subscriber; the redemption records slice does not publish `RedemptionRecorded` yet):
   - The event and the business data are written in the same transaction.
   - The dispatcher takes events from the outbox, retries failures and shows them in the UI, and resends after a restart.
   - Delivery state is tracked per subscriber, so one failing subscriber neither re-runs nor blocks the others.
@@ -72,7 +72,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
   - Events delivered to every subscriber are cleaned up periodically, together with pending deliveries for removed modules.
 - **Disabling modules**:
   - From the skeleton on, modules have an enable/disable switch; while a module is disabled, in-memory events (chat, etc.) are dropped, not kept.
-  - Once the outbox exists (redemption records slice), the streamer chooses when disabling:
+  - Once the outbox exists (check-in slice), the streamer chooses when disabling:
     - "Pause": events stay in the outbox undelivered and are delivered in order after re-enabling; retries are not counted while paused; the UI shows the backlog size and the time of the oldest event.
     - "Off": events from the disabled period are marked skipped for that module, with no replay after re-enabling; before choosing, a warning lists the affected events and modules.
     - Switching from "pause" to "off" marks the undelivered events as skipped too.
@@ -146,8 +146,8 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 Twitch's official documentation is the source for these numbers; update this section when Twitch changes them.
 - **Helix API**: a token bucket per client ID and user, refilled every minute (for example 800 points; most endpoints cost 1 point per call). Every Helix request goes through the one Helix client in `integrations`: a 401 gets one refresh and one retry; a 429 waits until `Ratelimit-Reset` (at most 1 minute) before trying again and is never resent right away. Some 429s are unrelated to the points bucket (for example EventSub limits); without `Ratelimit-Reset`, normal backoff applies.
 - **EventSub WebSocket**: per user token (client ID and user), at most 3 connections with enabled subscriptions, at most 300 subscriptions per connection, and a `max_total_cost` of 10. The app opens only 1 connection per account and closes the old one before changing the Client ID or signing out; on `session_reconnect` it moves to the reconnect URL Twitch sends (this is not a new connection; subscriptions carry over and are not created again); failed connections reconnect with exponential backoff (from 1 second, at most 60 seconds).
-  - Each connection subscribes to 7 events: `channel.chat.message`, plus `channel.follow` (v2), `channel.subscribe`, `channel.subscription.message`, `channel.subscription.gift`, `channel.cheer` and `channel.raid` (with the `to_broadcaster_user_id` condition) for alerts. Raids need no authorization by the broadcaster and cost 1; the others are authorized by the broadcaster and cost 0, well under 10 in total.
-  - When a sign-in from before an update lacks the scope an event needs, that event is not subscribed; when Twitch answers an alert subscription with an error status (including 429), only a warning is logged and chat and the other events carry on. Only a failed chat subscription, or any subscription that encounters an invalid sign-in or cannot reach Twitch, counts as a failed connection and reconnects.
+  - Each connection subscribes to 9 events: `channel.chat.message`; `channel.follow` (v2), `channel.subscribe`, `channel.subscription.message`, `channel.subscription.gift`, `channel.cheer` and `channel.raid` (with the `to_broadcaster_user_id` condition) for alerts; `channel.channel_points_custom_reward_redemption.add` and `.update` for redemption records. Raids need no authorization by the broadcaster and cost 1; the others are authorized by the broadcaster and cost 0, well under 10 in total.
+  - When a sign-in from before an update lacks the scope an event needs, that event is not subscribed; when Twitch answers a subscription other than chat with an error status (including 429, or a channel without channel points), only a warning is logged and chat and the other events carry on. Only a failed chat subscription, or any subscription that encounters an invalid sign-in or cannot reach Twitch, counts as a failed connection and reconnects.
 - **Device Code Flow**: poll at the `interval` Twitch returns until `expires_in`, never faster, and at least 1 second apart.
 - **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
 
