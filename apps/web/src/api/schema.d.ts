@@ -342,6 +342,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sounds/slots/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Chooses what a slot plays. */
+        put: operations["set_slot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds/{id}": {
         parameters: {
             query?: never;
@@ -501,6 +518,8 @@ export interface components {
              * @description Months subscribed in total: `resubscribe`.
              */
             months?: number | null;
+            /** @description Played once as the alert starts; chosen per kind in the sound settings. */
+            sound: components["schemas"]["AlertSound"];
             /**
              * Format: int32
              * @description Subscription tier, 1 to 3: `subscribe`, `resubscribe`, `gift`.
@@ -513,6 +532,20 @@ export interface components {
              * @description Raiders: `raid`.
              */
             viewers?: number | null;
+        };
+        /** @description The sound an alert plays: the overlay's built-in one, none, or a library sound. */
+        AlertSound: {
+            /** @enum {string} */
+            kind: "built_in";
+        } | {
+            /** @enum {string} */
+            kind: "silent";
+        } | {
+            /** @enum {string} */
+            kind: "file";
+            url: string;
+            /** Format: int32 */
+            volume: number;
         };
         /**
          * @description Which built-in template the alert overlay shows.
@@ -682,6 +715,7 @@ export interface components {
             full: boolean;
             /** Format: int32 */
             slots: number;
+            sound: components["schemas"]["PlaySound"] | null;
             /**
              * Format: int32
              * @description Stamps on the current card, out of `slots`.
@@ -839,6 +873,12 @@ export interface components {
             client_id: string;
             status: components["schemas"]["AuthStatus"];
         };
+        /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */
+        PlaySound: {
+            url: string;
+            /** Format: int32 */
+            volume: number;
+        };
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
          *     carries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.
@@ -921,6 +961,10 @@ export interface components {
             stamps: number;
             userName?: string;
         };
+        SlotChoice: {
+            /** @description A sound's ID, `silent`, or `null` for the slot's default. */
+            sound: string | null;
+        };
         /** @description The first message on `/ws/overlay`: the recent retained events of each type. */
         Snapshot: {
             payload: components["schemas"]["SnapshotPayload"];
@@ -941,6 +985,8 @@ export interface components {
         Sound: {
             id: string;
             label: string;
+            /** @description Slots that play it; deleting it puts them back to their defaults. */
+            used_by: string[];
             /**
              * Format: int32
              * @description 0–100 (%).
@@ -948,6 +994,13 @@ export interface components {
             volume: number;
         };
         SoundLibrary: {
+            /**
+             * @description Chosen slots: `alert.<kind>`, `checkin` or `checkin.full` → a sound's ID or `silent`. A slot left out plays
+             *     its default: the built-in sound for alerts, nothing for check-ins.
+             */
+            slots: {
+                [key: string]: string;
+            };
             sounds: components["schemas"]["Sound"][];
         };
         SoundUpdate: {
@@ -1852,6 +1905,57 @@ export interface operations {
             };
             /** @description `sound.too_large`: larger than 10 MB */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_slot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `alert.<kind>`, `checkin` or `checkin.full` */
+                slot: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlotChoice"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `sound.unknown_slot` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.not_found`: no such sound */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

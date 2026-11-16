@@ -2,6 +2,7 @@
 //! public by design.
 
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -41,6 +42,9 @@ pub struct Settings {
 #[serde(default)]
 pub struct SoundSettings {
     pub library: Vec<SoundEntry>,
+    /// What plays where, e.g. `alert.follow` → a library sound's ID or `silent`. A missing slot plays its
+    /// default: the built-in sound for alerts, nothing for check-ins.
+    pub slots: BTreeMap<String, String>,
 }
 
 /// One imported sound; its file is `sounds/<id>.<format>` in the data folder.

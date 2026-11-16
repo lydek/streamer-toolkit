@@ -5,6 +5,10 @@ import { i18n } from '../../i18n'
 import type { Incoming } from '../chat/chat'
 import type { AlertEvent } from './alerts'
 import AlertsOverlay from './AlertsOverlay.vue'
+import chimeUrl from './chime.wav'
+
+const played = vi.hoisted(() => [] as [string, number][])
+vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]) }))
 
 // Each load waits until the test releases it with the stage class it should get.
 const loads = vi.hoisted(() => [] as { base: string; release: (stage: string) => void }[])
@@ -37,7 +41,7 @@ const alert = (seq: number, durationMs = 6000): AlertEvent => ({
   seq,
   occurredAt: '',
   source: 'simulation',
-  payload: { kind: 'raid', userName: `R${seq}`, viewers: seq, durationMs },
+  payload: { kind: 'raid', userName: `R${seq}`, viewers: seq, durationMs, sound: { kind: 'built_in' } },
 })
 const changed: Incoming = {
   type: 'template.changed',
@@ -75,6 +79,43 @@ describe('AlertsOverlay', () => {
       expect(loads.map((l) => l.base)).toEqual([`${location.origin}${base}`])
       wrapper.unmount()
     }
+  })
+
+  it('plays each alert’s sound: the built-in one, a library sound at its volume, or none', async () => {
+    vi.useFakeTimers()
+    const sockets: { onmessage?: (e: { data: string }) => void }[] = []
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        onmessage?: (e: { data: string }) => void
+        constructor() {
+          sockets.push(this)
+        }
+        close() {}
+      },
+    )
+    history.replaceState(null, '', '/overlay/alerts/')
+    loads.length = 0
+    played.length = 0
+    const wrapper = mount(AlertsOverlay, { global: { plugins: [i18n] }, attachTo: document.body })
+    const send = (m: unknown) => sockets[0].onmessage!({ data: JSON.stringify(m) })
+    send({ type: 'snapshot', version: 1, seq: 0, payload: {} })
+    for (const l of loads) l.release('a')
+    await vi.runAllTimersAsync()
+    const sounds: AlertEvent['payload']['sound'][] = [
+      { kind: 'built_in' },
+      { kind: 'file', url: '/sounds/s1', volume: 40 },
+      { kind: 'silent' },
+    ]
+    for (const [i, sound] of sounds.entries()) {
+      send({ ...alert(i + 1, 10), payload: { ...alert(i + 1, 10).payload, sound } })
+      await vi.runAllTimersAsync()
+    }
+    expect(played).toEqual([
+      [chimeUrl, 100],
+      ['/sounds/s1', 40],
+    ])
+    wrapper.unmount()
   })
 
   it('in preview, takes only messages from the parent on the same origin', async () => {

@@ -8,6 +8,7 @@ use std::{path::PathBuf, sync::Arc};
 use chrono::{SecondsFormat, Utc};
 use redemption::{REDEMPTION_RECORDED, RedemptionRecorded};
 use serde::{Deserialize, Serialize};
+use sound::{PlaySound, SoundService};
 use sqlx::SqlitePool;
 use toolkit_core::{
     bus::{Event, EventBus},
@@ -67,9 +68,12 @@ pub struct CheckinStampedPayload {
     pub full: bool,
     /// How long to show the card.
     pub duration_ms: u64,
+    /// Played once as the card shows; `null`: silent (the default).
+    #[schema(required)]
+    pub sound: Option<PlaySound>,
 }
 
-fn publish_card(bus: &EventBus, card: &Card, show: std::time::Duration) {
+fn publish_card(bus: &EventBus, sounds: &SoundService, card: &Card, show: std::time::Duration) {
     let payload = CheckinStampedPayload {
         user_name: card.name.clone(),
         avatar_url: card.avatar.clone(),
@@ -78,6 +82,7 @@ fn publish_card(bus: &EventBus, card: &Card, show: std::time::Duration) {
         total: card.total,
         full: card.full(),
         duration_ms: u64::try_from(show.as_millis()).unwrap_or(u64::MAX),
+        sound: PlaySound::from_cue(sounds.checkin(card.full())),
     };
     bus.publish(Event {
         id: Uuid::now_v7().to_string(),
@@ -137,18 +142,19 @@ fn publish_changed(bus: &EventBus, c: &CheckedIn) {
 
 /// Starts check-ins into `pool`, which must already have [`db::MIGRATOR`] applied, with the settings in
 /// `data_dir`. Each recorded check-in is announced on `bus` and gets a stamp card on the overlay, with the viewer's
-/// profile image from `profiles`; needs a Tokio runtime.
+/// profile image from `profiles` and the sound chosen in `sounds`; needs a Tokio runtime.
 pub fn start(
     pool: SqlitePool,
     bus: Arc<EventBus>,
     modules: Arc<Modules>,
     data_dir: PathBuf,
     profiles: Arc<dyn ProfileImages>,
+    sounds: Arc<SoundService>,
     timing: Timing,
 ) -> CheckinService {
     let changed_bus = bus.clone();
     let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
-    let show_card: ShowCard = Arc::new(move |card, show| publish_card(&bus, card, show));
+    let show_card: ShowCard = Arc::new(move |card, show| publish_card(&bus, &sounds, card, show));
     CheckinService::start(
         db::SqliteCheckins::new(pool),
         modules,
@@ -267,10 +273,35 @@ pub(crate) mod tests {
             pool,
             bus,
             modules,
-            dir,
+            dir.clone(),
             Arc::new(NoProfiles),
+            sounds(&dir),
             Timing::default(),
         )
+    }
+
+    /// The sound settings in `dir`.
+    fn sounds(dir: &std::path::Path) -> Arc<SoundService> {
+        Arc::new(SoundService::new(
+            dir.to_path_buf(),
+            Arc::new(Modules::load(dir.to_path_buf())),
+        ))
+    }
+
+    const SOUND_ID: &str = "0190a5b0-0000-7000-8000-000000000001";
+
+    /// Full cards play library sound `SOUND_ID` at 40%; normal check-ins stay silent.
+    fn full_card_sound(dir: &std::path::Path) {
+        toolkit_core::settings::update(dir, |s| {
+            s.sound.library.push(toolkit_core::settings::SoundEntry {
+                id: SOUND_ID.into(),
+                label: "Fanfare".into(),
+                volume: 40,
+                format: "ogg".into(),
+            });
+            s.sound.slots.insert("checkin.full".into(), SOUND_ID.into());
+        })
+        .unwrap();
     }
     use crate::infrastructure::db::tests::{chat, count, data_dir, pool, wait_for_count};
     use axum::{body::Body, http::Request};
@@ -895,8 +926,10 @@ pub(crate) mod tests {
             Arc::new(Modules::load(dir.clone())),
             dir.clone(),
             profiles.clone(),
+            sounds(&dir),
             quick(),
         );
+        full_card_sound(&dir);
         service
             .config()
             .update(&CheckinSettings {
@@ -920,12 +953,16 @@ pub(crate) mod tests {
         assert_eq!(first["source"], "twitch");
         assert_eq!(
             first["payload"],
-            serde_json::json!({ "userName": "<b>Viewer 1</b>", "avatarUrl": AVATAR, "stamps": 1, "slots": 2, "total": 1, "full": false, "durationMs": 80 })
+            serde_json::json!({ "userName": "<b>Viewer 1</b>", "avatarUrl": AVATAR, "stamps": 1, "slots": 2, "total": 1, "full": false, "durationMs": 80, "sound": null })
         );
         assert_eq!(second["payload"]["userName"], "<b>Viewer 2</b>");
         assert_eq!(
             (&third["payload"]["stamps"], &third["payload"]["full"]),
             (&2.into(), &true.into())
+        );
+        assert_eq!(
+            third["payload"]["sound"],
+            serde_json::json!({ "url": format!("/sounds/{SOUND_ID}"), "volume": 40 })
         );
         assert!(
             t2 - t1 >= quick().show + quick().gap && t3 - t2 >= quick().show + quick().gap,
@@ -969,6 +1006,7 @@ pub(crate) mod tests {
             Arc::new(Modules::load(dir.clone())),
             dir.clone(),
             profiles,
+            sounds(&dir),
             quick(),
         );
         service.receive_chat(&chat("1", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
@@ -997,6 +1035,7 @@ pub(crate) mod tests {
             Arc::new(Modules::load(dir.clone())),
             dir.clone(),
         );
+        full_card_sound(&dir);
         assert!(!service.simulate_card("Sim", 0));
         assert!(!service.simulate_card("Sim", 11), "more than the 10 slots");
         assert!(service.simulate_card("<i>Sim</i>", 10));
@@ -1004,6 +1043,10 @@ pub(crate) mod tests {
         assert_eq!(card["source"], "simulation");
         assert_eq!(card["payload"]["userName"], "<i>Sim</i>");
         assert_eq!(card["payload"]["full"], true);
+        assert_eq!(
+            card["payload"]["sound"]["volume"], 40,
+            "simulated cards play the chosen sound too"
+        );
         assert_eq!(count(&pool).await, 0);
         let viewers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM checkin_viewers")
             .fetch_one(&pool)

@@ -25,7 +25,7 @@ describe('fillAlert', () => {
         { kind: 'cheer', bits: 100 },
         { kind: 'raid', viewers: 42 },
       ] as const
-    ).map((p) => render({ ...p, userName: name, durationMs: 6000 }).querySelector('.title')!.textContent)
+    ).map((p) => render({ ...p, userName: name, durationMs: 6000, sound: { kind: 'built_in' } }).querySelector('.title')!.textContent)
     expect(titles).toEqual([
       `${name} 追隨了！`,
       `${name} 訂閱了！`,
@@ -37,11 +37,11 @@ describe('fillAlert', () => {
   })
 
   it('names an anonymous gift, keeps a message as text and drops an empty one', () => {
-    const gift = render({ kind: 'gift', userName: null, tier: 1, count: 5, durationMs: 6000 })
+    const gift = render({ kind: 'gift', userName: null, tier: 1, count: 5, durationMs: 6000, sound: { kind: 'built_in' } })
     expect(gift.querySelector('.title')!.textContent).toBe('匿名觀眾 送了 5 份訂閱！')
     expect(gift.querySelector('.message')).toBeNull()
 
-    const cheer = render({ kind: 'cheer', userName: 'A', bits: 1, message: '<b>hi</b>', durationMs: 9000 })
+    const cheer = render({ kind: 'cheer', userName: 'A', bits: 1, message: '<b>hi</b>', durationMs: 9000, sound: { kind: 'built_in' } })
     expect(cheer.querySelector('.message')!.innerHTML).toBe('&lt;b&gt;hi&lt;/b&gt;')
     expect(cheer.dataset.kind).toBe('cheer')
     expect(cheer.style.getPropertyValue('--duration')).toBe('9000ms')

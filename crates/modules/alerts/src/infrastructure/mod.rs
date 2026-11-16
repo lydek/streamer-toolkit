@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sound::{AlertSound, SoundService};
 use toolkit_core::events::{Alert, AlertKind, Source};
 use utoipa::ToSchema;
 
@@ -20,6 +21,20 @@ pub enum AlertKindName {
     Gift,
     Cheer,
     Raid,
+}
+
+impl AlertKindName {
+    /// As serialized, e.g. `follow`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Follow => "follow",
+            Self::Subscribe => "subscribe",
+            Self::Resubscribe => "resubscribe",
+            Self::Gift => "gift",
+            Self::Cheer => "cheer",
+            Self::Raid => "raid",
+        }
+    }
 }
 
 /// The `payload` of an `alert` event. Fields the kind does not have are left out.
@@ -49,6 +64,8 @@ pub struct AlertPayload {
     pub message: Option<String>,
     /// How long the overlay shows it; the next alert comes after this and a short pause.
     pub duration_ms: u64,
+    /// Played once as the alert starts; chosen per kind in the sound settings.
+    pub sound: AlertSound,
 }
 
 /// An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in
@@ -73,9 +90,10 @@ pub enum AlertType {
     Alert,
 }
 
-pub(crate) fn payload(alert: Alert, show: Duration) -> Value {
+pub(crate) fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
     let base = AlertPayload {
         duration_ms: show.as_millis() as u64,
+        sound: AlertSound::BuiltIn,
         kind: AlertKindName::Follow,
         user_name: alert.user_name,
         tier: None,
@@ -86,7 +104,7 @@ pub(crate) fn payload(alert: Alert, show: Duration) -> Value {
         message: None,
     };
     let text = |m: String| (!m.is_empty()).then_some(m);
-    let payload = match alert.kind {
+    let mut payload = match alert.kind {
         AlertKind::Follow => base,
         AlertKind::Subscribe { tier, .. } => AlertPayload {
             kind: AlertKindName::Subscribe,
@@ -122,5 +140,6 @@ pub(crate) fn payload(alert: Alert, show: Duration) -> Value {
             ..base
         },
     };
+    payload.sound = sounds.alert(payload.kind.name()).into();
     serde_json::to_value(payload).expect("alert payload serializes")
 }

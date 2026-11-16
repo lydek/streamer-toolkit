@@ -80,6 +80,48 @@ pub(crate) fn valid_volume(volume: u8) -> bool {
     volume <= 100
 }
 
+/// A slot set to play nothing, rather than its default.
+pub(crate) const SILENT: &str = "silent";
+const ALERT_KINDS: [&str; 6] = [
+    "follow",
+    "subscribe",
+    "resubscribe",
+    "gift",
+    "cheer",
+    "raid",
+];
+
+/// What a slot plays.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Cue {
+    /// The overlay's own built-in sound.
+    BuiltIn,
+    Silent,
+    /// A library sound at its volume (0–100).
+    File {
+        id: String,
+        volume: u8,
+    },
+}
+
+/// Whether `slot` names a place a sound can be chosen for: `alert.<kind>`, `checkin` or `checkin.full`.
+pub(crate) fn valid_slot(slot: &str) -> bool {
+    match slot.split_once('.') {
+        Some(("alert", kind)) => ALERT_KINDS.contains(&kind),
+        Some(("checkin", "full")) => true,
+        Some(_) => false,
+        None => slot == "checkin",
+    }
+}
+
+/// What a slot plays with nothing chosen: alerts keep their built-in sound, everything else is silent.
+pub(crate) fn default_cue(slot: &str) -> Cue {
+    match slot.starts_with("alert.") {
+        true => Cue::BuiltIn,
+        false => Cue::Silent,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +163,26 @@ mod tests {
             clean_label(&"字".repeat(150)).unwrap().chars().count(),
             LABEL_MAX
         );
+    }
+
+    #[test]
+    fn slots_and_their_defaults() {
+        for slot in ["alert.follow", "alert.raid", "checkin", "checkin.full"] {
+            assert!(valid_slot(slot), "{slot}");
+        }
+        for slot in [
+            "alert",
+            "alert.",
+            "alert.host",
+            "checkin.",
+            "checkin.half",
+            "x",
+            "",
+        ] {
+            assert!(!valid_slot(slot), "{slot}");
+        }
+        assert_eq!(default_cue("alert.cheer"), Cue::BuiltIn);
+        assert_eq!(default_cue("checkin.full"), Cue::Silent);
     }
 
     #[test]

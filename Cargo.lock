@@ -23,6 +23,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sound",
  "tokio",
  "toolkit-core",
  "tracing",
@@ -628,6 +629,7 @@ dependencies = [
  "redemption",
  "serde",
  "serde_json",
+ "sound",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",

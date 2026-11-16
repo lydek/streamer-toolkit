@@ -9,6 +9,7 @@ import type { Incoming } from '../chat/chat'
 import type { AlertPayload } from './alerts'
 import chimeUrl from './chime.wav'
 import { stylesheetsLoaded } from '../chat/template'
+import { playSound } from '../sound'
 import { type AlertTemplate, fillAlert, loadAlertTemplate } from './template'
 
 const RETRY_MS = 2000
@@ -65,8 +66,10 @@ async function play(p: AlertPayload) {
   for (let r: Promise<void> | undefined; r !== ready; ) await (r = ready)
   if (!template) return
   show(p, p.durationMs)
-  // OBS lets browser sources play sound without a click; elsewhere a refused play() only means silence.
-  if (!preview) new Audio(chimeUrl).play()?.catch(() => {})
+  if (preview) return
+  const { sound } = p
+  if (sound.kind === 'built_in') playSound(chimeUrl, 100)
+  else if (sound.kind === 'file') playSound(sound.url, sound.volume)
 }
 
 /** Draws `p` in the current template for `ms`. */

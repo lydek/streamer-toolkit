@@ -65,6 +65,12 @@
     <section aria-labelledby="checkin">
       <h2 id="checkin" tabindex="-1">{{ t('modules.names.checkin') }}</h2>
       <CheckinSettings @error="report" />
+      <SoundSlots
+        :slots="[
+          { slot: 'checkin', label: t('sound.checkinNormal') },
+          { slot: 'checkin.full', label: t('sound.checkinFull') },
+        ]"
+      />
       <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
     </section>
     <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" />
@@ -96,6 +102,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
 import CheckinSettings from './CheckinSettings.vue'
+import SoundSlots from './SoundSlots.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
 import { errorToast } from './home'

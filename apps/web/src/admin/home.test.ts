@@ -127,7 +127,7 @@ describe('applyLive', () => {
       seq,
       occurredAt: '',
       source: 'simulation',
-      payload: { kind: 'follow', userName: 'Fan', durationMs: 6000 },
+      payload: { kind: 'follow', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
     })
     let s = applyLive(start, snapshot(1, {}))
     s = applyLive(s, alert(2))

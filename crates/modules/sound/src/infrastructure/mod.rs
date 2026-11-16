@@ -1,6 +1,6 @@
 //! Adapters: the admin API (behind the admin token, added by the host) and the read-only sound file route.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -19,7 +19,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use crate::{
     application::{SoundError, SoundService},
-    domain::MAX_BYTES,
+    domain::{Cue, MAX_BYTES},
 };
 
 /// Same shape as the host's admin error body: a stable `<area>.<reason>` code.
@@ -34,7 +34,9 @@ fn error(status: StatusCode, code: &str) -> Response {
 
 fn sound_error(e: SoundError) -> Response {
     let status = match &e {
-        SoundError::UnsupportedType | SoundError::Invalid => StatusCode::BAD_REQUEST,
+        SoundError::UnsupportedType | SoundError::Invalid | SoundError::UnknownSlot => {
+            StatusCode::BAD_REQUEST
+        }
         SoundError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         SoundError::NotFound => StatusCode::NOT_FOUND,
         SoundError::SaveFailed(io) => {
@@ -52,21 +54,78 @@ pub struct Sound {
     pub label: String,
     /// 0–100 (%).
     pub volume: u8,
+    /// Slots that play it; deleting it puts them back to their defaults.
+    pub used_by: Vec<String>,
 }
 
-impl From<SoundEntry> for Sound {
-    fn from(e: SoundEntry) -> Self {
-        Self {
-            id: e.id,
-            label: e.label,
-            volume: e.volume,
-        }
+fn sound(e: SoundEntry, slots: &BTreeMap<String, String>) -> Sound {
+    Sound {
+        used_by: slots
+            .iter()
+            .filter(|(_, id)| **id == e.id)
+            .map(|(slot, _)| slot.clone())
+            .collect(),
+        id: e.id,
+        label: e.label,
+        volume: e.volume,
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SoundLibrary {
     pub sounds: Vec<Sound>,
+    /// Chosen slots: `alert.<kind>`, `checkin` or `checkin.full` → a sound's ID or `silent`. A slot left out plays
+    /// its default: the built-in sound for alerts, nothing for check-ins.
+    pub slots: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SlotChoice {
+    /// A sound's ID, `silent`, or `null` for the slot's default.
+    #[schema(required)]
+    pub sound: Option<String>,
+}
+
+/// A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct PlaySound {
+    pub url: String,
+    pub volume: u8,
+}
+
+impl PlaySound {
+    /// `None` when nothing from the library plays.
+    pub fn from_cue(cue: Cue) -> Option<Self> {
+        match cue {
+            Cue::File { id, volume } => Some(Self {
+                url: format!("/sounds/{id}"),
+                volume,
+            }),
+            Cue::BuiltIn | Cue::Silent => None,
+        }
+    }
+}
+
+/// The sound an alert plays: the overlay's built-in one, none, or a library sound.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AlertSound {
+    BuiltIn,
+    Silent,
+    File { url: String, volume: u8 },
+}
+
+impl From<Cue> for AlertSound {
+    fn from(cue: Cue) -> Self {
+        match cue {
+            Cue::BuiltIn => Self::BuiltIn,
+            Cue::Silent => Self::Silent,
+            Cue::File { id, volume } => Self::File {
+                url: format!("/sounds/{id}"),
+                volume,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -97,6 +156,7 @@ pub fn routes(service: Arc<SoundService>) -> Router {
             "/api/admin/sounds/{id}",
             put(update_sound).delete(delete_sound),
         )
+        .route("/api/admin/sounds/slots/{slot}", put(set_slot))
         .with_state(service)
 }
 
@@ -114,9 +174,39 @@ pub fn file_routes(service: Arc<SoundService>) -> Router {
     responses((status = 200, body = SoundLibrary))
 )]
 pub(crate) async fn list_sounds(State(s): State<Arc<SoundService>>) -> Json<SoundLibrary> {
+    let slots = s.slots();
     Json(SoundLibrary {
-        sounds: s.list().into_iter().map(Sound::from).collect(),
+        sounds: s.list().into_iter().map(|e| sound(e, &slots)).collect(),
+        slots,
     })
+}
+
+/// Chooses what a slot plays.
+#[utoipa::path(
+    put,
+    path = "/api/admin/sounds/slots/{slot}",
+    tag = "admin",
+    params(("slot" = String, Path, description = "`alert.<kind>`, `checkin` or `checkin.full`")),
+    request_body = SlotChoice,
+    responses(
+        (status = 204),
+        (status = 400, description = "`sound.unknown_slot`", body = ErrorBody),
+        (status = 404, description = "`sound.not_found`: no such sound", body = ErrorBody),
+        (status = 500, description = "`sound.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_slot(
+    State(s): State<Arc<SoundService>>,
+    Path(slot): Path<String>,
+    body: Result<Json<SlotChoice>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "sound.invalid");
+    };
+    match s.set_slot(&slot, b.sound.as_deref()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => sound_error(e),
+    }
 }
 
 /// Copies an MP3, WAV or OGG file (at most 10 MB) into the library at 100% volume. The body is the file itself.
@@ -149,7 +239,7 @@ pub(crate) async fn import_sound(
         Err(_) => return error(StatusCode::BAD_REQUEST, "sound.unsupported_type"),
     };
     match s.import(&q.name, &bytes) {
-        Ok(entry) => Json(Sound::from(entry)).into_response(),
+        Ok(entry) => Json(sound(entry, &BTreeMap::new())).into_response(),
         Err(e) => sound_error(e),
     }
 }
@@ -177,7 +267,7 @@ pub(crate) async fn update_sound(
         return error(StatusCode::BAD_REQUEST, "sound.invalid");
     };
     match s.update(&id, &b.label, b.volume) {
-        Ok(entry) => Json(Sound::from(entry)).into_response(),
+        Ok(entry) => Json(sound(entry, &s.slots())).into_response(),
         Err(e) => sound_error(e),
     }
 }
@@ -227,7 +317,7 @@ async fn sound_file(State(s): State<Arc<SoundService>>, Path(id): Path<String>) 
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_sounds, import_sound, update_sound, delete_sound))]
+#[openapi(paths(list_sounds, import_sound, update_sound, delete_sound, set_slot))]
 struct SoundApi;
 
 /// This module's part of the Host's OpenAPI document.
@@ -251,7 +341,8 @@ mod tests {
     }
 
     fn app(dir: &std::path::Path) -> Router {
-        let service = Arc::new(SoundService::new(dir.to_path_buf()));
+        let modules = Arc::new(toolkit_core::modules::Modules::load(dir.to_path_buf()));
+        let service = Arc::new(SoundService::new(dir.to_path_buf(), modules));
         routes(service.clone()).merge(file_routes(service))
     }
 
@@ -371,7 +462,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             json(res).await,
-            serde_json::json!({ "id": id, "label": "Ding", "volume": 40 })
+            serde_json::json!({ "id": id, "label": "Ding", "volume": 40, "used_by": [] })
         );
         for bad in [
             serde_json::json!({ "label": " ", "volume": 40 }),
@@ -427,6 +518,143 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(send(&app, req).await.0, StatusCode::NOT_FOUND);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn choose(slot: &str, sound: serde_json::Value) -> Request<Body> {
+        Request::put(format!("/api/admin/sounds/slots/{slot}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({ "sound": sound }).to_string(),
+            ))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
+        let dir = data_dir("slots");
+        let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
+        let service = Arc::new(SoundService::new(dir.clone(), modules.clone()));
+        let app = routes(service.clone());
+        let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        // Nothing chosen: alerts keep the built-in sound, check-ins are silent.
+        assert_eq!(
+            AlertSound::from(service.alert("follow")),
+            AlertSound::BuiltIn
+        );
+        assert_eq!(PlaySound::from_cue(service.checkin(false)), None);
+
+        for (slot, choice) in [
+            ("alert.follow", id.as_str()),
+            ("checkin.full", id.as_str()),
+            ("alert.raid", "silent"),
+        ] {
+            assert_eq!(
+                send(&app, choose(slot, choice.into())).await.0,
+                StatusCode::NO_CONTENT,
+                "{slot}"
+            );
+        }
+        let file = AlertSound::File {
+            url: format!("/sounds/{id}"),
+            volume: 100,
+        };
+        assert_eq!(AlertSound::from(service.alert("follow")), file);
+        assert_eq!(AlertSound::from(service.alert("raid")), AlertSound::Silent);
+        assert_eq!(
+            AlertSound::from(service.alert("cheer")),
+            AlertSound::BuiltIn
+        );
+        assert_eq!(
+            PlaySound::from_cue(service.checkin(true)),
+            Some(PlaySound {
+                url: format!("/sounds/{id}"),
+                volume: 100
+            })
+        );
+        assert_eq!(PlaySound::from_cue(service.checkin(false)), None);
+
+        let (_, res) = send(
+            &app,
+            Request::get("/api/admin/sounds")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        let library = json(res).await;
+        assert_eq!(
+            library["sounds"][0]["used_by"],
+            serde_json::json!(["alert.follow", "checkin.full"])
+        );
+        assert_eq!(library["slots"]["alert.raid"], "silent");
+
+        for (slot, choice, status, code) in [
+            (
+                "alert.host",
+                serde_json::json!(id),
+                StatusCode::BAD_REQUEST,
+                "sound.unknown_slot",
+            ),
+            (
+                "checkin.half",
+                serde_json::Value::Null,
+                StatusCode::BAD_REQUEST,
+                "sound.unknown_slot",
+            ),
+            (
+                "checkin",
+                serde_json::json!("nope"),
+                StatusCode::NOT_FOUND,
+                "sound.not_found",
+            ),
+        ] {
+            let (got, res) = send(&app, choose(slot, choice)).await;
+            assert_eq!(
+                (got, json(res).await["code"].clone()),
+                (status, code.into()),
+                "{slot}"
+            );
+        }
+
+        // While the module is off every slot plays its default.
+        modules
+            .set_enabled(toolkit_core::modules::SOUND, false)
+            .unwrap();
+        assert_eq!(
+            AlertSound::from(service.alert("follow")),
+            AlertSound::BuiltIn
+        );
+        assert_eq!(PlaySound::from_cue(service.checkin(true)), None);
+        modules
+            .set_enabled(toolkit_core::modules::SOUND, true)
+            .unwrap();
+
+        let delete = Request::delete(format!("/api/admin/sounds/{id}"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(send(&app, delete).await.0, StatusCode::NO_CONTENT);
+        assert_eq!(
+            AlertSound::from(service.alert("follow")),
+            AlertSound::BuiltIn
+        );
+        assert_eq!(PlaySound::from_cue(service.checkin(true)), None);
+        assert_eq!(
+            service.slots(),
+            BTreeMap::from([("alert.raid".to_owned(), "silent".to_owned())]),
+            "only the slots that played it are reset"
+        );
+        // Back to the default with `null`.
+        assert_eq!(
+            send(&app, choose("alert.raid", serde_json::Value::Null))
+                .await
+                .0,
+            StatusCode::NO_CONTENT
+        );
+        assert!(service.slots().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

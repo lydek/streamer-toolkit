@@ -21,7 +21,7 @@
         v-for="s in library.sounds"
         :key="s.id"
         :sound="s"
-        :used-by="[]"
+        :used-by="s.used_by.map((slot) => slotLabel(slot, t))"
         @deleted="deleted"
         @error="report"
       />
@@ -37,7 +37,7 @@ import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast } from './home'
-import { importSound } from './sounds'
+import { importSound, slotLabel } from './sounds'
 import SoundRow from './SoundRow.vue'
 
 const { t } = useI18n()

@@ -18,6 +18,7 @@ tracing = "0.1.44"
 utoipa = "6.0.0"
 uuid = { version = "1.29.2", features = ["v7"] }
 redemption = { version = "0.1.0", path = "../redemption" }
+sound = { version = "0.1.0", path = "../sound" }
 chrono-tz = { version = "0.10.4", default-features = false, features = ["std"] }
 
 [dev-dependencies]

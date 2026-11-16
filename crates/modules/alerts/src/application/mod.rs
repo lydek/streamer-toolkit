@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use sound::SoundService;
 use tokio::sync::Notify;
 use toolkit_core::{
     bus::{Event, EventBus},
@@ -45,17 +46,24 @@ struct Queue {
     bus: Arc<EventBus>,
     modules: Arc<Modules>,
     timing: Timing,
+    sounds: Arc<SoundService>,
     waiting: Mutex<VecDeque<(Alert, Source)>>,
     ready: Notify,
 }
 
 impl AlertsService {
     /// Starts the player task; needs a Tokio runtime.
-    pub fn new(bus: Arc<EventBus>, modules: Arc<Modules>, timing: Timing) -> Self {
+    pub fn new(
+        bus: Arc<EventBus>,
+        modules: Arc<Modules>,
+        timing: Timing,
+        sounds: Arc<SoundService>,
+    ) -> Self {
         let queue = Arc::new(Queue {
             bus,
             modules,
             timing,
+            sounds,
             waiting: Mutex::default(),
             ready: Notify::new(),
         });
@@ -109,7 +117,7 @@ async fn play(queue: Arc<Queue>) {
             version: ALERT_VERSION,
             occurred_at: alert.occurred_at.clone(),
             source,
-            payload: infrastructure::payload(alert, show),
+            payload: infrastructure::payload(alert, show, &queue.sounds),
         });
         tokio::time::sleep(show + queue.timing.gap).await;
     }
@@ -141,10 +149,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("st-alerts-{name}-{}", std::process::id()));
         let bus = Arc::new(EventBus::default());
         let modules = Arc::new(Modules::load(dir.clone()));
-        let alerts = AlertsService::new(bus.clone(), modules.clone(), Timing::default());
+        let sounds = Arc::new(SoundService::new(dir.clone(), modules.clone()));
+        let alerts = AlertsService::new(bus.clone(), modules.clone(), Timing::default(), sounds);
         let (_, rx) = bus.subscribe();
         (dir, modules, alerts, rx)
     }
+
+    const SOUND_ID: &str = "0190a5b0-0000-7000-8000-000000000001";
 
     async fn next(rx: &mut broadcast::Receiver<Arc<str>>) -> Value {
         serde_json::from_str(&rx.recv().await.unwrap()).unwrap()
@@ -257,6 +268,18 @@ mod tests {
             },
             AlertKind::Raid { viewers: 42 },
         ];
+        // Follows play a library sound, cheers none; other kinds keep the built-in one.
+        toolkit_core::settings::update(&dir, |s| {
+            s.sound.library.push(toolkit_core::settings::SoundEntry {
+                id: SOUND_ID.into(),
+                label: "Ding".into(),
+                volume: 40,
+                format: "wav".into(),
+            });
+            s.sound.slots.insert("alert.follow".into(), SOUND_ID.into());
+            s.sound.slots.insert("alert.cheer".into(), "silent".into());
+        })
+        .unwrap();
         for (i, kind) in kinds.into_iter().enumerate() {
             alerts.receive(alert(&i.to_string(), Some("Viewer"), kind), Source::Twitch);
         }
@@ -280,17 +303,19 @@ mod tests {
         let payloads: Vec<&Value> = sent.iter().map(|e| &e["payload"]).collect();
         assert_eq!(
             payloads[0],
-            &serde_json::json!({"kind":"follow","userName":"Viewer","durationMs":6000})
+            &serde_json::json!({"kind":"follow","userName":"Viewer","durationMs":6000,
+                                "sound":{"kind":"file","url":format!("/sounds/{SOUND_ID}"),"volume":40}})
         );
         assert_eq!(
             payloads[2],
             &serde_json::json!({"kind":"resubscribe","userName":"Viewer","tier":1,"months":12,
-                                "message":"<b>hi</b>","durationMs":9000}),
+                                "message":"<b>hi</b>","durationMs":9000,"sound":{"kind":"built_in"}}),
             "viewer text stays raw"
         );
         assert_eq!(
             payloads[4],
-            &serde_json::json!({"kind":"cheer","userName":"Viewer","bits":100,"durationMs":6000}),
+            &serde_json::json!({"kind":"cheer","userName":"Viewer","bits":100,"durationMs":6000,
+                                "sound":{"kind":"silent"}}),
             "an empty message is left out"
         );
         assert_eq!(payloads[6]["userName"], Value::Null);
