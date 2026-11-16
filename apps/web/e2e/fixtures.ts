@@ -17,6 +17,8 @@ export interface AdminState {
   obs: Schemas['ObsOverview']
   /** Saved home tile order; `null` = the defaults. PUT stores it. */
   homeTiles: string[] | null
+  /** PUT stores it and answers it back. */
+  checkin: Schemas['CheckinSettingsBody']
 }
 
 export interface Invoke {
@@ -95,6 +97,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     general: { ask_before_close: true },
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     homeTiles: null,
+    checkin: { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10 },
     ...state,
   }
   await mockIpc(page)
@@ -119,6 +122,10 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     if (r.request().method() !== 'PUT') return r.fulfill({ json: s.homeTiles })
     s.homeTiles = r.request().postDataJSON()
     return r.fulfill({ status: 204 })
+  })
+  await page.route('**/api/admin/checkin/settings', (r) => {
+    if (r.request().method() === 'PUT') s.checkin = r.request().postDataJSON()
+    return r.fulfill({ json: s.checkin })
   })
   const snapshot: Schemas['Snapshot'] = {
     type: 'snapshot',

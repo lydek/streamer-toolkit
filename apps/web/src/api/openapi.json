@@ -10,6 +10,73 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/checkin/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "checkin_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinSettingsBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_checkin_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckinSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The settings as saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinSettingsBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.invalid_settings`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/general": {
       "get": {
         "tags": [
@@ -1040,6 +1107,38 @@
           "bubble",
           "custom"
         ]
+      },
+      "CheckinSettingsBody": {
+        "type": "object",
+        "description": "The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped.",
+        "required": [
+          "command",
+          "time_zone",
+          "reset_hour",
+          "card_slots"
+        ],
+        "properties": {
+          "card_slots": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stamp card slots, 1–100.",
+            "minimum": 0
+          },
+          "command": {
+            "type": "string",
+            "description": "One word, at most 25 characters."
+          },
+          "reset_hour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Local hour a new business day starts, 0–23.",
+            "minimum": 0
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "IANA time zone, e.g. `Asia/Taipei`."
+          }
+        }
       },
       "ClientIdBody": {
         "type": "object",

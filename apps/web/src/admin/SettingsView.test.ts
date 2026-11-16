@@ -17,6 +17,7 @@ const GETS: Record<string, unknown> = {
   '/api/admin/obs': { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'error', reason: null } },
   '/api/admin/twitch': { client_id: '', status: { state: 'signed_out' } },
   '/api/admin/modules': [{ id: 'chat', enabled: true }],
+  '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10 },
 }
 
 async function mountSettings() {
@@ -28,6 +29,7 @@ async function mountSettings() {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   client.GET.mockImplementation(async (path: string) => ok(GETS[path]))
   client.PUT.mockReset()
 })
@@ -129,6 +131,30 @@ describe('SettingsView', () => {
         body: { enabled: false },
       }),
     )
+    wrapper.unmount()
+  })
+
+  it('saves check-in fields committed back to back with the other values already saved', async () => {
+    client.PUT.mockImplementation(async (_: string, init: { body: unknown }) => ok(init.body))
+    const wrapper = await mountSettings()
+    await vi.waitFor(() => expect(wrapper.find('#checkin-command').exists()).toBe(true))
+
+    await wrapper.get('#checkin-command').setValue('!sign')
+    await wrapper.get('#checkin-command').trigger('blur')
+    await wrapper.get('#checkin-slots').setValue('12')
+    await wrapper.get('#checkin-slots').trigger('keydown', { key: 'Enter' })
+    await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(2))
+    expect(client.PUT.mock.calls.map(([, init]) => init.body)).toEqual([
+      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10 },
+      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 12 },
+    ])
+    // The "!" is shown in front of the field, so a typed one is dropped.
+    expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('sign')
+
+    await wrapper.get('#checkin-slots').setValue('0')
+    await wrapper.get('#checkin-slots').trigger('blur')
+    await vi.waitFor(() => expect(wrapper.get<HTMLInputElement>('#checkin-slots').element.value).toBe('12'))
+    expect(client.PUT).toHaveBeenCalledTimes(2) // refused before it reaches the Host
     wrapper.unmount()
   })
 })

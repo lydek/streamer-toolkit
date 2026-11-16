@@ -172,6 +172,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         bus.clone(),
         modules.clone(),
     ));
+    let checkin = Arc::new(checkin::start(
+        config.db.clone(),
+        modules.clone(),
+        config.data_dir.clone(),
+    ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -184,6 +189,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         chat,
         alerts,
         redemption,
+        checkin.clone(),
         modules,
     ));
     Ok(Router::new()
@@ -199,6 +205,12 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         )))
         .merge(
             redemption::routes(config.db).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
+        )
+        .merge(
+            checkin::routes(checkin).layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )),
@@ -394,6 +406,22 @@ mod tests {
             serde_json::json!({ "items": [], "total": 0 })
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn checkin_settings_need_the_token() {
+        for (token, expected) in [
+            (None, StatusCode::UNAUTHORIZED),
+            (Some("nope"), StatusCode::UNAUTHORIZED),
+            (Some(TOKEN), StatusCode::OK),
+        ] {
+            let b = get_req("/api/admin/checkin/settings", "127.0.0.1:47810");
+            let b = match token {
+                Some(t) => b.header(header::AUTHORIZATION, format!("Bearer {t}")),
+                None => b,
+            };
+            assert_eq!(status(b.body(Body::empty()).unwrap()).await, expected);
+        }
     }
 
     #[tokio::test]
