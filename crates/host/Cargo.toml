@@ -26,6 +26,8 @@ toolkit-core = { version = "0.1.0", path = "../core" }
 tracing = "0.1.44"
 utoipa = "6.0.0"
 uuid = { version = "1.29.2", features = ["v7"] }
+zip = { version = "9.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+sha2 = "0.10.9"
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }

@@ -94,21 +94,45 @@ async fn applied_versions(pool: &SqlitePool) -> Result<HashSet<i64>, sqlx::Error
     Ok(rows.into_iter().map(|(v,)| v).collect())
 }
 
-/// A consistent copy taken through SQLite (`VACUUM INTO`), never a raw copy of the open file.
 async fn backup(pool: &SqlitePool, data_dir: &Path) -> Result<PathBuf, DbError> {
-    let failed = |e: &dyn std::fmt::Display| DbError::Backup(e.to_string());
     let dir = data_dir.join(BACKUP_DIR);
-    std::fs::create_dir_all(&dir).map_err(|e| failed(&e))?;
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
-    let path = dir.join(format!("toolkit-{stamp}.db"));
-    let target = path.to_str().ok_or_else(|| failed(&"path is not UTF-8"))?;
-    // VACUUM INTO refuses an existing file, so a backup never overwrites another.
+    std::fs::create_dir_all(&dir).map_err(|e| DbError::Backup(e.to_string()))?;
+    let path = dir.join(format!("toolkit-{}.db", stamp()));
+    snapshot(pool, &path).await?;
+    Ok(path)
+}
+
+/// UTC time for backup file names, e.g. `20261117T093000123Z`.
+pub(crate) fn stamp() -> impl std::fmt::Display {
+    chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ")
+}
+
+/// A consistent copy taken through SQLite (`VACUUM INTO`), never a raw copy of the open file. It refuses an
+/// existing file, so a copy never overwrites another.
+pub(crate) async fn snapshot(pool: &SqlitePool, target: &Path) -> Result<(), DbError> {
+    let failed = |e: &dyn std::fmt::Display| DbError::Backup(e.to_string());
+    let target = target
+        .to_str()
+        .ok_or_else(|| failed(&"path is not UTF-8"))?;
     sqlx::query("VACUUM INTO ?")
         .bind(target)
         .execute(pool)
         .await
         .map_err(|e| failed(&e))?;
-    Ok(path)
+    Ok(())
+}
+
+/// Opens a database file that is not the running one (a snapshot or a staged restore) without changing it.
+pub(crate) async fn open_file(path: &Path) -> Result<SqlitePool, sqlx::Error> {
+    SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(path).read_only(true))
+        .await
+}
+
+/// The newest migration applied to a database; 0 when none is.
+pub(crate) async fn schema_version(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    Ok(applied_versions(pool).await?.into_iter().max().unwrap_or(0))
 }
 
 /// An empty in-memory database for tests that never touch module tables.

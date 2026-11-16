@@ -10,6 +10,37 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/backup": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates and sounds. Live use goes\non while it is made; database writes wait only for the snapshot.",
+        "operationId": "export_backup",
+        "responses": {
+          "200": {
+            "description": "The backup file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.too_large`: more than a restore accepts; `backup.export_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/import": {
       "post": {
         "tags": [

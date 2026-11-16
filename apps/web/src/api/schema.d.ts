@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/admin/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A `.stbackup` file of this data folder: settings, the database, custom templates and sounds. Live use goes
+         *     on while it is made; database writes wait only for the snapshot.
+         */
+        get: operations["export_backup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/import": {
         parameters: {
             query?: never;
@@ -1091,6 +1111,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    export_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The backup file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description `backup.too_large`: more than a restore accepts; `backup.export_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     apply_import: {
         parameters: {
             query?: never;

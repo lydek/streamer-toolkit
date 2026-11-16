@@ -65,6 +65,7 @@ async fn main() {
             gap: Duration::from_millis(200),
         },
         db,
+        app_version: "0.0.0-e2e".into(),
     })
     .await
     .expect("bind the E2E Host");

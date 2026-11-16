@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: e94cdf662c4dc33fc26253d5a7fc67af11390460c80585765e12629bb85d76f9 -->
+<!-- source: docs/decisions.md source-sha256: 99dad2deff06860b36f0e6dfa026ddc6330bdc4633bb7c2de9672e2555ed93e4 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -73,6 +73,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Secrets | `secrecy`: tokens are wrapped in `SecretString` and never logged |
 | Logging | `tracing` + `tracing-subscriber` (JSON) + `tracing-appender` (daily rotation with a 14-day retention period); written to the data directory's `logs/`, level adjustable with `RUST_LOG`; output-layer masking is only a backup |
 | Embedded frontend | `rust-embed` (with `debug-embed`) |
+| Backup files | `zip` (deflate only: `flate2` + `zlib-rs`) + `sha2`; format in architecture.en.md §6 "Backup files" |
 | OpenAPI | `utoipa` |
 | Frontend API types | `openapi-typescript` + `openapi-fetch`; WS event types also live in OpenAPI components |
 | Architecture tests | Custom Rust test: `cargo_metadata` checks crate dependencies and scans `domain/` for any occurrence of `sqlx`/`axum` (including derives and full paths) |
@@ -95,7 +96,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | When | Items |
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (check-in slice; built in slice 4), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (check-in slice; built in slice 4), portable backup format `.stbackup` (backup and restore slice; built in slice 6), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
 | **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
@@ -126,3 +127,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-16 | SQLite and the automatic backup before migrations were built in slice 3: one database file `toolkit.db`, a single connection, backups made with `VACUUM INTO` and never deleted automatically | A single connection is the only writer, so `SQLITE_BUSY` cannot happen; backups are only made on upgrades and stay few, and deleting them automatically could throw away the only one that can restore |
 | 2026-11-16 | The outbox and the "pause/off" choice when disabling moved from the redemption records slice to the check-in slice; redemption records do not publish `RedemptionRecorded` yet | The redemption records slice has no subscriber yet, check-in is the first; without a subscriber it cannot be tested in a real scenario |
 | 2026-11-16 | The outbox was built in slice 4: its tables and migrations belong to core; after 5 attempts (1, 2, 4 and 8 seconds apart) an event moves to the dead letters; fully delivered events are cleaned up every 10 minutes | While retrying, an event holds back its subscriber in order, so check-ins never arrive out of order; the cap means one bad event holds things up for about 15 seconds at most |
+| 2026-11-17 | `.stbackup` was built in slice 6: a zip (`zip` crate, deflate only) plus `manifest.json` (each file's size and SHA-256); the save dialog is the WebView's `showSaveFilePicker`, with no Tauri dialog plugin | No extra plugin and capability; any common tool can open the zip to inspect it |
