@@ -981,6 +981,205 @@
         }
       }
     },
+    "/api/admin/sounds": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_sounds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoundLibrary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Copies an MP3, WAV or OGG file (at most 10 MB) into the library at 100% volume. The body is the file itself.",
+        "operationId": "import_sound",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The original file name: its extension must match the content; the rest becomes the label.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The sound file",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sound"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`sound.unsupported_type`: not an MP3, WAV or OGG file (by extension and content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`sound.too_large`: larger than 10 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/sounds/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Renames a sound or changes its volume.",
+        "operationId": "update_sound",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoundUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sound"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`sound.invalid`: an empty label or a volume over 100",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`sound.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deletes a sound and its file.",
+        "operationId": "delete_sound",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`sound.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/templates/alerts": {
       "get": {
         "tags": [
@@ -2555,6 +2754,62 @@
         "enum": [
           "snapshot"
         ]
+      },
+      "Sound": {
+        "type": "object",
+        "description": "One imported sound. `label` is broadcaster text: render it as text. Its file is `GET /sounds/{id}`.",
+        "required": [
+          "id",
+          "label",
+          "volume"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "SoundLibrary": {
+        "type": "object",
+        "required": [
+          "sounds"
+        ],
+        "properties": {
+          "sounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sound"
+            }
+          }
+        }
+      },
+      "SoundUpdate": {
+        "type": "object",
+        "required": [
+          "label",
+          "volume"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
       },
       "Source": {
         "type": "string",

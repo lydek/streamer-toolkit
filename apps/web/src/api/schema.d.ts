@@ -325,6 +325,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_sounds"];
+        put?: never;
+        /** Copies an MP3, WAV or OGG file (at most 10 MB) into the library at 100% volume. The body is the file itself. */
+        post: operations["import_sound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sounds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renames a sound or changes its volume. */
+        put: operations["update_sound"];
+        post?: never;
+        /** Deletes a sound and its file. */
+        delete: operations["delete_sound"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/templates/alerts": {
         parameters: {
             query?: never;
@@ -902,6 +937,28 @@ export interface components {
         };
         /** @enum {string} */
         SnapshotType: "snapshot";
+        /** @description One imported sound. `label` is broadcaster text: render it as text. Its file is `GET /sounds/{id}`. */
+        Sound: {
+            id: string;
+            label: string;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
+        SoundLibrary: {
+            sounds: components["schemas"]["Sound"][];
+        };
+        SoundUpdate: {
+            /** @description 1–100 characters after trimming. */
+            label: string;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
         /**
          * @description Where an event came from. Simulated events never go into real business records.
          * @enum {string}
@@ -1731,6 +1788,168 @@ export interface operations {
             };
             /** @description `simulate.invalid_checkin` or `simulate.invalid_stamps` */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_sounds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoundLibrary"];
+                };
+            };
+        };
+    };
+    import_sound: {
+        parameters: {
+            query: {
+                /** @description The original file name: its extension must match the content; the rest becomes the label. */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The sound file */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sound"];
+                };
+            };
+            /** @description `sound.unsupported_type`: not an MP3, WAV or OGG file (by extension and content) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.too_large`: larger than 10 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_sound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoundUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sound"];
+                };
+            };
+            /** @description `sound.invalid`: an empty label or a volume over 100 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_sound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `sound.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
