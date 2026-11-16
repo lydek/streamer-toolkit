@@ -1,6 +1,7 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+pub mod db;
 mod home_tiles;
 mod obs;
 mod openapi;
@@ -70,6 +71,8 @@ pub struct HostConfig {
     pub obs_secrets: Arc<dyn SecretStore>,
     /// How long alerts show; the default except in tests.
     pub alert_timing: AlertTiming,
+    /// The database, opened and migrated by [`db::open`] before the Host starts.
+    pub db: db::SqlitePool,
 }
 
 /// Twitch addresses; tests point them at fake services.
@@ -324,6 +327,7 @@ mod tests {
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
+            db: db::memory(),
         }
     }
 
@@ -407,6 +411,7 @@ mod tests {
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
+            db: db::memory(),
         })
         .unwrap();
 

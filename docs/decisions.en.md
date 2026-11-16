@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: f00eb927a906fb869fac20a6cd9dfcde06de98e507b30fd200e40158e98c0248 -->
+<!-- source: docs/decisions.md source-sha256: 992166a0135e30edf2628f24e92dbb99b5a362dba34239296743e3fa0e358373 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -95,7 +95,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | When | Items |
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (redemption records slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
 | **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
@@ -123,3 +123,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-15 | Merging changed from squash to rebase-merge; exactly one commit per issue, and one PR may hold several independent issues; issues too big for one commit are split into sub-issues | `main` stays one straight line with one commit per issue, and there are fewer PRs |
 | 2026-11-16 | Added `bits:read` to the Twitch scopes | Slice 2 alerts include Bits; existing sign-ins are asked to sign in again once |
 | 2026-11-16 | The default alert sound is synthesised by `scripts/generate-chime.mjs` with Node's built-in modules | No need to find a redistributable sound file, and the license stays simple (this project's MIT); the script and its output are committed together and a test checks they match |
+| 2026-11-16 | SQLite and the automatic backup before migrations were built in slice 3: one database file `toolkit.db`, a single connection, backups made with `VACUUM INTO` and never deleted automatically | A single connection is the only writer, so `SQLITE_BUSY` cannot happen; backups are only made on upgrades and stay few, and deleting them automatically could throw away the only one that can restore |

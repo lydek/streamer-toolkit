@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 3f5b355687b609b537232bd904519bda9077c9a20361c8f7788911cdf51177aa -->
+<!-- source: docs/architecture.md source-sha256: 1ab6ffc857a1cfdf8d34ce1636a47da999200f98191cd8c43fd3b3bdea0d610b -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -76,12 +76,14 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
     - "Pause": events stay in the outbox undelivered and are delivered in order after re-enabling; retries are not counted while paused; the UI shows the backlog size and the time of the oldest event.
     - "Off": events from the disabled period are marked skipped for that module, with no replay after re-enabling; before choosing, a warning lists the affected events and modules.
     - Switching from "pause" to "off" marks the undelivered events as skipped too.
-- **Data**: one SQLite file; each module has its own tables (module prefix) and its own migration folder; **no cross-module joins**: use the public interface to get another module's data. Write transactions always use `BEGIN IMMEDIATE` (or a single writer connection) to avoid SQLite returning `SQLITE_BUSY`.
+- **Data**: one SQLite file; each module has its own tables (module prefix) and its own migration folder; **no cross-module joins**: use the public interface to get another module's data. Write transactions always use `BEGIN IMMEDIATE` (or a single writer connection) to avoid SQLite returning `SQLITE_BUSY`; for now only one connection is opened. The database file is `toolkit.db` in the data folder.
 - **Migrations**: files use timestamp versions, and `host` merges them into a single Migrator at startup. Rules:
   - Versions must be globally unique and sorted by version after merging; a test checks this.
   - Released migration files must never change (SQLx compares checksums; even a line-ending change breaks startup).
   - Disabled modules must still provide their migrations, or startup fails on missing versions; even if a module is removed, its migration files are kept.
-  - A dev command applies the merged migrations for SQLx offline data (`.sqlx/`).
+  - The dev command `cargo run -p host --example migrate -- <folder>` applies the merged migrations to that folder's `toolkit.db`, for SQLx offline data (`.sqlx/`).
+  - Pre-upgrade backup: when the database already has migrations applied and more are pending, it is first backed up with SQLite's `VACUUM INTO` to `backups/` in the data folder (`toolkit-<UTC time>.db`), never by copying the open file. A newly created database, or one with no new migrations, is not backed up. If the backup fails, nothing is applied: an error is shown and the app exits. Backups are never deleted automatically (they are only made on upgrades).
+  - A database with a migration this version does not know (data from a newer version) is refused: an error is shown and the app exits.
 - If a dependency cycle appears, move the shared event or type into `core` instead of letting two modules depend on each other.
 - External platforms (Twitch, OBS) appear only in `integrations`; business modules never depend on external SDKs and only receive internal events. External values are converted at the integration layer; for example, EventSub redemption statuses are lowercase (`unfulfilled`/`fulfilled`/`canceled`, plus `unknown`) while the Helix API uses uppercase, so both are mapped to internal statuses and `unknown` is handled.
 
@@ -171,7 +173,7 @@ When ✕ is clicked on the admin window, Rust always calls `prevent_close()`: if
 ### Data directory
 Each data directory serves as an application data unit, identified by its `instance-id`: settings, logs, cache and WebView2 data all live in it. The app ships as a portable package only, so data defaults to the `data` folder next to the executable.
 - Which data directory is used: the one given by `--data-dir <path>` on the command line; otherwise the `data` folder next to the executable (dev builds too, so theirs is `target\debug\data\`).
-- Contents: `settings.json`, `logs/` (JSON, rotated daily, kept 14 days), `cache/`, `templates/` (`custom` templates, never created by the Host), `WebView2/`, `instance-id`; the database and pre-upgrade backups come later.
+- Contents: `settings.json`, `logs/` (JSON, rotated daily, kept 14 days), `cache/`, `templates/` (`custom` templates, never created by the Host), `WebView2/`, `instance-id`, `toolkit.db` (the database), `backups/` (pre-upgrade backups).
 - Only one instance may run per data directory; different data directories can run side by side (for example to test a new version). `instance-id` is a random ID inside the data directory and survives moving it; a copied data directory keeps the same `instance-id`, counts as the same instance and cannot run next to the original.
 - Twitch sign-in and the OBS password are per data directory: the Credential Manager entries are named `<instance-id>/twitch` and `<instance-id>/obs`.
 - If the data directory is not writable, show an error and exit; never fall back to another location.

@@ -75,12 +75,14 @@ apps/
     - 「暫停」：事件保留在 outbox 不投遞，重新啟用後依序補送；暫停期間不累計重試次數；UI 顯示積壓數量與最舊事件的時間。
     - 「關閉」：停用期間的事件對該模組標為略過，重新啟用後不補；選擇前先警告，列出會受影響的事件與模組。
     - 從「暫停」改為「關閉」時，尚未投遞的事件一併標為略過。
-- **資料**：單一 SQLite 檔；每個模組有自己的資料表（加模組前綴）與 migration 目錄；**禁止跨模組 join**，要別人的資料走公開介面。寫入交易一律用 `BEGIN IMMEDIATE`（或單一 writer 連線），避免 SQLite 回 `SQLITE_BUSY`。
+- **資料**：單一 SQLite 檔；每個模組有自己的資料表（加模組前綴）與 migration 目錄；**禁止跨模組 join**，要別人的資料走公開介面。寫入交易一律用 `BEGIN IMMEDIATE`（或單一 writer 連線），避免 SQLite 回 `SQLITE_BUSY`；目前只開一條連線。資料庫檔是資料夾的 `toolkit.db`。
 - **Migration**：檔名用時間戳版本，啟動時由 `host` 合併成單一 Migrator 執行。規則：
   - 版本必須全域唯一，合併後依版本排序；有測試檢查。
   - 發布後的 migration 檔不得修改（SQLx 會比對 checksum，連換行符號改變都會導致啟動失敗）。
   - 停用中的模組仍要提供自己的 migration，否則啟動會因版本缺漏失敗；模組即使移除，它的 migration 檔也要保留。
-  - 提供一個開發指令，套用合併後的 migration，供 SQLx offline 資料（`.sqlx/`）使用。
+  - 開發指令 `cargo run -p host --example migrate -- <資料夾>` 對該資料夾的 `toolkit.db` 套用合併後的 migration，供 SQLx offline 資料（`.sqlx/`）使用。
+  - 升級前備份：資料庫已套用過 migration、又有待套用的 migration 時，先用 SQLite 的 `VACUUM INTO` 備份到資料夾的 `backups/`（`toolkit-<UTC 時間>.db`），不直接複製開啟中的檔案。第一次建立的資料庫與沒有新 migration 時不備份。備份失敗就不套用，顯示錯誤並結束。備份不自動刪除（只在升級時產生）。
+  - 資料庫有這一版不認得的 migration（較新版程式的資料）時拒絕開啟，顯示錯誤並結束。
 - 若出現循環相依，把共用的事件或型別移到 `core`，不要讓兩個模組互相依賴。
 - 外部平台（Twitch、OBS）只出現在 `integrations`；業務模組不依賴外部 SDK，只接收內部事件。外部值在整合層轉換，例如 EventSub 的兌換狀態是小寫（`unfulfilled`／`fulfilled`／`canceled`，另有 `unknown`），Helix API 是大寫，一律轉成內部狀態並處理 `unknown`。
 
@@ -170,7 +172,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
-- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`WebView2/`、`instance-id`；之後加資料庫與升級前備份。
+- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前備份）。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
