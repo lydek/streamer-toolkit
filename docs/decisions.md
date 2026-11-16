@@ -72,6 +72,7 @@
 | 機密值 | `secrecy`：Token 用 `SecretString` 包起來，永不寫進記錄檔 |
 | 記錄檔 | `tracing`＋`tracing-subscriber`（JSON）＋`tracing-appender`（按日輪替，保留 14 天）；寫在資料夾的 `logs/`，`RUST_LOG` 可調整等級；輸出層遮蔽只當備援 |
 | 內嵌前端 | `rust-embed`（啟用 `debug-embed`） |
+| 備份檔 | `zip`（只開 deflate：`flate2`＋`zlib-rs`）＋`sha2`；格式見 architecture.md §6「備份檔」 |
 | OpenAPI | `utoipa` |
 | 前端 API 型別 | `openapi-typescript`＋`openapi-fetch`；WS 事件型別也放進 OpenAPI components |
 | 架構測試 | 自寫 Rust 測試：`cargo_metadata` 檢查 crate 相依性，掃描 `domain/` 內任何 `sqlx`／`axum` 字樣（含 derive 與完整路徑） |
@@ -94,7 +95,7 @@
 | 時機 | 項目 |
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
-| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
+| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片；切片 6 已建立）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
 | **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 
@@ -125,3 +126,4 @@
 | 2026-11-16 | SQLite 與 migration 前自動備份在切片 3 建立：單一資料庫檔 `toolkit.db`、只開一條連線、備份用 `VACUUM INTO` 且不自動刪除 | 單一連線就是唯一的 writer，不會遇到 `SQLITE_BUSY`；備份只在升級時產生，數量少，自動刪除反而可能丟掉唯一能還原的那份 |
 | 2026-11-16 | outbox 與停用時的「暫停／關閉」從兌換紀錄切片延到打卡簽到切片；兌換紀錄先不發布 `RedemptionRecorded` | 兌換紀錄切片還沒有任何訂閱者，打卡簽到才是第一個；沒有訂閱者時做出來無法用真實情境測試 |
 | 2026-11-16 | outbox 在切片 4 建立：表與 migration 屬於 core；重試共 5 次（間隔 1、2、4、8 秒）後移入 dead-letter；投遞完成的事件每 10 分鐘清除 | 重試期間依序擋住同一個訂閱者，打卡才不會亂序；上限讓一筆壞事件最多擋 15 秒左右 |
+| 2026-11-17 | `.stbackup` 在切片 6 建立：zip（`zip` crate，只開 deflate）＋`manifest.json`（每個檔案的大小與 SHA-256）；另存新檔用 WebView 的 `showSaveFilePicker`，不加 Tauri dialog plugin | 不必多一個 plugin 與它的 capability；zip 用一般工具就能打開檢查 |

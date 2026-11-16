@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: ad0c483f779bca429f2873cf6032bf1ca54caefb379c7f750926b30c1e137ee1 -->
+<!-- source: docs/architecture.md source-sha256: 17efb2bb6371e664bc89ab7a0a24a2bdcc465073d4b81eeb231a9cac86cae221 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -186,6 +186,14 @@ Each data directory serves as an application data unit, identified by its `insta
 - Twitch sign-in and the OBS password are per data directory: the Credential Manager entries are named `<instance-id>/twitch` and `<instance-id>/obs`.
 - If the data directory is not writable, show an error and exit; never fall back to another location.
 - Side-by-side copies: extract the package more than once, or point `--data-dir` at different directories. There is no installer (see "Distribution" in decisions.en.md).
+
+Backup files (`.stbackup`, "Backup and restore" on the settings page):
+- A zip file holding `settings.json`, the database `toolkit.db`, `templates/`, `sounds/` and `manifest.json`; never `logs/`, `cache/`, `WebView2/`, `backups/` or `instance-id`. Twitch sign-in and the OBS password live in the Credential Manager, not in the data directory, so they never go into a backup; the Client ID is not a secret and is backed up with `settings.json`.
+- The database is first saved as a snapshot in `cache/` with `VACUUM INTO`, then added to the zip; the open file is never read directly. Exporting during a stream leaves chat, alerts and check-ins running; database writes wait only while the snapshot is taken.
+- `manifest.json`: `format` (`streamer-toolkit-backup`), `format_version` (currently 1), `app_version`, `schema_version` (the newest migration applied to the database, 0 for an empty one), `created_at` (UTC, RFC 3339), `records` (`redemptions`, `checkins`: how many redemption and check-in records there are), `files` (each file's `path`, `size` and `sha256`).
+- Paths may only be `settings.json`, `toolkit.db`, or relative paths under `templates/` or `sounds/`, separated by `/`; no segment may be empty, `.` or `..`, contain `\`, `:` or other characters Windows does not allow, or be a reserved name (`CON`, `NUL` and so on). Symbolic links and junctions are not backed up.
+- Limits: a 512 MB zip, 10,000 files, 2 GB in total once extracted. An export over a limit is refused (500 `backup.too_large`), so every exported file can be restored.
+- Export: the admin API `GET /api/admin/backup` returns the backup file. The admin UI first opens a save dialog (`showSaveFilePicker`) to choose where, then writes the response there; without that API the browser downloads the file instead.
 
 Startup order:
 1. Resolve the data directory and check that it is writable. `tauri-plugin-single-instance` names its lock after the identifier, so at startup the identifier gets the `instance-id` appended and the lock is per data directory. Register this plugin first, so a second copy never tries to take the port before handing off.

@@ -75,10 +75,9 @@
     </section>
     <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" />
 
-    <!-- Slice 6 adds backup and restore here. -->
     <section aria-labelledby="backup">
       <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
-      <p>{{ t('settings.backupLater') }}</p>
+      <BackupRestore />
     </section>
 
     <section aria-labelledby="about">
@@ -99,6 +98,7 @@ import { useI18n } from 'vue-i18n'
 import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import BackupRestore from './BackupRestore.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
 import CheckinSettings from './CheckinSettings.vue'

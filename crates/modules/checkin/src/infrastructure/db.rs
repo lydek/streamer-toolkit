@@ -12,6 +12,13 @@ use crate::{
 /// This module's migrations; the host merges them with the other modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
+/// How many check-in records there are; the host's backup lists it.
+pub async fn record_count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM checkin_records")
+        .fetch_one(pool)
+        .await
+}
+
 pub(crate) struct SqliteCheckins {
     pool: SqlitePool,
 }

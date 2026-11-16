@@ -186,6 +186,14 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
 
+備份檔（`.stbackup`，設定頁的「備份與還原」）：
+- zip 檔，內含 `settings.json`、資料庫 `toolkit.db`、`templates/`、`sounds/` 與 `manifest.json`；不含 `logs/`、`cache/`、`WebView2/`、`backups/` 與 `instance-id`。Twitch 登入與 OBS 密碼在 Credential Manager，不在資料夾裡，所以不會進備份檔；Client ID 不是秘密，隨 `settings.json` 備份。
+- 資料庫先用 `VACUUM INTO` 存成 `cache/` 裡的快照再放進 zip，不直接讀開啟中的檔案。直播中匯出時聊天室、特效與打卡照常運作，資料庫寫入只在快照期間稍等。
+- `manifest.json`：`format`（`streamer-toolkit-backup`）、`format_version`（目前為 1）、`app_version`、`schema_version`（資料庫最新的 migration 版本，空的資料庫為 0）、`created_at`（UTC，RFC 3339）、`records`（`redemptions`、`checkins`：兌換紀錄與打卡紀錄的筆數）、`files`（每個檔案的 `path`、`size`、`sha256`）。
+- 路徑只能是 `settings.json`、`toolkit.db`，或 `templates/`、`sounds/` 底下的相對路徑，以 `/` 分隔；每一段不得為空、`.` 或 `..`，不得含 `\`、`:` 等 Windows 不允許的字元，也不得是保留名稱（`CON`、`NUL` 等）。符號連結與 junction 不備份。
+- 上限：zip 512 MB、檔案 10,000 個、解壓後合計 2 GB。匯出超過上限時拒絕（500 `backup.too_large`），所以匯出的檔案一定能還原。
+- 匯出：管理 API `GET /api/admin/backup` 回傳備份檔。管理 UI 先開另存新檔對話方塊（`showSaveFilePicker`）選位置，再把回應寫進去；沒有這個 API 時改由瀏覽器下載。
+
 啟動順序：
 1. 決定資料夾並確認可寫入；`tauri-plugin-single-instance` 依 identifier 命名它的鎖，因此啟動時把 identifier 加上 `instance-id`，讓鎖依資料夾區分。先註冊這個 plugin，第二份程式在交棒前不會去搶 port。
 2. Host 綁 port；失敗時開啟 port 修改小頁面，使用者儲存後重試。

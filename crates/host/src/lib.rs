@@ -1,6 +1,7 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+mod backup;
 pub mod db;
 mod home_tiles;
 mod obs;
@@ -76,6 +77,8 @@ pub struct HostConfig {
     pub checkin_timing: CheckinTiming,
     /// The database, opened and migrated by [`db::open`] before the Host starts.
     pub db: db::SqlitePool,
+    /// The app's version, recorded in backups.
+    pub app_version: String,
 }
 
 /// Twitch addresses; tests point them at fake services.
@@ -214,6 +217,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
+    let backup = backup::routes(backup::BackupState {
+        db: config.db.clone(),
+        data_dir: config.data_dir.clone(),
+        app_version: config.app_version,
+    });
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,
@@ -261,6 +269,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         )
         .merge(sound::file_routes(sounds))
         .merge(home_tiles.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(backup.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -398,6 +410,7 @@ mod tests {
             alert_timing: AlertTiming::default(),
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
+            app_version: "0.0.0-test".into(),
         }
     }
 
@@ -681,6 +694,7 @@ mod tests {
             alert_timing: AlertTiming::default(),
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
+            app_version: "0.0.0-test".into(),
         })
         .unwrap();
 

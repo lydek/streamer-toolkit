@@ -337,6 +337,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         alert_timing: AlertTiming::default(),
         checkin_timing: CheckinTiming::default(),
         db: state.db.clone(),
+        app_version: app.package_info().version.to_string(),
     }
 }
 

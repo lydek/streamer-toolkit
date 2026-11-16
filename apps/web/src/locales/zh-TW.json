@@ -188,9 +188,12 @@
       "cardSlots": "集點卡格數"
     },
     "backup": "備份與還原",
-    "backupLater": "之後的版本才會提供。",
     "about": "關於",
     "license": "以 MIT 授權釋出。"
+  },
+  "backup": {
+    "export": "匯出備份",
+    "exported": "已匯出備份。"
   },
   "checkin": {
     "today": "今天 {n} 人打卡",
@@ -384,6 +387,10 @@
       "invalid": "名稱不能空白，音量是 0 到 100%。",
       "save_failed": "無法儲存音效。",
       "unknown_slot": "這裡不能選音效。"
+    },
+    "backup": {
+      "too_large": "資料太多，超過備份檔的上限。",
+      "export_failed": "無法匯出備份，請檢視記錄檔。"
     }
   }
 }
