@@ -41,6 +41,7 @@ async fn main() {
         s.obs.port = 1;
     })
     .expect("write settings.json");
+    let db = host::db::open(&data_dir).await.expect("open the database");
     let host = host::bind(HostConfig {
         port,
         extra_origins: Vec::new(),
@@ -59,6 +60,7 @@ async fn main() {
             show_with_message: Duration::from_millis(2000),
             gap: Duration::from_millis(200),
         },
+        db,
     })
     .await
     .expect("bind the E2E Host");

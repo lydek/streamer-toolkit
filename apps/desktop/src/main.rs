@@ -38,6 +38,7 @@ struct AppState {
     obs_secrets: Arc<dyn SecretStore>,
     /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
     host_port: Mutex<Option<u16>>,
+    db: host::db::SqlitePool,
     close_hint: Mutex<close_hint::CloseHint>,
 }
 
@@ -72,12 +73,21 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             CredentialManager::init()?;
+            // After the single-instance lock, so a second copy on this folder never migrates under the first.
+            let db = match tauri::async_runtime::block_on(host::db::open(&data_dir)) {
+                Ok(db) => db,
+                Err(e) => fail(&text::database_unusable(
+                    &data_dir.join(host::db::DB_FILE).display().to_string(),
+                    &e.to_string(),
+                )),
+            };
             app.manage(AppState {
                 admin_token: random_token()?,
                 data_dir: data_dir.clone(),
                 twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
                 obs_secrets: CredentialManager::new(&format!("{instance}/obs"))?,
                 host_port: Mutex::new(None),
+                db,
                 close_hint: Mutex::default(),
             });
             create_tray(app.handle())?;
@@ -323,6 +333,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         twitch: TwitchEndpoints::default(),
         obs_secrets: state.obs_secrets.clone(),
         alert_timing: AlertTiming::default(),
+        db: state.db.clone(),
     }
 }
 

@@ -11,4 +11,10 @@ pub fn data_folder_unusable(dir: &str, error: &str) -> String {
     )
 }
 
+pub fn database_unusable(file: &str, error: &str) -> String {
+    format!(
+        "無法開啟或升級資料庫，程式不會繼續執行：\n{file}\n\n{error}\n\n升級前的備份在資料夾的 backups 裡。"
+    )
+}
+
 pub const WEBVIEW_MISSING: &str = "找不到 Microsoft Edge WebView2 Runtime，無法開啟管理視窗。\n\nOverlay 仍會繼續運作。按「確定」後會開啟微軟的下載頁面；安裝 Evergreen Runtime 後，在系統匣選「開啟 Streamer Toolkit」即可。";
