@@ -54,7 +54,8 @@ pub(crate) struct AdminState {
     checkin: Arc<CheckinService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
-    twitch: RwLock<TwitchAuth>,
+    /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
+    twitch: Arc<RwLock<TwitchAuth>>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
     eventsub: Mutex<Option<AbortHandle>>,
 }
@@ -68,6 +69,8 @@ impl AdminState {
         secrets: Arc<dyn SecretStore>,
         endpoints: TwitchEndpoints,
         tls: Arc<ClientConfig>,
+        http: HttpsClient,
+        twitch: Arc<RwLock<TwitchAuth>>,
         chat: Arc<ChatService>,
         alerts: Arc<AlertsService>,
         redemption: Arc<RedemptionService>,
@@ -75,9 +78,7 @@ impl AdminState {
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
-        let http = integrations::tls::https_client(tls.clone());
-        let client_id = settings::load(&data_dir).twitch_client_id;
-        let twitch = TwitchAuth::new(client_id, &endpoints.oauth, http.clone(), secrets.clone());
+        let current = twitch.try_read().expect("not locked yet").clone();
         let state = Self {
             token,
             data_dir,
@@ -91,10 +92,10 @@ impl AdminState {
             checkin,
             outbox,
             modules,
-            twitch: RwLock::new(twitch.clone()),
+            twitch,
             eventsub: Mutex::new(None),
         };
-        state.start_eventsub(twitch);
+        state.start_eventsub(current);
         state
     }
 
@@ -145,6 +146,7 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         )
         .route("/api/admin/simulate/chat", post(simulate_chat))
         .route("/api/admin/simulate/alert", post(simulate_alert))
+        .route("/api/admin/simulate/checkin", post(simulate_checkin))
         .layer(middleware::from_fn_with_state(state.clone(), require_token))
         .with_state(state)
 }
@@ -681,6 +683,69 @@ async fn simulate_alert(
             StatusCode::NO_CONTENT.into_response()
         }
         Err(code) => error(StatusCode::BAD_REQUEST, code),
+    }
+}
+
+/// Profile images for the stamp card overlay, from Helix Get Users with the broadcaster's sign-in.
+pub(crate) struct TwitchProfiles {
+    pub(crate) helix: String,
+    pub(crate) http: HttpsClient,
+    pub(crate) twitch: Arc<RwLock<TwitchAuth>>,
+}
+
+impl checkin::ProfileImages for TwitchProfiles {
+    fn profile_image<'a>(
+        &'a self,
+        twitch_user_id: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send + 'a>> {
+        Box::pin(async move {
+            if twitch_user_id.is_empty() || !twitch_user_id.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let auth = self.twitch.read().await.clone();
+            let body = Helix::new(&self.helix, auth, self.http.clone())
+                .get_json(&format!("/users?id={twitch_user_id}"))
+                .await
+                .ok()?;
+            body["data"][0]["profile_image_url"]
+                .as_str()
+                .map(str::to_owned)
+        })
+    }
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SimulatedCheckin {
+    #[serde(default)]
+    user_name: String,
+    /// Stamps on the card, 1 to its slots; all of them shows the full-card effect.
+    stamps: u32,
+}
+
+/// Shows a stamp card on `/overlay/checkin/` tagged `source=simulation`; nothing is recorded.
+#[utoipa::path(
+    post,
+    path = "/api/admin/simulate/checkin",
+    tag = "admin",
+    request_body = SimulatedCheckin,
+    responses((status = 204), (status = 400, description = "`simulate.invalid_checkin` or `simulate.invalid_stamps`", body = ErrorBody))
+)]
+async fn simulate_checkin(
+    State(s): State<Arc<AdminState>>,
+    body: Result<Json<SimulatedCheckin>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, "simulate.invalid_checkin");
+    };
+    let name: String = match body.user_name.trim() {
+        "" => "Simulator".into(),
+        name => name.chars().take(25).collect(),
+    };
+    if s.checkin.simulate_card(&name, body.stamps) {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        error(StatusCode::BAD_REQUEST, "simulate.invalid_stamps")
     }
 }
 

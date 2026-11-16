@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 421a8fc7e86361f97acb15dbe0b66337d3c0b08213121609100922926d17b204 -->
+<!-- source: docs/modules/checkin.md source-sha256: 1b07da62df5d1673cd9edef80162cb884521b9fb9e08ae054dc906bbbf28e08a -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -24,6 +24,10 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - The home "check-in" tile and drawer show how many viewers checked in today (the current business day) and the latest few; the full page lists each viewer's total, stamp card and last check-in day, searchable by login or display name.
 - The broadcaster can register a known viewer for today or back-fill a past business day (recorded at the start of that day); future business days are refused. Manual check-ins and back-fills follow the same once-per-business-day rule, and a repeat returns "already checked in" with a notice, not an error.
 - Viewer names are shown as text only. Deleting or editing single records, removing stamps and exporting are not offered.
+
+## OBS stamp card
+- `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing.
+- The simulator in the drawer tests the overlay without writing records. Details in [architecture.en.md](../architecture.en.md) "Stamp card overlay".
 
 ## Business day
 - Settings: time zone (IANA, default `Asia/Taipei`) and reset hour (local 0–23, default 0).

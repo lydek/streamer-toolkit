@@ -161,6 +161,25 @@
     </AppDrawer>
 
     <AppDrawer id="checkin" :title="moduleName('checkin')" full-page="/checkin">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('checkin')" />
+        <form @submit.prevent="simulateCheckin">
+          <p>{{ t('simulate.hint') }}</p>
+          <label for="sim-checkin-user">{{ t('simulate.userName') }}</label>
+          <InputText id="sim-checkin-user" v-model="simCheckin.userName" autocomplete="off" maxlength="25" />
+          <label for="sim-checkin-stamps">{{ t('simulate.stamps') }}</label>
+          <InputNumber
+            v-model="simCheckin.stamps"
+            input-id="sim-checkin-stamps"
+            :min="1"
+            :max="100"
+            :use-grouping="false"
+            required
+          />
+          <Button type="submit" :label="t('simulate.sendCheckin')" icon="pi pi-send" :disabled="busy" />
+        </form>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
       <template #now>
         <p v-if="checkinToday.state === 'failed'" role="alert">{{ t('checkin.page.loadFailed') }}</p>
         <p v-else-if="checkinToday.state === 'loading'">{{ t('app.loading') }}</p>
@@ -225,6 +244,7 @@ const simUser = ref('')
 const simText = ref('')
 // The Host's limits for the kinds that take an amount (crates/host/src/admin.rs).
 const AMOUNT_MAX: Partial<Record<AlertKind, number>> = { resubscribe: 100000, gift: 100, cheer: 100000, raid: 100000 }
+const simCheckin = reactive({ userName: '', stamps: 3 as number | null })
 const simAlert = reactive({ kind: 'follow' as AlertKind, userName: '', amount: 5 as number | null, message: '' })
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
@@ -363,6 +383,13 @@ const simulateChat = () =>
     notify(t('simulate.sent'), false)
   })
 
+const simulateCheckin = () =>
+  run(async () => {
+    const { userName, stamps } = simCheckin
+    await api(client.POST('/api/admin/simulate/checkin', { body: { userName, stamps: stamps ?? 0 } }))
+    notify(t('simulate.checkinSent'), false)
+  })
+
 const simulateAlert = () =>
   run(async () => {
     const { kind, userName, amount, message } = simAlert
@@ -370,7 +397,7 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.

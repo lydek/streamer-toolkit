@@ -11,6 +11,7 @@ mod templates;
 pub use openapi::openapi;
 
 pub use alerts::Timing as AlertTiming;
+pub use checkin::Timing as CheckinTiming;
 pub use toolkit_core::{DEFAULT_PORT, settings};
 
 use std::{
@@ -71,6 +72,8 @@ pub struct HostConfig {
     pub obs_secrets: Arc<dyn SecretStore>,
     /// How long alerts show; the default except in tests.
     pub alert_timing: AlertTiming,
+    /// How long stamp cards show; the default except in tests.
+    pub checkin_timing: CheckinTiming,
     /// The database, opened and migrated by [`db::open`] before the Host starts.
     pub db: db::SqlitePool,
 }
@@ -167,11 +170,27 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.alert_timing,
     ));
+    let http = integrations::tls::https_client(tls.clone());
+    let twitch = Arc::new(tokio::sync::RwLock::new(
+        integrations::twitch::auth::TwitchAuth::new(
+            settings::load(&config.data_dir).twitch_client_id,
+            &config.twitch.oauth,
+            http.clone(),
+            config.twitch_secrets.clone(),
+        ),
+    ));
+    let profiles = Arc::new(admin::TwitchProfiles {
+        helix: config.twitch.helix.clone(),
+        http: http.clone(),
+        twitch: twitch.clone(),
+    });
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
         modules.clone(),
         config.data_dir.clone(),
+        profiles,
+        config.checkin_timing,
     ));
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
@@ -194,6 +213,8 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.twitch_secrets,
         config.twitch,
         tls,
+        http,
+        twitch,
         chat,
         alerts,
         redemption,
@@ -360,6 +381,7 @@ mod tests {
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
+            checkin_timing: CheckinTiming::default(),
             db: db::memory(),
         }
     }
@@ -506,6 +528,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn simulated_check_ins_are_validated() {
+        let app = app();
+        for (body, expected) in [
+            (r#"{"userName":"Sim","stamps":10}"#, (204, None)),
+            (r#"{"stamps":0}"#, (400, Some("simulate.invalid_stamps"))),
+            (r#"{"stamps":11}"#, (400, Some("simulate.invalid_stamps"))),
+            (
+                r#"{"userName":"Sim"}"#,
+                (400, Some("simulate.invalid_checkin")),
+            ),
+        ] {
+            let req = get_req("/api/admin/simulate/checkin", "127.0.0.1:47810")
+                .method(Method::POST)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            let status = res.status().as_u16();
+            let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let code = serde_json::from_slice::<serde_json::Value>(&bytes)
+                .ok()
+                .and_then(|v| v["code"].as_str().map(str::to_owned));
+            assert_eq!((status, code.as_deref()), expected, "{body}");
+        }
+    }
+
+    #[tokio::test]
     async fn checkin_rewards_need_a_sign_in() {
         let req = get_req("/api/admin/checkin/rewards", "127.0.0.1:47810")
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
@@ -582,6 +635,7 @@ mod tests {
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
+            checkin_timing: CheckinTiming::default(),
             db: db::memory(),
         })
         .unwrap();
@@ -968,7 +1022,7 @@ mod tests {
 
     #[tokio::test]
     async fn overlay_gets_overlay_csp_and_assets_get_cors() {
-        for page in ["/overlay/chat", "/overlay/alerts"] {
+        for page in ["/overlay/chat", "/overlay/alerts", "/overlay/checkin"] {
             let res = app()
                 .oneshot(
                     get_req(page, "127.0.0.1:47810")

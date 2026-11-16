@@ -9,6 +9,7 @@ export type Incoming =
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']
+  | components['schemas']['CheckinStampedEvent']
 
 export interface ChatState {
   messages: ChatEvent[]

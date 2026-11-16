@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent` and `CheckinChangedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent` and `CheckinStampedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -827,6 +827,38 @@
         }
       }
     },
+    "/api/admin/simulate/checkin": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Shows a stamp card on `/overlay/checkin/` tagged `source=simulation`; nothing is recorded.",
+        "operationId": "simulate_checkin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatedCheckin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`simulate.invalid_checkin` or `simulate.invalid_stamps`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/templates/alerts": {
       "get": {
         "tags": [
@@ -1625,6 +1657,103 @@
           }
         }
       },
+      "CheckinStampedEvent": {
+        "type": "object",
+        "description": "A `checkin.stamped` event exactly as `/ws/overlay` sends it: a stamp card to show on `/overlay/checkin/`. The\nHost sends them one at a time. Not kept in snapshots, so a reloaded overlay never replays one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CheckinStampedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CheckinStampedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CheckinStampedPayload": {
+        "type": "object",
+        "required": [
+          "userName",
+          "avatarUrl",
+          "stamps",
+          "slots",
+          "total",
+          "full",
+          "durationMs"
+        ],
+        "properties": {
+          "avatarUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Twitch profile image (`https://static-cdn.jtvnw.net/` only); `null` when unknown."
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How long to show the card.",
+            "minimum": 0
+          },
+          "full": {
+            "type": "boolean",
+            "description": "This check-in filled the card."
+          },
+          "slots": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "stamps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stamps on the current card, out of `slots`.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "userName": {
+            "type": "string",
+            "description": "Raw viewer text; overlays escape it when rendering."
+          }
+        }
+      },
+      "CheckinStampedType": {
+        "type": "string",
+        "enum": [
+          "checkin.stamped"
+        ]
+      },
       "CheckinToday": {
         "type": "object",
         "description": "Today's check-ins (the business day in force now).",
@@ -2173,6 +2302,23 @@
         "properties": {
           "text": {
             "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "SimulatedCheckin": {
+        "type": "object",
+        "required": [
+          "stamps"
+        ],
+        "properties": {
+          "stamps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stamps on the card, 1 to its slots; all of them shows the full-card effect.",
+            "minimum": 0
           },
           "userName": {
             "type": "string"

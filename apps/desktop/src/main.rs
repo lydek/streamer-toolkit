@@ -10,7 +10,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use host::{AlertTiming, BoundHost, HostConfig, HostError, TwitchEndpoints, settings};
+use host::{
+    AlertTiming, BoundHost, CheckinTiming, HostConfig, HostError, TwitchEndpoints, settings,
+};
 use integrations::secrets::{CredentialManager, SecretStore};
 use secrecy::{ExposeSecret, SecretString};
 use tauri::{
@@ -333,6 +335,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         twitch: TwitchEndpoints::default(),
         obs_secrets: state.obs_secrets.clone(),
         alert_timing: AlertTiming::default(),
+        checkin_timing: CheckinTiming::default(),
         db: state.db.clone(),
     }
 }
