@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: b325bd53e531d4184b3172b6f18c2716ea550af42fac4b537a2fe56bf027d16d -->
+<!-- source: docs/decisions.md source-sha256: 7cd2c38a62a8700169aa0a8e57feffa5d7d0129f1aed90d116509a8b371e3370 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -95,7 +95,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | When | Items |
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (check-in slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox (check-in slice; built in slice 4) and the "pause/off" choice when disabling (check-in slice), portable backup format `.stbackup` (backup and restore slice), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
 | **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
@@ -125,3 +125,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-16 | The default alert sound is synthesised by `scripts/generate-chime.mjs` with Node's built-in modules | No need to find a redistributable sound file, and the license stays simple (this project's MIT); the script and its output are committed together and a test checks they match |
 | 2026-11-16 | SQLite and the automatic backup before migrations were built in slice 3: one database file `toolkit.db`, a single connection, backups made with `VACUUM INTO` and never deleted automatically | A single connection is the only writer, so `SQLITE_BUSY` cannot happen; backups are only made on upgrades and stay few, and deleting them automatically could throw away the only one that can restore |
 | 2026-11-16 | The outbox and the "pause/off" choice when disabling moved from the redemption records slice to the check-in slice; redemption records do not publish `RedemptionRecorded` yet | The redemption records slice has no subscriber yet, check-in is the first; without a subscriber it cannot be tested in a real scenario |
+| 2026-11-16 | The outbox was built in slice 4: its tables and migrations belong to core; after 5 attempts (1, 2, 4 and 8 seconds apart) an event moves to the dead letters; fully delivered events are cleaned up every 10 minutes | While retrying, an event holds back its subscriber in order, so check-ins never arrive out of order; the cap means one bad event holds things up for about 15 seconds at most |

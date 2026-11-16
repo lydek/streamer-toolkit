@@ -167,10 +167,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.alert_timing,
     ));
+    let outbox = toolkit_core::outbox::Outbox::new(config.db.clone(), Vec::new());
+    outbox.start();
     let redemption = Arc::new(redemption::start(
         config.db.clone(),
         bus.clone(),
         modules.clone(),
+        outbox,
     ));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
