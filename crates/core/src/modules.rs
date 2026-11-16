@@ -11,7 +11,8 @@ use crate::settings;
 pub const CHAT: &str = "chat";
 pub const ALERTS: &str = "alerts";
 pub const REDEMPTION: &str = "redemption";
-pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION];
+pub const CHECKIN: &str = "checkin";
+pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {

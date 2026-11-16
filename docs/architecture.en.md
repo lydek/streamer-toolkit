@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: c9e49e9ca184f9206da9180dbe3bf14deb3084d1ab1e6dbde26bdac08388f69b -->
+<!-- source: docs/architecture.md source-sha256: a50e476a7c91fa3c17a5d81543e9debde334fbde58249c17825457e6b849871d -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -50,7 +50,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 | Module | Type | Reason |
 |---|---|---|
 | Redemption records | Complex | Deduplication, `UNFULFILLED`/`FULFILLED`/`CANCELED` state transitions, marking records as possibly incomplete |
-| Daily check-in | Complex | Once per day, business time zone, streaks, three trigger sources, import deduplication |
+| Daily check-in | Complex | Once per day, business time zone, three trigger sources, import deduplication |
 | Personal badges (after MVP) | Thin | First version is only "viewer/role → badge"; upgrade when rule priorities appear |
 | Event alerts | Thin | Queueing, priority and replay are playback logic in the application layer |
 | Chat display, sound management, shoutout clips, settings | Thin | CRUD or rendering, no data rules |

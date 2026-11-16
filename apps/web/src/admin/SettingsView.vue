@@ -62,6 +62,11 @@
       </ul>
     </section>
 
+    <section aria-labelledby="checkin">
+      <h2 id="checkin" tabindex="-1">{{ t('modules.names.checkin') }}</h2>
+      <CheckinSettings @error="report" />
+    </section>
+
     <!-- Slice 6 adds backup and restore here. -->
     <section aria-labelledby="backup">
       <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
@@ -86,6 +91,7 @@ import { useI18n } from 'vue-i18n'
 import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import CheckinSettings from './CheckinSettings.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
 import { errorToast } from './home'

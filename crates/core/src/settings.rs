@@ -29,6 +29,32 @@ pub struct Settings {
     pub chat_template: String,
     /// The alert overlay's built-in template. The Host checks it; an unknown value means the default.
     pub alert_template: String,
+    /// Check-in rules; the check-in module validates them and falls back to defaults for values it cannot use.
+    pub checkin: CheckinSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CheckinSettings {
+    /// The chat command without its `!`.
+    pub command: String,
+    /// IANA time zone the business day is judged in.
+    pub time_zone: String,
+    /// Local hour (0–23) a new business day starts.
+    pub reset_hour: u32,
+    /// Slots on a stamp card.
+    pub card_slots: u32,
+}
+
+impl Default for CheckinSettings {
+    fn default() -> Self {
+        Self {
+            command: "打卡".into(),
+            time_zone: "Asia/Taipei".into(),
+            reset_hour: 0,
+            card_slots: 10,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,6 +84,7 @@ impl Default for Settings {
             home_tiles: None,
             chat_template: "default".into(),
             alert_template: "default".into(),
+            checkin: CheckinSettings::default(),
         }
     }
 }

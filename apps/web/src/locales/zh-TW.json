@@ -161,7 +161,8 @@
     "names": {
       "chat": "聊天室",
       "alerts": "特效",
-      "redemption": "兌換紀錄"
+      "redemption": "兌換紀錄",
+      "checkin": "打卡"
     }
   },
   "settings": {
@@ -177,6 +178,12 @@
       "removePassword": "移除密碼"
     },
     "features": "功能",
+    "checkin": {
+      "command": "打卡指令",
+      "timeZone": "時區",
+      "resetHour": "換日時間",
+      "cardSlots": "集點卡格數"
+    },
     "backup": "備份與還原",
     "backupLater": "之後的版本才會提供。",
     "about": "關於",
@@ -217,6 +224,9 @@
     },
     "home": {
       "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "checkin": {
+      "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。"
     },
     "redemption": {
       "invalid_filter": "篩選條件不正確。",

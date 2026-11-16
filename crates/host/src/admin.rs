@@ -15,6 +15,7 @@ use axum::{
     routing::{get, post, put},
 };
 use chat::ChatService;
+use checkin::CheckinService;
 use integrations::{
     secrets::SecretStore,
     tls::{ClientConfig, HttpsClient},
@@ -49,6 +50,7 @@ pub(crate) struct AdminState {
     chat: Arc<ChatService>,
     alerts: Arc<AlertsService>,
     redemption: Arc<RedemptionService>,
+    checkin: Arc<CheckinService>,
     modules: Arc<Modules>,
     twitch: RwLock<TwitchAuth>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
@@ -67,6 +69,7 @@ impl AdminState {
         chat: Arc<ChatService>,
         alerts: Arc<AlertsService>,
         redemption: Arc<RedemptionService>,
+        checkin: Arc<CheckinService>,
         modules: Arc<Modules>,
     ) -> Self {
         let http = integrations::tls::https_client(tls.clone());
@@ -82,6 +85,7 @@ impl AdminState {
             chat,
             alerts,
             redemption,
+            checkin,
             modules,
             twitch: RwLock::new(twitch.clone()),
             eventsub: Mutex::new(None),
@@ -90,17 +94,21 @@ impl AdminState {
         state
     }
 
-    /// Connects chat, alerts and redemptions for `auth` (it waits until signed in) and stops the task of the previous auth.
+    /// Connects chat (and its check-in command), alerts and redemptions for `auth` (it waits until signed in) and stops the task of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
         let alerts = self.alerts.clone();
         let redemption = self.redemption.clone();
+        let checkin = self.checkin.clone();
         let task = tokio::spawn(
             EventSub {
                 url: self.endpoints.eventsub.clone(),
                 helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
                 tls: self.tls.clone(),
-                deliver: Arc::new(move |m| chat.receive(m, Source::Twitch)),
+                deliver: Arc::new(move |m| {
+                    checkin.receive_chat(&m, Source::Twitch);
+                    chat.receive(m, Source::Twitch)
+                }),
                 deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
                 deliver_redemption: Arc::new(move |r| redemption.receive(r, Source::Twitch)),
             }

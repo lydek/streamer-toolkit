@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/admin/checkin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checkin_settings"];
+        put: operations["set_checkin_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -364,6 +380,23 @@ export interface components {
          * @enum {string}
          */
         ChatTemplate: "default" | "compact" | "bubble" | "custom";
+        /** @description The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped. */
+        CheckinSettingsBody: {
+            /**
+             * Format: int32
+             * @description Stamp card slots, 1–100.
+             */
+            card_slots: number;
+            /** @description One word, at most 25 characters. */
+            command: string;
+            /**
+             * Format: int32
+             * @description Local hour a new business day starts, 0–23.
+             */
+            reset_hour: number;
+            /** @description IANA time zone, e.g. `Asia/Taipei`. */
+            time_zone: string;
+        };
         ClientIdBody: {
             client_id: string;
         };
@@ -567,6 +600,67 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    checkin_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinSettingsBody"];
+                };
+            };
+        };
+    };
+    set_checkin_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckinSettingsBody"];
+            };
+        };
+        responses: {
+            /** @description The settings as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinSettingsBody"];
+                };
+            };
+            /** @description `checkin.invalid_settings` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     general: {
         parameters: {
             query?: never;
