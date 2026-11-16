@@ -23,7 +23,7 @@ use integrations::{
         MVP_SCOPES,
         auth::{AuthError, AuthStatus, DeviceLogin, TwitchAuth},
         eventsub::EventSub,
-        helix::Helix,
+        helix::{Helix, HelixError},
     },
 };
 use redemption::RedemptionService;
@@ -129,6 +129,7 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .route("/api/admin/general", get(general).put(set_general))
         .route("/api/admin/modules", get(list_modules))
         .route("/api/admin/modules/{id}", put(set_module))
+        .route("/api/admin/checkin/rewards", get(checkin_rewards))
         .route("/api/admin/simulate/chat", post(simulate_chat))
         .route("/api/admin/simulate/alert", post(simulate_alert))
         .layer(middleware::from_fn_with_state(state.clone(), require_token))
@@ -319,6 +320,57 @@ async fn set_module(
         Err(e @ ModuleError::Unknown) => error(StatusCode::NOT_FOUND, &e.to_string()),
         Err(e @ ModuleError::SaveFailed(_)) => {
             error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+    }
+}
+
+/// A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub(crate) struct Reward {
+    id: String,
+    title: String,
+}
+
+#[derive(Deserialize)]
+struct RewardList {
+    data: Vec<Reward>,
+}
+
+/// Helix Get Custom Reward (scope `channel:read:redemptions`). A channel without channel points is refused by
+/// Twitch: 502 `twitch.request_refused`.
+#[utoipa::path(
+    get,
+    path = "/api/admin/checkin/rewards",
+    tag = "admin",
+    responses(
+        (status = 200, body = Vec<Reward>),
+        (status = 409, description = "`twitch.client_id_required` or `twitch.sign_in_required`", body = ErrorBody),
+        (status = 502, description = "`twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable`", body = ErrorBody),
+    )
+)]
+async fn checkin_rewards(State(s): State<Arc<AdminState>>) -> Response {
+    let twitch = s.twitch.read().await.clone();
+    let Some(user_id) = twitch
+        .token()
+        .map(|t| t.user_id)
+        .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+    else {
+        return auth_error(AuthError::SignInRequired);
+    };
+    let helix = Helix::new(&s.endpoints.helix, twitch, s.http.clone());
+    match helix
+        .get_json(&format!(
+            "/channel_points/custom_rewards?broadcaster_id={user_id}"
+        ))
+        .await
+    {
+        Ok(body) => match serde_json::from_value::<RewardList>(body) {
+            Ok(list) => Json(list.data).into_response(),
+            Err(_) => auth_error(AuthError::InvalidResponse),
+        },
+        Err(HelixError::Auth(e)) => auth_error(e),
+        Err(e @ (HelixError::RateLimited(_) | HelixError::Refused(_))) => {
+            error(StatusCode::BAD_GATEWAY, &e.to_string())
         }
     }
 }

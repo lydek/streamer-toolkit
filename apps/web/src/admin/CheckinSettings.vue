@@ -12,6 +12,18 @@
         @blur="commitCommand"
       />
     </div>
+    <label id="checkin-reward-label">{{ t('settings.checkin.reward') }}</label>
+    <Select
+      v-model="reward.value.value"
+      input-id="checkin-reward"
+      :options="rewardOptions"
+      option-label="label"
+      option-value="value"
+      aria-labelledby="checkin-reward-label"
+      :pt="{ label: { 'aria-describedby': rewardError ? 'checkin-reward-error' : undefined } }"
+      @update:model-value="reward.commit()"
+    />
+    <p v-if="rewardError" id="checkin-reward-error">{{ rewardError }}</p>
     <label id="checkin-zone-label">{{ t('settings.checkin.timeZone') }}</label>
     <Select
       v-model="zone.value.value"
@@ -48,6 +60,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
 
@@ -58,7 +71,7 @@ const emit = defineEmits<{ error: [unknown] }>()
 
 const loaded = ref(false)
 const loadFailed = ref(false)
-let saved: Schemas['CheckinSettingsBody'] = { command: '', time_zone: '', reset_hour: 0, card_slots: 0 }
+let saved: Schemas['CheckinSettingsBody'] = { command: '', time_zone: '', reset_hour: 0, card_slots: 0, reward_id: null }
 let queue: Promise<unknown> = Promise.resolve()
 function put(patch: Partial<Schemas['CheckinSettingsBody']>) {
   const run = queue.then(async () => {
@@ -75,6 +88,22 @@ function commitCommand() {
   command.value.value = command.value.value.trim().replace(/^!/, '')
   void command.commit()
 }
+// '' = no reward (chat only); the Host takes null for it.
+const rewardSaved = ref('')
+const reward = useDrawerSetting(rewardSaved, (v) => put({ reward_id: v || null }))
+const rewards = ref<Schemas['Reward'][]>([])
+const rewardError = ref('')
+// The saved reward stays listed (by its ID) when Twitch cannot list the channel's rewards or it was deleted.
+const rewardOptions = computed(() => {
+  const options = [
+    { value: '', label: t('settings.checkin.noReward') },
+    ...rewards.value.map((r) => ({ value: r.id, label: r.title })),
+  ]
+  if (rewardSaved.value && !rewards.value.some((r) => r.id === rewardSaved.value)) {
+    options.push({ value: rewardSaved.value, label: rewardSaved.value })
+  }
+  return options
+})
 const zoneSaved = ref('')
 const zone = useDrawerSetting(zoneSaved, (v) => put({ time_zone: v }))
 const hourSaved = ref(0)
@@ -102,10 +131,17 @@ onMounted(async () => {
     zoneSaved.value = saved.time_zone
     hourSaved.value = saved.reset_hour
     slotsSaved.value = String(saved.card_slots)
+    rewardSaved.value = saved.reward_id ?? ''
     loaded.value = true
   } catch (e) {
     loadFailed.value = true
     emit('error', e)
+    return
+  }
+  try {
+    rewards.value = await api(client.GET('/api/admin/checkin/rewards'))
+  } catch (e) {
+    rewardError.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
   }
 })
 </script>

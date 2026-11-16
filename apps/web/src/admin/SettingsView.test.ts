@@ -17,7 +17,8 @@ const GETS: Record<string, unknown> = {
   '/api/admin/obs': { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'error', reason: null } },
   '/api/admin/twitch': { client_id: '', status: { state: 'signed_out' } },
   '/api/admin/modules': [{ id: 'chat', enabled: true }],
-  '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10 },
+  '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+  '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
 }
 
 async function mountSettings() {
@@ -134,6 +135,22 @@ describe('SettingsView', () => {
     wrapper.unmount()
   })
 
+  it('says why the channel rewards cannot be listed and keeps the saved one by its ID', async () => {
+    client.GET.mockImplementation(async (path: string) =>
+      path === '/api/admin/checkin/rewards'
+        ? { error: { code: 'twitch.request_refused' }, response: new Response(null, { status: 502 }) }
+        : path === '/api/admin/checkin/settings'
+          ? ok({ command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: 'w-9' })
+          : ok(GETS[path]),
+    )
+    const wrapper = await mountSettings()
+    await vi.waitFor(() => expect(wrapper.find('#checkin-reward-error').exists()).toBe(true))
+    expect(wrapper.get('#checkin-reward-error').text()).toBe(i18n.global.t('errors.twitch.request_refused'))
+    expect(wrapper.get('#checkin-reward').attributes('aria-describedby')).toBe('checkin-reward-error')
+    expect(wrapper.get('#checkin-reward').text()).toBe('w-9')
+    wrapper.unmount()
+  })
+
   it('saves check-in fields committed back to back with the other values already saved', async () => {
     client.PUT.mockImplementation(async (_: string, init: { body: unknown }) => ok(init.body))
     const wrapper = await mountSettings()
@@ -145,8 +162,8 @@ describe('SettingsView', () => {
     await wrapper.get('#checkin-slots').trigger('keydown', { key: 'Enter' })
     await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(2))
     expect(client.PUT.mock.calls.map(([, init]) => init.body)).toEqual([
-      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10 },
-      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 12 },
+      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 12, reward_id: null },
     ])
     // The "!" is shown in front of the field, so a typed one is dropped.
     expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('sign')

@@ -167,18 +167,21 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.alert_timing,
     ));
-    let outbox = toolkit_core::outbox::Outbox::new(config.db.clone(), Vec::new());
+    let checkin = Arc::new(checkin::start(
+        config.db.clone(),
+        modules.clone(),
+        config.data_dir.clone(),
+    ));
+    let outbox = toolkit_core::outbox::Outbox::new(
+        config.db.clone(),
+        checkin::subscriptions(config.db.clone(), &checkin),
+    );
     outbox.start();
     let redemption = Arc::new(redemption::start(
         config.db.clone(),
         bus.clone(),
         modules.clone(),
         outbox,
-    ));
-    let checkin = Arc::new(checkin::start(
-        config.db.clone(),
-        modules.clone(),
-        config.data_dir.clone(),
     ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
@@ -425,6 +428,23 @@ mod tests {
             };
             assert_eq!(status(b.body(Body::empty()).unwrap()).await, expected);
         }
+    }
+
+    #[tokio::test]
+    async fn checkin_rewards_need_a_sign_in() {
+        let req = get_req("/api/admin/checkin/rewards", "127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["code"],
+            "twitch.sign_in_required"
+        );
     }
 
     #[tokio::test]

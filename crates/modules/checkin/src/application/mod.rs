@@ -16,7 +16,8 @@ use toolkit_core::{
 };
 
 use crate::domain::{
-    BusinessDay, CardSlots, CheckIn, Command, InvalidSettings, Rules, Trigger, TwitchUserId, Viewer,
+    BusinessDay, CardSlots, CheckIn, Command, InvalidSettings, RewardId, Rules, Trigger,
+    TwitchUserId, Viewer,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +38,15 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
     /// check-in labelled `check_in.day` or happening inside `check_in.window`.
     fn check_in(
         &self,
+        viewer: &Viewer,
+        check_in: &CheckIn,
+    ) -> impl Future<Output = Result<Outcome, RepositoryError>> + Send;
+
+    /// [`CheckinRepository::check_in`] for the outbox event `event_id`, recording the ID in the inbox in the same
+    /// transaction. An event already in the inbox changes nothing and is a repeat.
+    fn check_in_once(
+        &self,
+        event_id: &str,
         viewer: &Viewer,
         check_in: &CheckIn,
     ) -> impl Future<Output = Result<Outcome, RepositoryError>> + Send;
@@ -83,6 +93,7 @@ impl Config {
 pub(crate) fn rules(s: &CheckinSettings) -> Result<Rules, InvalidSettings> {
     Ok(Rules {
         command: Command::new(&s.command)?,
+        reward: s.reward_id.as_deref().map(RewardId::new).transpose()?,
         day: BusinessDay::new(&s.time_zone, s.reset_hour)?,
         slots: CardSlots::new(s.card_slots)?,
     })
@@ -92,6 +103,7 @@ fn rules_or_defaults(s: &CheckinSettings) -> Rules {
     let d = CheckinSettings::default();
     Rules {
         command: Command::new(&s.command).unwrap_or_else(|_| Command::new(&d.command).unwrap()),
+        reward: s.reward_id.as_deref().and_then(|id| RewardId::new(id).ok()),
         day: BusinessDay::new(&s.time_zone, s.reset_hour)
             .or_else(|_| BusinessDay::new(&s.time_zone, d.reset_hour))
             .unwrap_or_else(|_| BusinessDay::new(&d.time_zone, d.reset_hour).unwrap()),
@@ -106,7 +118,38 @@ pub(crate) fn settings_of(r: &Rules) -> CheckinSettings {
         time_zone: r.day.time_zone().to_owned(),
         reset_hour: r.day.reset_hour(),
         card_slots: r.slots.get(),
+        reward_id: r.reward.as_ref().map(|w| w.as_str().to_owned()),
     }
+}
+
+/// A channel points redemption, as the redemption module announced it through the outbox.
+pub(crate) struct Redeemed {
+    pub(crate) event_id: String,
+    pub(crate) viewer: Viewer,
+    pub(crate) reward_id: String,
+    /// The Twitch redemption time; a redemption delivered late still counts for the day it happened.
+    pub(crate) occurred_at: DateTime<Utc>,
+}
+
+/// Redeeming the configured reward checks the viewer in, once per redemption and once per business day. Other
+/// rewards, and every reward while none is configured, change nothing. Refunds never undo a check-in.
+pub(crate) async fn redeemed<R: CheckinRepository>(
+    repo: &R,
+    rules: &Rules,
+    r: &Redeemed,
+    now: DateTime<Utc>,
+) -> Result<Option<Outcome>, RepositoryError> {
+    if rules
+        .reward
+        .as_ref()
+        .is_none_or(|w| w.as_str() != r.reward_id)
+    {
+        return Ok(None);
+    }
+    let check_in = CheckIn::at(&rules.day, r.occurred_at, Trigger::Redemption, now);
+    repo.check_in_once(&r.event_id, &r.viewer, &check_in)
+        .await
+        .map(Some)
 }
 
 struct Job {
@@ -146,7 +189,7 @@ impl CheckinService {
         }
     }
 
-    pub(crate) fn config(&self) -> &Config {
+    pub(crate) fn config(&self) -> &Arc<Config> {
         &self.config
     }
 
@@ -199,12 +242,14 @@ mod tests {
             time_zone: "Europe/Berlin".into(),
             reset_hour: 30,
             card_slots: 12,
+            reward_id: Some("not valid!".into()),
         };
         let r = rules_or_defaults(&saved);
         let s = settings_of(&r);
         assert_eq!(s.command, "打卡");
         assert_eq!((s.time_zone.as_str(), s.reset_hour), ("Europe/Berlin", 0));
         assert_eq!(s.card_slots, 12);
+        assert_eq!(s.reward_id, None);
         assert!(
             rules(&saved).is_err(),
             "an update with the same values is refused"

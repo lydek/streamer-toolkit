@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use http::{HeaderMap, Method, Request, header};
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use secrecy::ExposeSecret;
 
 use super::auth::{AuthError, TwitchAuth};
@@ -48,19 +48,38 @@ impl Helix {
     }
 
     pub async fn post_json(&self, path: &str, body: &serde_json::Value) -> Result<(), HelixError> {
-        let body = Bytes::from(body.to_string());
+        self.send(Method::POST, path, Some(Bytes::from(body.to_string())))
+            .await
+            .map(|_| ())
+    }
+
+    /// `path` includes its query; the response body is parsed as JSON.
+    pub async fn get_json(&self, path: &str) -> Result<serde_json::Value, HelixError> {
+        let body = self.send(Method::GET, path, None).await?;
+        Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)
+    }
+
+    async fn send(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Bytes>,
+    ) -> Result<Bytes, HelixError> {
         for attempt in 0..2 {
             let token = self.auth.token().ok_or(AuthError::SignInRequired)?;
-            let req = Request::builder()
-                .method(Method::POST)
+            let mut req = Request::builder()
+                .method(method.clone())
                 .uri(format!("{}{path}", self.base))
                 .header("Client-Id", self.auth.client_id())
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", token.access.expose_secret()),
-                )
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Full::new(body.clone()))
+                );
+            if body.is_some() {
+                req = req.header(header::CONTENT_TYPE, "application/json");
+            }
+            let req = req
+                .body(Full::new(body.clone().unwrap_or_default()))
                 .map_err(|_| AuthError::InvalidResponse)?;
             let res = self
                 .http
@@ -68,7 +87,14 @@ impl Helix {
                 .await
                 .map_err(|_| AuthError::Unreachable)?;
             match res.status().as_u16() {
-                200..=299 => return Ok(()),
+                200..=299 => {
+                    return Ok(res
+                        .into_body()
+                        .collect()
+                        .await
+                        .map_err(|_| AuthError::Unreachable)?
+                        .to_bytes());
+                }
                 401 if attempt == 0 => self.auth.refresh(token.access.expose_secret()).await?,
                 429 => return Err(HelixError::RateLimited(reset_wait(res.headers()))),
                 status => return Err(HelixError::Refused(status)),

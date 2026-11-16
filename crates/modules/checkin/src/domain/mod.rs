@@ -19,6 +19,7 @@ pub(crate) struct Viewer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Trigger {
     Chat,
+    Redemption,
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -129,10 +130,28 @@ impl CardSlots {
     }
 }
 
-/// The check-in rules in force: command, business day and card size.
+/// Twitch's ID of the channel points reward that checks in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RewardId(String);
+
+impl RewardId {
+    pub(crate) fn new(id: &str) -> Result<Self, InvalidSettings> {
+        let id = id.trim();
+        let ok = (1..=64).contains(&id.len())
+            && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        ok.then(|| Self(id.to_owned())).ok_or(InvalidSettings)
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The check-in rules in force: command, reward, business day and card size.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Rules {
     pub(crate) command: Command,
+    pub(crate) reward: Option<RewardId>,
     pub(crate) day: BusinessDay,
     pub(crate) slots: CardSlots,
 }
@@ -235,6 +254,12 @@ mod tests {
         assert_eq!(BusinessDay::new("Mars/Olympus", 0), Err(InvalidSettings));
         assert_eq!(BusinessDay::new("UTC", 24), Err(InvalidSettings));
         assert!(CardSlots::new(0).is_err() && CardSlots::new(101).is_err());
+        assert!(
+            RewardId::new("").is_err()
+                && RewardId::new("a b").is_err()
+                && RewardId::new("<x>").is_err()
+        );
+        assert_eq!(RewardId::new(" 9a1f-22 ").unwrap().as_str(), "9a1f-22");
         for bad in ["", "!", "two words", "!!x", &*"長".repeat(26)] {
             assert_eq!(Command::new(bad), Err(InvalidSettings), "{bad:?}");
         }

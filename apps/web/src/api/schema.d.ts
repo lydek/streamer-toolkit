@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/admin/checkin/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Helix Get Custom Reward (scope `channel:read:redemptions`). A channel without channel points is refused by
+         *     Twitch: 502 `twitch.request_refused`.
+         */
+        get: operations["checkin_rewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/settings": {
         parameters: {
             query?: never;
@@ -394,6 +414,8 @@ export interface components {
              * @description Local hour a new business day starts, 0–23.
              */
             reset_hour: number;
+            /** @description Twitch ID of the channel points reward that checks in; `null`: chat only. */
+            reward_id?: string | null;
             /** @description IANA time zone, e.g. `Asia/Taipei`. */
             time_zone: string;
         };
@@ -522,6 +544,11 @@ export interface components {
         };
         /** @enum {string} */
         RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
+        /** @description A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text. */
+        Reward: {
+            id: string;
+            title: string;
+        };
         SimulatedAlert: {
             /**
              * Format: int32
@@ -600,6 +627,43 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    checkin_rewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reward"][];
+                };
+            };
+            /** @description `twitch.client_id_required` or `twitch.sign_in_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     checkin_settings: {
         parameters: {
             query?: never;

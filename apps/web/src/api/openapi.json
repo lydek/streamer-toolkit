@@ -10,6 +10,49 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/checkin/rewards": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Helix Get Custom Reward (scope `channel:read:redemptions`). A channel without channel points is refused by\nTwitch: 502 `twitch.request_refused`.",
+        "operationId": "checkin_rewards",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Reward"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`twitch.client_id_required` or `twitch.sign_in_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/settings": {
       "get": {
         "tags": [
@@ -1134,6 +1177,13 @@
             "description": "Local hour a new business day starts, 0–23.",
             "minimum": 0
           },
+          "reward_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Twitch ID of the channel points reward that checks in; `null`: chat only."
+          },
           "time_zone": {
             "type": "string",
             "description": "IANA time zone, e.g. `Asia/Taipei`."
@@ -1501,6 +1551,22 @@
           "canceled",
           "unknown"
         ]
+      },
+      "Reward": {
+        "type": "object",
+        "description": "A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text.",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "SimulatedAlert": {
         "type": "object",

@@ -44,6 +44,8 @@ pub struct CheckinSettings {
     pub reset_hour: u32,
     /// Slots on a stamp card.
     pub card_slots: u32,
+    /// Twitch ID of the channel points reward that checks in; `None`: chat only.
+    pub reward_id: Option<String>,
 }
 
 impl Default for CheckinSettings {
@@ -53,6 +55,7 @@ impl Default for CheckinSettings {
             time_zone: "Asia/Taipei".into(),
             reset_hour: 0,
             card_slots: 10,
+            reward_id: None,
         }
     }
 }
