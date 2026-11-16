@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/admin/checkin/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Imports the file in one transaction; the same file imported again gives the same totals. */
+        post: operations["apply_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What importing this file would change; nothing is written. The admin UI posts the chosen file's content. */
+        post: operations["preview_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/outbox": {
         parameters: {
             query?: never;
@@ -684,6 +718,21 @@ export interface components {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
             ask_before_close: boolean;
         };
+        /** @description An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering. */
+        ImportSkip: {
+            key: string;
+            reason: components["schemas"]["ImportSkipReason"];
+        };
+        /** @enum {string} */
+        ImportSkipReason: "invalid_id" | "owner" | "excluded" | "invalid_total" | "invalid_date";
+        /** @description What an import adds, updates (replacing the imported baseline of known viewers) and skips. */
+        ImportSummary: {
+            /** Format: int64 */
+            added: number;
+            skipped: components["schemas"]["ImportSkip"][];
+            /** Format: int64 */
+            updated: number;
+        };
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
         };
@@ -898,6 +947,108 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    apply_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The import file: an object keyed by Twitch user ID (at most 5 MB) */
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportSummary"];
+                };
+            };
+            /** @description `checkin.import_invalid`: not JSON, or not an object */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.import_too_large`: larger than 5 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    preview_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The import file: an object keyed by Twitch user ID (at most 5 MB) */
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportSummary"];
+                };
+            };
+            /** @description `checkin.import_invalid`: not JSON, or not an object */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.import_too_large`: larger than 5 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     checkin_outbox: {
         parameters: {
             query?: never;

@@ -72,7 +72,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
 
   await drawer.getByRole('link', { name: zh.drawer.fullPage }).click()
   await expect(page).toHaveURL(/\/admin\/checkin$/)
-  await expect(page.getByRole('heading', { name: zh.modules.names.checkin })).toBeVisible()
+  await expect(page.getByRole('heading', { name: zh.modules.names.checkin, exact: true })).toBeVisible()
 })
 
 test('the full page searches, pages, registers and back-fills, and reloads on changes', async ({ page }) => {
@@ -137,4 +137,44 @@ test('the full page has no sideways scroll at 1280, 640 and 320 px', async ({ pa
     await page.setViewportSize({ width, height: 800 })
     expect(await scrollsSideways(page), `${width}px`).toBe(false)
   }
+})
+
+test('importing previews the file, says what is skipped and why, then imports the same content', async ({ page }) => {
+  await mockAdmin(page, { modules })
+  let listed = 0
+  await page.route('**/api/admin/checkin/viewers?*', (r) => {
+    listed++
+    return r.fulfill({ json: { items: [], total: 0 } })
+  })
+  const bodies: Record<string, unknown[]> = { preview: [], apply: [] }
+  const summary = { added: 1, updated: 2, skipped: [{ key: HTML, reason: 'invalid_id' }] }
+  await page.route('**/api/admin/checkin/import/preview', (r) => {
+    bodies.preview.push(r.request().postDataJSON())
+    return r.fulfill({ json: summary })
+  })
+  await page.route('**/api/admin/checkin/import', (r) => {
+    bodies.apply.push(r.request().postDataJSON())
+    return r.fulfill({ json: summary })
+  })
+  await page.goto('/admin/checkin')
+  await expect(page.getByText(zh.checkin.page.empty)).toBeVisible()
+
+  const file = page.getByLabel(zh.checkin.import.file)
+  await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{oops') })
+  await expect(page.getByText(zh.errors.checkin.import_invalid)).toBeVisible()
+  expect(bodies.preview).toEqual([])
+
+  const content = { '123': { totalCheckIns: 12, lastName: 'Ann' }, [HTML]: { totalCheckIns: 1 } }
+  await file.setInputFiles({ name: 'checkins.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(content)) })
+  await expect(page.getByText(fill(zh.checkin.import.summary, { added: 1, updated: 2, skipped: 1 }))).toBeVisible()
+  await expect(page.getByText(`${HTML}：${zh.checkin.import.reasons.invalid_id}`)).toBeVisible()
+  await expect(page.locator('main img')).toHaveCount(0)
+  expect(bodies.preview).toEqual([content])
+
+  const before = listed
+  await page.getByRole('button', { name: zh.checkin.import.confirm }).click()
+  await expect(page.getByText(fill(zh.checkin.import.done, { added: 1, updated: 2 }))).toBeVisible()
+  expect(bodies.apply).toEqual([content])
+  await expect.poll(() => listed).toBeGreaterThan(before)
+  await expect(page.getByRole('button', { name: zh.checkin.import.confirm })).toHaveCount(0)
 })

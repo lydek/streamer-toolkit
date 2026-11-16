@@ -18,8 +18,8 @@ use toolkit_core::{
 };
 
 use crate::domain::{
-    BusinessDay, CardSlots, CheckIn, Command, InvalidSettings, RewardId, Rules, Trigger,
-    TwitchUserId, Viewer,
+    BusinessDay, CardSlots, CheckIn, Command, ImportedViewer, InvalidSettings, RewardId, Rules,
+    Trigger, TwitchUserId, Viewer,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -36,6 +36,19 @@ pub(crate) enum Outcome {
 
 /// Storage port; the SQLite implementation lives in `infrastructure::db`.
 pub(crate) trait CheckinRepository: Send + Sync + 'static {
+    /// Twitch user IDs of every known viewer.
+    fn known_viewers(
+        &self,
+    ) -> impl Future<Output = Result<std::collections::HashSet<String>, RepositoryError>> + Send;
+
+    /// In one transaction: sets each viewer's imported baseline (adding unknown viewers), keeping names and
+    /// profile images already known.
+    fn import(
+        &self,
+        viewers: &[ImportedViewer],
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+
     /// The viewer's stored profile image URL.
     fn profile_image(
         &self,
@@ -507,6 +520,35 @@ async fn manual<R: CheckinRepository>(
     };
     let outcome = repo.check_in(&viewer, &check_in).await?;
     Ok((viewer, outcome))
+}
+
+/// How an import changes the viewers: new ones, and known ones whose baseline is replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ImportCounts {
+    pub(crate) added: u64,
+    pub(crate) updated: u64,
+}
+
+/// Counts what importing `viewers` changes and, when `apply`, writes it. The baseline replaces the previous one,
+/// so the same file imported twice gives the same totals.
+pub(crate) async fn import<R: CheckinRepository>(
+    repo: &R,
+    viewers: &[ImportedViewer],
+    apply: bool,
+    now: DateTime<Utc>,
+) -> Result<ImportCounts, RepositoryError> {
+    let known = repo.known_viewers().await?;
+    let updated = viewers
+        .iter()
+        .filter(|v| known.contains(&v.twitch_id.0))
+        .count() as u64;
+    if apply {
+        repo.import(viewers, now).await?;
+    }
+    Ok(ImportCounts {
+        added: viewers.len() as u64 - updated,
+        updated,
+    })
 }
 
 /// The time the event happened; an unreadable one falls back to the time received.

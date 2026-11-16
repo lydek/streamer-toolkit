@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     application::{CheckinRepository, Outcome, RepositoryError},
-    domain::{CheckIn, Trigger, TwitchUserId, Viewer},
+    domain::{CheckIn, ImportedViewer, Trigger, TwitchUserId, Viewer},
 };
 
 /// This module's migrations; the host merges them with the other modules'.
@@ -53,10 +53,11 @@ pub(crate) async fn list_viewers(
     .await
     .map_err(storage)?;
     let rows: Vec<(String, String, String, i64, Option<String>)> = sqlx::query_as(
-        "SELECT v.id, v.user_login, v.user_name, COUNT(r.id), MAX(r.business_day) \
+        "SELECT v.id, v.user_login, v.user_name, v.baseline_total + COUNT(r.id) AS total, \
+         MAX(COALESCE(MAX(r.business_day), v.baseline_last_day), COALESCE(v.baseline_last_day, MAX(r.business_day))) AS last_day \
          FROM checkin_viewers v LEFT JOIN checkin_records r ON r.viewer_id = v.id \
          WHERE (?1 IS NULL OR v.user_login LIKE ?1 ESCAPE '!' OR v.user_name LIKE ?1 ESCAPE '!') \
-         GROUP BY v.id ORDER BY MAX(r.business_day) DESC NULLS LAST, v.user_login, v.id LIMIT ?2 OFFSET ?3",
+         GROUP BY v.id ORDER BY last_day DESC NULLS LAST, v.user_login, v.user_name, v.id LIMIT ?2 OFFSET ?3",
     )
     .bind(&pattern)
     .bind(i64::from(limit))
@@ -185,11 +186,14 @@ pub(crate) async fn check_in_tx(
         return Ok(Outcome::Repeat);
     }
 
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM checkin_records WHERE viewer_id = ?")
-        .bind(&viewer_id)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(storage)?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT baseline_total + (SELECT COUNT(*) FROM checkin_records WHERE viewer_id = ?1) \
+         FROM checkin_viewers WHERE id = ?1",
+    )
+    .bind(&viewer_id)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(storage)?;
     Ok(Outcome::CheckedIn {
         viewer_id,
         total: u64::try_from(total).unwrap_or(0),
@@ -197,6 +201,50 @@ pub(crate) async fn check_in_tx(
 }
 
 impl CheckinRepository for SqliteCheckins {
+    async fn known_viewers(&self) -> Result<std::collections::HashSet<String>, RepositoryError> {
+        let ids: Vec<String> = sqlx::query_scalar("SELECT twitch_user_id FROM checkin_viewers")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(ids.into_iter().collect())
+    }
+
+    async fn import(
+        &self,
+        viewers: &[ImportedViewer],
+        now: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let now = time_text(now);
+        for v in viewers {
+            // A new viewer's login is unknown until they check in; the display name stands in.
+            let name = v.name.clone().unwrap_or_else(|| v.twitch_id.0.clone());
+            let image = v
+                .profile_image
+                .as_deref()
+                .filter(|u| crate::application::is_twitch_image(u));
+            sqlx::query(
+                "INSERT INTO checkin_viewers (id, twitch_user_id, user_login, user_name, created_at, updated_at, \
+                 profile_image_url, baseline_total, baseline_last_day) VALUES (?, ?, '', ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT (twitch_user_id) DO UPDATE SET baseline_total = excluded.baseline_total, \
+                 baseline_last_day = excluded.baseline_last_day, updated_at = excluded.updated_at, \
+                 profile_image_url = COALESCE(checkin_viewers.profile_image_url, excluded.profile_image_url)",
+            )
+            .bind(Uuid::now_v7().to_string())
+            .bind(&v.twitch_id.0)
+            .bind(name)
+            .bind(&now)
+            .bind(&now)
+            .bind(image)
+            .bind(i64::try_from(v.total).unwrap_or(i64::MAX))
+            .bind(v.last_day.map(|d| d.to_string()))
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        }
+        tx.commit().await.map_err(storage)
+    }
+
     async fn profile_image(&self, viewer_id: &str) -> Result<Option<String>, RepositoryError> {
         sqlx::query_scalar::<_, Option<String>>(
             "SELECT profile_image_url FROM checkin_viewers WHERE id = ?",

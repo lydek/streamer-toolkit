@@ -49,6 +49,8 @@
         @click="go(1)"
       />
     </nav>
+
+    <CheckinImport @imported="load" />
   </FullPage>
 </template>
 
@@ -60,6 +62,7 @@ import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import CheckinImport from './CheckinImport.vue'
 import { changesCheckins, localDate, viewerQuery } from './checkins'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
