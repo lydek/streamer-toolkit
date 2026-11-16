@@ -90,6 +90,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_redemptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/alert": {
         parameters: {
             query?: never;
@@ -421,6 +437,58 @@ export interface components {
             client_id: string;
             status: components["schemas"]["AuthStatus"];
         };
+        /**
+         * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
+         *     carries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.
+         *     Not kept in snapshots.
+         */
+        RedemptionChangedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["RedemptionChangedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["RedemptionChangedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        RedemptionChangedPayload: {
+            /** @description The record's ID, as in `RedemptionRecord.id`. */
+            id: string;
+        };
+        /** @enum {string} */
+        RedemptionChangedType: "redemption.changed";
+        /** @description `GET /api/admin/redemptions`: one page, newest first. */
+        RedemptionPage: {
+            items: components["schemas"]["RedemptionRecord"][];
+            /**
+             * Format: int64
+             * @description Records matching the filters, across all pages.
+             */
+            total: number;
+        };
+        /**
+         * @description One redemption record. `user_name`, `reward_title` and `user_input` are raw viewer or Twitch text: escape them
+         *     when rendering.
+         */
+        RedemptionRecord: {
+            id: string;
+            /** @description RFC 3339, UTC. */
+            redeemed_at: string;
+            /** Format: int32 */
+            reward_cost: number;
+            reward_title: string;
+            status: components["schemas"]["RedemptionStatusName"];
+            /** @description RFC 3339, UTC: when the record was created or last changed status. */
+            updated_at: string;
+            /** @description Empty when the reward asks for nothing. */
+            user_input: string;
+            user_login: string;
+            user_name: string;
+        };
+        /** @enum {string} */
+        RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
         SimulatedAlert: {
             /**
              * Format: int32
@@ -715,6 +783,57 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_redemptions: {
+        parameters: {
+            query?: {
+                /** @description RFC 3339; records redeemed at or after it. */
+                from?: string;
+                /** @description RFC 3339; records redeemed before it. */
+                to?: string;
+                /** @description Part of the viewer's login or display name; ASCII letters ignore case. */
+                viewer?: string;
+                /** @description Part of the reward name; ASCII letters ignore case. */
+                reward?: string;
+                status?: components["schemas"]["RedemptionStatusName"];
+                /** @description Records to skip; default 0. */
+                offset?: number;
+                /** @description Page size, 1 to 100; default 50. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedemptionPage"];
+                };
+            };
+            /** @description `redemption.invalid_filter`: a bad time, status or page size */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `redemption.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

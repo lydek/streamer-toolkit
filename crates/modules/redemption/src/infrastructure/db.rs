@@ -1,11 +1,11 @@
 //! SQLite repository for redemption records. Rows map to the domain here; nothing else sees them.
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use sqlx::{SqlitePool, migrate::Migrator};
+use sqlx::{QueryBuilder, Sqlite, SqlitePool, migrate::Migrator};
 use uuid::Uuid;
 
 use crate::{
-    application::{RedemptionRepository, RepositoryError},
+    application::{ListFilter, RedemptionRepository, RepositoryError},
     domain::{Redemption, RedemptionId, Reward, Status, TwitchRedemptionId, Viewer},
 };
 
@@ -20,6 +20,73 @@ impl SqliteRedemptions {
     pub(crate) fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
+
+    /// One page of records, newest first, and how many match in total.
+    pub(crate) async fn list(
+        &self,
+        filter: &ListFilter,
+    ) -> Result<(Vec<Redemption>, u64), RepositoryError> {
+        let mut count = QueryBuilder::<Sqlite>::new("SELECT COUNT(*) FROM redemption_records");
+        push_filter(&mut count, filter);
+        let total: i64 = count
+            .build_query_scalar()
+            .fetch_one(&self.pool)
+            .await
+            .map_err(storage)?;
+
+        let mut page = QueryBuilder::<Sqlite>::new("SELECT * FROM redemption_records");
+        push_filter(&mut page, filter);
+        page.push(" ORDER BY redeemed_at DESC, id DESC LIMIT ")
+            .push_bind(i64::from(filter.limit))
+            .push(" OFFSET ")
+            .push_bind(i64::from(filter.offset));
+        let rows: Vec<RedemptionRow> = page
+            .build_query_as()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        let items = rows
+            .into_iter()
+            .map(Redemption::try_from)
+            .collect::<Result<_, _>>()?;
+        Ok((items, u64::try_from(total).unwrap_or(0)))
+    }
+}
+
+/// `WHERE` for [`ListFilter`]; every value is bound, none is spliced into the SQL.
+fn push_filter(q: &mut QueryBuilder<Sqlite>, f: &ListFilter) {
+    q.push(" WHERE 1 = 1");
+    if let Some(from) = f.from {
+        q.push(" AND redeemed_at >= ").push_bind(time_text(from));
+    }
+    if let Some(to) = f.to {
+        q.push(" AND redeemed_at < ").push_bind(time_text(to));
+    }
+    if let Some(viewer) = &f.viewer {
+        let pattern = like_pattern(viewer);
+        q.push(" AND (user_login LIKE ")
+            .push_bind(pattern.clone())
+            .push(" ESCAPE '!' OR user_name LIKE ")
+            .push_bind(pattern)
+            .push(" ESCAPE '!')");
+    }
+    if let Some(reward) = &f.reward {
+        q.push(" AND reward_title LIKE ")
+            .push_bind(like_pattern(reward))
+            .push(" ESCAPE '!'");
+    }
+    if let Some(status) = f.status {
+        q.push(" AND status = ").push_bind(status_text(status));
+    }
+}
+
+/// Matches `text` anywhere; `%`, `_` and `!` (the escape character) in it are literal. SQLite's LIKE ignores ASCII case only.
+fn like_pattern(text: &str) -> String {
+    let escaped = text
+        .replace('!', "!!")
+        .replace('%', "!%")
+        .replace('_', "!_");
+    format!("%{escaped}%")
 }
 
 #[derive(sqlx::FromRow)]
@@ -155,9 +222,17 @@ pub(crate) mod tests {
     use crate::application::{RedemptionService, record};
     use sqlx::sqlite::SqlitePoolOptions;
     use std::time::Duration;
-    use toolkit_core::events::{
-        ChannelPointsRedemption, RedemptionChange, RedemptionStatus, Source,
+    use toolkit_core::{
+        events::{ChannelPointsRedemption, RedemptionChange, RedemptionStatus, Source},
+        modules::{self, Modules},
     };
+
+    /// A module registry in its own temporary folder (every module enabled).
+    pub(crate) fn modules(name: &str) -> std::sync::Arc<Modules> {
+        let dir = std::env::temp_dir().join(format!("st-redemption-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::sync::Arc::new(Modules::load(dir))
+    }
 
     pub(crate) async fn pool() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -371,24 +446,53 @@ pub(crate) mod tests {
         assert_eq!(stored(&repo, "r-1").await.unwrap().redeemed_at, at(9));
     }
 
+    async fn wait_for(repo: &SqliteRedemptions, id: &str) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while stored(repo, id).await.is_none() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     #[tokio::test]
     async fn simulated_redemptions_are_never_stored() {
         let pool = pool().await;
-        let service = RedemptionService::start(SqliteRedemptions::new(pool.clone()));
+        let service =
+            RedemptionService::start(SqliteRedemptions::new(pool.clone()), modules("sim"), |_| {});
         use RedemptionChange::*;
         use RedemptionStatus::*;
         service.receive(event("sim", Added, Unfulfilled), Source::Simulation);
         service.receive(event("real", Added, Unfulfilled), Source::Twitch);
         let repo = SqliteRedemptions::new(pool.clone());
         // The simulated one never enters the queue; the real one shows the worker ran.
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while stored(&repo, "real").await.is_none() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        wait_for(&repo, "real").await;
         assert!(stored(&repo, "sim").await.is_none());
         assert_eq!(count(&pool).await, 1);
+    }
+
+    #[tokio::test]
+    async fn disabled_module_drops_redemptions_and_keeps_the_records() {
+        let pool = pool().await;
+        let switch = modules("disabled");
+        let service =
+            RedemptionService::start(SqliteRedemptions::new(pool.clone()), switch.clone(), |_| {});
+        let repo = SqliteRedemptions::new(pool.clone());
+        use RedemptionChange::*;
+        use RedemptionStatus::*;
+        service.receive(event("before", Added, Unfulfilled), Source::Twitch);
+        wait_for(&repo, "before").await;
+
+        switch.set_enabled(modules::REDEMPTION, false).unwrap();
+        service.receive(event("while-off", Added, Unfulfilled), Source::Twitch);
+        switch.set_enabled(modules::REDEMPTION, true).unwrap();
+        service.receive(event("after", Added, Unfulfilled), Source::Twitch);
+        wait_for(&repo, "after").await;
+        assert!(stored(&repo, "while-off").await.is_none());
+        assert!(
+            stored(&repo, "before").await.is_some(),
+            "disabling keeps the data"
+        );
     }
 }

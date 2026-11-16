@@ -37,7 +37,7 @@ const button = (tile: string, action: string) =>
 const live = () => document.querySelector('[aria-live="polite"]')!.textContent
 
 beforeEach(() => {
-  // Tests need tiles in both groups; only the live group (chat, alerts) exists so far.
+  // Tests need two tiles in each group; the features group has only the redemption tile so far.
   TILES.push(...extra)
   outcome = true
 })
@@ -54,8 +54,8 @@ describe('ArrangeTiles', () => {
     button('chat', 'later').focus()
     button('chat', 'later').click()
     await flushPromises()
-    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'checkin'])
-    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'checkin'])
+    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin'])
+    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin'])
     expect(document.activeElement).toBe(button('chat', 'earlier'))
     expect(live()).toBe('聊天室移到直播中第 2 個')
   })

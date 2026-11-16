@@ -1,4 +1,4 @@
-<!-- source: docs/modules/redemption.md source-sha256: c4654f5f9425ef56a58638b45f54bf04fb04038df757a3acd41cf374fd8dc623 -->
+<!-- source: docs/modules/redemption.md source-sha256: 3bd8a0ffa49228928972e1ac454f5e24c3b35c840632c613fb16c81ccca5133a -->
 [繁體中文](redemption.md) | **English**
 
 # Redemption records
@@ -13,6 +13,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - When a status update arrives before the redemption itself, the update carries the whole redemption and creates the record; the redemption event that arrives later counts as a duplicate and changes nothing.
 - A redemption event received again changes nothing.
 - Simulated events (`source=simulation`) are never stored.
+- Redemptions received while the module is disabled are dropped, like other in-memory events (the outbox that could keep them comes with the check-in slice); stored records are kept.
 - The viewer's text is stored as-is and escaped when shown.
 - Times are stored in UTC; when Twitch's redemption time cannot be read, the time received is used.
 
@@ -33,5 +34,6 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Statuses change only as in the table; refunded never becomes valid again; invalid transitions are rejected and logged.
 - An `unknown` status is stored without an error.
 - When a status update arrives before the redemption itself, no data is lost and the status does not go back.
-- Simulated events create no records.
+- Simulated events create no records; nor does anything while the module is disabled.
+- Browsing: filter by redemption time range, viewer (part of the login or display name), part of the reward name and status, newest first, in pages; an empty state when there are no records; the viewer's text is escaped when shown.
 - All of the above are tested (the repository with real SQLite).

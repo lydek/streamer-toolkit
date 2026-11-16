@@ -6,13 +6,18 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+axum = "0.8.9"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "macros"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt", "sync"] }
 toolkit-core = { version = "0.1.0", path = "../../core" }
 tracing = "0.1.44"
+utoipa = "6.0.0"
 uuid = { version = "1.29.2", features = ["v7"] }
 
 [dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

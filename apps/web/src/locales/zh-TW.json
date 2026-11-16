@@ -105,6 +105,32 @@
       "raid": "{name} 帶著 {viewers} 人揪團來了！"
     }
   },
+  "redemption": {
+    "empty": "還沒有兌換紀錄",
+    "noMatch": "沒有符合條件的紀錄",
+    "cost": "{n} 點",
+    "status": {
+      "unfulfilled": "未完成",
+      "fulfilled": "已完成",
+      "canceled": "已退還",
+      "unknown": "不明"
+    },
+    "filters": "篩選",
+    "from": "開始日期",
+    "to": "結束日期",
+    "viewer": "觀眾",
+    "reward": "獎勵",
+    "statusLabel": "狀態",
+    "allStatuses": "全部",
+    "apply": "篩選",
+    "clear": "清除篩選",
+    "total": "共 {n} 筆",
+    "pages": "分頁",
+    "page": "第 {page} / {pages} 頁",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "loadFailed": "無法載入兌換紀錄。"
+  },
   "preview": {
     "heading": "樣板",
     "templates": {
@@ -134,7 +160,8 @@
   "modules": {
     "names": {
       "chat": "聊天室",
-      "alerts": "特效"
+      "alerts": "特效",
+      "redemption": "兌換紀錄"
     }
   },
   "settings": {
@@ -190,6 +217,10 @@
     },
     "home": {
       "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "redemption": {
+      "invalid_filter": "篩選條件不正確。",
+      "storage_failed": "無法讀取兌換紀錄。"
     },
     "modules": {
       "unknown": "沒有這個模組。",

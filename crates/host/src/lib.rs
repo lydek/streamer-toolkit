@@ -167,7 +167,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         config.alert_timing,
     ));
-    let redemption = Arc::new(redemption::start(config.db));
+    let redemption = Arc::new(redemption::start(
+        config.db.clone(),
+        bus.clone(),
+        modules.clone(),
+    ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -193,6 +197,12 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin.clone(),
             admin::require_token,
         )))
+        .merge(
+            redemption::routes(config.db).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
+        )
         .merge(home_tiles.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
@@ -351,6 +361,39 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(status(ok).await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn redemption_records_need_the_token() {
+        let dir = std::env::temp_dir().join(format!("st-host-redemption-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut config = test_config();
+        config.db = db::open(&dir).await.unwrap();
+        let app = router(config).unwrap();
+        let req = |token: Option<&str>| {
+            let b = get_req("/api/admin/redemptions", "127.0.0.1:47810");
+            match token {
+                Some(t) => b.header(header::AUTHORIZATION, format!("Bearer {t}")),
+                None => b,
+            }
+            .body(Body::empty())
+            .unwrap()
+        };
+        for token in [None, Some("nope")] {
+            let res = app.clone().oneshot(req(token)).await.unwrap();
+            assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        }
+        let res = app.clone().oneshot(req(Some(TOKEN))).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            serde_json::json!({ "items": [], "total": 0 })
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

@@ -132,6 +132,7 @@ export interface Tile {
 export const TILES: Tile[] = [
   { id: 'chat', group: 'live', icon: 'pi pi-comments' },
   { id: 'alerts', group: 'live', icon: 'pi pi-bell' },
+  { id: 'redemption', group: 'features', icon: 'pi pi-gift' },
 ]
 
 /** Non-empty groups in display order. */

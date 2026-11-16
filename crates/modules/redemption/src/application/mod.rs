@@ -1,11 +1,14 @@
 //! Records redemptions from Twitch: one record per Twitch redemption ID, status changes checked by the aggregate.
 //! Events are handled one at a time, in arrival order.
 
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
-use toolkit_core::events::{ChannelPointsRedemption, RedemptionChange, RedemptionStatus, Source};
+use toolkit_core::{
+    events::{ChannelPointsRedemption, RedemptionChange, RedemptionStatus, Source},
+    modules::{self, Modules},
+};
 
 use crate::domain::{Redemption, Reward, Status, TwitchRedemptionId, Viewer};
 
@@ -29,25 +32,36 @@ pub(crate) trait RedemptionRepository: Send + Sync + 'static {
 
 pub struct RedemptionService {
     tx: mpsc::UnboundedSender<ChannelPointsRedemption>,
+    modules: Arc<Modules>,
 }
 
 impl RedemptionService {
-    /// Spawns the worker that stores events in order; needs a Tokio runtime.
-    pub(crate) fn start<R: RedemptionRepository>(repo: R) -> Self {
+    /// Spawns the worker that stores events in order and calls `changed` after a record is created or changes
+    /// status; needs a Tokio runtime.
+    pub(crate) fn start<R, F>(repo: R, modules: Arc<Modules>, changed: F) -> Self
+    where
+        R: RedemptionRepository,
+        F: Fn(&Redemption) + Send + 'static,
+    {
         let (tx, mut rx) = mpsc::unbounded_channel();
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
-                if let Err(e) = record(&repo, event, Utc::now()).await {
-                    tracing::error!(code = "redemption.storage_failed", error = %e, "redemption not stored");
+                match record(&repo, event, Utc::now()).await {
+                    Ok(Some(r)) => changed(&r),
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::error!(code = "redemption.storage_failed", error = %e, "redemption not stored")
+                    }
                 }
             }
         });
-        Self { tx }
+        Self { tx, modules }
     }
 
-    /// Simulated redemptions never go into the records.
+    /// Simulated redemptions never go into the records. While the module is disabled, redemptions are dropped
+    /// like other in-memory events (the outbox that could keep them comes with the check-in slice).
     pub fn receive(&self, redemption: ChannelPointsRedemption, source: Source) {
-        if source == Source::Simulation {
+        if source == Source::Simulation || !self.modules.is_enabled(modules::REDEMPTION) {
             return;
         }
         let _ = self.tx.send(redemption);
@@ -56,11 +70,12 @@ impl RedemptionService {
 
 /// Stores a new redemption, or applies the status of one already stored. Twitch may send the same event twice, or
 /// an update before the redemption itself; the update carries the whole redemption, so it can create the record.
+/// Returns the record when it was created or its status changed.
 pub(crate) async fn record<R: RedemptionRepository>(
     repo: &R,
     event: ChannelPointsRedemption,
     now: DateTime<Utc>,
-) -> Result<(), RepositoryError> {
+) -> Result<Option<Redemption>, RepositoryError> {
     let twitch_id = TwitchRedemptionId(event.id);
     let status = status(event.status);
     let redeemed_at = DateTime::parse_from_rfc3339(&event.redeemed_at)
@@ -87,19 +102,19 @@ pub(crate) async fn record<R: RedemptionRepository>(
         now,
     );
     if repo.insert(&new).await? {
-        return Ok(());
+        return Ok(Some(new));
     }
     // Already stored: a repeated `add` changes nothing; an update goes through the status rules.
     if event.change == RedemptionChange::Added {
-        return Ok(());
+        return Ok(None);
     }
     let mut existing = repo
         .find_by_twitch_id(&twitch_id)
         .await?
         .ok_or_else(|| RepositoryError("record vanished after a duplicate insert".into()))?;
     match existing.change_status(status, now) {
-        Ok(true) => repo.save_status(&existing).await,
-        Ok(false) => Ok(()),
+        Ok(true) => repo.save_status(&existing).await.map(|()| Some(existing)),
+        Ok(false) => Ok(None),
         Err(e) => {
             tracing::warn!(
                 code = %e,
@@ -108,9 +123,22 @@ pub(crate) async fn record<R: RedemptionRepository>(
                 to = ?e.to,
                 "redemption status change rejected"
             );
-            Ok(())
+            Ok(None)
         }
     }
+}
+
+/// Filters and page of the record list; `to` is exclusive. Text filters match part of the name, ignoring case.
+#[derive(Debug, Default)]
+pub(crate) struct ListFilter {
+    pub(crate) from: Option<DateTime<Utc>>,
+    pub(crate) to: Option<DateTime<Utc>>,
+    /// Login or display name.
+    pub(crate) viewer: Option<String>,
+    pub(crate) reward: Option<String>,
+    pub(crate) status: Option<Status>,
+    pub(crate) offset: u32,
+    pub(crate) limit: u32,
 }
 
 fn status(s: RedemptionStatus) -> Status {
