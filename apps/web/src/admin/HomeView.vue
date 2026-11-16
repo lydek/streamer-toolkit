@@ -151,6 +151,14 @@
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
     </AppDrawer>
+
+    <AppDrawer id="redemption" :title="moduleName('redemption')" full-page="/redemptions">
+      <template #now>
+        <p v-if="recent.state === 'failed'" role="alert">{{ t('redemption.loadFailed') }}</p>
+        <p v-else-if="recent.state === 'loading'">{{ t('app.loading') }}</p>
+        <RedemptionList v-else-if="recent.state === 'ready'" :records="recent.items" :empty="t('redemption.empty')" />
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
@@ -183,6 +191,8 @@ import {
 } from './home'
 import HomeTile from './HomeTile.vue'
 import { focusReturnTarget } from './page'
+import RedemptionList from './RedemptionList.vue'
+import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import StatusLight from './StatusLight.vue'
 import TwitchSignIn from './TwitchSignIn.vue'
 
@@ -215,7 +225,24 @@ const drawer = useDrawer()
 watch(drawer.current, () => (notice.value = undefined))
 // Kept here, not in the drawer, so messages keep arriving while it is closed.
 const chatLog = shallowRef(EMPTY_LOG)
-const live = useLiveEvents(2000, (msg) => (chatLog.value = applyChat(chatLog.value, msg)))
+// The latest records, for the redemption tile and drawer; reloaded on every change and reconnect.
+const recent = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: RedemptionRecord[] }>({
+  state: 'loading',
+})
+let recentRequest = 0
+async function loadRecent() {
+  const mine = ++recentRequest
+  try {
+    const page = await api(client.GET('/api/admin/redemptions', { params: { query: redemptionQuery(noFilters(), 0, RECENT) } }))
+    if (mine === recentRequest) recent.value = { state: 'ready', items: page.items }
+  } catch {
+    if (mine === recentRequest) recent.value = { state: 'failed' }
+  }
+}
+const live = useLiveEvents(2000, (msg) => {
+  chatLog.value = applyChat(chatLog.value, msg)
+  if (changesRecords(msg)) void loadRecent()
+})
 const broadcasterId = computed(() =>
   overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
 )
@@ -235,9 +262,16 @@ const lines = computed<Record<string, Line>>(() => {
       status === 'open'
         ? { state: 'ready', text: lastAlert ? alertTitle(lastAlert.payload) : t('alerts.empty') }
         : { state: status },
+    redemption: recentLine(recent.value),
   }
 })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
+
+function recentLine(r: typeof recent.value): Line {
+  if (r.state !== 'ready') return { state: r.state }
+  const last = r.items[0]
+  return { state: 'ready', text: last ? `${last.user_name}：${last.reward_title}` : t('redemption.empty') }
+}
 
 const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names.${id}`) : id)
 

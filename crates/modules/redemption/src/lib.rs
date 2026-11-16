@@ -6,4 +6,9 @@ mod domain;
 mod infrastructure;
 
 pub use application::RedemptionService;
-pub use infrastructure::{db::MIGRATOR, start};
+pub use infrastructure::{
+    RedemptionChangedEvent, RedemptionChangedPayload,
+    db::MIGRATOR,
+    http::{RedemptionPage, RedemptionQuery, RedemptionRecord, RedemptionStatusName, routes},
+    openapi, start,
+};

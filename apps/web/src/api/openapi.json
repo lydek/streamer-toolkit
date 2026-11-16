@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent` and `TemplateChangedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent` and `RedemptionChangedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -252,6 +252,113 @@
             }
           },
           "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/redemptions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_redemptions",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; records redeemed at or after it.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "RFC 3339; records redeemed before it.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "viewer",
+            "in": "query",
+            "description": "Part of the viewer's login or display name; ASCII letters ignore case.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reward",
+            "in": "query",
+            "description": "Part of the reward name; ASCII letters ignore case.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RedemptionStatusName"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Records to skip; default 0.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100; default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedemptionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`redemption.invalid_filter`: a bad time, status or page size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`redemption.storage_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1157,6 +1264,144 @@
             "$ref": "#/components/schemas/AuthStatus"
           }
         }
+      },
+      "RedemptionChangedEvent": {
+        "type": "object",
+        "description": "A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It\ncarries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.\nNot kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RedemptionChangedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/RedemptionChangedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "RedemptionChangedPayload": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The record's ID, as in `RedemptionRecord.id`."
+          }
+        }
+      },
+      "RedemptionChangedType": {
+        "type": "string",
+        "enum": [
+          "redemption.changed"
+        ]
+      },
+      "RedemptionPage": {
+        "type": "object",
+        "description": "`GET /api/admin/redemptions`: one page, newest first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RedemptionRecord"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Records matching the filters, across all pages.",
+            "minimum": 0
+          }
+        }
+      },
+      "RedemptionRecord": {
+        "type": "object",
+        "description": "One redemption record. `user_name`, `reward_title` and `user_input` are raw viewer or Twitch text: escape them\nwhen rendering.",
+        "required": [
+          "id",
+          "user_login",
+          "user_name",
+          "reward_title",
+          "reward_cost",
+          "user_input",
+          "status",
+          "redeemed_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "redeemed_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "reward_cost": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "reward_title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RedemptionStatusName"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC: when the record was created or last changed status."
+          },
+          "user_input": {
+            "type": "string",
+            "description": "Empty when the reward asks for nothing."
+          },
+          "user_login": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        }
+      },
+      "RedemptionStatusName": {
+        "type": "string",
+        "enum": [
+          "unfulfilled",
+          "fulfilled",
+          "canceled",
+          "unknown"
+        ]
       },
       "SimulatedAlert": {
         "type": "object",

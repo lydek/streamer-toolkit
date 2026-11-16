@@ -10,8 +10,8 @@ use crate::{admin, home_tiles, obs, overlay, templates};
     info(
         title = "Streamer Toolkit Host",
         description = "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message \
-                       is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent` and \
-                       `TemplateChangedEvent` follow in `seq` order."
+                       is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, \
+                       `TemplateChangedEvent` and `RedemptionChangedEvent` follow in `seq` order."
     ),
     paths(
         admin::twitch_overview,
@@ -46,5 +46,7 @@ use crate::{admin, home_tiles, obs, overlay, templates};
 struct ApiDoc;
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    ApiDoc::openapi()
+    let mut doc = ApiDoc::openapi();
+    doc.merge(redemption::openapi());
+    doc
 }

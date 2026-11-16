@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 3ac1586ce566a4ebd1f157e800ff8574de5d065fc5a71fe4a61a72360a838d9b -->
+<!-- source: docs/dev.md source-sha256: e51782acd441a745d08c617bcdadfc5d2e2ccec463b813e15047143ff5cbc9fe -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -76,6 +76,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
   - Alert simulator: each of the six kinds is sent once with the right name, amount and message; a refusal shows its reason; no sideways scrolling at 1280px, 640px and 320px; the real Host sends every simulated kind to `/ws/overlay` as an `alert` marked `source=simulation`, answers 400 to an amount out of range and 401 without the admin token.
   - Alert overlay (real Host, shorter play time): the six kinds play one at a time in the order sent, each with a sound, and leave when their time is up; a gift of 3 subs plays once; picking a built-in template switches it at once, without a reload.
   - Alerts full page template picker: every preview plays the sample alert; clicking a preview picks and sends it; arrow keys move the pick; no sideways scrolling at 1280px and 320px.
+  - Redemption records: the tile shows the latest one and the drawer lists the most recent ones, with viewer text never treated as HTML; the full page sends the right filters and pages, and on `redemption.changed` reads again with the same filters and page; with no records it shows an empty state; a rejected query shows why; no horizontal scrollbar at 1280px, 640px and 320px.
   - Chat overlay (real Host): picking a built-in template applies at once, without a reload; editing the folder's custom template (`custom`) applies at once; `<script>`, event attributes and `.js` files in a template never run; a broken template falls back to the default one; when disconnected, the status text has the same color, font, font size and shadow as the current built-in template's chat text (tested once for each of the three).
 - Checked manually once per finished slice:
   - A real OBS connection with actual visuals and audio (one live-stream test); slices that touch Twitch sign-in or chat also test real Twitch sign-in and chat. Alerts: with "Control audio via OBS" checked on the browser source, the source shows in the audio mixer and the sound is heard; a real follow, sub, Bits cheer and raid each trigger once.

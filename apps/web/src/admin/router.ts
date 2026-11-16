@@ -4,6 +4,7 @@ import ChatPage from './ChatPage.vue'
 import { useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
 import NotFoundView from './NotFoundView.vue'
+import RedemptionsPage from './RedemptionsPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 
@@ -15,6 +16,7 @@ export const router = createRouter({
     { path: '/settings', component: SettingsView },
     { path: '/chat', component: ChatPage },
     { path: '/alerts', component: AlertsPage },
+    { path: '/redemptions', component: RedemptionsPage },
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })
