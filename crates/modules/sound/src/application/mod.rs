@@ -9,6 +9,8 @@ use std::{
 };
 
 use toolkit_core::{
+    bus::EventBus,
+    events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
     settings::{self, SoundEntry},
 };
@@ -35,11 +37,38 @@ pub enum SoundError {
 pub struct SoundService {
     data_dir: PathBuf,
     modules: Arc<Modules>,
+    bus: Arc<EventBus>,
 }
 
 impl SoundService {
-    pub fn new(data_dir: PathBuf, modules: Arc<Modules>) -> Self {
-        Self { data_dir, modules }
+    pub fn new(data_dir: PathBuf, modules: Arc<Modules>, bus: Arc<EventBus>) -> Self {
+        Self {
+            data_dir,
+            modules,
+            bus,
+        }
+    }
+
+    /// Plays the sound chosen for a new redemption's reward on `/overlay/sound/`, straight away: kept in memory
+    /// only, so redemptions from before a restart never play late.
+    pub fn receive_redemption(&self, r: &ChannelPointsRedemption) {
+        if r.change != RedemptionChange::Added || !self.modules.is_enabled(modules::SOUND) {
+            return;
+        }
+        if let Cue::File { id, volume } = self.cue(&format!("reward.{}", r.reward_id)) {
+            crate::infrastructure::publish_play(&self.bus, &id, volume, Source::Twitch);
+        }
+    }
+
+    /// The test button: plays a library sound on `/overlay/sound/` as `source=simulation`; nothing is recorded.
+    pub fn play_test(&self, id: &str) -> Result<(), SoundError> {
+        let entry = self
+            .list()
+            .into_iter()
+            .find(|e| e.id == id)
+            .ok_or(SoundError::NotFound)?;
+        crate::infrastructure::publish_play(&self.bus, &entry.id, entry.volume, Source::Simulation);
+        Ok(())
     }
 
     fn folder(&self) -> PathBuf {

@@ -29,6 +29,7 @@ use integrations::{
 use redemption::RedemptionService;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use sound::SoundService;
 use tokio::{sync::RwLock, task::AbortHandle};
 use toolkit_core::{
     events::{Alert, AlertKind, ChatMessage, Fragment, Source},
@@ -52,6 +53,7 @@ pub(crate) struct AdminState {
     alerts: Arc<AlertsService>,
     redemption: Arc<RedemptionService>,
     checkin: Arc<CheckinService>,
+    sounds: Arc<SoundService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
@@ -75,6 +77,7 @@ impl AdminState {
         alerts: Arc<AlertsService>,
         redemption: Arc<RedemptionService>,
         checkin: Arc<CheckinService>,
+        sounds: Arc<SoundService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
@@ -90,6 +93,7 @@ impl AdminState {
             alerts,
             redemption,
             checkin,
+            sounds,
             outbox,
             modules,
             twitch,
@@ -99,12 +103,13 @@ impl AdminState {
         state
     }
 
-    /// Connects chat (and its check-in command), alerts and redemptions for `auth` (it waits until signed in) and stops the task of the previous auth.
+    /// Connects chat (and its check-in command), alerts and redemptions (and their reward sounds) for `auth` (it waits until signed in) and stops the task of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
         let alerts = self.alerts.clone();
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
+        let sounds = self.sounds.clone();
         let task = tokio::spawn(
             EventSub {
                 url: self.endpoints.eventsub.clone(),
@@ -115,7 +120,11 @@ impl AdminState {
                     chat.receive(m, Source::Twitch)
                 }),
                 deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
-                deliver_redemption: Arc::new(move |r| redemption.receive(r, Source::Twitch)),
+                // Reward sounds take the in-memory path, not the outbox: a sound played late is worse than none.
+                deliver_redemption: Arc::new(move |r| {
+                    sounds.receive_redemption(&r);
+                    redemption.receive(r, Source::Twitch)
+                }),
             }
             .run(),
         );

@@ -149,7 +149,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("st-alerts-{name}-{}", std::process::id()));
         let bus = Arc::new(EventBus::default());
         let modules = Arc::new(Modules::load(dir.clone()));
-        let sounds = Arc::new(SoundService::new(dir.clone(), modules.clone()));
+        let sounds = Arc::new(SoundService::new(dir.clone(), modules.clone(), bus.clone()));
         let alerts = AlertsService::new(bus.clone(), modules.clone(), Timing::default(), sounds);
         let (_, rx) = bus.subscribe();
         (dir, modules, alerts, rx)

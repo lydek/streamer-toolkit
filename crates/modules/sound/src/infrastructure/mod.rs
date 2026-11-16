@@ -11,10 +11,14 @@ use axum::{
     },
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
-use toolkit_core::settings::SoundEntry;
+use toolkit_core::{
+    bus::{Event, EventBus},
+    events::Source,
+    settings::SoundEntry,
+};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use crate::{
@@ -74,8 +78,8 @@ fn sound(e: SoundEntry, slots: &BTreeMap<String, String>) -> Sound {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SoundLibrary {
     pub sounds: Vec<Sound>,
-    /// Chosen slots: `alert.<kind>`, `checkin` or `checkin.full` → a sound's ID or `silent`. A slot left out plays
-    /// its default: the built-in sound for alerts, nothing for check-ins.
+    /// Chosen slots: `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>` → a sound's ID or
+    /// `silent`. A slot left out plays its default: the built-in sound for alerts, nothing otherwise.
     pub slots: BTreeMap<String, String>,
 }
 
@@ -104,6 +108,46 @@ impl PlaySound {
             Cue::BuiltIn | Cue::Silent => None,
         }
     }
+}
+
+const PLAY: &str = "sound.play";
+const PLAY_VERSION: u32 = 1;
+
+/// A `sound.play` event exactly as `/ws/overlay` sends it: a reward sound for `/overlay/sound/`, which plays them
+/// one at a time in order. Not kept in snapshots, so nothing replays after a reload or restart.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundPlayEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: SoundPlayType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: PlaySound,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum SoundPlayType {
+    #[serde(rename = "sound.play")]
+    SoundPlay,
+}
+
+pub(crate) fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
+    let payload = PlaySound::from_cue(Cue::File {
+        id: id.into(),
+        volume,
+    });
+    bus.publish(Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type: PLAY,
+        version: PLAY_VERSION,
+        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        source,
+        payload: serde_json::to_value(payload).expect("serializable"),
+    });
 }
 
 /// The sound an alert plays: the overlay's built-in one, none, or a library sound.
@@ -157,6 +201,7 @@ pub fn routes(service: Arc<SoundService>) -> Router {
             put(update_sound).delete(delete_sound),
         )
         .route("/api/admin/sounds/slots/{slot}", put(set_slot))
+        .route("/api/admin/sounds/{id}/play", post(play_sound))
         .with_state(service)
 }
 
@@ -181,12 +226,33 @@ pub(crate) async fn list_sounds(State(s): State<Arc<SoundService>>) -> Json<Soun
     })
 }
 
+/// Plays a sound once on `/overlay/sound/` (`source=simulation`), to test it in OBS; nothing is recorded.
+#[utoipa::path(
+    post,
+    path = "/api/admin/sounds/{id}/play",
+    tag = "admin",
+    params(("id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`sound.not_found`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn play_sound(
+    State(s): State<Arc<SoundService>>,
+    Path(id): Path<String>,
+) -> Response {
+    match s.play_test(&id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => sound_error(e),
+    }
+}
+
 /// Chooses what a slot plays.
 #[utoipa::path(
     put,
     path = "/api/admin/sounds/slots/{slot}",
     tag = "admin",
-    params(("slot" = String, Path, description = "`alert.<kind>`, `checkin` or `checkin.full`")),
+    params(("slot" = String, Path, description = "`alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>`")),
     request_body = SlotChoice,
     responses(
         (status = 204),
@@ -317,7 +383,17 @@ async fn sound_file(State(s): State<Arc<SoundService>>, Path(id): Path<String>) 
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_sounds, import_sound, update_sound, delete_sound, set_slot))]
+#[openapi(
+    paths(
+        list_sounds,
+        import_sound,
+        update_sound,
+        delete_sound,
+        set_slot,
+        play_sound
+    ),
+    components(schemas(SoundPlayEvent))
+)]
 struct SoundApi;
 
 /// This module's part of the Host's OpenAPI document.
@@ -342,7 +418,11 @@ mod tests {
 
     fn app(dir: &std::path::Path) -> Router {
         let modules = Arc::new(toolkit_core::modules::Modules::load(dir.to_path_buf()));
-        let service = Arc::new(SoundService::new(dir.to_path_buf(), modules));
+        let service = Arc::new(SoundService::new(
+            dir.to_path_buf(),
+            modules,
+            Arc::new(EventBus::default()),
+        ));
         routes(service.clone()).merge(file_routes(service))
     }
 
@@ -534,7 +614,11 @@ mod tests {
     async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
         let dir = data_dir("slots");
         let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
-        let service = Arc::new(SoundService::new(dir.clone(), modules.clone()));
+        let service = Arc::new(SoundService::new(
+            dir.clone(),
+            modules.clone(),
+            Arc::new(EventBus::default()),
+        ));
         let app = routes(service.clone());
         let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
             .as_str()
@@ -655,6 +739,112 @@ mod tests {
             StatusCode::NO_CONTENT
         );
         assert!(service.slots().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn redemption(
+        reward: &str,
+        change: toolkit_core::events::RedemptionChange,
+    ) -> toolkit_core::events::ChannelPointsRedemption {
+        toolkit_core::events::ChannelPointsRedemption {
+            id: "r-1".into(),
+            change,
+            user_id: "1".into(),
+            user_login: "viewer".into(),
+            user_name: "Viewer".into(),
+            reward_id: reward.into(),
+            reward_title: "Bell".into(),
+            reward_cost: 100,
+            user_input: String::new(),
+            status: toolkit_core::events::RedemptionStatus::Unfulfilled,
+            redeemed_at: "2026-11-17T10:00:00Z".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn new_redemptions_of_a_mapped_reward_play_its_sound_once_and_live_only() {
+        use toolkit_core::events::RedemptionChange::{Added, Updated};
+        let dir = data_dir("rewards");
+        let bus = Arc::new(EventBus::default());
+        let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
+        let service = Arc::new(SoundService::new(dir.clone(), modules.clone(), bus.clone()));
+        let app = routes(service.clone());
+        let id = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let reward = "92af127c-7326-4483-a52b-b0da0be61c01";
+        assert_eq!(
+            send(&app, choose(&format!("reward.{reward}"), id.clone().into()))
+                .await
+                .0,
+            StatusCode::NO_CONTENT
+        );
+        let (_, mut rx) = bus.subscribe();
+
+        service.receive_redemption(&redemption(reward, Updated));
+        service.receive_redemption(&redemption("other-reward", Added));
+        modules
+            .set_enabled(toolkit_core::modules::SOUND, false)
+            .unwrap();
+        service.receive_redemption(&redemption(reward, Added));
+        modules
+            .set_enabled(toolkit_core::modules::SOUND, true)
+            .unwrap();
+        assert!(
+            rx.try_recv().is_err(),
+            "status changes, other rewards and a disabled module play nothing"
+        );
+
+        service.receive_redemption(&redemption(reward, Added));
+        let event: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+        assert_eq!(event["type"], "sound.play");
+        assert_eq!(event["source"], "twitch");
+        assert_eq!(
+            event["payload"],
+            serde_json::json!({ "url": format!("/sounds/{id}"), "volume": 100 })
+        );
+        let typed: SoundPlayEvent = serde_json::from_value(event.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(typed).unwrap(),
+            event,
+            "the schema type matches the bus"
+        );
+        let (snapshot, _) = bus.subscribe();
+        assert!(
+            !snapshot.contains("sound.play"),
+            "never replayed to an overlay that connects later"
+        );
+
+        // The test button plays any library sound as a simulation.
+        let play = |id: &str| {
+            Request::post(format!("/api/admin/sounds/{id}/play"))
+                .body(Body::empty())
+                .unwrap()
+        };
+        assert_eq!(send(&app, play(&id)).await.0, StatusCode::NO_CONTENT);
+        let event: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+        assert_eq!(
+            (event["type"].as_str(), event["source"].as_str()),
+            (Some("sound.play"), Some("simulation"))
+        );
+        assert_eq!(send(&app, play("nope")).await.0, StatusCode::NOT_FOUND);
+
+        let library = json(
+            send(
+                &app,
+                Request::get("/api/admin/sounds")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .1,
+        )
+        .await;
+        assert_eq!(
+            library["sounds"][0]["used_by"],
+            serde_json::json!([format!("reward.{reward}")])
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent` and `CheckinStampedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent` and `SoundPlayEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -1081,7 +1081,7 @@
           {
             "name": "slot",
             "in": "path",
-            "description": "`alert.<kind>`, `checkin` or `checkin.full`",
+            "description": "`alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>`",
             "required": true,
             "schema": {
               "type": "string"
@@ -1232,6 +1232,38 @@
           },
           "500": {
             "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/sounds/{id}/play": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays a sound once on `/overlay/sound/` (`source=simulation`), to test it in OBS; nothing is recorded.",
+        "operationId": "play_sound",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`sound.not_found`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2965,7 +2997,7 @@
         "properties": {
           "slots": {
             "type": "object",
-            "description": "Chosen slots: `alert.<kind>`, `checkin` or `checkin.full` → a sound's ID or `silent`. A slot left out plays\nits default: the built-in sound for alerts, nothing for check-ins.",
+            "description": "Chosen slots: `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>` → a sound's ID or\n`silent`. A slot left out plays its default: the built-in sound for alerts, nothing otherwise.",
             "additionalProperties": {
               "type": "string"
             },
@@ -2980,6 +3012,52 @@
             }
           }
         }
+      },
+      "SoundPlayEvent": {
+        "type": "object",
+        "description": "A `sound.play` event exactly as `/ws/overlay` sends it: a reward sound for `/overlay/sound/`, which plays them\none at a time in order. Not kept in snapshots, so nothing replays after a reload or restart.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PlaySound"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SoundPlayType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "SoundPlayType": {
+        "type": "string",
+        "enum": [
+          "sound.play"
+        ]
       },
       "SoundUpdate": {
         "type": "object",

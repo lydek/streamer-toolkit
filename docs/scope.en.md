@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 9e433f667754a82dc985993c7fd9ed67022a8db46fff0bfdc0b07935d4d44565 -->
+<!-- source: docs/scope.md source-sha256: 59534ad3d9bc849f395166db189f95fece6d058ba3faf62520345fa877b9466c -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -22,7 +22,7 @@ Build in order. Try each slice on a real stream when it is done, and move on onl
 | 2 | Follows, subscriptions, Bits and raids | Follows, new subs, resubs, gift subs, Bits and raids trigger overlay animations and sounds; several at once play one after another, and one gift of subs plays only once; pick from built-in templates; testable with the event simulator, without waiting for a real follow |
 | 3 | Redemption records | Every channel-point redemption is stored (deduplicated by redemption ID) and searchable in the UI; the first complex module |
 | 4 | Daily check-in | Viewers check in by redeeming channel points or with a chat command; the streamer can manually register or backfill check-ins in the UI; one check-in per viewer per business day, with the day boundary set by the streamer's time zone; a stamp card shows progress from the total check-ins; old check-in data can be imported (preview before import, deduplication, original file untouched; JSON format, see [modules/checkin.en.md](modules/checkin.en.md)) |
-| 5 | Sound management | Import local sound files and choose which event triggers each one |
+| 5 | Sound management | Import local sound files (MP3, WAV, OGG) and choose what alerts, check-ins and each channel point reward play; all sound plays in OBS, with reward sounds played in order on a separate OBS URL |
 | 6 | Backup and restore | One-click export/import of settings and records, with all data preserved after import |
 | 7 | Windows portable package | Usable on another PC after extracting the zip; the zip includes a list of third-party licenses and instructions for handling SmartScreen warnings and unblocking the zip. When a new version is available, the admin UI notifies the user; extracting the new zip over the existing folder updates the app without affecting existing data |
 

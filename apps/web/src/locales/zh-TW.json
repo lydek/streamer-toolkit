@@ -264,8 +264,12 @@
     "where": {
       "alert": "特效：{kind}",
       "checkin": "打卡：一般打卡",
-      "checkinFull": "打卡：集滿"
-    }
+      "checkinFull": "打卡：集滿",
+      "reward": "頻道點數：{title}"
+    },
+    "rewards": "頻道點數獎勵",
+    "playInObs": "在 OBS 播放",
+    "playedInObs": "已送到 OBS 播放。"
   },
   "simulate": {
     "heading": "事件模擬器",
