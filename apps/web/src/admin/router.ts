@@ -8,6 +8,7 @@ import NotFoundView from './NotFoundView.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
+import SoundsPage from './SoundsPage.vue'
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
 export const router = createRouter({
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: '/alerts', component: AlertsPage },
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
+    { path: '/sounds', component: SoundsPage },
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

@@ -162,7 +162,8 @@
       "chat": "聊天室",
       "alerts": "特效",
       "redemption": "兌換紀錄",
-      "checkin": "打卡"
+      "checkin": "打卡",
+      "sound": "音效"
     }
   },
   "settings": {
@@ -240,6 +241,22 @@
       "retry": "重試",
       "skip": "略過"
     }
+  },
+  "sound": {
+    "count": "{n} 個音效",
+    "empty": "還沒有音效",
+    "file": "匯入音效檔",
+    "label": "名稱",
+    "volume": "音量",
+    "play": "試聽",
+    "delete": "刪除",
+    "confirmDelete": "確定刪除",
+    "cancel": "取消",
+    "usedBy": "刪除後，這些地方會改回預設：",
+    "notUsed": "沒有地方用到這個音效。",
+    "imported": "已匯入「{label}」。",
+    "deleted": "已刪除「{label}」。",
+    "loadFailed": "無法載入音效。"
   },
   "simulate": {
     "heading": "事件模擬器",
@@ -346,6 +363,13 @@
       "in_use": "這個連接埠也被佔用了，請換一個。",
       "bind_failed": "無法使用這個連接埠，請檢視記錄檔。",
       "start_failed": "無法啟動 Host，請檢視記錄檔。"
+    },
+    "sound": {
+      "unsupported_type": "只能匯入 MP3、WAV、OGG 檔。",
+      "too_large": "檔案超過 10 MB。",
+      "not_found": "找不到這個音效，可能已經刪除。",
+      "invalid": "名稱不能空白，音量是 0 到 100%。",
+      "save_failed": "無法儲存音效。"
     }
   }
 }

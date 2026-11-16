@@ -193,6 +193,19 @@
         </template>
       </template>
     </AppDrawer>
+
+    <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
+      <template #now>
+        <p v-if="sounds.state === 'failed'" role="alert">{{ t('sound.loadFailed') }}</p>
+        <p v-else-if="sounds.state === 'loading'">{{ t('app.loading') }}</p>
+        <template v-else-if="sounds.state === 'ready'">
+          <p v-if="!sounds.items.length">{{ t('sound.empty') }}</p>
+          <ul v-else class="plain sound-list">
+            <li v-for="s in sounds.items" :key="s.id">{{ s.label }}</li>
+          </ul>
+        </template>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
@@ -289,6 +302,18 @@ async function loadCheckinToday() {
     if (mine === checkinRequest) checkinToday.value = { state: 'failed' }
   }
 }
+// The sound library, for the sound tile and drawer; reloaded when the drawer opens.
+const sounds = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: Schemas['Sound'][] }>({
+  state: 'loading',
+})
+async function loadSounds() {
+  try {
+    sounds.value = { state: 'ready', items: (await api(client.GET('/api/admin/sounds'))).sounds }
+  } catch {
+    sounds.value = { state: 'failed' }
+  }
+}
+watch(drawer.current, (id) => id === 'sound' && void loadSounds())
 const live = useLiveEvents(2000, (msg) => {
   chatLog.value = applyChat(chatLog.value, msg)
   if (changesRecords(msg)) void loadRecent()
@@ -319,6 +344,13 @@ const lines = computed<Record<string, Line>>(() => {
       checkinToday.value.state === 'ready'
         ? { state: 'ready', text: t('checkin.today', { n: checkinToday.value.today.count }) }
         : { state: checkinToday.value.state },
+    sound:
+      sounds.value.state === 'ready'
+        ? {
+            state: 'ready',
+            text: sounds.value.items.length ? t('sound.count', { n: sounds.value.items.length }) : t('sound.empty'),
+          }
+        : { state: sounds.value.state },
   }
 })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
@@ -459,6 +491,7 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(async () => {
   document.addEventListener('keydown', onKeydown, true)
   await run(async () => {})
+  void loadSounds()
   await focusReturnTarget()
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
   // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
@@ -474,6 +507,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.sound-list {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .recent-checkins {
   list-style: none;
   padding: 0;

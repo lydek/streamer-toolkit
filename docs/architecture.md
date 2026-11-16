@@ -101,13 +101,13 @@ apps/
   - `cfg(dev)` 只在 `apps/desktop` 有效：由 `apps/desktop` 判斷是否為 dev，再把 dev 額外允許的 Vite origin 當成執行期設定傳給 Host；`crates/host` 不讀任何 cfg。
   - `rust-embed` 啟用 `debug-embed` feature，debug 建置也真的把檔案內嵌進執行檔。
   - 使用者自訂的 HTML／CSS 樣板（`custom`）存在資料夾的 `templates/`，由使用者自己放入（見下方「本機 API 安全」的「使用者樣板」）。
-- **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws` 與 `/templates` proxy 到 Host：
+- **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws`、`/templates` 與 `/sounds` proxy 到 Host：
   - proxy 目標寫 `http://127.0.0.1:<port>`，不寫 `localhost`（Node 可能解析成 IPv6 `::1`，但 Host 只綁 IPv4）。
   - `<port>` 每個請求都重新讀 dev 資料夾（`target\debug\data\`，由 `pnpm tauri dev` 使用，不看 `--data-dir`；有設 `CARGO_TARGET_DIR` 時以它為準，須為絕對路徑）的 `settings.json`，沒有檔案或內容不合法時用預設 port：Vite 比 app 先啟動，資料夾第一次啟動時可能自動換 port，port 修改小頁面也可能存下新的 port。
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
   - Vite 送出和 Host 相同的 CSP：`/overlay/` 下的頁面送 Overlay CSP，其他送 `/admin` 的 CSP（`frame-src` 依請求的 Host 標頭，放行同一 origin 下的聊天室與特效 Overlay 頁；標頭不是單純的主機名稱與 port 時為 `'none'`），讓違規在開發時就出現。CSP 由下一條的 middleware 設定，不用 `server.headers`：Vite 最後才套用它，會蓋掉 Overlay CSP。
-  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
+  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates`、`/sounds` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
   - 任何網站的 sandbox iframe 都是 `null` origin，所以依上一條，任何網站都讀得到 Vite 提供的檔案。因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 資料）在裡面，不能經由 Vite 讀到。
 
 ### 本機 API 安全
@@ -136,6 +136,10 @@ apps/
   - 樣板：只有內建樣板 `default`、`banner`、`text`（原始檔在 `apps/web/src/overlay/alerts/templates/<id>/`，只用 HTML／CSS，同時內嵌進執行檔）；沒有資料夾樣板。選擇記在 `settings.json` 的 `alert_template`（預設 `default`，無法辨識的值當成 `default`），管理 UI 用 `GET`／`PUT /api/admin/templates/alerts`（`{ "selected": "<id>" }`；其餘值回 400 `template.unknown`，存檔失敗回 500 `settings.save_failed`）讀取與切換，存檔後發布 `template.changed`（`overlay` 為 `alerts`），Overlay 立即換掉。`GET /templates/alerts/{*path}` 提供目前選擇的樣板，`GET /templates/built-in/alerts/{id}/{*path}` 提供任一款給預覽（未知的 ID 回 404）；類型白名單、路徑檢查與標頭都和聊天室樣板相同。綁定方式：`data-alert-stage` 元素（目前播放的特效放在裡面）與 `<template data-alert>`（一則特效的標記）；`data-field="title"` 填「誰做了什麼」，`data-field="message"` 填觀眾留言（沒有留言就移除）；最上層元素加上 `data-kind`（事件種類）與 CSS 變數 `--duration`，時間到就移除。文字一律以 `textContent` 寫入；Overlay 一樣以 `DOMParser` 解析並移除會執行的內容，相對路徑指向樣板目錄。
   - 音效：預設音效 `chime.wav` 由 `scripts/generate-chime.mjs` 只用 Node 內建模組合成（不下載外部音檔，記在 `assets/CREDITS.md`），打包進建置產物，每則特效開始時播放一次。OBS 瀏覽器來源允許自動播放；要在 OBS 混音器調整音量，勾選來源的「透過 OBS 控制音訊」。
 - **集點卡 Overlay**（`/overlay/checkin/`）：每次打卡成功（重複的不算）由 checkin 模組 application 層的佇列一次送出一則 `checkin.stamped`：觀眾名稱、頭像網址、目前的格數與總格數、累計次數、是否剛好集滿、顯示時間（5 秒，之後隔 1 秒才送下一則），不放進快照。頭像向 Twitch（Helix Get Users）查一次後存起來，只接受 `https://static-cdn.jtvnw.net/` 的網址，Overlay 也再檢查一次。名稱以 Vue 的文字插值顯示。只有一款內建樣式（純 CSS，沒有外部素材），集滿時有不同的效果。模擬器（`POST /api/admin/simulate/checkin`，`source=simulation`）只送到 Overlay，不寫入紀錄。
+- **音效庫**（sound 模組）：管理 API `GET`／`POST /api/admin/sounds`、`PUT`／`DELETE /api/admin/sounds/{id}`。
+  - 匯入：body 就是檔案本身，`?name=` 帶原始檔名；上限 10 MB（`DefaultBodyLimit`，超過回 413 `sound.too_large`）。副檔名與檔案開頭的 magic bytes 必須是同一種格式：MP3（`ID3` 或 MPEG frame sync）、WAV（`RIFF`…`WAVE`）或 OGG（`OggS`），否則回 400 `sound.unsupported_type`。
+  - 檔案複製到資料夾的 `sounds/`，以 UUID v7 命名；原始檔名只當名稱（以文字顯示），不當路徑。名稱、音量（0–100%）與格式記在 `settings.json` 的 `sound.library`。刪除時先從 `settings.json` 移除，再刪檔案。
+  - `GET /sounds/{id}` 唯讀、不需要 token（給 Overlay 與管理 UI 試聽），只提供音效庫裡有的 ID，檔案路徑只由 ID 與格式組成。`Content-Type` 依格式固定（`audio/mpeg`／`audio/wav`／`audio/ogg`），另加 `X-Content-Type-Options: nosniff` 與 `Cache-Control: no-store`。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。
@@ -173,7 +177,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
-- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前備份）。
+- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前備份）。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。

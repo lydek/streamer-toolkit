@@ -207,6 +207,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
+    let sounds = Arc::new(sound::SoundService::new(config.data_dir.clone()));
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
         config.data_dir,
@@ -245,6 +246,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
                 admin::require_token,
             )),
         )
+        .merge(
+            sound::routes(sounds.clone()).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
+        )
+        .merge(sound::file_routes(sounds))
         .merge(home_tiles.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
@@ -509,6 +517,35 @@ mod tests {
             serde_json::json!({ "items": [], "total": 0 })
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn sound_library_needs_the_token_but_sound_files_do_not() {
+        for (token, expected) in [
+            (None, StatusCode::UNAUTHORIZED),
+            (Some(TOKEN), StatusCode::OK),
+        ] {
+            let b = get_req("/api/admin/sounds", "127.0.0.1:47810");
+            let b = match token {
+                Some(t) => b.header(header::AUTHORIZATION, format!("Bearer {t}")),
+                None => b,
+            };
+            assert_eq!(status(b.body(Body::empty()).unwrap()).await, expected);
+        }
+        let upload = Request::post("/api/admin/sounds?name=a.wav")
+            .header(header::HOST, "127.0.0.1:47810")
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .body(Body::from(&b"RIFF\0\0\0\0WAVE"[..]))
+            .unwrap();
+        assert_eq!(status(upload).await, StatusCode::UNAUTHORIZED);
+        // The file route is public (overlays have no token) and answers unknown IDs with 404, not 401.
+        let file = get_req(
+            "/sounds/0190a5b0-0000-7000-8000-000000000000",
+            "127.0.0.1:47810",
+        )
+        .body(Body::empty())
+        .unwrap();
+        assert_eq!(status(file).await, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

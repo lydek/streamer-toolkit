@@ -33,6 +33,27 @@ pub struct Settings {
     pub alert_template: String,
     /// Check-in rules; the check-in module validates them and falls back to defaults for values it cannot use.
     pub checkin: CheckinSettings,
+    /// Imported sound files; the sound module checks them.
+    pub sound: SoundSettings,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SoundSettings {
+    pub library: Vec<SoundEntry>,
+}
+
+/// One imported sound; its file is `sounds/<id>.<format>` in the data folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SoundEntry {
+    /// UUID v7.
+    pub id: String,
+    /// Shown to the broadcaster; starts as the original file name, which is never used as a path.
+    pub label: String,
+    /// 0–100 (%).
+    pub volume: u8,
+    /// `mp3`, `wav` or `ogg`.
+    pub format: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +112,7 @@ impl Default for Settings {
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
+            sound: SoundSettings::default(),
         }
     }
 }

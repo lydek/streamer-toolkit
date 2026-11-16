@@ -6,8 +6,8 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
-const extra: Tile[] = [{ id: 'sound', group: 'features', icon: '' }]
-const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', sound: '音效' }
+const extra: Tile[] = [{ id: 'badge', group: 'features', icon: '' }]
+const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', badge: '徽章' }
 
 // What the page's save does: shows `next` at once, puts the previous order back on failure (`outcome` false),
 // changes nothing while busy (`outcome` undefined).
@@ -54,8 +54,8 @@ describe('ArrangeTiles', () => {
     button('chat', 'later').focus()
     button('chat', 'later').click()
     await flushPromises()
-    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin', 'sound'])
-    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin', 'sound'])
+    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin', 'sound', 'badge'])
+    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin', 'sound', 'badge'])
     expect(document.activeElement).toBe(button('chat', 'earlier'))
     expect(live()).toBe('聊天室移到直播中第 2 個')
   })
@@ -99,16 +99,16 @@ describe('ArrangeTiles', () => {
 
   it('adds to the end of its group and focuses the first enabled button of the new tile', async () => {
     const wrapper = arrange(['chat'])
-    document.querySelector<HTMLButtonElement>('[data-available="sound"] [data-action="add"]')!.click()
+    document.querySelector<HTMLButtonElement>('[data-available="badge"] [data-action="add"]')!.click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['chat', 'sound'])
+    expect(wrapper.props('saved')).toEqual(['chat', 'badge'])
     // Alone in its group: both move buttons are disabled.
-    expect(document.activeElement).toBe(button('sound', 'remove'))
-    expect(live()).toBe('音效已加到功能第 1 個')
+    expect(document.activeElement).toBe(button('badge', 'remove'))
+    expect(live()).toBe('徽章已加到功能第 1 個')
 
     document.querySelector<HTMLButtonElement>('[data-available="alerts"] [data-action="add"]')!.click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['chat', 'sound', 'alerts'])
+    expect(wrapper.props('saved')).toEqual(['chat', 'badge', 'alerts'])
     expect(document.activeElement).toBe(button('alerts', 'earlier'))
   })
 

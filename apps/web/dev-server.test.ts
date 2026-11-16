@@ -118,6 +118,12 @@ describe('dev server', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull()
   })
 
+  it('proxies /sounds to the Host without opening it to the null origin', async () => {
+    const res = await fetch(`${base}/sounds/x`, { headers: { Origin: 'null' } })
+    expect(await res.text()).toBe('host')
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
   it('leaves the CSP to devServer()', () => {
     // Vite applies server.headers after every middleware, so a CSP there would replace the overlay CSP.
     // Checked on the config: local HTTPS filters (e.g. AdGuard) may rewrite CSP headers on the wire.
