@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 1b07da62df5d1673cd9edef80162cb884521b9fb9e08ae054dc906bbbf28e08a -->
+<!-- source: docs/modules/checkin.md source-sha256: 8398eb92bde16e9e8fd1a527c7e2159323197a37187e44ed6f86ac77438b4bf9 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -29,6 +29,25 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing.
 - The simulator in the drawer tests the overlay without writing records. Details in [architecture.en.md](../architecture.en.md) "Stamp card overlay".
 
+## Import
+- Pick a JSON file on the full page: the admin UI reads the file and sends its content to the Host for a preview (how many viewers would be added, updated and skipped, with reasons), and writes it in one transaction only after confirmation. The original file is never changed. Files are limited to 5 MB.
+- Format: a JSON object keyed by Twitch user ID, where each entry may have:
+  - `totalCheckIns` (required, an integer of 0 or more): the total.
+  - `lastName` or `name`: the display name (`lastName` wins when both exist); a new viewer's login stays unknown until they check in.
+  - `profileImage`: avatar URL, accepted only from Twitch's image CDN, never replacing a known avatar.
+  - `lastCheckInDate` (`YYYY-MM-DD`): the last check-in day, read as a date with no time zone conversion; left empty when missing. It never blocks checking in that day.
+  - `stamps`, `isOwner`, `excluded`; any other field is ignored.
+- Skipped and listed with a reason: a non-numeric key, `isOwner` or `excluded` set to `true`, a missing or invalid `totalCheckIns`, a `lastCheckInDate` that is not a date.
+- The imported total is stored as the viewer's baseline, which a later import overwrites, so importing the same file twice gives the same result. The displayed total = baseline + check-ins recorded by the toolkit; the stamp card is recalculated from it, never taken from the file's `stamps`; the last check-in day is the later of the baseline date and the toolkit's records.
+- Known viewers keep their current names.
+
+```json
+{
+  "12345678": { "totalCheckIns": 23, "lastName": "Viewer name", "lastCheckInDate": "2026-10-31" },
+  "87654321": { "totalCheckIns": 5, "name": "Someone else", "excluded": true }
+}
+```
+
 ## Business day
 - Settings: time zone (IANA, default `Asia/Taipei`) and reset hour (local 0–23, default 0).
 - The business day comes from the time the event happened (`occurredAt`), not from processing time: the date of the local time minus the reset hour. Example: with a 6 o'clock reset, 5 a.m. on 11/17 still counts as 11/16.
@@ -47,5 +66,6 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - After pausing and re-enabling, redemptions from that period are applied in order, on the day each was redeemed; after closing and re-enabling, they are not applied.
 - Events past the retry limit move to the failed list and do not hold back later events.
 - Manual check-ins and back-fills follow the same once-per-business-day rule; a repeat shows a notice and is not counted again. After the number of card slots changes, every viewer's card is recalculated at once.
+- Import: the original file is unchanged; viewers are matched by Twitch user ID, and importing the same data again adds nothing; skipped entries are listed with reasons in the preview; stamp cards are recalculated from `totalCheckIns`; `lastCheckInDate`, when present, becomes the last check-in day, otherwise it stays empty, and checking in that day still works.
 - Simulated events are never written to check-in records; nothing is recorded while the module is disabled.
 - All of the above are tested (the repository against a real SQLite database).

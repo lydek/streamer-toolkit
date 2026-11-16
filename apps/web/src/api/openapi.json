@@ -10,6 +10,128 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/checkin/import": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Imports the file in one transaction; the same file imported again gives the same totals.",
+        "operationId": "apply_import",
+        "requestBody": {
+          "description": "The import file: an object keyed by Twitch user ID (at most 5 MB)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.import_invalid`: not JSON, or not an object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`checkin.import_too_large`: larger than 5 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/import/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "What importing this file would change; nothing is written. The admin UI posts the chosen file's content.",
+        "operationId": "preview_import",
+        "requestBody": {
+          "description": "The import file: an object keyed by Twitch user ID (at most 5 MB)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.import_invalid`: not JSON, or not an object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`checkin.import_too_large`: larger than 5 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/outbox": {
       "get": {
         "tags": [
@@ -1903,6 +2025,59 @@
           "ask_before_close": {
             "type": "boolean",
             "description": "Show the close hint on ✕; the hint's \"Don't show again\" turns it off."
+          }
+        }
+      },
+      "ImportSkip": {
+        "type": "object",
+        "description": "An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering.",
+        "required": [
+          "key",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ImportSkipReason"
+          }
+        }
+      },
+      "ImportSkipReason": {
+        "type": "string",
+        "enum": [
+          "invalid_id",
+          "owner",
+          "excluded",
+          "invalid_total",
+          "invalid_date"
+        ]
+      },
+      "ImportSummary": {
+        "type": "object",
+        "description": "What an import adds, updates (replacing the imported baseline of known viewers) and skips.",
+        "required": [
+          "added",
+          "updated",
+          "skipped"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportSkip"
+            }
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

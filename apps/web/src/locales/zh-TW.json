@@ -209,6 +209,20 @@
       "registered": "已登記 {name}（{date}）。",
       "already": "{name} 在 {date} 已經打過卡了，沒有重複計算。"
     },
+    "import": {
+      "heading": "匯入舊打卡資料",
+      "file": "選擇 JSON 檔",
+      "summary": "會新增 {added} 位、更新 {updated} 位，略過 {skipped} 筆。",
+      "confirm": "確認匯入",
+      "done": "已匯入：新增 {added} 位、更新 {updated} 位。",
+      "reasons": {
+        "invalid_id": "不是數字的 Twitch user ID",
+        "owner": "實況主本人（isOwner）",
+        "excluded": "標為排除（excluded）",
+        "invalid_total": "totalCheckIns 缺少或不是 0 以上的整數",
+        "invalid_date": "lastCheckInDate 不是 YYYY-MM-DD"
+      }
+    },
     "disable": {
       "title": "停用打卡",
       "pause": "暫停：保留期間的兌換，重新啟用後依序補打卡。",
@@ -276,6 +290,8 @@
     },
     "checkin": {
       "invalid_query": "搜尋條件不正確。",
+      "import_invalid": "不是有效的打卡資料：需要一個以 Twitch user ID 為鍵的 JSON 物件。",
+      "import_too_large": "檔案超過 5 MB。",
       "invalid_date": "日期不正確：只能登記今天或過去的營運日。",
       "viewer_not_found": "找不到這位觀眾。",
       "storage_failed": "無法讀取或寫入打卡紀錄。",

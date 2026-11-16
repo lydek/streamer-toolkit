@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State, rejection::QueryRejection},
+    extract::{
+        DefaultBodyLimit, Path, Query, State, rejection::JsonRejection, rejection::QueryRejection,
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -16,9 +18,13 @@ use toolkit_core::settings::CheckinSettings;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    application::{CheckinService, ConfigError, ManualError, Outcome, settings_of},
+    application::{self, CheckinService, ConfigError, ManualError, Outcome, settings_of},
+    domain::{ImportEntry, ImportedViewer, SkipReason},
     infrastructure::db,
 };
+
+/// Largest import file accepted.
+pub const IMPORT_MAX_BYTES: usize = 5 * 1024 * 1024;
 
 const DEFAULT_LIMIT: u32 = 50;
 const MAX_LIMIT: u32 = 100;
@@ -78,6 +84,14 @@ pub fn routes(pool: SqlitePool, service: Arc<CheckinService>) -> Router {
         .route(
             "/api/admin/checkin/viewers/{id}/check-ins",
             post(manual_check_in),
+        )
+        .route(
+            "/api/admin/checkin/import/preview",
+            post(preview_import).layer(DefaultBodyLimit::max(IMPORT_MAX_BYTES)),
+        )
+        .route(
+            "/api/admin/checkin/import",
+            post(apply_import).layer(DefaultBodyLimit::max(IMPORT_MAX_BYTES)),
         )
         .with_state(Arc::new(HttpState { pool, service }))
 }
@@ -154,6 +168,149 @@ pub enum ManualCheckInResult {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ManualCheckIn {
     pub result: ManualCheckInResult,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportSkipReason {
+    /// The key is not a numeric Twitch user ID.
+    InvalidId,
+    /// `isOwner` is `true`.
+    Owner,
+    /// `excluded` is `true`.
+    Excluded,
+    /// `totalCheckIns` is missing, not an integer, or negative.
+    InvalidTotal,
+    /// `lastCheckInDate` is not `YYYY-MM-DD`.
+    InvalidDate,
+}
+
+impl From<SkipReason> for ImportSkipReason {
+    fn from(r: SkipReason) -> Self {
+        match r {
+            SkipReason::InvalidId => Self::InvalidId,
+            SkipReason::Owner => Self::Owner,
+            SkipReason::Excluded => Self::Excluded,
+            SkipReason::InvalidTotal => Self::InvalidTotal,
+            SkipReason::InvalidDate => Self::InvalidDate,
+        }
+    }
+}
+
+/// An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportSkip {
+    pub key: String,
+    pub reason: ImportSkipReason,
+}
+
+/// What an import adds, updates (replacing the imported baseline of known viewers) and skips.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportSummary {
+    pub added: u64,
+    pub updated: u64,
+    pub skipped: Vec<ImportSkip>,
+}
+
+/// Reads the import format (docs/modules/checkin.md): an object keyed by Twitch user ID. Unknown fields and
+/// `stamps` are ignored.
+fn read_import(body: &serde_json::Value) -> Option<(Vec<ImportedViewer>, Vec<ImportSkip>)> {
+    let entries = body.as_object()?;
+    let mut viewers = Vec::new();
+    let mut skipped = Vec::new();
+    for (key, value) in entries {
+        let field = |name: &str| value.get(name);
+        let text = |name: &str| field(name).and_then(serde_json::Value::as_str);
+        let flag = |name: &str| field(name).and_then(serde_json::Value::as_bool) == Some(true);
+        let entry = ImportEntry {
+            key,
+            total: field("totalCheckIns").and_then(serde_json::Value::as_i64),
+            is_owner: flag("isOwner"),
+            excluded: flag("excluded"),
+            // A present but non-text date is invalid, not missing.
+            last_date: match field("lastCheckInDate") {
+                None | Some(serde_json::Value::Null) => None,
+                Some(v) => Some(v.as_str().unwrap_or("")),
+            },
+            name: text("lastName").or_else(|| text("name")),
+            profile_image: text("profileImage"),
+        };
+        match ImportedViewer::check(&entry) {
+            Ok(v) => viewers.push(v),
+            Err(reason) => skipped.push(ImportSkip {
+                key: key.chars().take(64).collect(),
+                reason: reason.into(),
+            }),
+        }
+    }
+    Some((viewers, skipped))
+}
+
+async fn import(
+    s: &HttpState,
+    body: Result<Json<serde_json::Value>, JsonRejection>,
+    apply: bool,
+) -> Response {
+    let body = match body {
+        Ok(Json(v)) => v,
+        Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            return error(StatusCode::PAYLOAD_TOO_LARGE, "checkin.import_too_large");
+        }
+        Err(_) => return error(StatusCode::BAD_REQUEST, "checkin.import_invalid"),
+    };
+    let Some((viewers, skipped)) = read_import(&body) else {
+        return error(StatusCode::BAD_REQUEST, "checkin.import_invalid");
+    };
+    let repo = db::SqliteCheckins::new(s.pool.clone());
+    match application::import(&repo, &viewers, apply, Utc::now()).await {
+        Ok(counts) => Json(ImportSummary {
+            added: counts.added,
+            updated: counts.updated,
+            skipped,
+        })
+        .into_response(),
+        Err(e) => storage_error(e),
+    }
+}
+
+/// What importing this file would change; nothing is written. The admin UI posts the chosen file's content.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/import/preview",
+    tag = "admin",
+    request_body(content = Object, description = "The import file: an object keyed by Twitch user ID (at most 5 MB)"),
+    responses(
+        (status = 200, body = ImportSummary),
+        (status = 400, description = "`checkin.import_invalid`: not JSON, or not an object", body = ErrorBody),
+        (status = 413, description = "`checkin.import_too_large`: larger than 5 MB", body = ErrorBody),
+        (status = 500, description = "`checkin.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn preview_import(
+    State(s): State<Arc<HttpState>>,
+    body: Result<Json<serde_json::Value>, JsonRejection>,
+) -> Response {
+    import(&s, body, false).await
+}
+
+/// Imports the file in one transaction; the same file imported again gives the same totals.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/import",
+    tag = "admin",
+    request_body(content = Object, description = "The import file: an object keyed by Twitch user ID (at most 5 MB)"),
+    responses(
+        (status = 200, body = ImportSummary),
+        (status = 400, description = "`checkin.import_invalid`: not JSON, or not an object", body = ErrorBody),
+        (status = 413, description = "`checkin.import_too_large`: larger than 5 MB", body = ErrorBody),
+        (status = 500, description = "`checkin.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn apply_import(
+    State(s): State<Arc<HttpState>>,
+    body: Result<Json<serde_json::Value>, JsonRejection>,
+) -> Response {
+    import(&s, body, true).await
 }
 
 fn storage_error(e: impl std::fmt::Display) -> Response {

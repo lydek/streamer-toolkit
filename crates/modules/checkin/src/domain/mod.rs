@@ -212,6 +212,77 @@ impl CheckIn {
     }
 }
 
+/// Why an imported entry is left out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SkipReason {
+    /// The key is not a numeric Twitch user ID.
+    InvalidId,
+    Owner,
+    Excluded,
+    /// `totalCheckIns` is missing, not an integer, or negative.
+    InvalidTotal,
+    /// `lastCheckInDate` is not a `YYYY-MM-DD` date.
+    InvalidDate,
+}
+
+/// One viewer's imported history: a baseline total (the stamp card is derived from it, never imported) and the
+/// last check-in day as a plain calendar date. It never blocks checking in on that day.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ImportedViewer {
+    pub(crate) twitch_id: TwitchUserId,
+    pub(crate) name: Option<String>,
+    pub(crate) profile_image: Option<String>,
+    pub(crate) total: u64,
+    pub(crate) last_day: Option<NaiveDate>,
+}
+
+/// An entry as read from the import file, before the rules.
+pub(crate) struct ImportEntry<'a> {
+    pub(crate) key: &'a str,
+    /// `None` when missing or not an integer.
+    pub(crate) total: Option<i64>,
+    pub(crate) is_owner: bool,
+    pub(crate) excluded: bool,
+    /// The raw `lastCheckInDate`, when present.
+    pub(crate) last_date: Option<&'a str>,
+    pub(crate) name: Option<&'a str>,
+    pub(crate) profile_image: Option<&'a str>,
+}
+
+impl ImportedViewer {
+    pub(crate) fn check(e: &ImportEntry) -> Result<Self, SkipReason> {
+        if e.key.is_empty() || e.key.len() > 20 || !e.key.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(SkipReason::InvalidId);
+        }
+        if e.is_owner {
+            return Err(SkipReason::Owner);
+        }
+        if e.excluded {
+            return Err(SkipReason::Excluded);
+        }
+        let total = e
+            .total
+            .and_then(|t| u64::try_from(t).ok())
+            .ok_or(SkipReason::InvalidTotal)?;
+        let last_day = e
+            .last_date
+            .map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| SkipReason::InvalidDate))
+            .transpose()?;
+        let text = |t: Option<&str>| {
+            t.map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned)
+        };
+        Ok(Self {
+            twitch_id: TwitchUserId(e.key.to_owned()),
+            name: text(e.name),
+            profile_image: text(e.profile_image),
+            total,
+            last_day,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +384,69 @@ mod tests {
             2,
             "recomputed for a new size"
         );
+    }
+
+    #[test]
+    fn import_entries_follow_the_rules() {
+        let entry = |key, total| ImportEntry {
+            key,
+            total,
+            is_owner: false,
+            excluded: false,
+            last_date: Some("2026-10-31"),
+            name: Some(" Ann "),
+            profile_image: None,
+        };
+        let ok = ImportedViewer::check(&entry("123", Some(42))).unwrap();
+        assert_eq!(
+            (ok.twitch_id.0.as_str(), ok.total, ok.name.as_deref()),
+            ("123", 42, Some("Ann"))
+        );
+        assert_eq!(
+            ok.last_day,
+            Some(date("2026-10-31")),
+            "read as a date, no zone"
+        );
+        assert_eq!(
+            ImportedViewer::check(&entry("12a", Some(1))),
+            Err(SkipReason::InvalidId)
+        );
+        assert_eq!(
+            ImportedViewer::check(&entry("", Some(1))),
+            Err(SkipReason::InvalidId)
+        );
+        assert_eq!(
+            ImportedViewer::check(&entry("1", None)),
+            Err(SkipReason::InvalidTotal)
+        );
+        assert_eq!(
+            ImportedViewer::check(&entry("1", Some(-1))),
+            Err(SkipReason::InvalidTotal)
+        );
+        assert!(ImportedViewer::check(&entry("1", Some(0))).is_ok());
+        let owner = ImportEntry {
+            is_owner: true,
+            ..entry("1", Some(1))
+        };
+        assert_eq!(ImportedViewer::check(&owner), Err(SkipReason::Owner));
+        let excluded = ImportEntry {
+            excluded: true,
+            ..entry("1", Some(1))
+        };
+        assert_eq!(ImportedViewer::check(&excluded), Err(SkipReason::Excluded));
+        let bad_date = ImportEntry {
+            last_date: Some("31/10/2026"),
+            ..entry("1", Some(1))
+        };
+        assert_eq!(
+            ImportedViewer::check(&bad_date),
+            Err(SkipReason::InvalidDate)
+        );
+        let no_date = ImportEntry {
+            last_date: None,
+            ..entry("1", Some(1))
+        };
+        assert_eq!(ImportedViewer::check(&no_date).unwrap().last_day, None);
     }
 
     #[test]
