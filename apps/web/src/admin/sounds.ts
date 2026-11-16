@@ -18,10 +18,11 @@ export function importSound(file: File) {
   )
 }
 
-/** Where a slot is, for the "used by" list: e.g. `alert.follow` → 特效：追隨. */
-export function slotLabel(slot: string, t: ComposerTranslation): string {
+/** Where a slot is, for the "used by" list: e.g. `alert.follow` → 特效：追隨. `rewards`: reward ID → title. */
+export function slotLabel(slot: string, t: ComposerTranslation, rewards = new Map<string, string>()): string {
   const [area, rest] = slot.split(/\.(.*)/)
   if (area === 'alert') return t('sound.where.alert', { kind: t(`alerts.kinds.${rest}`) })
+  if (area === 'reward') return t('sound.where.reward', { title: rewards.get(rest) ?? rest })
   if (slot === 'checkin') return t('sound.where.checkin')
   if (slot === 'checkin.full') return t('sound.where.checkinFull')
   return slot

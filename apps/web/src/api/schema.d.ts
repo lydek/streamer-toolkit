@@ -377,6 +377,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sounds/{id}/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plays a sound once on `/overlay/sound/` (`source=simulation`), to test it in OBS; nothing is recorded. */
+        post: operations["play_sound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/templates/alerts": {
         parameters: {
             query?: never;
@@ -995,14 +1012,31 @@ export interface components {
         };
         SoundLibrary: {
             /**
-             * @description Chosen slots: `alert.<kind>`, `checkin` or `checkin.full` → a sound's ID or `silent`. A slot left out plays
-             *     its default: the built-in sound for alerts, nothing for check-ins.
+             * @description Chosen slots: `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>` → a sound's ID or
+             *     `silent`. A slot left out plays its default: the built-in sound for alerts, nothing otherwise.
              */
             slots: {
                 [key: string]: string;
             };
             sounds: components["schemas"]["Sound"][];
         };
+        /**
+         * @description A `sound.play` event exactly as `/ws/overlay` sends it: a reward sound for `/overlay/sound/`, which plays them
+         *     one at a time in order. Not kept in snapshots, so nothing replays after a reload or restart.
+         */
+        SoundPlayEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["PlaySound"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["SoundPlayType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        SoundPlayType: "sound.play";
         SoundUpdate: {
             /** @description 1–100 characters after trimming. */
             label: string;
@@ -1928,7 +1962,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description `alert.<kind>`, `checkin` or `checkin.full` */
+                /** @description `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>` */
                 slot: string;
             };
             cookie?: never;
@@ -2054,6 +2088,34 @@ export interface operations {
             };
             /** @description `sound.save_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    play_sound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `sound.not_found` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -285,6 +285,7 @@ pub(crate) mod tests {
         Arc::new(SoundService::new(
             dir.to_path_buf(),
             Arc::new(Modules::load(dir.to_path_buf())),
+            Arc::new(EventBus::default()),
         ))
     }
 

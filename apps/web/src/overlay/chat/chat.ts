@@ -10,6 +10,7 @@ export type Incoming =
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']
   | components['schemas']['CheckinStampedEvent']
+  | components['schemas']['SoundPlayEvent']
 
 export interface ChatState {
   messages: ChatEvent[]

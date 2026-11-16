@@ -195,6 +195,10 @@
     </AppDrawer>
 
     <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('sound')" />
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
       <template #now>
         <p v-if="sounds.state === 'failed'" role="alert">{{ t('sound.loadFailed') }}</p>
         <p v-else-if="sounds.state === 'loading'">{{ t('app.loading') }}</p>
@@ -429,7 +433,7 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.

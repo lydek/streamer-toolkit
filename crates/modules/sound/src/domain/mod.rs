@@ -104,11 +104,17 @@ pub enum Cue {
     },
 }
 
-/// Whether `slot` names a place a sound can be chosen for: `alert.<kind>`, `checkin` or `checkin.full`.
+/// Whether `slot` names a place a sound can be chosen for: `alert.<kind>`, `checkin`, `checkin.full` or
+/// `reward.<Twitch reward ID>`.
 pub(crate) fn valid_slot(slot: &str) -> bool {
     match slot.split_once('.') {
         Some(("alert", kind)) => ALERT_KINDS.contains(&kind),
         Some(("checkin", "full")) => true,
+        // Twitch reward IDs are UUIDs; anything close enough is kept, nothing that could be markup or a path.
+        Some(("reward", id)) => {
+            (1..=64).contains(&id.len())
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        }
         Some(_) => false,
         None => slot == "checkin",
     }
@@ -167,7 +173,13 @@ mod tests {
 
     #[test]
     fn slots_and_their_defaults() {
-        for slot in ["alert.follow", "alert.raid", "checkin", "checkin.full"] {
+        for slot in [
+            "alert.follow",
+            "alert.raid",
+            "checkin",
+            "checkin.full",
+            "reward.92af127c-7326-4483-a52b-b0da0be61c01",
+        ] {
             assert!(valid_slot(slot), "{slot}");
         }
         for slot in [
@@ -176,6 +188,10 @@ mod tests {
             "alert.host",
             "checkin.",
             "checkin.half",
+            "reward.",
+            "reward.<b>",
+            "reward.a/b",
+            &format!("reward.{}", "a".repeat(65)),
             "x",
             "",
         ] {
@@ -183,6 +199,7 @@ mod tests {
         }
         assert_eq!(default_cue("alert.cheer"), Cue::BuiltIn);
         assert_eq!(default_cue("checkin.full"), Cue::Silent);
+        assert_eq!(default_cue("reward.r1"), Cue::Silent);
     }
 
     #[test]

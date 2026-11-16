@@ -168,6 +168,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let sounds = Arc::new(sound::SoundService::new(
         config.data_dir.clone(),
         modules.clone(),
+        bus.clone(),
     ));
     let alerts = Arc::new(alerts::AlertsService::new(
         bus.clone(),
@@ -225,6 +226,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         alerts,
         redemption,
         checkin.clone(),
+        sounds.clone(),
         outbox,
         modules,
     ));
@@ -1064,7 +1066,12 @@ mod tests {
 
     #[tokio::test]
     async fn overlay_gets_overlay_csp_and_assets_get_cors() {
-        for page in ["/overlay/chat", "/overlay/alerts", "/overlay/checkin"] {
+        for page in [
+            "/overlay/chat",
+            "/overlay/alerts",
+            "/overlay/checkin",
+            "/overlay/sound",
+        ] {
             let res = app()
                 .oneshot(
                     get_req(page, "127.0.0.1:47810")
