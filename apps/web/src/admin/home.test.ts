@@ -207,10 +207,10 @@ describe('tileGroups', () => {
       { id: 'chat', group: 'live' as const, icon: '' },
       { id: 'checkin', group: 'features' as const, icon: '' },
     ]
-    expect(tileGroups([{ id: 'chat', enabled: true }, { id: 'checkin', enabled: false }], tiles)).toEqual([
+    expect(tileGroups([{ id: 'chat', enabled: true, closed: false }, { id: 'checkin', enabled: false, closed: false }], tiles)).toEqual([
       { group: 'live', tiles: [tiles[0]] },
     ])
-    expect(tileGroups([{ id: 'chat', enabled: false }], tiles)).toEqual([])
+    expect(tileGroups([{ id: 'chat', enabled: false, closed: false }], tiles)).toEqual([])
   })
 })
 

@@ -7,8 +7,8 @@ import { HOST_PORT } from './ports'
 const HOST = `http://127.0.0.1:${HOST_PORT}`
 const admin = { Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}`, Origin: HOST }
 const modules = [
-  { id: 'chat', enabled: true },
-  { id: 'alerts', enabled: true },
+  { id: 'chat', enabled: true, closed: false },
+  { id: 'alerts', enabled: true, closed: false },
 ]
 
 async function openSimulator(page: Page) {

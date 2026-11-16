@@ -1,6 +1,6 @@
 // The settings page, a full page (page.ts, FullPage.vue), with the admin API and IPC mocked.
 import { type Page, expect, test } from '@playwright/test'
-import { openAdmin, zh } from './fixtures'
+import { openAdmin, scrollsSideways, zh } from './fixtures'
 
 const gear = (page: Page) => page.getByRole('button', { name: zh.settings.title, exact: true })
 const homeButton = (page: Page) => page.getByRole('button', { name: zh.app.home })
@@ -66,4 +66,37 @@ test('the settings page reads "Ask before closing" again when the window gets fo
   state.general = { ask_before_close: false }
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(ask).not.toBeChecked()
+})
+
+test('turning check-ins off asks to pause or close; Esc keeps them on', async ({ page }) => {
+  await openAdmin(page, { modules: [{ id: 'checkin', enabled: true, closed: false }] })
+  const puts: unknown[] = []
+  await page.route('**/api/admin/modules/checkin', (r) => {
+    puts.push(r.request().postDataJSON())
+    return r.fulfill({ status: 204 })
+  })
+  await gear(page).click()
+  const dialog = page.getByRole('dialog', { name: zh.checkin.disable.title })
+  const toggle = page.locator('#module-checkin')
+
+  await toggle.click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: zh.checkin.disable.pauseButton })).toBeFocused()
+  await expect(dialog.getByText(zh.checkin.disable.closeWarning)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  expect(puts).toEqual([])
+
+  await toggle.click()
+  await dialog.getByRole('button', { name: zh.checkin.disable.pauseButton }).click()
+  await expect(dialog).toBeHidden()
+  await expect.poll(() => puts).toEqual([{ enabled: false, close: false }])
+
+  await page.setViewportSize({ width: 320, height: 640 })
+  await toggle.click()
+  await expect(dialog.getByRole('button', { name: zh.checkin.disable.closeButton })).toBeInViewport()
+  expect(await scrollsSideways(dialog)).toBe(false)
+  await dialog.getByRole('button', { name: zh.checkin.disable.closeButton }).click()
+  await expect.poll(() => puts.length).toBe(2)
+  expect(puts[1]).toEqual({ enabled: false, close: true })
 })

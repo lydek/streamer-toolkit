@@ -15,7 +15,7 @@ const ok = (data: unknown) => Promise.resolve({ data, response: new Response(nul
 const responses: Record<string, unknown> = {
   '/api/admin/twitch': { client_id: '', status: { state: 'signed_out' } },
   '/api/admin/home-tiles': null,
-  '/api/admin/modules': [{ id: 'chat', enabled: true }],
+  '/api/admin/modules': [{ id: 'chat', enabled: true, closed: false }],
   '/api/admin/templates/chat': { error: null },
 }
 let put: ReturnType<typeof vi.fn>

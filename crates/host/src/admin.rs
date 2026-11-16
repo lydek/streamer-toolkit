@@ -32,7 +32,8 @@ use serde::{Deserialize, Serialize};
 use tokio::{sync::RwLock, task::AbortHandle};
 use toolkit_core::{
     events::{Alert, AlertKind, ChatMessage, Fragment, Source},
-    modules::{ModuleError, ModuleState, Modules},
+    modules::{self, ModuleError, ModuleState, Modules},
+    outbox::Outbox,
     settings,
 };
 
@@ -51,6 +52,7 @@ pub(crate) struct AdminState {
     alerts: Arc<AlertsService>,
     redemption: Arc<RedemptionService>,
     checkin: Arc<CheckinService>,
+    outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     twitch: RwLock<TwitchAuth>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
@@ -70,6 +72,7 @@ impl AdminState {
         alerts: Arc<AlertsService>,
         redemption: Arc<RedemptionService>,
         checkin: Arc<CheckinService>,
+        outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
         let http = integrations::tls::https_client(tls.clone());
@@ -86,6 +89,7 @@ impl AdminState {
             alerts,
             redemption,
             checkin,
+            outbox,
             modules,
             twitch: RwLock::new(twitch.clone()),
             eventsub: Mutex::new(None),
@@ -130,6 +134,15 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .route("/api/admin/modules", get(list_modules))
         .route("/api/admin/modules/{id}", put(set_module))
         .route("/api/admin/checkin/rewards", get(checkin_rewards))
+        .route("/api/admin/checkin/outbox", get(checkin_outbox))
+        .route(
+            "/api/admin/checkin/outbox/{event_id}/retry",
+            post(retry_dead_letter),
+        )
+        .route(
+            "/api/admin/checkin/outbox/{event_id}/skip",
+            post(skip_dead_letter),
+        )
         .route("/api/admin/simulate/chat", post(simulate_chat))
         .route("/api/admin/simulate/alert", post(simulate_alert))
         .layer(middleware::from_fn_with_state(state.clone(), require_token))
@@ -296,6 +309,10 @@ async fn list_modules(State(s): State<Arc<AdminState>>) -> Response {
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct ModuleBody {
     enabled: bool,
+    /// With `enabled: false`: skip the module's outbox events instead of keeping them for later ("close"; the
+    /// default pauses). Enabling a closed module never delivers what was published while it was closed.
+    #[serde(default)]
+    close: bool,
 }
 
 #[utoipa::path(
@@ -315,7 +332,19 @@ async fn set_module(
     Path(id): Path<String>,
     Json(body): Json<ModuleBody>,
 ) -> Response {
-    match s.modules.set_enabled(&id, body.enabled) {
+    if body.enabled
+        && s.modules.is_closed(&id)
+        && let Err(e) = s.outbox.skip_pending(&id).await
+    {
+        tracing::error!(code = "outbox.storage_failed", error = %e, "closed-period events not skipped");
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "outbox.storage_failed");
+    }
+    let result = match (body.enabled, body.close) {
+        (false, true) => s.modules.close(&id),
+        (enabled, _) => s.modules.set_enabled(&id, enabled),
+    };
+    s.outbox.wake();
+    match result {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e @ ModuleError::Unknown) => error(StatusCode::NOT_FOUND, &e.to_string()),
         Err(e @ ModuleError::SaveFailed(_)) => {
@@ -373,6 +402,125 @@ async fn checkin_rewards(State(s): State<Arc<AdminState>>) -> Response {
             error(StatusCode::BAD_GATEWAY, &e.to_string())
         }
     }
+}
+
+/// Redemptions waiting for the check-in module (while it is paused), and those it failed to take.
+#[derive(Serialize, ToSchema)]
+pub(crate) struct CheckinOutbox {
+    pending: u64,
+    /// RFC 3339: when the oldest waiting redemption happened.
+    oldest_pending_at: Option<String>,
+    dead_letters: Vec<CheckinDeadLetter>,
+}
+
+/// A redemption the check-in module failed to take five times in a row. `user_name` and `reward_title` are raw
+/// Twitch text.
+#[derive(Serialize, ToSchema)]
+pub(crate) struct CheckinDeadLetter {
+    event_id: String,
+    /// RFC 3339: when the redemption happened.
+    occurred_at: String,
+    /// RFC 3339: the last failed attempt.
+    failed_at: String,
+    attempts: i64,
+    error: String,
+    user_name: Option<String>,
+    reward_title: Option<String>,
+}
+
+fn rfc3339(t: chrono::DateTime<chrono::Utc>) -> String {
+    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/admin/checkin/outbox",
+    tag = "admin",
+    responses((status = 200, body = CheckinOutbox), (status = 500, description = "`outbox.storage_failed`", body = ErrorBody))
+)]
+async fn checkin_outbox(State(s): State<Arc<AdminState>>) -> Response {
+    let read = async {
+        let backlog = s.outbox.backlog(modules::CHECKIN).await?;
+        let dead = s.outbox.dead_letters(modules::CHECKIN).await?;
+        Ok::<_, sqlx::Error>((backlog, dead))
+    };
+    match read.await {
+        Ok((backlog, dead)) => Json(CheckinOutbox {
+            pending: backlog.pending,
+            oldest_pending_at: backlog.oldest.map(rfc3339),
+            dead_letters: dead
+                .into_iter()
+                .map(|d| {
+                    let r =
+                        serde_json::from_value::<redemption::RedemptionRecorded>(d.event.payload)
+                            .ok();
+                    CheckinDeadLetter {
+                        event_id: d.event.id,
+                        occurred_at: rfc3339(d.event.occurred_at),
+                        failed_at: rfc3339(d.failed_at),
+                        attempts: d.attempts,
+                        error: d.last_error,
+                        user_name: r.as_ref().map(|r| r.user_name.clone()),
+                        reward_title: r.map(|r| r.reward_title),
+                    }
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(e) => {
+            tracing::error!(code = "outbox.storage_failed", error = %e, "outbox not read");
+            error(StatusCode::INTERNAL_SERVER_ERROR, "outbox.storage_failed")
+        }
+    }
+}
+
+fn dead_letter_result(result: sqlx::Result<bool>) -> Response {
+    match result {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => error(StatusCode::NOT_FOUND, "outbox.not_found"),
+        Err(e) => {
+            tracing::error!(code = "outbox.storage_failed", error = %e, "dead letter not changed");
+            error(StatusCode::INTERNAL_SERVER_ERROR, "outbox.storage_failed")
+        }
+    }
+}
+
+/// Puts a dead letter back in line with a fresh set of attempts.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/outbox/{event_id}/retry",
+    tag = "admin",
+    params(("event_id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`outbox.not_found`: no such dead letter", body = ErrorBody),
+        (status = 500, description = "`outbox.storage_failed`", body = ErrorBody),
+    )
+)]
+async fn retry_dead_letter(
+    State(s): State<Arc<AdminState>>,
+    Path(event_id): Path<String>,
+) -> Response {
+    dead_letter_result(s.outbox.retry(modules::CHECKIN, &event_id).await)
+}
+
+/// Gives up on a dead letter: that redemption never checks in.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/outbox/{event_id}/skip",
+    tag = "admin",
+    params(("event_id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`outbox.not_found`: no such dead letter", body = ErrorBody),
+        (status = 500, description = "`outbox.storage_failed`", body = ErrorBody),
+    )
+)]
+async fn skip_dead_letter(
+    State(s): State<Arc<AdminState>>,
+    Path(event_id): Path<String>,
+) -> Response {
+    dead_letter_result(s.outbox.skip(modules::CHECKIN, &event_id).await)
 }
 
 #[derive(Deserialize, ToSchema)]

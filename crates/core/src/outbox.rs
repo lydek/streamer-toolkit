@@ -15,6 +15,8 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool, migrate::Migrator};
 use tokio::sync::Notify;
 
+use crate::modules::Modules;
+
 /// The outbox tables belong to `core`; the host merges these migrations with the modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -49,8 +51,37 @@ pub struct Subscription {
 
 pub struct Outbox {
     pool: SqlitePool,
+    modules: Arc<Modules>,
     subscriptions: Vec<Subscription>,
     wake: Notify,
+}
+
+/// Events a subscriber has not received yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Backlog {
+    pub pending: u64,
+    /// `occurred_at` of the oldest one.
+    pub oldest: Option<DateTime<Utc>>,
+}
+
+/// An event that failed [`MAX_ATTEMPTS`] times and waits for the broadcaster to retry or skip it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeadLetter {
+    pub event: OutboxEvent,
+    pub attempts: i64,
+    pub last_error: String,
+    pub failed_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct DeadRow {
+    id: String,
+    event_type: String,
+    payload: String,
+    occurred_at: String,
+    attempts: i64,
+    last_error: Option<String>,
+    updated_at: String,
 }
 
 /// Fixed width, so text order is time order.
@@ -59,10 +90,16 @@ fn time_text(t: DateTime<Utc>) -> String {
 }
 
 impl Outbox {
-    /// `pool` must already have [`MIGRATOR`] applied.
-    pub fn new(pool: SqlitePool, subscriptions: Vec<Subscription>) -> Arc<Self> {
+    /// `pool` must already have [`MIGRATOR`] applied. A disabled module gets nothing: while paused its events
+    /// wait (retries are not counted), while closed they are skipped.
+    pub fn new(
+        pool: SqlitePool,
+        modules: Arc<Modules>,
+        subscriptions: Vec<Subscription>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             pool,
+            modules,
             subscriptions,
             wake: Notify::new(),
         })
@@ -148,6 +185,13 @@ impl Outbox {
     async fn deliver_to(&self, module: &str, now: DateTime<Utc>) -> sqlx::Result<()> {
         let now_text = time_text(now);
         loop {
+            // Checked per event, so a module disabled mid-way stops at once.
+            if !self.modules.is_enabled(module) {
+                if self.modules.is_closed(module) {
+                    self.skip_pending(module).await?;
+                }
+                return Ok(());
+            }
             // No connection is held while the handler runs: it needs the (single) connection itself.
             let head: Option<(String, String, String, String, i64, String)> = sqlx::query_as(
                 "SELECT e.id, e.event_type, e.payload, e.occurred_at, d.attempts, d.next_attempt_at \
@@ -256,6 +300,94 @@ impl Outbox {
         .map(|_| ())
     }
 
+    /// Marks every event `module` has not received yet as skipped; returns how many. Called before a closed module
+    /// is enabled again, so events from the closed period are never delivered.
+    pub async fn skip_pending(&self, module: &str) -> sqlx::Result<u64> {
+        sqlx::query(
+            "UPDATE outbox_deliveries SET state = 'skipped', updated_at = ? WHERE subscriber = ? AND state = 'pending'",
+        )
+        .bind(time_text(Utc::now()))
+        .bind(module)
+        .execute(&self.pool)
+        .await
+        .map(|r| r.rows_affected())
+    }
+
+    pub async fn backlog(&self, module: &str) -> sqlx::Result<Backlog> {
+        let (pending, oldest): (i64, Option<String>) = sqlx::query_as(
+            "SELECT COUNT(*), MIN(e.occurred_at) FROM outbox_deliveries d JOIN outbox_events e ON e.id = d.event_id              WHERE d.subscriber = ? AND d.state = 'pending'",
+        )
+        .bind(module)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Backlog {
+            pending: u64::try_from(pending).unwrap_or(0),
+            oldest: oldest
+                .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
+                .map(|t| t.to_utc()),
+        })
+    }
+
+    /// Oldest first; unreadable rows are left out.
+    pub async fn dead_letters(&self, module: &str) -> sqlx::Result<Vec<DeadLetter>> {
+        let rows: Vec<DeadRow> = sqlx::query_as(
+            "SELECT e.id, e.event_type, e.payload, e.occurred_at, d.attempts, d.last_error, d.updated_at              FROM outbox_deliveries d JOIN outbox_events e ON e.id = d.event_id              WHERE d.subscriber = ? AND d.state = 'dead' ORDER BY e.published_at, e.id",
+        )
+        .bind(module)
+        .fetch_all(&self.pool)
+        .await?;
+        let time = |t: &str| DateTime::parse_from_rfc3339(t).ok().map(|t| t.to_utc());
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                Some(DeadLetter {
+                    event: OutboxEvent {
+                        id: r.id,
+                        event_type: r.event_type,
+                        payload: serde_json::from_str(&r.payload).ok()?,
+                        occurred_at: time(&r.occurred_at)?,
+                    },
+                    attempts: r.attempts,
+                    last_error: r.last_error.unwrap_or_default(),
+                    failed_at: time(&r.updated_at)?,
+                })
+            })
+            .collect())
+    }
+
+    /// Puts a dead letter back in line with a fresh set of attempts; `false` when there is no such dead letter.
+    pub async fn retry(&self, module: &str, event_id: &str) -> sqlx::Result<bool> {
+        let now = time_text(Utc::now());
+        let changed = sqlx::query(
+            "UPDATE outbox_deliveries SET state = 'pending', attempts = 0, next_attempt_at = ?, updated_at = ?              WHERE subscriber = ? AND event_id = ? AND state = 'dead'",
+        )
+        .bind(&now)
+        .bind(&now)
+        .bind(module)
+        .bind(event_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected()
+            == 1;
+        if changed {
+            self.wake();
+        }
+        Ok(changed)
+    }
+
+    /// Gives up on a dead letter; `false` when there is no such dead letter.
+    pub async fn skip(&self, module: &str, event_id: &str) -> sqlx::Result<bool> {
+        sqlx::query(
+            "UPDATE outbox_deliveries SET state = 'skipped', updated_at = ?              WHERE subscriber = ? AND event_id = ? AND state = 'dead'",
+        )
+        .bind(time_text(Utc::now()))
+        .bind(module)
+        .bind(event_id)
+        .execute(&self.pool)
+        .await
+        .map(|r| r.rows_affected() == 1)
+    }
+
     /// Drops the deliveries of modules that no longer subscribe to anything, then every event no subscriber still
     /// waits for (pending) or has to decide on (dead).
     pub async fn clean_up(&self) -> sqlx::Result<()> {
@@ -292,6 +424,15 @@ pub(crate) mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
     use std::sync::Mutex;
+
+    /// A registry where every module is enabled.
+    fn modules() -> Arc<Modules> {
+        Arc::new(Modules::load(std::env::temp_dir().join(format!(
+            "st-outbox-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ))))
+    }
 
     pub(crate) async fn pool() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -404,7 +545,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn event_is_written_in_the_callers_transaction() {
         let pool = with_inbox().await;
-        let outbox = Outbox::new(pool.clone(), vec![sub("a", recorder(&pool))]);
+        let outbox = Outbox::new(pool.clone(), modules(), vec![sub("a", recorder(&pool))]);
         let mut tx = pool.begin().await.unwrap();
         outbox.publish(&mut tx, &event("e1")).await.unwrap();
         tx.rollback().await.unwrap();
@@ -419,13 +560,13 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn undelivered_events_are_delivered_after_a_restart_in_order() {
         let pool = with_inbox().await;
-        let before = Outbox::new(pool.clone(), vec![sub("a", recorder(&pool))]);
+        let before = Outbox::new(pool.clone(), modules(), vec![sub("a", recorder(&pool))]);
         publish(&before, &pool, "e1").await;
         publish(&before, &pool, "e2").await;
         drop(before); // the program stopped before dispatching
 
         let a = recorder(&pool);
-        let after = Outbox::new(pool.clone(), vec![sub("a", a.clone())]);
+        let after = Outbox::new(pool.clone(), modules(), vec![sub("a", a.clone())]);
         after.dispatch(at(0)).await.unwrap();
         assert_eq!(*a.applied.lock().unwrap(), ["e1", "e2"]);
         assert!(states(&pool).await.iter().all(|s| s.2 == "delivered"));
@@ -435,7 +576,7 @@ pub(crate) mod tests {
     async fn an_event_delivered_twice_is_applied_once() {
         let pool = with_inbox().await;
         let a = recorder(&pool);
-        let outbox = Outbox::new(pool.clone(), vec![sub("a", a.clone())]);
+        let outbox = Outbox::new(pool.clone(), modules(), vec![sub("a", a.clone())]);
         publish(&outbox, &pool, "e1").await;
         outbox.dispatch(at(0)).await.unwrap();
         // A crash after the subscriber committed but before the delivery was marked sends it again.
@@ -453,7 +594,11 @@ pub(crate) mod tests {
         let pool = with_inbox().await;
         let (a, b) = (recorder(&pool), recorder(&pool));
         *a.failures.lock().unwrap() = u32::MAX;
-        let outbox = Outbox::new(pool.clone(), vec![sub("a", a.clone()), sub("b", b.clone())]);
+        let outbox = Outbox::new(
+            pool.clone(),
+            modules(),
+            vec![sub("a", a.clone()), sub("b", b.clone())],
+        );
         publish(&outbox, &pool, "e1").await;
         publish(&outbox, &pool, "e2").await;
 
@@ -492,13 +637,55 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn dead_letters_can_be_retried_or_skipped() {
+        let pool = with_inbox().await;
+        let a = recorder(&pool);
+        let outbox = Outbox::new(pool.clone(), modules(), vec![sub("a", a.clone())]);
+        publish(&outbox, &pool, "e1").await;
+        publish(&outbox, &pool, "e2").await;
+        sqlx::query(
+            "UPDATE outbox_deliveries SET state = 'dead', attempts = 5, last_error = 'boom'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let dead = outbox.dead_letters("a").await.unwrap();
+        assert_eq!(dead.len(), 2);
+        assert_eq!(
+            (
+                dead[0].event.id.as_str(),
+                dead[0].attempts,
+                dead[0].last_error.as_str()
+            ),
+            ("e1", 5, "boom")
+        );
+        assert_eq!(dead[0].event.payload, serde_json::json!({ "n": "e1" }));
+
+        assert!(outbox.retry("a", "e1").await.unwrap());
+        assert!(outbox.skip("a", "e2").await.unwrap());
+        assert!(!outbox.retry("a", "e2").await.unwrap(), "only dead letters");
+        assert!(!outbox.skip("a", "missing").await.unwrap());
+        outbox.dispatch(at(0)).await.unwrap();
+        assert_eq!(*a.applied.lock().unwrap(), ["e1"]);
+        assert!(outbox.dead_letters("a").await.unwrap().is_empty());
+        assert_eq!(
+            outbox.backlog("a").await.unwrap(),
+            Backlog {
+                pending: 0,
+                oldest: None
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn subscribers_are_fixed_when_the_event_is_published() {
         let pool = with_inbox().await;
-        let before = Outbox::new(pool.clone(), vec![sub("a", recorder(&pool))]);
+        let before = Outbox::new(pool.clone(), modules(), vec![sub("a", recorder(&pool))]);
         publish(&before, &pool, "old").await;
         let late = recorder(&pool);
         let after = Outbox::new(
             pool.clone(),
+            modules(),
             vec![sub("a", recorder(&pool)), sub("late", late.clone())],
         );
         publish(&after, &pool, "new").await;
@@ -515,13 +702,14 @@ pub(crate) mod tests {
         let pool = with_inbox().await;
         let outbox = Outbox::new(
             pool.clone(),
+            modules(),
             vec![sub("a", recorder(&pool)), sub("gone", recorder(&pool))],
         );
         for id in ["done", "waiting", "dead"] {
             publish(&outbox, &pool, id).await;
         }
         // Without "gone" (a removed module); "a" has one of each state.
-        let outbox = Outbox::new(pool.clone(), vec![sub("a", recorder(&pool))]);
+        let outbox = Outbox::new(pool.clone(), modules(), vec![sub("a", recorder(&pool))]);
         for (id, state) in [("done", "delivered"), ("dead", "dead")] {
             sqlx::query(
                 "UPDATE outbox_deliveries SET state = ? WHERE event_id = ? AND subscriber = 'a'",

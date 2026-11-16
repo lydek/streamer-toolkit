@@ -174,6 +174,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     ));
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
+        modules.clone(),
         checkin::subscriptions(config.db.clone(), &checkin),
     );
     outbox.start();
@@ -181,7 +182,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.db.clone(),
         bus.clone(),
         modules.clone(),
-        outbox,
+        outbox.clone(),
     ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
@@ -196,6 +197,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         alerts,
         redemption,
         checkin.clone(),
+        outbox,
         modules,
     ));
     Ok(Router::new()
@@ -379,6 +381,78 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(status(ok).await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn checkin_can_be_closed_and_its_dead_letters_handled() {
+        let dir = std::env::temp_dir().join(format!("st-host-close-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        config.db = db::open(&dir).await.unwrap();
+        let app = router(config).unwrap();
+        let call = |method: Method, uri: &str, body: Option<serde_json::Value>| {
+            let mut b = get_req(uri, "127.0.0.1:47810")
+                .method(method)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+            if body.is_some() {
+                b = b.header(header::CONTENT_TYPE, "application/json");
+            }
+            let req = b
+                .body(body.map_or_else(Body::empty, |v| Body::from(v.to_string())))
+                .unwrap();
+            let app = app.clone();
+            async move {
+                let res = app.oneshot(req).await.unwrap();
+                let status = res.status();
+                let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                (
+                    status,
+                    serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+                )
+            }
+        };
+        let close = serde_json::json!({ "enabled": false, "close": true });
+        let (status, _) = call(Method::PUT, "/api/admin/modules/checkin", Some(close)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (_, list) = call(Method::GET, "/api/admin/modules", None).await;
+        let checkin = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == "checkin")
+            .unwrap();
+        assert_eq!(
+            (&checkin["enabled"], &checkin["closed"]),
+            (&false.into(), &true.into())
+        );
+
+        let enable = serde_json::json!({ "enabled": true });
+        let (status, _) = call(Method::PUT, "/api/admin/modules/checkin", Some(enable)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, outbox) = call(Method::GET, "/api/admin/checkin/outbox", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            outbox,
+            serde_json::json!({ "pending": 0, "oldest_pending_at": null, "dead_letters": [] })
+        );
+        for action in ["retry", "skip"] {
+            let (status, body) = call(
+                Method::POST,
+                &format!("/api/admin/checkin/outbox/nope/{action}"),
+                None,
+            )
+            .await;
+            assert_eq!(
+                (status, &body["code"]),
+                (StatusCode::NOT_FOUND, &"outbox.not_found".into())
+            );
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

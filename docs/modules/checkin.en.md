@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 3fc55e7f922ea958b8405638a0b8b3b20493d604ae05a6a245dca3514fa29344 -->
+<!-- source: docs/modules/checkin.md source-sha256: 656983542290295146b548641b150a270779f5fb9d67639af05436a86563267b -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -14,6 +14,10 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Simulated events (`source=simulation`) are never written to check-in records.
 - Redemptions made while the program is closed never arrive (a Twitch limitation); redemptions received while it runs but not yet handled are applied after a restart, counted for the business day of the redemption.
 - While the module is disabled, chat check-in commands are dropped, like other in-memory events; existing records are kept.
+- Disabling offers "pause" or "close" ([architecture.en.md](../architecture.en.md) §4):
+  - Pause: redemptions stay in the outbox and retries are not counted; the settings page shows how many are waiting and when the oldest was redeemed; after re-enabling they check in in order, on the business day of each redemption.
+  - Close: a warning comes first; redemptions from the disabled period (including those kept while paused) are marked skipped and never applied after re-enabling. Switching from pause to close skips the kept ones too.
+- A redemption that keeps failing (5 attempts) moves to the failed list and no longer holds back later ones; the settings page lists it with "retry" (attempts start over) and "skip".
 - Times are stored in UTC; when an event's time cannot be read, the time it was received is used.
 
 ## Business day
@@ -31,5 +35,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Repeated check-ins on the same business day are not counted again; the business day follows the configured time zone and reset hour, judged from the time the event happened.
 - After the time zone or reset hour changes, a viewer who already checked in that day is not counted again.
 - One redemption checks in only once (redelivery included); a chat check-in followed by a redemption on the same day counts once; a redemption delivered late counts for the business day it was redeemed.
+- After pausing and re-enabling, redemptions from that period are applied in order, on the day each was redeemed; after closing and re-enabling, they are not applied.
+- Events past the retry limit move to the failed list and do not hold back later events.
 - Simulated events are never written to check-in records; nothing is recorded while the module is disabled.
 - All of the above are tested (the repository against a real SQLite database).

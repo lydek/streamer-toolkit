@@ -16,9 +16,10 @@ const GETS: Record<string, unknown> = {
   '/api/admin/general': { ask_before_close: true },
   '/api/admin/obs': { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'error', reason: null } },
   '/api/admin/twitch': { client_id: '', status: { state: 'signed_out' } },
-  '/api/admin/modules': [{ id: 'chat', enabled: true }],
+  '/api/admin/modules': [{ id: 'chat', enabled: true, closed: false }],
   '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
   '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
+  '/api/admin/checkin/outbox': { pending: 0, oldest_pending_at: null, dead_letters: [] },
 }
 
 async function mountSettings() {
@@ -129,7 +130,7 @@ describe('SettingsView', () => {
     await vi.waitFor(() =>
       expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', {
         params: { path: { id: 'chat' } },
-        body: { enabled: false },
+        body: { enabled: false, close: false },
       }),
     )
     wrapper.unmount()
@@ -173,5 +174,98 @@ describe('SettingsView', () => {
     await vi.waitFor(() => expect(wrapper.get<HTMLInputElement>('#checkin-slots').element.value).toBe('12'))
     expect(client.PUT).toHaveBeenCalledTimes(2) // refused before it reaches the Host
     wrapper.unmount()
+  })
+
+  describe('check-in switch and outbox', () => {
+    beforeEach(() => {
+      HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+        this.open = true
+      }
+      HTMLDialogElement.prototype.close = function (this: HTMLDialogElement, value?: string) {
+        if (value !== undefined) this.returnValue = value
+        this.open = false
+        this.dispatchEvent(new Event('close'))
+      }
+      GETS['/api/admin/modules'] = [{ id: 'checkin', enabled: true, closed: false }]
+      GETS['/api/admin/checkin/outbox'] = { pending: 0, oldest_pending_at: null, dead_letters: [] }
+      client.POST.mockReset()
+    })
+    afterEach(() => {
+      GETS['/api/admin/modules'] = [{ id: 'chat', enabled: true, closed: false }]
+    })
+
+    it('asks whether to pause or close before turning check-ins off', async () => {
+      client.PUT.mockResolvedValue(ok())
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#module-checkin').exists()).toBe(true))
+      const dialog = wrapper.get('dialog').element as HTMLDialogElement
+
+      await wrapper.get('#module-checkin').trigger('change')
+      expect(dialog.open).toBe(true)
+      expect(client.PUT).not.toHaveBeenCalled()
+      dialog.close() // Esc or Cancel
+      await flushPromises()
+      expect(client.PUT).not.toHaveBeenCalled()
+
+      await wrapper.get('#module-checkin').trigger('change')
+      expect(wrapper.get('#checkin-close-warning').text()).toBe(i18n.global.t('checkin.disable.closeWarning'))
+      await wrapper.get('dialog').findAll('button')[1].trigger('click')
+      await vi.waitFor(() =>
+        expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', {
+          params: { path: { id: 'checkin' } },
+          body: { enabled: false, close: true },
+        }),
+      )
+      wrapper.unmount()
+    })
+
+    it('shows the backlog while paused and offers to close, warning about what gets skipped', async () => {
+      GETS['/api/admin/modules'] = [{ id: 'checkin', enabled: false, closed: false }]
+      GETS['/api/admin/checkin/outbox'] = { pending: 3, oldest_pending_at: '2026-11-16T15:00:00.000Z', dead_letters: [] }
+      client.PUT.mockResolvedValue(ok())
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.text()).toContain(i18n.global.t('checkin.outbox.paused', { n: 3 })))
+      expect(wrapper.find('time[datetime="2026-11-16T15:00:00.000Z"]').exists()).toBe(true)
+      const toClose = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('checkin.outbox.switchToClose'))!
+      await toClose.trigger('click')
+      expect(wrapper.get('#checkin-close-warning').text()).toContain(
+        i18n.global.t('checkin.disable.pendingSkipped', { n: 3 }),
+      )
+      wrapper.unmount()
+    })
+
+    it('retries or skips a dead letter, showing viewer text as text', async () => {
+      GETS['/api/admin/checkin/outbox'] = {
+        pending: 0,
+        oldest_pending_at: null,
+        dead_letters: [
+          {
+            event_id: 'e1',
+            occurred_at: '2026-11-16T15:00:00.000Z',
+            failed_at: '2026-11-16T15:00:20.000Z',
+            attempts: 5,
+            error: 'checkin.storage_failed: disk full',
+            user_name: '<b>Viewer</b>',
+            reward_title: '打卡',
+          },
+        ],
+      }
+      client.POST.mockResolvedValue(ok())
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#checkin-dead-letters').exists()).toBe(true))
+      expect(wrapper.html()).toContain('&lt;b&gt;Viewer&lt;/b&gt;')
+      expect(wrapper.find('b').exists()).toBe(false)
+      const button = (label: string) => wrapper.findAll('button').find((b) => b.text() === i18n.global.t(label))!
+      await button('checkin.outbox.retry').trigger('click')
+      await vi.waitFor(() => expect(button('checkin.outbox.skip').attributes('disabled')).toBeUndefined())
+      await button('checkin.outbox.skip').trigger('click')
+      await vi.waitFor(() => expect(client.POST).toHaveBeenCalledTimes(2))
+      expect(client.POST.mock.calls.map(([path]) => path)).toEqual([
+        '/api/admin/checkin/outbox/{event_id}/retry',
+        '/api/admin/checkin/outbox/{event_id}/skip',
+      ])
+      expect(client.POST.mock.calls[0][1]).toEqual({ params: { path: { event_id: 'e1' } } })
+      wrapper.unmount()
+    })
   })
 })

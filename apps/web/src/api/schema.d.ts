@@ -4,6 +4,56 @@
  */
 
 export interface paths {
+    "/api/admin/checkin/outbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checkin_outbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/outbox/{event_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Puts a dead letter back in line with a fresh set of attempts. */
+        post: operations["retry_dead_letter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/outbox/{event_id}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gives up on a dead letter: that redemption never checks in. */
+        post: operations["skip_dead_letter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/rewards": {
         parameters: {
             query?: never;
@@ -400,6 +450,30 @@ export interface components {
          * @enum {string}
          */
         ChatTemplate: "default" | "compact" | "bubble" | "custom";
+        /**
+         * @description A redemption the check-in module failed to take five times in a row. `user_name` and `reward_title` are raw
+         *     Twitch text.
+         */
+        CheckinDeadLetter: {
+            /** Format: int64 */
+            attempts: number;
+            error: string;
+            event_id: string;
+            /** @description RFC 3339: the last failed attempt. */
+            failed_at: string;
+            /** @description RFC 3339: when the redemption happened. */
+            occurred_at: string;
+            reward_title?: string | null;
+            user_name?: string | null;
+        };
+        /** @description Redemptions waiting for the check-in module (while it is paused), and those it failed to take. */
+        CheckinOutbox: {
+            dead_letters: components["schemas"]["CheckinDeadLetter"][];
+            /** @description RFC 3339: when the oldest waiting redemption happened. */
+            oldest_pending_at?: string | null;
+            /** Format: int64 */
+            pending: number;
+        };
         /** @description The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped. */
         CheckinSettingsBody: {
             /**
@@ -441,9 +515,19 @@ export interface components {
             ask_before_close: boolean;
         };
         ModuleBody: {
+            /**
+             * @description With `enabled: false`: skip the module's outbox events instead of keeping them for later ("close"; the
+             *     default pauses). Enabling a closed module never delivers what was published while it was closed.
+             */
+            close?: boolean;
             enabled: boolean;
         };
         ModuleState: {
+            /**
+             * @description Disabled and skipping its outbox events ("close"); a disabled module that is not closed is paused and keeps
+             *     them for later.
+             */
+            closed: boolean;
             enabled: boolean;
             id: string;
         };
@@ -627,6 +711,108 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    checkin_outbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinOutbox"];
+                };
+            };
+            /** @description `outbox.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    retry_dead_letter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `outbox.not_found`: no such dead letter */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `outbox.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    skip_dead_letter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `outbox.not_found`: no such dead letter */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `outbox.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     checkin_rewards: {
         parameters: {
             query?: never;

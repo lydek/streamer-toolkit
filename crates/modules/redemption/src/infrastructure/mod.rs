@@ -136,7 +136,7 @@ mod tests {
             pool.clone(),
             bus.clone(),
             modules("announce"),
-            Outbox::new(pool.clone(), Vec::new()),
+            Outbox::new(pool.clone(), modules("outbox-a"), Vec::new()),
         );
         use RedemptionChange::*;
         use RedemptionStatus::*;
@@ -170,7 +170,7 @@ mod tests {
             pool.clone(),
             bus,
             modules("wire"),
-            Outbox::new(pool, Vec::new()),
+            Outbox::new(pool, modules("outbox-w"), Vec::new()),
         );
         service.receive(
             event(

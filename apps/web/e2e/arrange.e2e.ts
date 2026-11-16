@@ -14,8 +14,8 @@ const chatAction = (page: Page, key: 'remove' | 'add') =>
 test('an emptied home stays empty after a reload, and "Arrange tiles" brings the tile back', async ({ page }) => {
   const state = await openAdmin(page, {
     modules: [
-      { id: 'chat', enabled: true },
-      { id: 'alerts', enabled: false },
+      { id: 'chat', enabled: true, closed: false },
+      { id: 'alerts', enabled: false, closed: false },
     ],
   })
   await pencil(page).click()

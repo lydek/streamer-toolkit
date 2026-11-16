@@ -94,7 +94,7 @@
 | 時機 | 項目 |
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
-| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox（打卡簽到切片；切片 4 已建立）與停用時的「暫停／關閉」（打卡簽到切片）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
+| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
 | **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 

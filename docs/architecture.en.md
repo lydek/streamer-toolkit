@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 6e7ae265527fca0886b3778445e33b046726eea70feb765cc7d7682ab04d4b3c -->
+<!-- source: docs/architecture.md source-sha256: 37c13feb37bbdc7e97858e2b71f28817683397fba901e1aa7c61f86721d61ba9 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -72,7 +72,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
   - Events delivered to every subscriber are cleaned up every 10 minutes (and once at startup), together with pending deliveries for removed modules.
 - **Disabling modules**:
   - From the skeleton on, modules have an enable/disable switch; while a module is disabled, in-memory events (chat, etc.) are dropped, not kept.
-  - Once the outbox exists (check-in slice), the streamer chooses when disabling:
+  - When disabling a module that subscribes to the outbox (currently only check-in), the streamer chooses (stored as `disabled_modules` and `closed_modules` in `settings.json`):
     - "Pause": events stay in the outbox undelivered and are delivered in order after re-enabling; retries are not counted while paused; the UI shows the backlog size and the time of the oldest event.
     - "Off": events from the disabled period are marked skipped for that module, with no replay after re-enabling; before choosing, a warning lists the affected events and modules.
     - Switching from "pause" to "off" marks the undelivered events as skipped too.

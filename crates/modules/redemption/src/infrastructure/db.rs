@@ -288,7 +288,10 @@ pub(crate) mod tests {
 
     /// A repository whose outbox has no subscribers; events stay in the table for tests to read.
     pub(crate) fn repo(pool: &SqlitePool) -> SqliteRedemptions {
-        SqliteRedemptions::new(pool.clone(), Outbox::new(pool.clone(), Vec::new()))
+        SqliteRedemptions::new(
+            pool.clone(),
+            Outbox::new(pool.clone(), modules("outbox"), Vec::new()),
+        )
     }
 
     /// `redemption.recorded` events in the outbox, oldest first.

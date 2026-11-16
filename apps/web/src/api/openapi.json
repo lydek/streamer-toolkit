@@ -10,6 +10,119 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/checkin/outbox": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "checkin_outbox",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinOutbox"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`outbox.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/outbox/{event_id}/retry": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts a dead letter back in line with a fresh set of attempts.",
+        "operationId": "retry_dead_letter",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`outbox.not_found`: no such dead letter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`outbox.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/outbox/{event_id}/skip": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Gives up on a dead letter: that redemption never checks in.",
+        "operationId": "skip_dead_letter",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`outbox.not_found`: no such dead letter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`outbox.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/rewards": {
       "get": {
         "tags": [
@@ -1151,6 +1264,77 @@
           "custom"
         ]
       },
+      "CheckinDeadLetter": {
+        "type": "object",
+        "description": "A redemption the check-in module failed to take five times in a row. `user_name` and `reward_title` are raw\nTwitch text.",
+        "required": [
+          "event_id",
+          "occurred_at",
+          "failed_at",
+          "attempts",
+          "error"
+        ],
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "failed_at": {
+            "type": "string",
+            "description": "RFC 3339: the last failed attempt."
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC 3339: when the redemption happened."
+          },
+          "reward_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CheckinOutbox": {
+        "type": "object",
+        "description": "Redemptions waiting for the check-in module (while it is paused), and those it failed to take.",
+        "required": [
+          "pending",
+          "dead_letters"
+        ],
+        "properties": {
+          "dead_letters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckinDeadLetter"
+            }
+          },
+          "oldest_pending_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: when the oldest waiting redemption happened."
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "CheckinSettingsBody": {
         "type": "object",
         "description": "The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped.",
@@ -1253,6 +1437,10 @@
           "enabled"
         ],
         "properties": {
+          "close": {
+            "type": "boolean",
+            "description": "With `enabled: false`: skip the module's outbox events instead of keeping them for later (\"close\"; the\ndefault pauses). Enabling a closed module never delivers what was published while it was closed."
+          },
           "enabled": {
             "type": "boolean"
           }
@@ -1262,9 +1450,14 @@
         "type": "object",
         "required": [
           "id",
-          "enabled"
+          "enabled",
+          "closed"
         ],
         "properties": {
+          "closed": {
+            "type": "boolean",
+            "description": "Disabled and skipping its outbox events (\"close\"); a disabled module that is not closed is paused and keeps\nthem for later."
+          },
           "enabled": {
             "type": "boolean"
           },
