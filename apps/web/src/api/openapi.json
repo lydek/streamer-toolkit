@@ -2642,6 +2642,10 @@
           "ask_before_close": {
             "type": "boolean",
             "description": "Show the close hint on ✕; the hint's \"Don't show again\" turns it off."
+          },
+          "settings_unreadable": {
+            "type": "boolean",
+            "description": "Read only (ignored on PUT): `settings.json` exists but cannot be read or parsed. Defaults are in use and\nno setting saves (`settings.save_failed`) until the file is fixed or removed."
           }
         }
       },

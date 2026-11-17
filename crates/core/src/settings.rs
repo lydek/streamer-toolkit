@@ -3,7 +3,8 @@
 
 use std::{
     collections::BTreeMap,
-    fs, io,
+    fs,
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -133,33 +134,53 @@ pub fn path(config_dir: &Path) -> PathBuf {
 }
 
 /// Missing settings mean defaults. A file that cannot be read or parsed also falls back to defaults so startup is
-/// never blocked, but is first copied to `settings.json.bak`: the next save would otherwise overwrite it.
+/// never blocked; [`update`] then refuses to write, so the file is never overwritten.
 pub fn load(config_dir: &Path) -> Settings {
-    let path = path(config_dir);
-    match fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| {
-            back_up(&path);
-            Settings::default()
-        }),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Settings::default(),
-        Err(_) => {
-            back_up(&path);
-            Settings::default()
-        }
-    }
+    read(config_dir).unwrap_or_default()
 }
 
-/// Returns whether a copy was made. The admin UI polls settings, so an unchanged broken file is copied and
-/// logged once, not on every load.
+/// Like [`load`], but a file that exists and cannot be read or parsed is an error (`InvalidData` when it does
+/// not parse). Each broken version is first copied next to it, see [`back_up`].
+pub fn read(config_dir: &Path) -> io::Result<Settings> {
+    let path = path(config_dir);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Settings::default()),
+        Err(e) => {
+            back_up(&path);
+            return Err(e);
+        }
+    };
+    serde_json::from_str(&text).map_err(|e| {
+        back_up(&path);
+        io::Error::new(io::ErrorKind::InvalidData, e)
+    })
+}
+
+/// Copies a broken settings file to `settings.json.<UTC time>.bak`; returns whether a copy was made. Each broken
+/// version is copied once (the admin UI polls settings), and never over an earlier copy.
 fn back_up(path: &Path) -> bool {
-    let backup = path.with_extension("json.bak");
-    if let (Ok(current), Ok(kept)) = (fs::read(path), fs::read(&backup))
-        && current == kept
-    {
+    let current = match fs::read(path) {
+        Ok(current) => current,
+        Err(e) => {
+            tracing::error!(code = "settings.unreadable", error = %e, "could not keep a copy");
+            return false;
+        }
+    };
+    let dir = path.parent().unwrap_or(Path::new("."));
+    let kept = fs::read_dir(dir).into_iter().flatten().flatten().any(|e| {
+        let name = e.file_name().to_string_lossy().into_owned();
+        name.starts_with("settings.json.")
+            && name.ends_with(".bak")
+            && fs::read(e.path()).is_ok_and(|b| b == current)
+    });
+    if kept {
         return false;
     }
-    match fs::copy(path, &backup) {
-        Ok(_) => {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
+    let backup = path.with_extension(format!("json.{stamp}.bak"));
+    match write_synced(&backup, &current) {
+        Ok(()) => {
             tracing::warn!(code = "settings.unreadable", backup = %backup.display(), "kept a copy");
             true
         }
@@ -170,20 +191,28 @@ fn back_up(path: &Path) -> bool {
     }
 }
 
+/// Writes and flushes to disk before returning.
+fn write_synced(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
+}
+
 pub fn save(config_dir: &Path, settings: &Settings) -> io::Result<()> {
     fs::create_dir_all(config_dir)?;
     let path = path(config_dir);
-    // Write to a temp file then rename, so a crash never leaves a half-written settings file.
+    // Written to disk before the rename, so a crash or power cut never leaves a half-written or empty file.
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_vec_pretty(settings)?)?;
+    write_synced(&tmp, &serde_json::to_vec_pretty(settings)?)?;
     fs::rename(tmp, path)
 }
 
-/// Loads, applies `change`, and saves in one step. Serialized so two callers never lose each other's change.
+/// Reads, applies `change`, and saves in one step. Serialized so two callers never lose each other's change. A
+/// settings file that cannot be read or parsed is an error and stays as it is.
 pub fn update(config_dir: &Path, change: impl FnOnce(&mut Settings)) -> io::Result<Settings> {
     static WRITER: Mutex<()> = Mutex::new(());
     let _writer = WRITER.lock().unwrap();
-    let mut settings = load(config_dir);
+    let mut settings = read(config_dir)?;
     change(&mut settings);
     save(config_dir, &settings)?;
     Ok(settings)
@@ -202,21 +231,55 @@ mod tests {
         assert_eq!((s.obs.host.as_str(), s.obs.port), ("127.0.0.1", 4455));
     }
 
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("st-settings-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn backups(dir: &Path) -> Vec<String> {
+        let mut kept: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "bak"))
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        kept.sort();
+        kept
+    }
+
     #[test]
     fn broken_file_is_backed_up_before_defaults_are_used() {
-        let dir = std::env::temp_dir().join(format!("st-settings-broken-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = temp_dir("broken");
         let broken = r#"{"port":"not a number","twitch_client_id":"abc"}"#;
         fs::write(path(&dir), broken).unwrap();
         assert_eq!(load(&dir), Settings::default());
-        let backup = path(&dir).with_extension("json.bak");
-        assert_eq!(fs::read_to_string(backup).unwrap(), broken);
+        assert_eq!(backups(&dir), [broken]);
         assert!(
             !back_up(&path(&dir)),
             "same broken file is not copied again"
         );
         fs::write(path(&dir), "{").unwrap();
         assert!(back_up(&path(&dir)), "a different broken file is copied");
+        assert_eq!(backups(&dir), ["{", broken], "never over an earlier copy");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_broken_file_is_never_overwritten_by_a_save() {
+        let dir = temp_dir("never-overwritten");
+        let broken = r#"{"port":5000,"twitch_client_id":"abc""#;
+        fs::write(path(&dir), broken).unwrap();
+        let e = update(&dir, |s| s.skip_close_hint = true).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+        assert!(read(&dir).is_err());
+        assert_eq!(
+            fs::read_to_string(path(&dir)).unwrap(),
+            broken,
+            "byte for byte"
+        );
+        assert_eq!(backups(&dir), [broken]);
         let _ = fs::remove_dir_all(dir);
     }
 

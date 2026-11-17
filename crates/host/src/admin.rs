@@ -284,12 +284,18 @@ async fn logout(State(s): State<Arc<AdminState>>) -> Response {
 pub(crate) struct GeneralSettings {
     /// Show the close hint on ✕; the hint's "Don't show again" turns it off.
     ask_before_close: bool,
+    /// Read only (ignored on PUT): `settings.json` exists but cannot be read or parsed. Defaults are in use and
+    /// no setting saves (`settings.save_failed`) until the file is fixed or removed.
+    #[serde(default)]
+    settings_unreadable: bool,
 }
 
 #[utoipa::path(get, path = "/api/admin/general", tag = "admin", responses((status = 200, body = GeneralSettings)))]
 async fn general(State(s): State<Arc<AdminState>>) -> Json<GeneralSettings> {
+    let read = settings::read(&s.data_dir);
     Json(GeneralSettings {
-        ask_before_close: !settings::load(&s.data_dir).skip_close_hint,
+        settings_unreadable: read.is_err(),
+        ask_before_close: !read.unwrap_or_default().skip_close_hint,
     })
 }
 

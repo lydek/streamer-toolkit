@@ -920,6 +920,11 @@ export interface components {
         GeneralSettings: {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
             ask_before_close: boolean;
+            /**
+             * @description Read only (ignored on PUT): `settings.json` exists but cannot be read or parsed. Defaults are in use and
+             *     no setting saves (`settings.save_failed`) until the file is fixed or removed.
+             */
+            settings_unreadable?: boolean;
         };
         /** @description An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering. */
         ImportSkip: {

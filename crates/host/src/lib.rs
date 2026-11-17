@@ -881,6 +881,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn broken_settings_are_reported_and_never_saved_over() {
+        let dir = std::env::temp_dir().join(format!("st-host-broken-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let broken = r#"{"skip_close_hint":tru"#;
+        std::fs::write(settings::path(&dir), broken).unwrap();
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        let app = router(config).unwrap();
+        let get = get_req("/api/admin/general", "127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let body = axum::body::to_bytes(app.clone().oneshot(get).await.unwrap().into_body(), 4096)
+            .await
+            .unwrap();
+        let general: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(general["settings_unreadable"], true);
+
+        let put = get_req("/api/admin/general", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"ask_before_close":false}"#))
+            .unwrap();
+        let res = app.oneshot(put).await.unwrap();
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            std::fs::read_to_string(settings::path(&dir)).unwrap(),
+            broken
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
     async fn port_zero_binds_a_free_port_and_allows_it() {
         let mut config = test_config();
         config.port = 0;

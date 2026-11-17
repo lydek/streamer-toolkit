@@ -170,6 +170,7 @@
     "title": "設定",
     "general": "一般",
     "askBeforeClose": "關閉視窗前先詢問",
+    "unreadable": "資料夾裡的 settings.json 讀不到或格式不正確，目前使用預設值。修好或刪掉這個檔案之前，設定都不會儲存；改壞的版本已另存成 settings.json.<時間>.bak。",
     "obs": {
       "host": "主機",
       "port": "連接埠",
