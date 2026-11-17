@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 27c53eee5745af6886c043762f051f6601fde63494cc74a824a69b0b814ad364 -->
+<!-- source: docs/dev.md source-sha256: c54c990f22ba6f87bc93b9dbe22541bbcb0a67ad86a55a32275dd3a818662904 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -53,7 +53,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date; UI E2E for browser behavior jsdom cannot test.
 - UI E2E (`apps/web/e2e/`, Playwright + Chromium, `pnpm web:e2e`; build the frontend first):
   - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain only a dummy token, never a real token or secret; Vite sends the same CSP as the Host, so E2E runs under it (the header the Host actually sends is covered by the `crates/host` Rust tests). Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
-  - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on).
+  - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on). These tests share one Host, are tagged `@host` and run one at a time in the Playwright `host` project; the other tests run in parallel in the `admin` project.
   - Logic that unit tests can cover still gets unit tests; E2E does not repeat them.
 - Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
 - Migration test: merged versions are globally unique and sorted.
