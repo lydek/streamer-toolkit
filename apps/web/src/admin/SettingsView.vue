@@ -2,6 +2,7 @@
   <FullPage :title="t('settings.title')">
     <section aria-labelledby="general">
       <h2 id="general" tabindex="-1">{{ t('settings.general') }}</h2>
+      <p v-if="unreadable" role="alert">{{ t('settings.unreadable') }}</p>
       <p v-if="ask.value.value === undefined">{{ loadText }}</p>
       <div v-else class="choice">
         <Checkbox v-model="ask.value.value" input-id="ask-before-close" binary @update:model-value="ask.commit()" />
@@ -134,6 +135,7 @@ const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names
 
 // Saved values are undefined until loaded; their fields show only after that.
 const askSaved = ref<boolean>()
+const unreadable = ref(false)
 const ask = useDrawerSetting(askSaved, (v) => api(client.PUT('/api/admin/general', { body: { ask_before_close: v! } })))
 
 const checkSaved = ref<boolean>()
@@ -219,7 +221,8 @@ async function refresh() {
 
 async function loadGeneral() {
   const before = askSaved.value
-  const { ask_before_close } = await api(client.GET('/api/admin/general'))
+  const { ask_before_close, settings_unreadable } = await api(client.GET('/api/admin/general'))
+  unreadable.value = settings_unreadable ?? false
   // A toggle saved while this read was in flight is newer than what it returned.
   if (askSaved.value === before) askSaved.value = ask_before_close
 }

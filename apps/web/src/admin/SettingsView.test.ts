@@ -43,6 +43,16 @@ afterEach(() => {
 })
 
 describe('SettingsView', () => {
+  it('says when settings.json cannot be read, so saves are refused for a reason the broadcaster can see', async () => {
+    let wrapper = await mountSettings()
+    expect(wrapper.find('#general ~ [role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+
+    GETS['/api/admin/general'] = { ask_before_close: true, settings_unreadable: true }
+    wrapper = await mountSettings()
+    await vi.waitFor(() => expect(wrapper.get('#general ~ [role="alert"]').text()).toBe(i18n.global.t('settings.unreadable')))
+  })
+
   it('saves OBS fields committed back to back in order, each with the other one already saved', async () => {
     let release!: () => void
     client.PUT.mockImplementationOnce(() => new Promise((r) => (release = () => r(ok())))).mockResolvedValue(ok())
