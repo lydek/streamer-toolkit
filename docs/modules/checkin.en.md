@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 8398eb92bde16e9e8fd1a527c7e2159323197a37187e44ed6f86ac77438b4bf9 -->
+<!-- source: docs/modules/checkin.md source-sha256: 19d19210ffce889adfcdecdfe6475f8100bd32b7d3a43642c4af329c4a75bf14 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -32,7 +32,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 ## Import
 - Pick a JSON file on the full page: the admin UI reads the file and sends its content to the Host for a preview (how many viewers would be added or updated, and how many entries would be skipped, with reasons), and writes it in one transaction only after confirmation. The original file is never changed. Files are limited to 5 MB.
 - Format: a JSON object keyed by Twitch user ID, where each entry may have:
-  - `totalCheckIns` (required, an integer of 0 or more): the total.
+  - `totalCheckIns` (required, an integer from 0 to 1,000,000,000): the total.
   - `lastName` or `name`: the display name (`lastName` wins when both exist); a new viewer's login stays unknown until they check in.
   - `profileImage`: avatar URL, accepted only from Twitch's image CDN, never replacing a known avatar.
   - `lastCheckInDate` (`YYYY-MM-DD`): the last check-in day, read as a date with no time zone conversion; left empty when missing. It never blocks checking in that day.

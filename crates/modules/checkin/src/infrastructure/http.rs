@@ -179,7 +179,7 @@ pub enum ImportSkipReason {
     Owner,
     /// `excluded` is `true`.
     Excluded,
-    /// `totalCheckIns` is missing, not an integer, or negative.
+    /// `totalCheckIns` is missing, not an integer, negative, or above 1,000,000,000.
     InvalidTotal,
     /// `lastCheckInDate` is not `YYYY-MM-DD`.
     InvalidDate,

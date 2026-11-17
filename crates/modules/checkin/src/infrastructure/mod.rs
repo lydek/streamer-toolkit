@@ -1093,7 +1093,9 @@ pub(crate) mod tests {
             "4": { "totalCheckIns": 1, "excluded": true },
             "5": { "name": "No total" },
             "6": { "totalCheckIns": 1, "lastCheckInDate": "2026/11/01" },
-            "7": { "totalCheckIns": 3 }
+            "7": { "totalCheckIns": 3 },
+            // Would overflow baseline + COUNT(*) to REAL in SQLite.
+            "8": { "totalCheckIns": i64::MAX }
         })
         .to_string();
         let (status, preview) =
@@ -1122,6 +1124,7 @@ pub(crate) mod tests {
                 ("4".into(), "excluded".into()),
                 ("5".into(), "invalid_total".into()),
                 ("6".into(), "invalid_date".into()),
+                ("8".into(), "invalid_total".into()),
                 ("abc".into(), "invalid_id".into()),
             ]
         );
