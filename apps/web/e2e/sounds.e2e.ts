@@ -212,7 +212,7 @@ test('alerts and check-ins each choose a sound, and deleting a used sound lists 
   ])
 })
 
-test('simulated alerts and check-ins on a real Host play the chosen sound at its volume', async ({ page, request }) => {
+test('simulated alerts and check-ins on a real Host play the chosen sound at its volume', { tag: '@host' }, async ({ page, request }) => {
   test.setTimeout(60_000)
   const res = await request.post(`${HOST}/api/admin/sounds?name=e2e.wav`, {
     headers: { ...admin, 'Content-Type': 'application/octet-stream' },
@@ -308,7 +308,7 @@ test('channel point rewards each choose a sound and test it in OBS', async ({ pa
   ])
 })
 
-test('the sound overlay of a real Host plays test sounds one at a time, in order, and records nothing', async ({
+test('the sound overlay of a real Host plays test sounds one at a time, in order, and records nothing', { tag: '@host' }, async ({
   page,
   request,
 }) => {

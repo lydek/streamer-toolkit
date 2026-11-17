@@ -24,7 +24,7 @@ test('the simulator in the check-in drawer sends the name and stamps', async ({ 
   expect(bodies).toEqual([{ userName: 'Viewer', stamps: 10 }])
 })
 
-test('simulated check-ins show one card at a time, in order, with the full-card effect', async ({ page, request }) => {
+test('simulated check-ins show one card at a time, in order, with the full-card effect', { tag: '@host' }, async ({ page, request }) => {
   const name = `E2E-${randomUUID().slice(0, 8)}`
   await page.addInitScript(() => {
     const w = window as unknown as { shown: string[]; most: number; full: string[] }

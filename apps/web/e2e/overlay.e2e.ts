@@ -13,7 +13,7 @@ const TEMPLATE_DIR = join(process.env.E2E_DATA_DIR!, 'templates', 'chat')
 mkdirSync(TEMPLATE_DIR, { recursive: true })
 const admin = { Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}`, Origin: HOST }
 
-// The tests share one Host and template folder; they run one after another as long as fullyParallel stays off.
+// The tests share one Host and template folder; tagged @host, they run one at a time (playwright.config.ts).
 
 const template = (item: string, extra = '') =>
   `${extra}<ul data-chat-list><template data-chat-message>${item}</template></ul>`
@@ -44,7 +44,7 @@ async function start(page: Page, request: APIRequestContext, itemClass: string) 
   return text
 }
 
-test('picking a built-in template applies live, without reloading the overlay', async ({ page, request }) => {
+test('picking a built-in template applies live, without reloading the overlay', { tag: '@host' }, async ({ page, request }) => {
   await select(request, 'default')
   await page.goto(`${HOST}/overlay/chat/`)
   const text = await say(request)
@@ -60,7 +60,7 @@ test('picking a built-in template applies live, without reloading the overlay', 
   expect(await status.json()).toEqual({ selected: 'compact', error: null })
 })
 
-test('the connection status takes the look of each built-in template\'s chat text', async ({ page, request }) => {
+test('the connection status takes the look of each built-in template\'s chat text', { tag: '@host' }, async ({ page, request }) => {
   // Proxies the overlay's WebSocket to the Host, so the test can drop it and refuse reconnects.
   let down = false
   const sockets: WebSocketRoute[] = []
@@ -101,7 +101,7 @@ test('the connection status takes the look of each built-in template\'s chat tex
   expect(new Set(looks).size).toBe(3)
 })
 
-test('a template edit applies live, without reloading the overlay', async ({ page, request }) => {
+test('a template edit applies live, without reloading the overlay', { tag: '@host' }, async ({ page, request }) => {
   const text = await start(page, request, 'first')
   await page.evaluate(() => Object.assign(window, { notReloaded: true }))
 
@@ -111,7 +111,7 @@ test('a template edit applies live, without reloading the overlay', async ({ pag
   expect(await page.evaluate(() => 'notReloaded' in window)).toBe(true)
 })
 
-test('scripts in a template never run: <script>, event attributes, javascript: URLs, .js files', async ({
+test('scripts in a template never run: <script>, event attributes, javascript: URLs, .js files', { tag: '@host' }, async ({
   page,
   request,
 }) => {
@@ -137,7 +137,7 @@ test('scripts in a template never run: <script>, event attributes, javascript: U
   await expect(page.locator('script[src*="evil"], [onerror], [onclick], [href^="javascript"]')).toHaveCount(0)
 })
 
-test('a broken template falls back to the default one', async ({ page, request }) => {
+test('a broken template falls back to the default one', { tag: '@host' }, async ({ page, request }) => {
   const text = await start(page, request, 'custom')
   writeTemplate('<p class="broken">no chat list here</p>')
 

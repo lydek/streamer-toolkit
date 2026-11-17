@@ -21,6 +21,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${VITE_PORT}`, trace: 'retain-on-failure' },
+  projects: [
+    { name: 'admin', grepInvert: /@host/ },
+    // Tests tagged @host share one real Host (its settings, template folder and overlay queues), so they run one at
+    // a time; the mocked admin tests stay parallel.
+    { name: 'host', grep: /@host/, workers: 1 },
+  ],
   webServer: [
     {
       // The admin UI with its API mocked per test (e2e/fixtures.ts); also serves e2e/harness/.

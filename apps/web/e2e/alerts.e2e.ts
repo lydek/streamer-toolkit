@@ -102,7 +102,7 @@ test('the alerts page picks a template; each preview plays the sample alert', as
   }
 })
 
-test('picking an alert template switches the overlay at once, without reloading it', async ({ page, request }) => {
+test('picking an alert template switches the overlay at once, without reloading it', { tag: '@host' }, async ({ page, request }) => {
   const select = async (selected: string) => {
     const res = await request.put(`${HOST}/api/admin/templates/alerts`, { headers: admin, data: { selected } })
     expect(res.status()).toBe(204)
@@ -127,7 +127,7 @@ test('picking an alert template switches the overlay at once, without reloading 
   await select('default')
 })
 
-test('the Host sends every simulated kind as an alert marked source=simulation', async ({ page, request }) => {
+test('the Host sends every simulated kind as an alert marked source=simulation', { tag: '@host' }, async ({ page, request }) => {
   await page.goto(`${HOST}/overlay/chat/`)
   // Listens on the overlay channel from the Host's own origin, as an overlay does.
   await page.evaluate(
@@ -177,7 +177,7 @@ test('the Host sends every simulated kind as an alert marked source=simulation',
   expect(anonymous.status()).toBe(401)
 })
 
-test('the overlay plays every kind in order, one at a time with a sound, and a gift of 3 once', async ({
+test('the overlay plays every kind in order, one at a time with a sound, and a gift of 3 once', { tag: '@host' }, async ({
   page,
   request,
 }) => {
