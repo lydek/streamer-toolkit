@@ -30,6 +30,8 @@ use crate::{admin, backup, home_tiles, obs, overlay, templates};
         admin::simulate_alert,
         admin::simulate_checkin,
         backup::export_backup,
+        backup::preview_restore,
+        backup::confirm_restore,
         home_tiles::home_tiles,
         home_tiles::set_home_tiles,
         obs::obs_overview,

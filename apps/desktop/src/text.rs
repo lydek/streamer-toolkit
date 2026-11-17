@@ -18,3 +18,28 @@ pub fn database_unusable(file: &str, error: &str) -> String {
 }
 
 pub const WEBVIEW_MISSING: &str = "找不到 Microsoft Edge WebView2 Runtime，無法開啟管理視窗。\n\nOverlay 仍會繼續運作。按「確定」後會開啟微軟的下載頁面；安裝 Evergreen Runtime 後，在系統匣選「開啟 Streamer Toolkit」即可。";
+
+pub const RESTORED: &str = "已還原備份。
+
+備份不含 Twitch 登入和 OBS 密碼：需要時請到設定頁重新登入 Twitch、重填 OBS 密碼。
+
+還原前的資料已備份到資料夾的 backups 裡。";
+
+pub fn restore_failed(error: &str) -> String {
+    format!(
+        "無法還原備份，目前的資料沒有變動：
+
+{error}"
+    )
+}
+
+pub fn restore_put_back_failed(dir: &str, error: &str) -> String {
+    format!(
+        "還原備份失敗，也無法放回原本的資料，程式不會繼續執行：
+{dir}
+
+{error}
+
+原本的資料在資料夾的 restore-previous 裡，也備份在 backups 裡。請關閉可能正在使用這個資料夾的程式後再啟動，程式會再試一次放回原本的資料。"
+    )
+}

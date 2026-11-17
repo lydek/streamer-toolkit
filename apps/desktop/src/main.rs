@@ -75,7 +75,20 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             CredentialManager::init()?;
-            // After the single-instance lock, so a second copy on this folder never migrates under the first.
+            // After the single-instance lock, so a second copy on this folder never migrates under the first;
+            // a confirmed restore goes in before the database opens.
+            let version = app.package_info().version.to_string();
+            match tauri::async_runtime::block_on(host::apply_pending(&data_dir, &version)) {
+                Ok(false) => {}
+                Ok(true) => message_box(text::RESTORED, false),
+                Err(e @ host::BackupError::PutBack(_)) => {
+                    fail(&text::restore_put_back_failed(&data_dir.display().to_string(), &e.to_string()))
+                }
+                Err(e) => {
+                    tracing::error!(code = "backup.restore_failed", error = %e, "restore not applied");
+                    message_box(&text::restore_failed(&e.to_string()), true);
+                }
+            }
             let db = match tauri::async_runtime::block_on(host::db::open(&data_dir)) {
                 Ok(db) => db,
                 Err(e) => fail(&text::database_unusable(
@@ -172,15 +185,17 @@ fn init_logs(dir: &Path) -> Option<WorkerGuard> {
 /// Shows a native error box and exits; used before any window exists.
 fn fail(message: &str) -> ! {
     tracing::error!(message, "cannot start");
-    message_box(message);
+    message_box(message, true);
     std::process::exit(1)
 }
 
 /// A native message box; works without WebView2.
-fn message_box(message: &str) {
+fn message_box(message: &str, is_error: bool) {
     #[cfg(windows)]
     {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MessageBoxW,
+        };
         let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
         let (body, title) = (wide(message), wide(text::APP_NAME));
         // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
@@ -189,7 +204,12 @@ fn message_box(message: &str) {
                 std::ptr::null_mut(),
                 body.as_ptr(),
                 title.as_ptr(),
-                MB_OK | MB_ICONERROR,
+                MB_OK
+                    | if is_error {
+                        MB_ICONERROR
+                    } else {
+                        MB_ICONINFORMATION
+                    },
             )
         };
     }
@@ -205,7 +225,7 @@ fn webview_available(app: &AppHandle) -> bool {
         code = "desktop.webview_missing",
         "WebView2 Runtime not found"
     );
-    message_box(text::WEBVIEW_MISSING);
+    message_box(text::WEBVIEW_MISSING, true);
     let _ = app.opener().open_url(WEBVIEW2_DOWNLOAD_URL, None::<&str>);
     false
 }
@@ -338,6 +358,10 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         checkin_timing: CheckinTiming::default(),
         db: state.db.clone(),
         app_version: app.package_info().version.to_string(),
+        restart: Arc::new({
+            let app = app.clone();
+            move || app.request_restart()
+        }),
     }
 }
 

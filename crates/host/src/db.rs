@@ -130,6 +130,52 @@ pub(crate) async fn open_file(path: &Path) -> Result<SqlitePool, sqlx::Error> {
         .await
 }
 
+/// The newest migration this build knows.
+pub(crate) fn latest_version() -> i64 {
+    modules()
+        .iter()
+        .flat_map(|m| m.iter())
+        .map(|m| m.version)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Whether this build can open a database.
+pub(crate) enum Fit {
+    /// Every applied migration is one this build knows (pending ones run on open).
+    Known,
+    /// It has a migration this build does not know: a newer version made it.
+    Newer,
+    /// A known migration with a different checksum, or one that did not finish: opening it would fail.
+    Changed,
+}
+
+/// Checks the database file at `path` (not the running one) without changing it.
+pub(crate) async fn fit(path: &Path) -> Result<Fit, sqlx::Error> {
+    let known: Vec<Migration> = modules().iter().flat_map(|m| m.iter().cloned()).collect();
+    let pool = open_file(path).await?;
+    let result = async {
+        if applied_versions(&pool).await?.is_empty() {
+            return Ok(Fit::Known);
+        }
+        let applied: Vec<(i64, bool, Vec<u8>)> =
+            sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations")
+                .fetch_all(&pool)
+                .await?;
+        for (version, success, checksum) in applied {
+            match known.iter().find(|m| m.version == version) {
+                None => return Ok(Fit::Newer),
+                Some(m) if !success || *m.checksum != *checksum => return Ok(Fit::Changed),
+                Some(_) => {}
+            }
+        }
+        Ok(Fit::Known)
+    }
+    .await;
+    pool.close().await;
+    result
+}
+
 /// The newest migration applied to a database; 0 when none is.
 pub(crate) async fn schema_version(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
     Ok(applied_versions(pool).await?.into_iter().max().unwrap_or(0))

@@ -28,8 +28,113 @@
               }
             }
           },
+          "413": {
+            "description": "`backup.too_large`: more than a restore accepts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "500": {
-            "description": "`backup.too_large`: more than a restore accepts; `backup.export_failed`",
+            "description": "`backup.export_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/backup/restore": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Restores the staged backup: the app restarts, backs up the current data to `backups/`, then puts the backup\nin place before the database opens.",
+        "operationId": "confirm_restore",
+        "responses": {
+          "202": {
+            "description": "The app restarts to restore"
+          },
+          "409": {
+            "description": "`backup.nothing_staged`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.restore_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/backup/restore/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Checks a backup file (at most 512 MB) and stages it for a restore; nothing in use changes. The body is the\nfile itself. A later preview replaces the staged one.",
+        "operationId": "preview_restore",
+        "requestBody": {
+          "description": "The backup file",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`backup.invalid`: damaged or not a backup; `backup.newer_version`: made by a newer version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`backup.too_large`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.restore_failed`: could not be staged",
             "content": {
               "application/json": {
                 "schema": {
@@ -2841,6 +2946,45 @@
           "canceled",
           "unknown"
         ]
+      },
+      "RestorePreview": {
+        "type": "object",
+        "description": "What a backup holds, shown before the broadcaster confirms a restore.",
+        "required": [
+          "created_at",
+          "app_version",
+          "redemptions",
+          "checkins",
+          "templates",
+          "sounds"
+        ],
+        "properties": {
+          "app_version": {
+            "type": "string",
+            "description": "The version of the app that made it."
+          },
+          "checkins": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When the backup was made (RFC 3339, UTC)."
+          },
+          "redemptions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sounds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "templates": {
+            "type": "integer",
+            "description": "Template folders, e.g. `templates/chat/`.",
+            "minimum": 0
+          }
+        }
       },
       "Reward": {
         "type": "object",

@@ -66,6 +66,7 @@ async fn main() {
         },
         db,
         app_version: "0.0.0-e2e".into(),
+        restart: Arc::new(|| {}),
     })
     .await
     .expect("bind the E2E Host");
