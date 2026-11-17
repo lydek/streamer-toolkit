@@ -1,0 +1,78 @@
+# Pushing a v* tag builds the portable zip and creates a DRAFT release; a person checks it and publishes it by hand.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  # A failing UI E2E stops the release.
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+
+  release:
+    needs: e2e
+    runs-on: windows-latest
+    # The only job that may write: it creates the draft release.
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches the app version
+        run: node scripts/check-version.mjs "$env:TAG"
+
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Toolchain and components come from rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+
+      # A build tool, not a dependency; its own lockfile pins what it is built from.
+      - name: Install cargo-about
+        run: cargo install --locked cargo-about --features cli
+      # Before the build: the frontend build embeds it for the settings page's about section.
+      - name: Third-party licenses
+        run: pnpm licenses:gen
+
+      # tauri build turns on tauri/custom-protocol, the only distributable build; the exe is zipped below.
+      - name: Build
+        run: pnpm tauri build --no-bundle
+
+      - name: Zip
+        env:
+          # Kept out of the script text so the runner's script encoding cannot mangle it.
+          USAGE_NAME: 使用說明.txt
+        run: |
+          $version = $env:TAG.Substring(1)
+          $zip = "streamer-toolkit-$version-windows-x64.zip"
+          $dir = New-Item -ItemType Directory -Path "out/Streamer Toolkit"
+          # Explicit file list: never the data folder.
+          Copy-Item target/release/desktop.exe "$dir/Streamer Toolkit.exe"
+          Copy-Item LICENSE "$dir/LICENSE"
+          Copy-Item apps/web/public/THIRD_PARTY_LICENSES.txt "$dir/THIRD_PARTY_LICENSES"
+          Copy-Item apps/desktop/release/usage.zh-TW.txt (Join-Path $dir $env:USAGE_NAME)
+          # UTF-8 entry names (with the zip's UTF-8 flag), so the usage note keeps its Chinese name when extracted.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory($dir.FullName, "$PWD/out/$zip", 'Optimal', $true, [Text.Encoding]::UTF8)
+          $hash = (Get-FileHash "out/$zip" -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("$PWD/out/$zip.sha256", "$hash  $zip`n")
+          "ZIP=out/$zip" >> $env:GITHUB_ENV
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:TAG" "$env:ZIP" "$env:ZIP.sha256" --draft --verify-tag --title "Streamer Toolkit $env:TAG"
