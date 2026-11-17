@@ -203,7 +203,9 @@ mod tests {
     }
 
     async fn get(pool: &SqlitePool, query: &str) -> (u16, serde_json::Value) {
-        let res = http::routes(pool.clone())
+        let service =
+            RedemptionService::start(db::tests::repo(pool), db::tests::modules("http"), |_| {});
+        let res = http::routes(pool.clone(), Arc::new(service))
             .oneshot(
                 Request::get(format!("/api/admin/redemptions{query}"))
                     .body(Body::empty())
@@ -339,7 +341,10 @@ mod tests {
     async fn empty_database_lists_nothing() {
         let (status, page) = get(&pool().await, "").await;
         assert_eq!(status, 200);
-        assert_eq!(page, serde_json::json!({ "items": [], "total": 0 }));
+        assert_eq!(
+            page,
+            serde_json::json!({ "items": [], "total": 0, "failed_writes": 0 })
+        );
     }
 
     #[tokio::test]

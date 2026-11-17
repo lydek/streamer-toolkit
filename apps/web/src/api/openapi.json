@@ -2989,9 +2989,16 @@
         "description": "`GET /api/admin/redemptions`: one page, newest first.",
         "required": [
           "items",
-          "total"
+          "total",
+          "failed_writes"
         ],
         "properties": {
+          "failed_writes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Redemptions that could not be stored since the app started, even after retries; they are not in the list.",
+            "minimum": 0
+          },
           "items": {
             "type": "array",
             "items": {
