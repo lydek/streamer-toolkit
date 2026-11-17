@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 94763b976d4280409e04be4ff02194e93741d2475c8f70bedff33ea44fea1887 -->
+<!-- source: docs/dev.md source-sha256: 390abf9b11730f45cf82dd3486ba2c25021711d24b5e63ecd377adadc8fbac28 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -52,10 +52,10 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 ## Releasing
 Only the portable zip is released. Pushing a `v*` tag makes `.github/workflows/release.yml` build it:
 1. Run UI E2E (`e2e.yml`) first; if it fails, nothing is released.
-2. Check that the tag matches the version in all three of `apps/desktop/tauri.conf.json`, `apps/desktop/Cargo.toml` and `package.json` (`node scripts/check-version.mjs <tag>`); if not, nothing is released.
-3. Generate `THIRD_PARTY_LICENSES` (see "Licenses"), then run `pnpm tauri build --no-bundle`.
+2. The build job has read access only, and its checkout keeps no GitHub credentials; it first checks that the tag's commit is on `main`, then checks that the tag matches the version in all three of `apps/desktop/tauri.conf.json`, `apps/desktop/Cargo.toml` and `package.json` (`node scripts/check-version.mjs <tag>`); if not, nothing is released.
+3. Generate `THIRD_PARTY_LICENSES` (see "Licenses"; `cargo-about` is pinned), then run `pnpm tauri build --no-bundle`.
 4. Pack `streamer-toolkit-<version>-windows-x64.zip`: it holds a single `Streamer Toolkit\` folder with `Streamer Toolkit.exe`, `LICENSE`, `THIRD_PARTY_LICENSES` and `使用說明.txt` (from `apps/desktop/release/usage.zh-TW.txt`), never `data`; a `.sha256` goes next to it.
-5. Create a draft release (`gh release create --draft`). The workflow never publishes; only this job has `contents: write`.
+5. A separate job downloads the built zip and `.sha256` and creates a draft release (`gh release create --draft`). The workflow never publishes; only this job has `contents: write`, and it runs no build code.
 
 Steps: bump the version in all three places through a PR and merge it, then tag `v<version>` on `main` and push the tag; when the workflow is done, download the draft's zip from GitHub Releases, verify the checksum, extract and start it on a Windows machine without developer tools, and only then publish.
 
