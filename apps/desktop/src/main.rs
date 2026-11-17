@@ -427,7 +427,16 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
         let host_url = format!("http://127.0.0.1:{port}/admin");
         WebviewUrl::External(host_url.parse().expect("valid admin URL"))
     };
-    let allowed_origin = format!("http://127.0.0.1:{port}");
+    let allowed_origin = if cfg!(dev) {
+        app.config()
+            .build
+            .dev_url
+            .as_ref()
+            .map(|u| u.origin().ascii_serialization())
+            .unwrap_or_default()
+    } else {
+        format!("http://127.0.0.1:{port}")
+    };
     WebviewWindowBuilder::new(app, ADMIN, url)
         .title(text::APP_NAME)
         .inner_size(1100.0, 720.0)
@@ -435,14 +444,16 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
         // Ctrl +/-/wheel: lets users enlarge the UI (WCAG 1.4.4).
         .zoom_hotkeys_enabled(true)
         .data_directory(webview_data_dir(app))
-        // Only /admin pages on the app's own origin (dev: the Vite origin).
-        .on_navigation(move |url| {
-            let origin = url.origin().ascii_serialization();
-            (origin == allowed_origin || cfg!(dev)) && url.path().starts_with("/admin")
-        })
+        .on_navigation(move |url| admin_navigation_allowed(url, &allowed_origin))
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
         .build()?;
     Ok(())
+}
+
+/// Only /admin pages on the app's own origin: the Host's, or in dev the Vite origin (devUrl).
+fn admin_navigation_allowed(url: &tauri::Url, origin: &str) -> bool {
+    url.origin().ascii_serialization() == origin
+        && (url.path() == "/admin" || url.path().starts_with("/admin/"))
 }
 
 fn open_port_page(app: &AppHandle) -> tauri::Result<()> {
@@ -505,5 +516,33 @@ fn show_main_window(app: &AppHandle) {
     };
     if let Err(e) = opened {
         tracing::error!(code = "desktop.window_failed", error = %e, "window not opened");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::admin_navigation_allowed;
+
+    #[test]
+    fn the_admin_window_stays_on_its_own_admin_pages() {
+        let allowed =
+            |url: &str| admin_navigation_allowed(&url.parse().unwrap(), "http://127.0.0.1:47810");
+        assert!(allowed("http://127.0.0.1:47810/admin"));
+        assert!(allowed("http://127.0.0.1:47810/admin/settings#backup"));
+        assert!(!allowed("http://127.0.0.1:47810/overlay/chat"));
+        assert!(!allowed("http://127.0.0.1:47810/administrator"));
+        assert!(!allowed("http://127.0.0.1:47811/admin/"));
+        assert!(!allowed("http://localhost:5173/admin/"));
+        assert!(!allowed("https://evil.example/admin/"));
+        assert!(!allowed("data:text/html,<script>alert(1)</script>"));
+        // Dev: only the Vite origin.
+        assert!(admin_navigation_allowed(
+            &"http://localhost:5173/admin/".parse().unwrap(),
+            "http://localhost:5173"
+        ));
+        assert!(!admin_navigation_allowed(
+            &"http://127.0.0.1:47810/admin/".parse().unwrap(),
+            "http://localhost:5173"
+        ));
     }
 }
