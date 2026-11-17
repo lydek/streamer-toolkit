@@ -51,10 +51,10 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 ## 發佈
 只出可攜版 zip。推 `v*` tag 後由 `.github/workflows/release.yml` 建置：
 1. 先跑 UI E2E（`e2e.yml`），失敗就不發佈。
-2. 檢查 tag 和 `apps/desktop/tauri.conf.json`、`apps/desktop/Cargo.toml`、`package.json` 三處的版本一致（`node scripts/check-version.mjs <tag>`），不一致就不發佈。
-3. 產生 `THIRD_PARTY_LICENSES`（見「授權」），再執行 `pnpm tauri build --no-bundle`。
+2. 建置 job 只有讀取權限，checkout 不保留 GitHub 憑證；先確認 tag 的 commit 在 `main` 上，再檢查 tag 和 `apps/desktop/tauri.conf.json`、`apps/desktop/Cargo.toml`、`package.json` 三處的版本一致（`node scripts/check-version.mjs <tag>`），不一致就不發佈。
+3. 產生 `THIRD_PARTY_LICENSES`（見「授權」，`cargo-about` 固定版本），再執行 `pnpm tauri build --no-bundle`。
 4. 打包 `streamer-toolkit-<版本>-windows-x64.zip`：裡面只有一個 `Streamer Toolkit\` 資料夾，放 `Streamer Toolkit.exe`、`LICENSE`、`THIRD_PARTY_LICENSES` 與 `使用說明.txt`（來源 `apps/desktop/release/usage.zh-TW.txt`），絕不含 `data`；旁邊附 `.sha256`。
-5. 建立草稿 release（`gh release create --draft`）。workflow 不會發佈；只有這個 job 有 `contents: write`。
+5. 另一個 job 下載建置好的 zip 與 `.sha256`，建立草稿 release（`gh release create --draft`）。workflow 不會發佈；只有這個 job 有 `contents: write`，而且它不跑任何建置程式。
 
 步驟：用 PR 把三處版本改成新版本並合併，在 `main` 上打 `v<版本>` tag 並推上去；workflow 完成後到 GitHub Releases 下載草稿的 zip，核對檢查碼，在沒裝開發工具的 Windows 上解壓縮並啟動，確認後才按發佈。
 
