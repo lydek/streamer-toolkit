@@ -1,0 +1,52 @@
+# UI E2E (Playwright); the slowest check, so it runs on demand and before a release (release.yml), not on every PR.
+name: UI E2E
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Toolchain and components come from rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+
+      # The E2E Host embeds apps/web/dist, so the frontend is built first.
+      - run: pnpm web:build
+      # Built ahead so Playwright's webServer timeout covers only the Host start, not a cold compile.
+      - name: Build the E2E Host
+        run: cargo build -q -p host --example e2e_host
+
+      - name: Playwright version
+        id: playwright
+        run: '"version=$((pnpm --filter web exec playwright --version) -replace ''\s'', ''-'')" >> $env:GITHUB_OUTPUT'
+      - uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Playwright Chromium
+        run: pnpm --filter web exec playwright install chromium
+      - name: UI E2E (Playwright)
+        run: pnpm web:e2e
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7

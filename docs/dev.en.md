@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: a7025e9978113531001703422609729ba676492ea658ddea460d5e67ff23e702 -->
+<!-- source: docs/dev.md source-sha256: 32e8e9c8daad53d6a05ab2355437416bd160c5550c36bf8e8368e68c49b20e6c -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -21,7 +21,7 @@ Principle: another Windows PC can get it running by following this document.
 - Build the frontend: `pnpm web:build` (required before the first Rust build; the Host embeds `apps/web/dist` into the executable)
 - Develop: `pnpm tauri dev` (Vite hot reload), or `cargo run -p desktop`
 - API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
-- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `pnpm web:e2e`, `cargo deny check`; to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push --force` (without `--force` it skips steps based on the pushed files; see "Git" below)
+- Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; UI E2E runs separately (see "Testing baseline" below); to run the same steps as CI (also covering translations, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push --force` (without `--force` it skips steps based on the pushed files; see "Git" below)
 - Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>` (the Vite proxy of `pnpm tauri dev` reads the port only from `target\debug\data\`, so that data's port must match it). Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
 
 ## Git
@@ -35,7 +35,7 @@ Principle: another Windows PC can get it running by following this document.
 - Hooks: lefthook, configured in `lefthook.yml`, with `assert_lefthook_installed` on, so a missing lefthook fails the commit instead of silently skipping checks.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
-  - `pre-push` runs the checks in CI order (which steps it skips is below; translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, UI E2E, `cargo deny check`) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
+  - `pre-push` runs the checks in CI order (which steps it skips is below; translations, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, `cargo deny check`; not UI E2E) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
   - `pre-push` runs only the steps the pushed files can affect (CI skips nothing and always runs the full check):
     - Docs only (root `*.md`, `docs/`): only the translation check; a change to `docs/decisions.md` also runs the script tests and the frontend license check (the license allowlist lives in that file).
     - Frontend only (`apps/web/`): skips `cargo fmt`, both `cargo clippy` runs and `cargo deny check`; the rest runs. Changes limited to the admin UI (`apps/web/src/admin/`) or E2E (`apps/web/e2e/`) also skip `cargo test`; other frontend changes run it, because the Host embeds `apps/web/dist`, and the Rust tests also check the overlay page and the built-in templates (`apps/web/src/overlay/chat/templates/`, `apps/web/src/overlay/alerts/templates/`).
@@ -43,15 +43,18 @@ Principle: another Windows PC can get it running by following this document.
     - Files are compared with the remote branch (for a new branch, `origin`'s default branch); lefthook does not list paths that no longer exist (a renamed file may not appear at all), so a push that only deletes or renames files may skip checks, and CI catches it.
 - Line endings are normalized by `.gitattributes` (LF; CRLF for Windows scripts).
 
-## Before every commit (CI runs the same set, Windows only)
+## Before every commit (PR CI runs the same set, Windows only)
 Order: build the frontend first (`dist/` is not under version control, and `rust-embed` needs it to compile), then run the Rust checks.
-Formatting, lint, type checks, tests, architecture tests, UI E2E and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
+CI runs only on PRs; merging into `main` does not run it again, because rebase-merge lands exactly the commits the PR already checked.
+Formatting, lint, type checks, tests, architecture tests and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
 Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release (for checking only; nothing is distributed). Releases always use `tauri build`.
 
 ## Testing baseline
 - Test only the behavior we own, not Twitch/OBS themselves.
 - Levels: unit tests for domain/use cases; integration tests for Repositories and HTTP against a real SQLite; contract checks that generated files are up to date; UI E2E for browser behavior jsdom cannot test.
-- UI E2E (`apps/web/e2e/`, Playwright + Chromium, `pnpm web:e2e`; build the frontend first):
+- UI E2E (`apps/web/e2e/`, Playwright + Chromium):
+  - When it runs: not in PR CI or pre-push (it is the slowest step). Trigger the "UI E2E" workflow (`.github/workflows/e2e.yml`) by hand in GitHub Actions; the release workflow also runs it before building the zip and does not release if it fails. When you change the admin UI, overlays or E2E tests, run it locally once before pushing. Rust and frontend unit and integration tests still gate every PR, because they guard the data rules.
+  - Running locally: `pnpm web:build` first (the Host embeds `apps/web/dist`), then `pnpm web:e2e`; install Chromium the first time (see "Environment" above).
   - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain only a dummy token, never a real token or secret; Vite sends the same CSP as the Host, so E2E runs under it (the header the Host actually sends is covered by the `crates/host` Rust tests). Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
   - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on). These tests share one Host, are tagged `@host` and run one at a time in the Playwright `host` project; the other tests run in parallel in the `admin` project.
   - Logic that unit tests can cover still gets unit tests; E2E does not repeat them.
@@ -60,7 +63,7 @@ Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI al
 - Must test: redemption deduplication and state transitions, restoring a backup actually works, migrations lose no data.
 - Test with simulated events instead of real Twitch triggers. Simulated events are tagged `source=simulation` and must never be written to any real business records (redemption records, check-in records).
 - a11y baseline: every action can be done with the keyboard, focus is visible, every control has a label, text contrast meets WCAG 2.2 AA (4.5:1), control boundaries and informative icons reach 3:1 (WCAG 1.4.11), and status is never conveyed by color alone. No screen reader testing, but semantic markup and ARIA are still done properly.
-- Checked automatically by UI E2E (CI runs it every time):
+- Checked automatically by UI E2E (on manual runs and before a release):
   - Drawer: at window widths above 1000px, the drawer (380px wide) sits side by side with the tiles, which stay usable; at or below 1000px it is a modal on the right that closes on a backdrop click or Esc; below 600px it comes up from the bottom.
   - After crossing the 1000px width threshold, the drawer stays open and focus, input values and scroll positions are preserved.
   - On open, focus is on the close button; after closing, focus returns to the tile, status light or pending item that opened it (the home page has no pending items yet, so a stand-in on the test page is used); if that item is gone, it falls back to its tile (the further fallbacks, the first tile and then "Arrange tiles", are covered by unit tests).

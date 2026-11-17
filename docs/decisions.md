@@ -22,7 +22,7 @@
 | Host 生命週期 | 與 Tauri 同程序，關視窗隱藏到系統匣，單一實例 |
 | 架構強制 | crate 相依性＋架構測試（CI 執行） |
 | 測試 | 首版：Unit＋Integration（真 SQLite）＋Contract（產物是否最新）＋UI E2E（Playwright＋Chromium） |
-| CI | GitHub Actions，skeleton 就建，只跑 Windows；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼 |
+| CI | GitHub Actions，skeleton 就建，只跑 Windows，只在 PR 上跑；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼；UI E2E 是另一個 workflow，手動觸發與發佈前跑 |
 | 正式發佈 | 一律用 `tauri build`；不得散布沒有開啟 `tauri/custom-protocol` 的建置產物 |
 | Overlay 自訂 | 初版只開放 HTML／CSS 樣板；聊天室與特效樣板在管理 UI 從內建款式選擇（特效沒有資料夾樣板），不做線上編輯、上傳，也不做字型與顏色調整；聊天室的資料夾自訂樣板（`custom`）管理 UI 不提供入口，要手動在 `settings.json` 指定，重新啟動後生效 |
 | 平台 | Windows 優先；macOS 列入 MVP 後；Linux 不支援 |
@@ -128,3 +128,4 @@
 | 2026-11-16 | outbox 在切片 4 建立：表與 migration 屬於 core；重試共 5 次（間隔 1、2、4、8 秒）後移入 dead-letter；投遞完成的事件每 10 分鐘清除 | 重試期間依序擋住同一個訂閱者，打卡才不會亂序；上限讓一筆壞事件最多擋 15 秒左右 |
 | 2026-11-17 | `.stbackup` 在切片 6 建立：zip（`zip` crate，只開 deflate）＋`manifest.json`（每個檔案的大小與 SHA-256）；另存新檔用 WebView 的 `showSaveFilePicker`，不加 Tauri dialog plugin | 不必多一個 plugin 與它的 capability；zip 用一般工具就能打開檢查 |
 | 2026-11-17 | 還原在重新啟動後、開資料庫前套用：先把目前的資料存成 `backups/before-restore-*.stbackup`，再以改名整份換掉，失敗就放回原本的資料 | 資料庫開著時無法安全替換；改名在同一個資料夾內，失敗時能完整放回，還原前的備份也能用同一個畫面還原回去 |
+| 2026-11-17 | UI E2E 移出 PR 的 CI 與 pre-push，改成手動觸發與發佈前跑；合併進 `main` 不再重跑 CI | E2E 是最慢的一步（約 5.5 分鐘中的 77 秒），改動又進得快；守住資料規則的 Rust 與前端單元、整合測試仍是每個 PR 的必要檢查；rebase-merge 合併的就是 PR 已檢查過的 commit |

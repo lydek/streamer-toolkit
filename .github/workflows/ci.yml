@@ -1,9 +1,9 @@
 # Same checks as docs/dev.md "每次提交前"; Windows only.
 name: CI
 
+# PRs only: with rebase-merge, main gets the same commits the PR run already checked.
+# UI E2E runs in e2e.yml (manual and before a release), not here.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -60,24 +60,5 @@ jobs:
       - name: Tests (includes architecture tests)
         run: cargo test --workspace
 
-      # After cargo test, which already built the E2E Host (crates/host/examples/e2e_host.rs).
-      - name: Playwright version
-        id: playwright
-        run: '"version=$((pnpm --filter web exec playwright --version) -replace ''\s'', ''-'')" >> $env:GITHUB_OUTPUT'
-      - uses: actions/cache@v4
-        with:
-          path: ~/AppData/Local/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Playwright Chromium
-        run: pnpm --filter web exec playwright install chromium
-      - name: UI E2E (Playwright)
-        run: pnpm web:e2e
-      - name: Upload Playwright traces
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-traces
-          path: apps/web/test-results
-          if-no-files-found: ignore
       - name: Licenses and advisories
         run: cargo deny check
