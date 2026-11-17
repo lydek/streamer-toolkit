@@ -467,6 +467,58 @@ mod tests {
         }
     }
 
+    /// Every documented admin route, so one added later is covered without touching this test.
+    #[tokio::test]
+    async fn every_admin_route_in_the_openapi_document_requires_the_token() {
+        let doc = openapi::openapi();
+        let mut checked = Vec::new();
+        for (path, item) in doc.paths.paths.iter() {
+            if !path.starts_with("/api/admin/") {
+                continue;
+            }
+            let uri = path
+                .split('/')
+                .map(|s| if s.starts_with('{') { "x" } else { s })
+                .collect::<Vec<_>>()
+                .join("/");
+            for (method, documented) in [
+                (Method::GET, item.get.is_some()),
+                (Method::PUT, item.put.is_some()),
+                (Method::POST, item.post.is_some()),
+                (Method::DELETE, item.delete.is_some()),
+                (Method::PATCH, item.patch.is_some()),
+            ] {
+                if !documented {
+                    continue;
+                }
+                let req = get_req(&uri, "127.0.0.1:47810")
+                    .method(method.clone())
+                    .header(header::ORIGIN, "http://127.0.0.1:47810")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap();
+                assert_eq!(
+                    status(req).await,
+                    StatusCode::UNAUTHORIZED,
+                    "{method} {path}"
+                );
+                checked.push(format!("{method} {path}"));
+            }
+        }
+        // The document really lists the admin API (the twitch, backup, sound and check-in groups at least).
+        for route in [
+            "GET /api/admin/twitch",
+            "POST /api/admin/backup/restore",
+            "DELETE /api/admin/sounds/{id}",
+            "GET /api/admin/checkin/viewers",
+        ] {
+            assert!(
+                checked.iter().any(|c| c == route),
+                "{route} not checked: {checked:?}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn admin_api_requires_the_token() {
         let no_token = get_req("/api/admin/twitch", "127.0.0.1:47810")
