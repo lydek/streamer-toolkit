@@ -22,7 +22,7 @@ pub const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Twitch sends something at least every keepalive interval; this much extra silence means the link is dead.
-const KEEPALIVE_GRACE: Duration = Duration::from_secs(10);
+const KEEPALIVE_GRACE: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 10 });
 const SEEN_CAPACITY: usize = 256;
 
 const REDEMPTION_ADD: &str = "channel.channel_points_custom_reward_redemption.add";
@@ -598,8 +598,12 @@ mod tests {
     }
 
     fn welcome(id: &str) -> String {
+        welcome_with(id, 10)
+    }
+
+    fn welcome_with(id: &str, keepalive_secs: u64) -> String {
         json!({"metadata":{"message_type":"session_welcome","message_id":format!("w-{id}")},
-               "payload":{"session":{"id":id,"keepalive_timeout_seconds":10}}})
+               "payload":{"session":{"id":id,"keepalive_timeout_seconds":keepalive_secs}}})
         .to_string()
     }
 
@@ -981,6 +985,180 @@ mod tests {
             body["transport"],
             json!({"method":"websocket","session_id":"s1"})
         );
+        task.abort();
+    }
+
+    /// One behavior for every connection: a welcome (session `s<n>`, 1 s keepalive), then `after_welcome` if
+    /// any, then silence. The chat subscription answers `chat_status`; the others are accepted.
+    #[derive(Clone)]
+    struct Scripted {
+        after_welcome: Option<String>,
+        chat_status: StatusCode,
+        rate_limit_reset: Option<u64>,
+        connections: Arc<Mutex<Vec<std::time::Instant>>>,
+        /// Session IDs the chat subscription was requested for.
+        chat_sessions: Arc<Mutex<Vec<String>>>,
+        closed: Arc<std::sync::atomic::AtomicU32>,
+    }
+
+    impl Scripted {
+        fn new(after_welcome: Option<String>, chat_status: StatusCode) -> Self {
+            Self {
+                after_welcome,
+                chat_status,
+                rate_limit_reset: None,
+                connections: Arc::default(),
+                chat_sessions: Arc::default(),
+                closed: Arc::default(),
+            }
+        }
+
+        fn connections(&self) -> Vec<std::time::Instant> {
+            self.connections.lock().unwrap().clone()
+        }
+
+        fn chat_sessions(&self) -> Vec<String> {
+            self.chat_sessions.lock().unwrap().clone()
+        }
+
+        fn closed(&self) -> u32 {
+            self.closed.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    async fn scripted_ws(ws: WebSocketUpgrade, State(f): State<Scripted>) -> Response {
+        ws.on_upgrade(move |mut socket| async move {
+            let n = {
+                let mut connections = f.connections.lock().unwrap();
+                connections.push(std::time::Instant::now());
+                connections.len()
+            };
+            send(&mut socket, welcome_with(&format!("s{n}"), 1)).await;
+            if let Some(text) = f.after_welcome.clone() {
+                send(&mut socket, text).await;
+            }
+            hold_open(socket).await;
+            f.closed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })
+    }
+
+    async fn scripted_subscribe(State(f): State<Scripted>, Json(body): Json<Value>) -> Response {
+        use axum::response::IntoResponse;
+        if body["type"] != "channel.chat.message" {
+            return StatusCode::ACCEPTED.into_response();
+        }
+        let session = body["transport"]["session_id"].as_str().unwrap_or_default();
+        f.chat_sessions.lock().unwrap().push(session.into());
+        match f.rate_limit_reset {
+            Some(reset) => {
+                (f.chat_status, [("Ratelimit-Reset", reset.to_string())]).into_response()
+            }
+            None => f.chat_status.into_response(),
+        }
+    }
+
+    /// Runs EventSub against `script`; returns the task and the sign-in it uses.
+    async fn run_scripted(script: &Scripted) -> (tokio::task::JoinHandle<()>, TwitchAuth) {
+        let app = Router::new()
+            .route("/ws", any(scripted_ws))
+            .route("/helix/eventsub/subscriptions", post(scripted_subscribe))
+            .with_state(script.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let config = tls::client_config().unwrap();
+        let http = tls::https_client(config.clone());
+        let auth = signed_in_auth(http.clone());
+        let task = tokio::spawn(
+            EventSub {
+                url: format!("{}/ws", base.replace("http://", "ws://")),
+                helix: Helix::new(&format!("{base}/helix"), auth.clone(), http),
+                tls: config,
+                deliver: Arc::new(|_| {}),
+                deliver_alert: Arc::new(|_| {}),
+                deliver_redemption: Arc::new(|_| {}),
+            }
+            .run(),
+        );
+        (task, auth)
+    }
+
+    async fn until(what: &str, done: impl Fn() -> bool) {
+        tokio::time::timeout(Duration::from_secs(15), async {
+            while !done() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for {what}"));
+    }
+
+    #[tokio::test]
+    async fn silence_past_the_keepalive_reconnects_and_subscribes_again() {
+        let script = Scripted::new(None, StatusCode::ACCEPTED);
+        let (task, _auth) = run_scripted(&script).await;
+        until("a second session", || script.chat_sessions().len() >= 2).await;
+        assert_eq!(script.chat_sessions()[..2], ["s1", "s2"]);
+        let c = script.connections();
+        // 1 s keepalive + 1 s grace, then a 1 s backoff.
+        assert!(c[1] - c[0] >= Duration::from_secs(3), "{:?}", c[1] - c[0]);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_revocation_ends_the_session_and_a_new_one_subscribes() {
+        let revocation = json!({"metadata":{"message_type":"revocation","message_id":"v1"},
+            "payload":{"subscription":{"type":"channel.chat.message","status":"authorization_revoked"}}})
+        .to_string();
+        let script = Scripted::new(Some(revocation), StatusCode::ACCEPTED);
+        let (task, _auth) = run_scripted(&script).await;
+        until("a second session", || script.chat_sessions().len() >= 2).await;
+        assert_eq!(script.chat_sessions()[..2], ["s1", "s2"]);
+        until("the revoked session closed", || script.closed() >= 1).await;
+        let c = script.connections();
+        // Ended by the revocation, long before the keepalive would; then a 1 s backoff.
+        assert!(c[1] - c[0] < Duration::from_secs(3), "{:?}", c[1] - c[0]);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn logout_closes_the_session_and_stays_away() {
+        let script = Scripted::new(None, StatusCode::ACCEPTED);
+        let (task, auth) = run_scripted(&script).await;
+        until("the first session", || script.chat_sessions().len() == 1).await;
+        auth.logout().unwrap();
+        until("the session closed", || script.closed() == 1).await;
+        // Longer than a keepalive timeout plus a backoff: no new session while signed out.
+        tokio::time::sleep(Duration::from_secs(4)).await;
+        assert_eq!(script.connections().len(), 1);
+        assert!(!task.is_finished(), "waits for the next sign-in");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_refused_chat_subscription_backs_off_longer_each_time() {
+        let script = Scripted::new(None, StatusCode::FORBIDDEN);
+        let (task, _auth) = run_scripted(&script).await;
+        until("three sessions", || script.connections().len() >= 3).await;
+        let c = script.connections();
+        assert!(c[1] - c[0] >= Duration::from_secs(1), "{:?}", c[1] - c[0]);
+        assert!(c[2] - c[1] >= Duration::from_secs(2), "{:?}", c[2] - c[1]);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_rate_limited_chat_subscription_waits_for_the_reset() {
+        let mut script = Scripted::new(None, StatusCode::TOO_MANY_REQUESTS);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        script.rate_limit_reset = Some(now + 4);
+        let (task, _auth) = run_scripted(&script).await;
+        until("a second session", || script.connections().len() >= 2).await;
+        let c = script.connections();
+        // Longer than the 1 s backoff: at least until the reset, 3 to 4 s away when the 429 came.
+        assert!(c[1] - c[0] >= Duration::from_secs(2), "{:?}", c[1] - c[0]);
         task.abort();
     }
 
