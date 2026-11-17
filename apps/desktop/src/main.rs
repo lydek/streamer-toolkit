@@ -167,6 +167,8 @@ fn main() {
 
 /// JSON lines, one file per day, the last `LOG_DAYS` kept. Dev builds also print to stderr.
 fn init_logs(dir: &Path) -> Option<WorkerGuard> {
+    // tracing-appender prunes old files before it creates the folder, which prints an error on first start.
+    std::fs::create_dir_all(dir).ok()?;
     let appender = rolling::Builder::new()
         .rotation(rolling::Rotation::DAILY)
         .filename_prefix("streamer-toolkit")
