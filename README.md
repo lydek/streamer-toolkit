@@ -6,12 +6,12 @@
 
 **原則：功能導向、快速迭代。** 一次做一個功能切片，做完就拿去實際直播試用。
 
-**狀態：** 尚未開始實作，下一步是 walking skeleton（見 [scope](docs/scope.md)）。
+**狀態：** MVP 切片都已完成，正在做實機檢查，準備第一個正式版（見 [scope](docs/scope.md)）。
 
 **技術棧：** Rust＋Axum、Tauri 2＋Vue 3＋TypeScript、SQLite＋SQLx。
 
 ## 怎麼跑
-Walking skeleton 完成後補上。環境需求見 [dev](docs/dev.md)。
+正式版發佈後，從 GitHub Releases 下載可攜版 zip，解壓縮後執行 `Streamer Toolkit.exe`；SmartScreen 與「解除封鎖」的步驟見 zip 裡的 `使用說明.txt`。從原始碼建置與開發見 [dev](docs/dev.md)。
 
 ## 文件
 只維護以下文件：下列四份、複雜模組規格 `docs/modules/<模組>.md`，以及給 AI 程式助理的 [AGENTS.md](AGENTS.md)。繁體中文為權威版本，英文版為同名 `.en.md`。

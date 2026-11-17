@@ -20,7 +20,7 @@
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
 - API 契約：改了 Host 的 HTTP API 或 WebSocket 事件後執行 `pnpm api:gen`（需要先建置前端），由 Rust（`utoipa`）產生 `apps/web/src/api/openapi.json`，再由 `openapi-typescript` 產生 `schema.d.ts`，兩個檔案一起 commit；CI 重新產生後有差異就失敗。WebSocket 的快照與事件型別也放在 OpenAPI components，測試會拿實際送出的 JSON 比對；新增對外事件或快照保留的事件種類時，要一起在 `crates/host/src/openapi.rs` 的 components 加型別。
-- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；UI E2E 另外跑（見下方「測試底線」）；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；UI E2E 另外跑（見下方「測試底線」）；要跑和 CI 相同的步驟（另含翻譯、script 測試、前端授權、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`（`pnpm tauri dev` 的 Vite proxy 只讀 `target\debug\data\` 的 port，所以那份資料的 port 要和它相同）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
@@ -34,7 +34,7 @@
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
-  - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`；不跑 UI E2E），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
+  - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、script 測試、前端授權、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`；不跑 UI E2E），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
   - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
     - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
     - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`、`apps/web/src/overlay/alerts/templates/`）。
@@ -137,7 +137,7 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 - 平時只寫中文，英文不必同步寫。**commit 文件前**才用 AI 指令產生或更新英文版，人工看過後再 commit。
 - 英文檔第一行記錄 `<!-- source: <中文檔路徑> source-sha256: <hash> -->`，第二行是語言切換連結（`[繁體中文](<name>.md) | **English**`）；中文檔開頭對應放 `**繁體中文** | [English](<name>.en.md)`。英文檔內的文件連結指向對應的 `.en.md`。
 - `node scripts/check-translations.mjs` 會檢查三件事：每份中文檔都有英文版、每份英文版的 source 都指向同名的中文檔（沒有孤兒檔）、英文版的 hash 與中文檔一致；不符就失敗，並印出問題檔案或新 hash。
-- 建立 git 後由 pre-commit hook 執行此檢查，CI 也跑同一個指令；hook 只檢查，不自動翻譯。
+- pre-commit 與 pre-push hook 都會執行此檢查，CI 也跑同一個指令；hook 只檢查，不自動翻譯。
 - 程式碼：識別碼、註解、API／DB 欄位、錯誤碼一律英文。錯誤碼格式 `<區域>.<原因>`，例如 `twitch.sign_in_required`。
 - Commit：英文 Conventional Commits，例：`feat(checkin): add daily check-in rule`。
 - UI 固定字串集中放在資源檔，之後要翻譯不必改元件。

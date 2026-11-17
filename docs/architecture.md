@@ -4,8 +4,8 @@
 
 DDD＋Clean Architecture，以 Modular Monolith 落地：單一程式、每個業務模組一個 crate、模組內分層。採循序漸進：DDD 戰術模式只用在複雜模組。選型與導入時機見 [decisions.md](decisions.md)。
 
-## 1. 初始目錄規劃
-Skeleton 時依實際情況微調；調整後更新本節。
+## 1. 目錄
+目錄結構改變時更新本節。
 
 ```text
 crates/
@@ -191,7 +191,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 資料庫先用 `VACUUM INTO` 存成 `cache/` 裡的快照再放進 zip，不直接讀開啟中的檔案。直播中匯出時聊天室、特效與打卡照常運作，資料庫寫入只在快照期間稍等。
 - `manifest.json`：`format`（`streamer-toolkit-backup`）、`format_version`（目前為 1）、`app_version`、`schema_version`（資料庫最新的 migration 版本，空的資料庫為 0）、`created_at`（UTC，RFC 3339）、`records`（`redemptions`、`checkins`：兌換紀錄與打卡紀錄的筆數）、`files`（每個檔案的 `path`、`size`、`sha256`）。
 - 路徑只能是 `settings.json`、`toolkit.db`，或 `templates/`、`sounds/` 底下的相對路徑，以 `/` 分隔；每一段不得為空、`.` 或 `..`，不得含 `\`、`:` 等 Windows 不允許的字元，也不得是保留名稱（`CON`、`NUL` 等）。符號連結與 junction 不備份。
-- 上限：zip 512 MB、檔案 10,000 個、解壓後合計 2 GB。匯出超過上限時拒絕（413 `backup.too_large`），所以匯出的檔案一定能還原。
+- 上限：zip 512 MB、檔案 10,000 個、解壓縮後合計 2 GB。匯出超過上限時拒絕（413 `backup.too_large`），所以匯出的檔案一定能還原。
 - 匯出：管理 API `GET /api/admin/backup` 回傳備份檔。管理 UI 先開另存新檔對話方塊（`showSaveFilePicker`）選位置，再把回應寫進去；沒有這個 API 時改由瀏覽器下載。
 - 還原只會整份取代，不合併：
   1. 選檔：管理 UI 把檔案原樣送到 `POST /api/admin/backup/restore/preview`（上限 512 MB，`DefaultBodyLimit`）。寫入任何東西之前，先在記憶體檢查上限、每個路徑、每個檔案的大小與 SHA-256（只讀到 manifest 寫的大小再多 1 byte，不相信 zip 自己記的大小）、zip 裡剛好是 manifest 列的檔案加上 manifest；`format_version` 或 `schema_version` 比這一版新時回 400 `backup.newer_version`，其他不符回 400 `backup.invalid`。通過後解到資料夾的 `restore-staging/`，再檢查資料庫本身（套用過的 migration 都必須是這一版認得、checksum 相同且已完成的；有不認得的也回 `backup.newer_version`）與 `settings.json` 讀得懂，最後才寫入 `manifest.json` 表示暫存完成，回傳預覽（備份時間、程式版本、兌換與打卡紀錄筆數、樣板資料夾數、音效檔數）。任何一步失敗就刪掉 `restore-staging/`；使用中的資料都不動。
