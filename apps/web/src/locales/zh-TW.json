@@ -108,6 +108,7 @@
   "redemption": {
     "empty": "還沒有兌換紀錄",
     "noMatch": "沒有符合條件的紀錄",
+    "writeFailed": "有 {n} 筆兌換重試後仍無法寫入紀錄，不在清單裡。",
     "cost": "{n} 點",
     "status": {
       "unfulfilled": "未完成",

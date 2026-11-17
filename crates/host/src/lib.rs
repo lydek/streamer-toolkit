@@ -246,7 +246,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         twitch,
         chat,
         alerts,
-        redemption,
+        redemption.clone(),
         checkin.clone(),
         sounds.clone(),
         outbox,
@@ -264,10 +264,9 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(
-            redemption::routes(config.db.clone()).layer(middleware::from_fn_with_state(
-                admin.clone(),
-                admin::require_token,
-            )),
+            redemption::routes(config.db.clone(), redemption.clone()).layer(
+                middleware::from_fn_with_state(admin.clone(), admin::require_token),
+            ),
         )
         .merge(
             checkin::routes(config.db.clone(), checkin).layer(middleware::from_fn_with_state(
@@ -588,7 +587,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
-            serde_json::json!({ "items": [], "total": 0 })
+            serde_json::json!({ "items": [], "total": 0, "failed_writes": 0 })
         );
         let _ = std::fs::remove_dir_all(dir);
     }

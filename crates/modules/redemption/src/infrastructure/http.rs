@@ -12,8 +12,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use utoipa::{IntoParams, ToSchema};
 
+use std::sync::Arc;
+
 use crate::{
-    application::ListFilter,
+    application::{ListFilter, RedemptionService},
     domain::{Redemption, Status},
     infrastructure::db,
 };
@@ -95,6 +97,8 @@ pub struct RedemptionPage {
     pub items: Vec<RedemptionRecord>,
     /// Records matching the filters, across all pages.
     pub total: u64,
+    /// Redemptions that could not be stored since the app started, even after retries; they are not in the list.
+    pub failed_writes: u64,
 }
 
 /// Empty values mean no filter.
@@ -126,10 +130,16 @@ fn error(status: StatusCode, code: &str) -> Response {
     (status, Json(ErrorBody { code: code.into() })).into_response()
 }
 
-pub fn routes(pool: SqlitePool) -> Router {
+#[derive(Clone)]
+pub(crate) struct Http {
+    pool: SqlitePool,
+    service: Arc<RedemptionService>,
+}
+
+pub fn routes(pool: SqlitePool, service: Arc<RedemptionService>) -> Router {
     Router::new()
         .route("/api/admin/redemptions", get(list_redemptions))
-        .with_state(pool)
+        .with_state(Http { pool, service })
 }
 
 fn filter(q: RedemptionQuery) -> Result<ListFilter, ()> {
@@ -170,7 +180,7 @@ fn filter(q: RedemptionQuery) -> Result<ListFilter, ()> {
     )
 )]
 pub(crate) async fn list_redemptions(
-    State(pool): State<SqlitePool>,
+    State(Http { pool, service }): State<Http>,
     query: Result<Query<RedemptionQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Response {
     let Some(filter) = query.ok().and_then(|Query(q)| filter(q).ok()) else {
@@ -180,6 +190,7 @@ pub(crate) async fn list_redemptions(
         Ok((items, total)) => Json(RedemptionPage {
             items: items.into_iter().map(RedemptionRecord::from).collect(),
             total,
+            failed_writes: service.failed_writes(),
         })
         .into_response(),
         Err(e) => {

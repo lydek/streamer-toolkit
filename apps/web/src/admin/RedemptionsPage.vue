@@ -36,6 +36,7 @@
 
     <!-- Always in the DOM, so screen readers announce changes to the count. -->
     <p role="status">{{ page ? t('redemption.total', { n: page.total }) : '' }}</p>
+    <p v-if="page?.failed_writes" role="alert">{{ t('redemption.writeFailed', { n: page.failed_writes }) }}</p>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="!page">{{ t('app.loading') }}</p>
     <RedemptionList

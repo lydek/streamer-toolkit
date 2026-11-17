@@ -1042,6 +1042,11 @@ export interface components {
         RedemptionChangedType: "redemption.changed";
         /** @description `GET /api/admin/redemptions`: one page, newest first. */
         RedemptionPage: {
+            /**
+             * Format: int64
+             * @description Redemptions that could not be stored since the app started, even after retries; they are not in the list.
+             */
+            failed_writes: number;
             items: components["schemas"]["RedemptionRecord"][];
             /**
              * Format: int64

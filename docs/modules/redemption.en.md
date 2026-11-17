@@ -1,4 +1,4 @@
-<!-- source: docs/modules/redemption.md source-sha256: b801e9eabcfcae1695619d4bcc2099816821d26932d695bb8d1389abaac780b1 -->
+<!-- source: docs/modules/redemption.md source-sha256: 911904dba3f19fef64272155bcb8fcbfd575164134476aebcaf50ad609112a04 -->
 [繁體中文](redemption.md) | **English**
 
 # Redemption records
@@ -13,6 +13,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - When a status update arrives before the redemption itself, the update carries the whole redemption and creates the record; the redemption event that arrives later counts as a duplicate and changes nothing.
 - A redemption event received again changes nothing.
 - Simulated events (`source=simulation`) are never stored.
+- When a write fails (for example, the database is briefly busy), it is retried after 1, 2 and 4 seconds while later events wait in order; if it still fails, it is logged, the number of such failures since this start is returned as `failed_writes` with the list, and the redemptions page shows a notice.
 - Redemptions received while the module is disabled are dropped, like other in-memory events; stored records are kept.
 - When a record is first stored (whether the redemption event or a status update created it), `RedemptionRecorded` is published through the outbox in the same transaction, with `occurredAt` set to the redemption time; repeated events and status updates publish nothing more.
 - The viewer's text is stored as-is and escaped when shown.
