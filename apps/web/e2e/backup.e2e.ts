@@ -1,6 +1,6 @@
 // Backup on the settings page, with the admin API and IPC mocked. The save dialog is faked: a real one is native.
 import { type Page, expect, test } from '@playwright/test'
-import { openAdmin, zh } from './fixtures'
+import { openAdmin, scrollsSideways, zh } from './fixtures'
 
 declare global {
   interface Window {
@@ -76,3 +76,59 @@ test('a refused export shows why', async ({ page }) => {
   await exportButton(page).click()
   await expect(page.getByText(zh.errors.backup.too_large)).toBeVisible()
 })
+
+const PREVIEW = {
+  created_at: '2026-11-17T01:30:00Z',
+  app_version: '0.1.0',
+  redemptions: 12,
+  checkins: 34,
+  templates: 1,
+  sounds: 5,
+}
+
+test('restore previews the chosen file, then confirms it to restart', async ({ page }) => {
+  await openSettings(page)
+  const uploads: number[] = []
+  let confirms = 0
+  await page.route('**/api/admin/backup/restore/preview', (r) => {
+    uploads.push(r.request().postDataBuffer()?.length ?? 0)
+    return r.fulfill({ json: PREVIEW })
+  })
+  await page.route('**/api/admin/backup/restore', (r) => {
+    confirms++
+    return r.fulfill({ status: 202 })
+  })
+  await page.getByLabel(zh.backup.restoreFile).setInputFiles({
+    name: 'old.stbackup',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(BACKUP),
+  })
+  await expect(page.getByText(zh.backup.appVersion.replace('{version}', '0.1.0'))).toBeVisible()
+  await expect(page.getByText('兌換紀錄 12 筆、打卡紀錄 34 筆')).toBeVisible()
+  await expect(page.getByText('樣板 1 個、音效 5 個')).toBeVisible()
+  expect(uploads).toEqual([BACKUP.length])
+  expect(confirms).toBe(0)
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 640 })
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+  }
+
+  await page.getByRole('button', { name: zh.backup.restore }).click()
+  await expect(page.getByRole('status').filter({ hasText: zh.backup.restarting })).toBeVisible()
+  expect(confirms).toBe(1)
+})
+
+for (const code of ['backup.invalid', 'backup.newer_version']) {
+  test(`a refused backup (${code}) shows why and offers no restore`, async ({ page }) => {
+    await openSettings(page)
+    await page.route('**/api/admin/backup/restore/preview', (r) => r.fulfill({ status: 400, json: { code } }))
+    await page.getByLabel(zh.backup.restoreFile).setInputFiles({
+      name: 'bad.stbackup',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('not a backup'),
+    })
+    const [area, reason] = code.split('.')
+    await expect(page.getByRole('alert')).toHaveText(zh.errors[area][reason])
+    await expect(page.getByRole('button', { name: zh.backup.restore })).toHaveCount(0)
+  })
+}

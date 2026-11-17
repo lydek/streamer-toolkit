@@ -180,7 +180,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
-- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前備份）。
+- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前與還原前的備份）；還原時另有暫時的 `restore-staging/`、`restore-pending` 與 `restore-previous/`（見下方「備份檔」）。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
@@ -191,14 +191,22 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 資料庫先用 `VACUUM INTO` 存成 `cache/` 裡的快照再放進 zip，不直接讀開啟中的檔案。直播中匯出時聊天室、特效與打卡照常運作，資料庫寫入只在快照期間稍等。
 - `manifest.json`：`format`（`streamer-toolkit-backup`）、`format_version`（目前為 1）、`app_version`、`schema_version`（資料庫最新的 migration 版本，空的資料庫為 0）、`created_at`（UTC，RFC 3339）、`records`（`redemptions`、`checkins`：兌換紀錄與打卡紀錄的筆數）、`files`（每個檔案的 `path`、`size`、`sha256`）。
 - 路徑只能是 `settings.json`、`toolkit.db`，或 `templates/`、`sounds/` 底下的相對路徑，以 `/` 分隔；每一段不得為空、`.` 或 `..`，不得含 `\`、`:` 等 Windows 不允許的字元，也不得是保留名稱（`CON`、`NUL` 等）。符號連結與 junction 不備份。
-- 上限：zip 512 MB、檔案 10,000 個、解壓後合計 2 GB。匯出超過上限時拒絕（500 `backup.too_large`），所以匯出的檔案一定能還原。
+- 上限：zip 512 MB、檔案 10,000 個、解壓後合計 2 GB。匯出超過上限時拒絕（413 `backup.too_large`），所以匯出的檔案一定能還原。
 - 匯出：管理 API `GET /api/admin/backup` 回傳備份檔。管理 UI 先開另存新檔對話方塊（`showSaveFilePicker`）選位置，再把回應寫進去；沒有這個 API 時改由瀏覽器下載。
+- 還原只會整份取代，不合併：
+  1. 選檔：管理 UI 把檔案原樣送到 `POST /api/admin/backup/restore/preview`（上限 512 MB，`DefaultBodyLimit`）。寫入任何東西之前，先在記憶體檢查上限、每個路徑、每個檔案的大小與 SHA-256（只讀到 manifest 寫的大小再多 1 byte，不相信 zip 自己記的大小）、zip 裡剛好是 manifest 列的檔案加上 manifest；`format_version` 或 `schema_version` 比這一版新時回 400 `backup.newer_version`，其他不符回 400 `backup.invalid`。通過後解到資料夾的 `restore-staging/`，再檢查資料庫本身（套用過的 migration 都必須是這一版認得、checksum 相同且已完成的；有不認得的也回 `backup.newer_version`）與 `settings.json` 讀得懂，最後才寫入 `manifest.json` 表示暫存完成，回傳預覽（備份時間、程式版本、兌換與打卡紀錄筆數、樣板資料夾數、音效檔數）。任何一步失敗就刪掉 `restore-staging/`；使用中的資料都不動。
+  2. 確認：`POST /api/admin/backup/restore`（沒有暫存時回 409 `backup.nothing_staged`）寫入 `restore-pending`，回 202 後重新啟動程式（`AppHandle::request_restart`，沿用原本的命令列參數）。
+  3. 啟動時（見「啟動順序」）：先把目前的資料存成 `backups/before-restore-<UTC 時間>.stbackup`（之後可以照樣還原回去）；再把目前的 `settings.json`、資料庫（含 `-wal`、`-shm`）、`templates/`、`sounds/` 搬進 `restore-previous/`，把暫存的搬到原位（都在資料夾內改名）；接著走一般的開資料庫流程（有待套用的 migration 時照樣先備份）。任一步失敗就把 `restore-previous/` 的東西放回原位，顯示原因後照常啟動；成功時顯示提醒：備份不含 Twitch 登入與 OBS 密碼，需要時重新登入、重填。最後刪掉 `restore-pending`、`restore-previous/`、`restore-staging/`。
+  - 程式在搬移途中結束時，下次啟動看到 `restore-pending` 與 `restore-previous/` 同時存在，就先放回原本的資料並說明還原中斷。連放回都失敗時保留兩者、顯示錯誤並結束，下次啟動再試。
+  - 暫存後沒有確認：下次啟動直接刪掉 `restore-staging/`。
+  - `instance-id` 不在備份裡，還原後不變；Credential Manager 的項目依它命名，所以還原到另一個資料夾或另一台電腦時要重新登入 Twitch、重填 OBS 密碼。
 
 啟動順序：
 1. 決定資料夾並確認可寫入；`tauri-plugin-single-instance` 依 identifier 命名它的鎖，因此啟動時把 identifier 加上 `instance-id`，讓鎖依資料夾區分。先註冊這個 plugin，第二份程式在交棒前不會去搶 port。
-2. Host 綁 port；失敗時開啟 port 修改小頁面，使用者儲存後重試。
-3. 正式版：為目前的 port 建立 remote capability，再建立管理視窗並載入 Host 網址。dev 模式：管理視窗載入 Vite dev server，使用 capability 2。
-4. 建立任何視窗前先確認有 WebView2 Runtime（Windows 11 內建，少數 Windows 10 沒有）。缺少時顯示說明並開啟微軟的下載頁，Host、Overlay 與系統匣照常運作；安裝後在系統匣選「開啟」就會建立視窗，不必重新啟動。
+2. 有已確認的還原就先套用（見「備份檔」），再開資料庫並套用 migration；兩者都在單一實例鎖之後，第二份程式不會動到同一個資料夾。
+3. Host 綁 port；失敗時開啟 port 修改小頁面，使用者儲存後重試。
+4. 正式版：為目前的 port 建立 remote capability，再建立管理視窗並載入 Host 網址。dev 模式：管理視窗載入 Vite dev server，使用 capability 2。
+5. 建立任何視窗前先確認有 WebView2 Runtime（Windows 11 內建，少數 Windows 10 沒有）。缺少時顯示說明並開啟微軟的下載頁，Host、Overlay 與系統匣照常運作；安裝後在系統匣選「開啟」就會建立視窗，不必重新啟動。
 
 ## 7. 規則怎麼強制
 - 跨模組相依性：由各 crate 的 `Cargo.toml` 強制。

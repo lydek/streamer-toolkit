@@ -24,6 +24,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/backup/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restores the staged backup: the app restarts, backs up the current data to `backups/`, then puts the backup
+         *     in place before the database opens.
+         */
+        post: operations["confirm_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup/restore/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Checks a backup file (at most 512 MB) and stages it for a restore; nothing in use changes. The body is the
+         *     file itself. A later preview replaces the staged one.
+         */
+        post: operations["preview_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/import": {
         parameters: {
             query?: never;
@@ -968,6 +1008,20 @@ export interface components {
         };
         /** @enum {string} */
         RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
+        /** @description What a backup holds, shown before the broadcaster confirms a restore. */
+        RestorePreview: {
+            /** @description The version of the app that made it. */
+            app_version: string;
+            /** Format: int64 */
+            checkins: number;
+            /** @description When the backup was made (RFC 3339, UTC). */
+            created_at: string;
+            /** Format: int64 */
+            redemptions: number;
+            sounds: number;
+            /** @description Template folders, e.g. `templates/chat/`. */
+            templates: number;
+        };
         /** @description A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text. */
         Reward: {
             id: string;
@@ -1129,7 +1183,103 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description `backup.too_large`: more than a restore accepts; `backup.export_failed` */
+            /** @description `backup.too_large`: more than a restore accepts */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.export_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    confirm_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The app restarts to restore */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `backup.nothing_staged` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.restore_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    preview_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The backup file */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestorePreview"];
+                };
+            };
+            /** @description `backup.invalid`: damaged or not a backup; `backup.newer_version`: made by a newer version */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.too_large` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.restore_failed`: could not be staged */
             500: {
                 headers: {
                     [name: string]: unknown;

@@ -127,3 +127,4 @@
 | 2026-11-16 | outbox 與停用時的「暫停／關閉」從兌換紀錄切片延到打卡簽到切片；兌換紀錄先不發布 `RedemptionRecorded` | 兌換紀錄切片還沒有任何訂閱者，打卡簽到才是第一個；沒有訂閱者時做出來無法用真實情境測試 |
 | 2026-11-16 | outbox 在切片 4 建立：表與 migration 屬於 core；重試共 5 次（間隔 1、2、4、8 秒）後移入 dead-letter；投遞完成的事件每 10 分鐘清除 | 重試期間依序擋住同一個訂閱者，打卡才不會亂序；上限讓一筆壞事件最多擋 15 秒左右 |
 | 2026-11-17 | `.stbackup` 在切片 6 建立：zip（`zip` crate，只開 deflate）＋`manifest.json`（每個檔案的大小與 SHA-256）；另存新檔用 WebView 的 `showSaveFilePicker`，不加 Tauri dialog plugin | 不必多一個 plugin 與它的 capability；zip 用一般工具就能打開檢查 |
+| 2026-11-17 | 還原在重新啟動後、開資料庫前套用：先把目前的資料存成 `backups/before-restore-*.stbackup`，再以改名整份換掉，失敗就放回原本的資料 | 資料庫開著時無法安全替換；改名在同一個資料夾內，失敗時能完整放回，還原前的備份也能用同一個畫面還原回去 |

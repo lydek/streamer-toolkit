@@ -1,4 +1,7 @@
-import { api, client } from './api'
+import { ApiError, api, client } from './api'
+
+/** The Host's restore limit (crates/host/src/backup.rs); checked here first so a larger file is never sent. */
+export const BACKUP_MAX_BYTES = 512 * 1024 * 1024
 
 /** Chromium's File System Access API; not in TypeScript's DOM types. */
 interface SavePicker {
@@ -44,3 +47,19 @@ export async function saveBackup(): Promise<boolean> {
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
   return true
 }
+
+/** Uploads a backup file as-is; the Host checks it and stages it for a restore. */
+export function previewRestore(file: File) {
+  if (file.size > BACKUP_MAX_BYTES) return Promise.reject(new ApiError('backup.too_large'))
+  return api(
+    client.POST('/api/admin/backup/restore/preview', {
+      // The body is the file itself, not JSON.
+      body: file as unknown as string,
+      bodySerializer: (b: unknown) => b as BodyInit,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    }),
+  )
+}
+
+/** Restores the staged backup: the app restarts and applies it before the database opens. */
+export const confirmRestore = () => api(client.POST('/api/admin/backup/restore'))

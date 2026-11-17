@@ -9,6 +9,7 @@ mod openapi;
 mod overlay;
 mod templates;
 
+pub use backup::{BackupError, apply_pending};
 pub use openapi::openapi;
 
 pub use alerts::Timing as AlertTiming;
@@ -79,6 +80,8 @@ pub struct HostConfig {
     pub db: db::SqlitePool,
     /// The app's version, recorded in backups.
     pub app_version: String,
+    /// Restarts the app; a confirmed restore is applied on the next start.
+    pub restart: Arc<dyn Fn() + Send + Sync>,
 }
 
 /// Twitch addresses; tests point them at fake services.
@@ -221,6 +224,8 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         db: config.db.clone(),
         data_dir: config.data_dir.clone(),
         app_version: config.app_version,
+        restart: config.restart,
+        lock: Default::default(),
     });
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,
@@ -411,6 +416,23 @@ mod tests {
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
             app_version: "0.0.0-test".into(),
+            restart: Arc::new(|| {}),
+        }
+    }
+
+    #[tokio::test]
+    async fn backup_routes_require_the_token() {
+        for (method, uri) in [
+            (Method::GET, "/api/admin/backup"),
+            (Method::POST, "/api/admin/backup/restore/preview"),
+            (Method::POST, "/api/admin/backup/restore"),
+        ] {
+            let req = get_req(uri, "127.0.0.1:47810")
+                .method(method)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .body(Body::empty())
+                .unwrap();
+            assert_eq!(status(req).await, StatusCode::UNAUTHORIZED, "{uri}");
         }
     }
 
@@ -695,6 +717,7 @@ mod tests {
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
             app_version: "0.0.0-test".into(),
+            restart: Arc::new(|| {}),
         })
         .unwrap();
 
