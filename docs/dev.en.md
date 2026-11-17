@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: b7a1ec69af869fbbe431816320c56eb613b29464eb648ac48b4f6bfe7f527888 -->
+<!-- source: docs/dev.md source-sha256: 409a08e7e30cb6401629e82399b9e1fdeb56b25e240e94dfeac6477714dfc294 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -48,6 +48,16 @@ Order: build the frontend first (`dist/` is not under version control, and `rust
 CI runs only on PRs; merging into `main` does not run it again, because rebase-merge lands exactly the commits the PR already checked.
 Formatting, lint, type checks, tests, architecture tests and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
 Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release (for checking only; nothing is distributed). Releases always use `tauri build`.
+
+## Releasing
+Only the portable zip is released. Pushing a `v*` tag makes `.github/workflows/release.yml` build it:
+1. Run UI E2E (`e2e.yml`) first; if it fails, nothing is released.
+2. Check that the tag matches the version in all three of `apps/desktop/tauri.conf.json`, `apps/desktop/Cargo.toml` and `package.json` (`node scripts/check-version.mjs <tag>`); if not, nothing is released.
+3. Generate `THIRD_PARTY_LICENSES` (see "Licenses"), then run `pnpm tauri build --no-bundle`.
+4. Pack `streamer-toolkit-<version>-windows-x64.zip`: it holds a single `Streamer Toolkit\` folder with `Streamer Toolkit.exe`, `LICENSE`, `THIRD_PARTY_LICENSES` and `使用說明.txt` (from `apps/desktop/release/usage.zh-TW.txt`), never `data`; a `.sha256` goes next to it.
+5. Create a draft release (`gh release create --draft`). The workflow never publishes; only this job has `contents: write`.
+
+Steps: bump the version in all three places through a PR and merge it, then tag `v<version>` on `main` and push the tag; when the workflow is done, download the draft's zip from GitHub Releases, verify the checksum, extract and start it on a Windows machine without developer tools, and only then publish.
 
 ## Testing baseline
 - Test only the behavior we own, not Twitch/OBS themselves.
