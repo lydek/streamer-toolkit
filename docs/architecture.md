@@ -112,7 +112,7 @@ apps/
 
 ### 本機 API 安全
 只綁 `127.0.0.1` 擋不住瀏覽器裡的惡意網頁（跨站請求、DNS rebinding、WebSocket 劫持），因此另外做：
-- **管理視窗**：載入 `http://127.0.0.1:<port>/admin`，在 Host 綁好 port 之後才建立；開發時改載入 Vite dev server。管理視窗與 API 同源，因此不開 CORS，也不必處理 Tauri 的 origin。管理視窗只能導向 app 自己 origin 下的 `/admin` 路徑（`on_navigation` 限制），開新視窗（`window.open`、`target=_blank`）一律拒絕（`on_new_window`）；Device Code Flow 的驗證網址由 Rust 指令用 `tauri-plugin-opener` 在系統瀏覽器開啟，視窗內只顯示代碼。其他外部網址也一樣：每個目的地各做一個網址寫死、不接受參數的指令，不做接受網址參數的通用指令（管理視窗若被注入腳本，可用它開任意網址或自訂通訊協定，例如 `ms-settings:`），也不授予任何視窗 opener plugin 的權限。
+- **管理視窗**：載入 `http://127.0.0.1:<port>/admin`，在 Host 綁好 port 之後才建立；開發時改載入 Vite dev server。管理視窗與 API 同源，因此不開 CORS，也不必處理 Tauri 的 origin。管理視窗只能導向 app 自己 origin（開發時是 devUrl 的 origin）下的 `/admin` 路徑（`on_navigation` 限制），開新視窗（`window.open`、`target=_blank`）一律拒絕（`on_new_window`）；Device Code Flow 的驗證網址由 Rust 指令用 `tauri-plugin-opener` 在系統瀏覽器開啟，視窗內只顯示代碼。其他外部網址也一樣：每個目的地各做一個網址寫死、不接受參數的指令，不做接受網址參數的通用指令（管理視窗若被注入腳本，可用它開任意網址或自訂通訊協定，例如 `ms-settings:`），也不授予任何視窗 opener plugin 的權限。
   - Host 對 `/admin`（含其下所有路徑）送出嚴格的 `Content-Security-Policy`：`script-src 'self'`（禁止 inline script 與 eval）；`connect-src 'self' ipc: http://ipc.localhost`（Tauri IPC）；`style-src 'self' 'unsafe-inline'`（PrimeVue 執行期插入樣式，或改用 PrimeVue 的 nonce）；`img-src 'self' data:` 與 `font-src 'self' data:`（Vite 會把小檔案內嵌成 `data:`）；`frame-src` 只放行 `/overlay/chat/` 與 `/overlay/alerts/` 路徑底下的頁面（聊天室與特效 Overlay 頁）：`http://127.0.0.1:<port>` 與 `http://localhost:<port>` 各加上這兩個路徑（樣板預覽用；`<port>` 是 Host 目前綁定的 port；CSP 的路徑比對不看 query，所以不分是否帶 `?preview`；正式版的 IPC capability 涵蓋整個 Host origin，其他同源頁面不得被框進管理視窗）。不設 `default-src`。vue-i18n 使用預先編譯的訊息，不需要 `unsafe-eval`。
 - **管理 token**：Host 每次啟動產生隨機 token，不寫入磁碟。管理視窗啟動時透過 Tauri IPC 指令取得；token 只放記憶體，不存 localStorage（WebView2 會寫到磁碟）。管理 HTTP 請求帶 `Authorization` header；管理 WebSocket 連線後第一則訊息帶 token。
 - **Tauri IPC 權限**：app 指令在 `build.rs` 用 `tauri_build::AppManifest` 宣告，每個指令都要明確授權。共三組 capability：
@@ -181,7 +181,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
 - 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前與還原前的備份）；還原時另有暫時的 `restore-staging/`、`restore-pending` 與 `restore-previous/`（見下方「備份檔」）。
-- 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。
+- 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。只有 `instance-id` 不存在時才產生新的（`create_new`，同時啟動的兩份拿到同一個 ID）；其他讀取錯誤會顯示錯誤並結束，不會換成新 ID。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
