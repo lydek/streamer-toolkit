@@ -90,6 +90,22 @@ describe('HomeView skip link', () => {
   })
 })
 
+describe('HomeView update notice', () => {
+  it('moves focus to the first tile once dismissed, since its button is gone', async () => {
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(path === '/api/admin/update' ? { current: '0.1.0', available: '0.2.0', check: true } : responses[path])) as never)
+    await home()
+    const dismiss = [...document.querySelectorAll<HTMLButtonElement>('.update button')].find(
+      (b) => b.textContent === i18n.global.t('update.dismiss'),
+    )!
+    dismiss.focus()
+    dismiss.click()
+    await flushPromises()
+    expect(document.querySelector('.update')).toBeNull()
+    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
+  })
+})
+
 describe('HomeView arrange mode', () => {
   it('enters only after the open drawer submitted and closed, and moves focus between ✎ and Done', async () => {
     await home()

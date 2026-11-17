@@ -177,4 +177,6 @@ test('importing previews the file, says what is skipped and why, then imports th
   expect(bodies.apply).toEqual([content])
   await expect.poll(() => listed).toBeGreaterThan(before)
   await expect(page.getByRole('button', { name: zh.checkin.import.confirm })).toHaveCount(0)
+  // The focused confirm button is gone: focus goes back to the file field.
+  await expect(file).toBeFocused()
 })

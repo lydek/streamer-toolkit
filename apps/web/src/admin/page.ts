@@ -50,6 +50,15 @@ export async function focusReturnTarget() {
   focusTarget(document, '', selector ? document.querySelector(selector) : null)?.focus()
 }
 
+/**
+ * After an action whose focused control went away (a deleted row, a dismissed notice, a replaced form), moves
+ * focus to `target` once the DOM has updated. Focus left elsewhere (the control is still there) stays.
+ */
+export async function keepFocus(target: () => HTMLElement | null | undefined) {
+  await nextTick()
+  if (!document.activeElement || document.activeElement === document.body) target()?.focus()
+}
+
 /** "← Home": back when the previous entry is home, otherwise replace this one. */
 export function goHome(router: Router) {
   const back = router.options.history.state.back

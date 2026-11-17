@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
-import { focusReturnTarget, goHome, openerSelector, rememberOpener } from './page'
+import { focusReturnTarget, goHome, keepFocus, openerSelector, rememberOpener } from './page'
 
 const route = (path: string) => ({ path, matched: [{}] }) as unknown as RouteLocationNormalized
 const home = route('/')
@@ -123,5 +123,22 @@ describe('goHome', () => {
     await new Promise((r) => setTimeout(r))
     expect(router.currentRoute.value.path).toBe('/')
     expect(history.length).toBe(length)
+  })
+})
+
+describe('keepFocus', () => {
+  afterEach(() => (document.body.innerHTML = ''))
+
+  it('moves focus on only when the focused control went away', async () => {
+    document.body.innerHTML = '<button id="gone">x</button><button id="kept">y</button><input id="target">'
+    const target = () => document.getElementById('target')
+    document.getElementById('kept')!.focus()
+    await keepFocus(target)
+    expect(document.activeElement?.id).toBe('kept')
+
+    document.getElementById('gone')!.focus()
+    document.getElementById('gone')!.remove()
+    await keepFocus(target)
+    expect(document.activeElement?.id).toBe('target')
   })
 })
