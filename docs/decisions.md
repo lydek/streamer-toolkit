@@ -36,7 +36,7 @@
 | 遠端 repo | GitHub public |
 | 授權 | MIT（`LICENSE`） |
 | 相依套件授權 | Rust（`cargo-deny`）允許清單：MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0。前端另設清單，只檢查會打包進產物的相依套件：上述加上 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。GPL／LGPL／AGPL 一律擋下 |
-| 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）合成 `THIRD_PARTY_LICENSES`，放進可攜版 zip 與關於畫面 |
+| 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）＋`assets/CREDITS.md` 合成 `THIRD_PARTY_LICENSES`，只在發佈建置時產生、不 commit；放進可攜版 zip 與設定頁「關於」 |
 | 內建素材 | 只收可再散布的素材（CC0、CC-BY、字型 OFL 等），來源與授權記在 `assets/CREDITS.md`；使用者匯入的素材不進 repo |
 | 分支 | 預設 `main`；工作在短命分支進行，PR 經 CI 通過後 rebase-merge（repo 只開放這種合併方式），`main` 保持一條直線；每個 issue 固定一個 commit，一個 PR 可以放同一階段的多個獨立 issue |
 | 換行 | `.gitattributes`：一律 LF；`.ps1`／`.bat`／`.cmd` 用 CRLF；圖片、音效、影片、字型標為 binary |
@@ -95,7 +95,7 @@
 | 時機 | 項目 |
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
-| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片；切片 6 已建立）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片） |
+| **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片；切片 6 已建立）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片；`THIRD_PARTY_LICENSES` 在切片 7 已建立） |
 | **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 
@@ -129,3 +129,4 @@
 | 2026-11-17 | `.stbackup` 在切片 6 建立：zip（`zip` crate，只開 deflate）＋`manifest.json`（每個檔案的大小與 SHA-256）；另存新檔用 WebView 的 `showSaveFilePicker`，不加 Tauri dialog plugin | 不必多一個 plugin 與它的 capability；zip 用一般工具就能打開檢查 |
 | 2026-11-17 | 還原在重新啟動後、開資料庫前套用：先把目前的資料存成 `backups/before-restore-*.stbackup`，再以改名整份換掉，失敗就放回原本的資料 | 資料庫開著時無法安全替換；改名在同一個資料夾內，失敗時能完整放回，還原前的備份也能用同一個畫面還原回去 |
 | 2026-11-17 | UI E2E 移出 PR 的 CI 與 pre-push，改成手動觸發與發佈前跑；合併進 `main` 不再重跑 CI | E2E 是最慢的一步（約 5.5 分鐘中的 77 秒），改動又進得快；守住資料規則的 Rust 與前端單元、整合測試仍是每個 PR 的必要檢查；rebase-merge 合併的就是 PR 已檢查過的 commit |
+| 2026-11-17 | `THIRD_PARTY_LICENSES` 在切片 7 建立：只在發佈建置時產生、不 commit，前端建置時內嵌，設定頁「關於」以純文字顯示 | 永遠和當次建置的 lockfile 一致；PR 不必多一步檢查，開發者也不必為了改套件安裝 `cargo-about` |

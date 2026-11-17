@@ -84,6 +84,12 @@
       <h2 id="about" tabindex="-1">{{ t('settings.about') }}</h2>
       <p>{{ t('app.name') }} {{ version }}</p>
       <p>{{ t('settings.license') }}</p>
+      <details @toggle="loadLicenses">
+        <summary>{{ t('settings.thirdParty') }}</summary>
+        <p v-if="licenses === undefined">{{ licensesFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+        <!-- Plain text: interpolation escapes it. Focusable so the keyboard can scroll it. -->
+        <pre v-else class="licenses" tabindex="0" :aria-label="t('settings.thirdParty')">{{ licenses }}</pre>
+      </details>
     </section>
   </FullPage>
 </template>
@@ -158,6 +164,22 @@ const obsPassword = useDrawerSetting(passwordSaved, async (password) => {
 
 async function commitPassword() {
   if (await obsPassword.commit()) passwordSaved.value = ''
+}
+
+// Generated at release build time (scripts/third-party-licenses.mjs) into the frontend's public folder, so dev
+// builds have none and show the load failure.
+const licenses = ref<string>()
+const licensesFailed = ref(false)
+async function loadLicenses(e: Event) {
+  if (!(e.target as HTMLDetailsElement).open || licenses.value !== undefined) return
+  licensesFailed.value = false
+  try {
+    const res = await fetch('/THIRD_PARTY_LICENSES.txt')
+    if (!res.ok || !res.headers.get('content-type')?.startsWith('text/plain')) throw new Error(String(res.status))
+    licenses.value = await res.text()
+  } catch {
+    licensesFailed.value = true
+  }
 }
 
 const report = (e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
@@ -257,6 +279,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.licenses {
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .plain {
   list-style: none;
   padding: 0;

@@ -6,6 +6,8 @@ import { devDataDir, devServer, hostProxy } from './dev-server.ts'
 
 export default defineConfig(({ mode }) => ({
   // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
+  // public/ holds only the release-time THIRD_PARTY_LICENSES.txt (scripts/third-party-licenses.mjs); the port page needs none.
+  publicDir: mode === 'port' ? false : 'public',
   plugins: [vue(), VueI18nPlugin({ include: resolve(import.meta.dirname, 'src/locales/**') }), devServer()],
   server: {
     port: 5173,
