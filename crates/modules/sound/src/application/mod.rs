@@ -9,7 +9,6 @@ use std::{
 };
 
 use toolkit_core::{
-    bus::EventBus,
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
     settings::{self, SoundEntry},
@@ -34,18 +33,25 @@ pub enum SoundError {
     SaveFailed(#[from] io::Error),
 }
 
+/// Plays a library sound (ID, volume) on `/overlay/sound/`; `infrastructure` publishes it on the bus.
+type Play = Box<dyn Fn(&str, u8, Source) + Send + Sync>;
+
 pub struct SoundService {
     data_dir: PathBuf,
     modules: Arc<Modules>,
-    bus: Arc<EventBus>,
+    play: Play,
 }
 
 impl SoundService {
-    pub fn new(data_dir: PathBuf, modules: Arc<Modules>, bus: Arc<EventBus>) -> Self {
+    pub(crate) fn with_player(
+        data_dir: PathBuf,
+        modules: Arc<Modules>,
+        play: impl Fn(&str, u8, Source) + Send + Sync + 'static,
+    ) -> Self {
         Self {
             data_dir,
             modules,
-            bus,
+            play: Box::new(play),
         }
     }
 
@@ -56,7 +62,7 @@ impl SoundService {
             return;
         }
         if let Cue::File { id, volume } = self.cue(&format!("reward.{}", r.reward_id)) {
-            crate::infrastructure::publish_play(&self.bus, &id, volume, Source::Twitch);
+            (self.play)(&id, volume, Source::Twitch);
         }
     }
 
@@ -67,7 +73,7 @@ impl SoundService {
             .into_iter()
             .find(|e| e.id == id)
             .ok_or(SoundError::NotFound)?;
-        crate::infrastructure::publish_play(&self.bus, &entry.id, entry.volume, Source::Simulation);
+        (self.play)(&entry.id, entry.volume, Source::Simulation);
         Ok(())
     }
 

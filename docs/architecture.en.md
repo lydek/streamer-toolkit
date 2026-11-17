@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 240850bd813249f5e51ec15f1cc75ded2381f6b6271e66bc98008ef2c1a5443a -->
+<!-- source: docs/architecture.md source-sha256: dfb51ce0b89a509d1f5d6e657f0bff6ca728148814ea1453a0d8906749b8db89 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -211,4 +211,4 @@ Startup order:
 
 ## 7. Enforcing the rules
 - Cross-module dependencies: enforced by each crate's `Cargo.toml`.
-- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`; only `integrations` may depend on external platform SDKs (`obws`, `tokio-tungstenite`). Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.
+- Layer rules: architecture tests (`crates/arch-tests`) run in CI. They check that `domain/` contains no occurrence of `sqlx`/`axum` at all (including `use`, derives and full paths), that code in `application/` (outside comments and tests) never uses `infrastructure` (publishing and other adapters are injected by infrastructure as callbacks), and use `cargo metadata` to check dependency direction: modules may depend only on `core` and other modules, never on `integrations` or `host`; `core` depends on no other workspace crate; `integrations` depends only on `core`; only `integrations` may depend on external platform SDKs (`obws`, `tokio-tungstenite`). Module internals are always `pub(crate)`, so other modules see only each other's public interfaces; Cargo itself forbids dependency cycles, and when one appears the shared types move to `core`.

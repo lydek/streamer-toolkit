@@ -1,15 +1,43 @@
 //! Maps the internal alert to the external `alert` payload.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sound::{AlertSound, SoundService};
-use toolkit_core::events::{Alert, AlertKind, Source};
+use toolkit_core::{
+    bus::{Event, EventBus},
+    events::{Alert, AlertKind, Source},
+    modules::Modules,
+};
 use utoipa::ToSchema;
 
-pub(crate) const ALERT: &str = "alert";
-pub(crate) const ALERT_VERSION: u32 = 1;
+use crate::application::{AlertsService, Timing};
+
+const ALERT: &str = "alert";
+const ALERT_VERSION: u32 = 1;
+
+impl AlertsService {
+    /// Publishes alerts on `bus`, with the sound each kind plays; starts the player task, so it needs a Tokio
+    /// runtime.
+    pub fn new(
+        bus: Arc<EventBus>,
+        modules: Arc<Modules>,
+        timing: Timing,
+        sounds: Arc<SoundService>,
+    ) -> Self {
+        Self::with_publisher(modules, timing, move |alert, source, show| {
+            bus.publish(Event {
+                id: alert.id.clone(),
+                event_type: ALERT,
+                version: ALERT_VERSION,
+                occurred_at: alert.occurred_at.clone(),
+                source,
+                payload: payload(alert, show, &sounds),
+            });
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -90,7 +118,7 @@ pub enum AlertType {
     Alert,
 }
 
-pub(crate) fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
+fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
     let base = AlertPayload {
         duration_ms: show.as_millis() as u64,
         sound: AlertSound::BuiltIn,

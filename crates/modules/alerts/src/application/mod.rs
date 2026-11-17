@@ -1,5 +1,5 @@
-//! Receives alerts from Twitch or the simulator and plays them one at a time: each goes to the overlay bus, and
-//! the next waits until it has shown.
+//! Receives alerts from Twitch or the simulator and plays them one at a time: each is handed on to the overlays,
+//! and the next waits until it has shown.
 
 use std::{
     collections::VecDeque,
@@ -7,15 +7,11 @@ use std::{
     time::Duration,
 };
 
-use sound::SoundService;
 use tokio::sync::Notify;
 use toolkit_core::{
-    bus::{Event, EventBus},
     events::{Alert, AlertKind, Source},
     modules::{self, Modules},
 };
-
-use crate::infrastructure::{self, ALERT, ALERT_VERSION};
 
 /// shortcut: beyond this many waiting alerts the oldest is dropped (a follow bot could otherwise queue hours of
 /// alerts); raise it if real streams ever reach it.
@@ -42,28 +38,28 @@ impl Default for Timing {
 
 pub struct AlertsService(Arc<Queue>);
 
+/// Shows an alert on the overlays for the given time; `infrastructure` publishes it on the bus.
+type Publish = Box<dyn Fn(Alert, Source, Duration) + Send + Sync>;
+
 struct Queue {
-    bus: Arc<EventBus>,
     modules: Arc<Modules>,
     timing: Timing,
-    sounds: Arc<SoundService>,
+    publish: Publish,
     waiting: Mutex<VecDeque<(Alert, Source)>>,
     ready: Notify,
 }
 
 impl AlertsService {
     /// Starts the player task; needs a Tokio runtime.
-    pub fn new(
-        bus: Arc<EventBus>,
+    pub(crate) fn with_publisher(
         modules: Arc<Modules>,
         timing: Timing,
-        sounds: Arc<SoundService>,
+        publish: impl Fn(Alert, Source, Duration) + Send + Sync + 'static,
     ) -> Self {
         let queue = Arc::new(Queue {
-            bus,
             modules,
             timing,
-            sounds,
+            publish: Box::new(publish),
             waiting: Mutex::default(),
             ready: Notify::new(),
         });
@@ -111,14 +107,7 @@ async fn play(queue: Arc<Queue>) {
             true => queue.timing.show_with_message,
             false => queue.timing.show,
         };
-        queue.bus.publish(Event {
-            id: alert.id.clone(),
-            event_type: ALERT,
-            version: ALERT_VERSION,
-            occurred_at: alert.occurred_at.clone(),
-            source,
-            payload: infrastructure::payload(alert, show, &queue.sounds),
-        });
+        (queue.publish)(alert, source, show);
         tokio::time::sleep(show + queue.timing.gap).await;
     }
 }
@@ -127,7 +116,9 @@ async fn play(queue: Arc<Queue>) {
 mod tests {
     use super::*;
     use serde_json::Value;
+    use sound::SoundService;
     use tokio::{sync::broadcast, time::Instant};
+    use toolkit_core::bus::EventBus;
 
     fn alert(id: &str, user_name: Option<&str>, kind: AlertKind) -> Alert {
         Alert {
