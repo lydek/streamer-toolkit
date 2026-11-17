@@ -2625,6 +2625,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `twitch.storage_failed`: signed out, but the stored token could not be deleted, so the next start would sign in again */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     update: {

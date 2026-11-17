@@ -1636,7 +1636,17 @@
         ],
         "operationId": "logout",
         "responses": {
-          "204": {}
+          "204": {},
+          "500": {
+            "description": "`twitch.storage_failed`: signed out, but the stored token could not be deleted, so the next start would sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
         }
       }
     },

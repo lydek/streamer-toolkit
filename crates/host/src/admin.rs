@@ -269,8 +269,10 @@ async fn login(State(s): State<Arc<AdminState>>) -> Response {
     post,
     path = "/api/admin/twitch/logout",
     tag = "admin",
-    // TwitchAuth::logout never fails today; auth_error stays as the guard if that changes.
-    responses((status = 204))
+    responses(
+        (status = 204),
+        (status = 500, description = "`twitch.storage_failed`: signed out, but the stored token could not be deleted, so the next start would sign in again", body = ErrorBody),
+    )
 )]
 async fn logout(State(s): State<Arc<AdminState>>) -> Response {
     match s.twitch.read().await.logout() {
@@ -768,6 +770,7 @@ fn auth_error(e: AuthError) -> Response {
     let status = match e {
         AuthError::ClientIdRequired | AuthError::SignInRequired => StatusCode::CONFLICT,
         AuthError::Unreachable => StatusCode::BAD_GATEWAY,
+        AuthError::StorageFailed => StatusCode::INTERNAL_SERVER_ERROR,
         _ => StatusCode::BAD_REQUEST,
     };
     error(status, &e.to_string())

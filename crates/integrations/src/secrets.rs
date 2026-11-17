@@ -74,6 +74,7 @@ pub(crate) mod memory {
     pub struct MemoryStore {
         pub value: Mutex<Option<String>>,
         pub fail_writes: std::sync::atomic::AtomicBool,
+        pub fail_deletes: std::sync::atomic::AtomicBool,
     }
 
     impl SecretStore for MemoryStore {
@@ -88,6 +89,9 @@ pub(crate) mod memory {
             Ok(())
         }
         fn delete(&self) -> Result<(), SecretStoreError> {
+            if self.fail_deletes.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(SecretStoreError("delete disabled".into()));
+            }
             *self.value.lock().unwrap() = None;
             Ok(())
         }

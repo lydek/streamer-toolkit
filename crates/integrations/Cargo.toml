@@ -30,7 +30,7 @@ utoipa = "6.0.0"
 
 [dev-dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "io-util"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "io-util", "test-util"] }
 
 [target."cfg(windows)".dependencies]
 windows-native-keyring-store = "1.1.0"
