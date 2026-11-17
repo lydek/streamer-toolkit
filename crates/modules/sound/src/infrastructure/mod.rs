@@ -1,6 +1,6 @@
 //! Adapters: the admin API (behind the admin token, added by the host) and the read-only sound file route.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
+    modules::Modules,
     settings::SoundEntry,
 };
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -135,7 +136,16 @@ enum SoundPlayType {
     SoundPlay,
 }
 
-pub(crate) fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
+impl SoundService {
+    /// Plays reward and test sounds by publishing on `bus`.
+    pub fn new(data_dir: PathBuf, modules: Arc<Modules>, bus: Arc<EventBus>) -> Self {
+        Self::with_player(data_dir, modules, move |id, volume, source| {
+            publish_play(&bus, id, volume, source)
+        })
+    }
+}
+
+fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
     let payload = PlaySound::from_cue(Cue::File {
         id: id.into(),
         volume,

@@ -86,10 +86,9 @@ fn crate_dependencies_point_inward() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
-/// `domain/` stays free of storage and web frameworks, including derives and full paths.
-#[test]
-fn domain_folders_do_not_mention_sqlx_or_axum() {
-    let mut problems = Vec::new();
+/// Every `.rs` file under `crates/` inside a folder named `layer`.
+fn layer_files(layer: &str) -> Vec<PathBuf> {
+    let mut files = Vec::new();
     let mut stack = vec![workspace_root().join("crates")];
     while let Some(dir) = stack.pop() {
         for entry in fs::read_dir(&dir).unwrap().flatten() {
@@ -100,14 +99,41 @@ fn domain_folders_do_not_mention_sqlx_or_axum() {
                 }
                 stack.push(path);
             } else if path.extension().is_some_and(|e| e == "rs")
-                && path.components().any(|c| c.as_os_str() == "domain")
+                && path.components().any(|c| c.as_os_str() == layer)
             {
-                let text = fs::read_to_string(&path).unwrap();
-                for word in ["sqlx", "axum"] {
-                    if text.contains(word) {
-                        problems.push(format!("{} mentions {word}", path.display()));
-                    }
-                }
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// `domain/` stays free of storage and web frameworks, including derives and full paths.
+#[test]
+fn domain_folders_do_not_mention_sqlx_or_axum() {
+    let mut problems = Vec::new();
+    for path in layer_files("domain") {
+        let text = fs::read_to_string(&path).unwrap();
+        for word in ["sqlx", "axum"] {
+            if text.contains(word) {
+                problems.push(format!("{} mentions {word}", path.display()));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// `application/` never uses `infrastructure` (docs/architecture.md §2); adapters are handed in, e.g. as a publish
+/// callback. Comments and the test module are left out.
+#[test]
+fn application_folders_do_not_use_infrastructure() {
+    let mut problems = Vec::new();
+    for path in layer_files("application") {
+        let text = fs::read_to_string(&path).unwrap();
+        let code = text.split("#[cfg(test)]").next().unwrap_or_default();
+        for (n, line) in code.lines().enumerate() {
+            if !line.trim_start().starts_with("//") && line.contains("infrastructure") {
+                problems.push(format!("{}:{}: {}", path.display(), n + 1, line.trim()));
             }
         }
     }

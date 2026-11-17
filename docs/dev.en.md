@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 390abf9b11730f45cf82dd3486ba2c25021711d24b5e63ecd377adadc8fbac28 -->
+<!-- source: docs/dev.md source-sha256: 426b1619379a85e9b3afaad5aae06a39c108e2d4610defedf658a34b86d574cb -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -68,7 +68,7 @@ Steps: bump the version in all three places through a PR and merge it, then tag 
   - The admin UI runs on the Vite dev server, with the admin API replaced by `page.route`, `/ws/overlay` by `page.routeWebSocket` and Tauri IPC by the fake `invoke` in `e2e/fixtures.ts`; fixtures contain only a dummy token, never a real token or secret; Vite sends the same CSP as the Host, so E2E runs under it (the header the Host actually sends is covered by the `crates/host` Rust tests). Drawer behavior no real feature uses yet (settings fields, dropdowns, "Open full page") is tested on the test page in `e2e/harness/`.
   - The overlay is tested against a real Host: `crates/host/examples/e2e_host.rs` starts the Host in a temporary data directory (random admin token, fake secret storage, Twitch and OBS both pointed at an address nothing listens on). These tests share one Host, are tagged `@host` and run one at a time in the Playwright `host` project; the other tests run in parallel in the `admin` project.
   - Logic that unit tests can cover still gets unit tests; E2E does not repeat them.
-- Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
+- Architecture tests (`crates/arch-tests`): `domain/` contains no occurrence of `sqlx`/`axum` at all; `application/` does not use `infrastructure`; crate dependencies point the right way: modules depend only on the shared core (`crates/core`, package name `toolkit-core`) and other modules' public interfaces, never on `integrations` or `host`; modules do not use other modules' non-public types (rules in [architecture.en.md](architecture.en.md)).
 - Migration test: merged versions are globally unique and sorted.
 - Must test: redemption deduplication and state transitions, restoring a backup actually works, migrations lose no data.
 - Test with simulated events instead of real Twitch triggers. Simulated events are tagged `source=simulation` and must never be written to any real business records (redemption records, check-in records).
