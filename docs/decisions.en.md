@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 0d8bb6a4493477b6e1f0a7efd66025fb8e15f1cb1a6a05b5fdb07063b7416745 -->
+<!-- source: docs/decisions.md source-sha256: a8230dc81dac2bdbda28709fced15b9c2d3b4902a4d6a61de974244c8ca08044 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -23,7 +23,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Host lifecycle | Same process as Tauri; closing the window hides it to the system tray; single instance |
 | Architecture enforcement | Crate dependencies + architecture tests (run in CI) |
 | Testing | First version: Unit + Integration (real SQLite) + Contract (generated files up to date) + UI E2E (Playwright + Chromium) |
-| CI | GitHub Actions, built with the skeleton, Windows only; also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release |
+| CI | GitHub Actions, built with the skeleton, Windows only, runs on PRs only; also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release; UI E2E is a separate workflow, run by hand and before a release |
 | Releases | Always built with `tauri build`; never distribute builds without `tauri/custom-protocol` |
 | Overlay customization | First version allows HTML/CSS templates only; the chat and alert templates are picked from built-in styles in the admin UI (alerts have no folder template), with no in-app editing, uploads or font and color adjustments; the admin UI has no entry for the chat's custom template in the data folder (`custom`); it is set by hand in `settings.json` and takes effect after a restart |
 | Platforms | Windows first; macOS after the MVP; Linux not supported |
@@ -129,3 +129,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-16 | The outbox was built in slice 4: its tables and migrations belong to core; after 5 attempts (1, 2, 4 and 8 seconds apart) an event moves to the dead letters; fully delivered events are cleaned up every 10 minutes | While retrying, an event holds back its subscriber in order, so check-ins never arrive out of order; the cap means one bad event holds things up for about 15 seconds at most |
 | 2026-11-17 | `.stbackup` was built in slice 6: a zip (`zip` crate, deflate only) plus `manifest.json` (each file's size and SHA-256); the save dialog is the WebView's `showSaveFilePicker`, with no Tauri dialog plugin | No extra plugin and capability; any common tool can open the zip to inspect it |
 | 2026-11-17 | A restore is applied after a restart, before the database opens: the current data is first saved as `backups/before-restore-*.stbackup`, then replaced whole by renames, and put back on failure | The open database cannot be swapped safely; renames inside the same directory can be undone completely, and the pre-restore backup restores back through the same screen |
+| 2026-11-17 | UI E2E moved out of PR CI and pre-push; it now runs by hand and before a release. Merging into `main` no longer reruns CI | E2E is the slowest step (77 s of about 5.5 min) and changes land fast; Rust and frontend unit and integration tests, which guard the data rules, still gate every PR; rebase-merge lands exactly the commits the PR already checked |

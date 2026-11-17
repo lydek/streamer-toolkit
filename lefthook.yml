@@ -76,10 +76,6 @@ pre-push:
         - "docs/**"
         - "apps/web/src/admin/**"
         - "apps/web/e2e/**"
-    # Needs Playwright's Chromium once: pnpm --filter web exec playwright install chromium (docs/dev.md).
-    - name: ui-e2e
-      run: pnpm web:e2e
-      exclude: *docs
     - name: cargo-deny
       run: cargo deny check
       exclude: *docs-and-web

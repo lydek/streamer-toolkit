@@ -20,7 +20,7 @@
 - 建置前端：`pnpm web:build`（第一次編 Rust 前必須執行，Host 會把 `apps/web/dist` 內嵌進執行檔）
 - 開發：`pnpm tauri dev`（Vite 熱更新），或 `cargo run -p desktop`
 - API 契約：改了 Host 的 HTTP API 或 WebSocket 事件後執行 `pnpm api:gen`（需要先建置前端），由 Rust（`utoipa`）產生 `apps/web/src/api/openapi.json`，再由 `openapi-typescript` 產生 `schema.d.ts`，兩個檔案一起 commit；CI 重新產生後有差異就失敗。WebSocket 的快照與事件型別也放在 OpenAPI components，測試會拿實際送出的 JSON 比對；新增對外事件或快照保留的事件種類時，要一起在 `crates/host/src/openapi.rs` 的 components 加型別。
-- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`pnpm web:e2e`、`cargo deny check`；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
+- 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；UI E2E 另外跑（見下方「測試底線」）；要跑和 CI 相同的步驟（另含翻譯、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`（`pnpm tauri dev` 的 Vite proxy 只讀 `target\debug\data\` 的 port，所以那份資料的 port 要和它相同）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
 
 ## Git
@@ -34,7 +34,7 @@
 - Hook：lefthook，設定在 `lefthook.yml`，已開啟 `assert_lefthook_installed`，找不到 lefthook 時 commit 會失敗，不會默默跳過檢查。
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
-  - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、UI E2E、`cargo deny check`），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
+  - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`；不跑 UI E2E），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
   - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
     - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
     - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`、`apps/web/src/overlay/alerts/templates/`）。
@@ -42,15 +42,18 @@
     - 比對對象是遠端分支（新分支則是 `origin` 的預設分支）；lefthook 不列出已經不存在的路徑（改名的檔案可能完全不出現），所以只刪除或改名檔案的推送可能跳過檢查，由 CI 把關。
 - 換行由 `.gitattributes` 統一（LF；Windows 腳本 CRLF）。
 
-## 每次提交前（CI 也跑同一套，只跑 Windows）
+## 每次提交前（PR 的 CI 也跑同一套，只跑 Windows）
 順序：先建置前端（`dist/` 不進版控，`rust-embed` 需要它才編得過），再跑 Rust 檢查。
-格式、lint、型別檢查、測試、架構測試、UI E2E、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
+CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合併的就是 PR 已檢查過的 commit。
+格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
 沒有開啟 `tauri/custom-protocol` 的 cargo 指令都以 dev 模式編譯，所以 CI 另跑 `cargo clippy --features tauri/custom-protocol`，檢查只在正式版編譯的程式碼（只用來檢查，不散布產物）。正式發佈一律用 `tauri build`。
 
 ## 測試底線
 - 只測我們負責的行為，不測 Twitch／OBS 本身。
 - 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新；UI E2E 測 jsdom 測不了的瀏覽器行為。
-- UI E2E（`apps/web/e2e/`，Playwright＋Chromium，`pnpm web:e2e`，需要先建置前端）：
+- UI E2E（`apps/web/e2e/`，Playwright＋Chromium）：
+  - 什麼時候跑：不在 PR 的 CI 與 pre-push 裡（它是最慢的一步）。在 GitHub Actions 手動觸發「UI E2E」workflow（`.github/workflows/e2e.yml`），發佈流程建置 zip 前也會先跑，失敗就不發佈。改到管理 UI、Overlay 或 E2E 時，push 前在本機跑一次。Rust 與前端的單元、整合測試仍是每個 PR 的必要檢查，因為它們守住資料規則。
+  - 本機執行：先 `pnpm web:build`（Host 內嵌 `apps/web/dist`），再 `pnpm web:e2e`；第一次要先裝 Chromium（見上方「環境」）。
   - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/overlay` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 只放假的 token，不放任何真的 token 或 secret；Vite 送出與 Host 相同的 CSP，E2E 在這份 CSP 下執行（Host 實際送出的標頭由 `crates/host` 的 Rust 測試涵蓋）。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
   - Overlay 對真的 Host 測：`crates/host/examples/e2e_host.rs` 在暫存資料夾啟動 Host（隨機管理 token、假的 secret 儲存、Twitch 與 OBS 都指向沒有服務的位址）。這些測試共用同一個 Host，標上 `@host`，在 Playwright 的 `host` project 一次只跑一個；其他測試在 `admin` project 平行跑。
   - 能用單元測試測的判斷照樣寫單元測試，E2E 不重複。
@@ -59,7 +62,7 @@
 - 必測：兌換事件去重與狀態轉換、備份後能實際還原、migration 升級不掉資料。
 - 用模擬事件測試，不必真的觸發 Twitch。模擬事件標記 `source=simulation`，不得寫入任何正式業務紀錄（兌換紀錄、打卡紀錄）。
 - a11y 基準：所有操作可用鍵盤完成、焦點可見、每個控制項有 label、文字對比達 WCAG 2.2 AA（4.5:1）、控制項邊界與傳達資訊的圖示達 3:1（WCAG 1.4.11）、狀態不只用顏色表達。不做螢幕閱讀器實測，但語意標記與 ARIA 照做。
-- 由 UI E2E 自動檢查（CI 每次都跑）：
+- 由 UI E2E 自動檢查（手動觸發與發佈前跑）：
   - 抽屜：視窗 > 1000px 時在功能磚旁並排（380px），功能磚仍可操作；≤ 1000px 時是右側 modal，點背景或按 Esc 會關；< 600px 時從底部出現。
   - 跨過 1000px 寬度門檻後，抽屜沒有關閉，焦點、輸入值、捲動位置都還在。
   - 打開抽屜時焦點在關閉鈕；關閉後焦點回到開啟它的功能磚、狀態燈或待處理項目（首頁還沒有待處理項目，用測試頁的替身測）；那個項目已不在時退回它所屬的功能磚（再往下退回第一個功能磚、「整理功能磚」的順序由單元測試涵蓋）。
