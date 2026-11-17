@@ -33,6 +33,17 @@ pub fn restore_failed(error: &str) -> String {
     )
 }
 
+pub fn restore_marker_left(dir: &str, error: &str) -> String {
+    format!(
+        "還原已結束，但無法刪除資料夾裡的 restore-pending 檔：
+{dir}
+
+{error}
+
+請關閉可能正在使用這個資料夾的程式後手動刪除它。在那之前，每次啟動都會提示沒有可還原的備份，現在的資料不會變動。"
+    )
+}
+
 pub fn restore_put_back_failed(dir: &str, error: &str) -> String {
     format!(
         "還原備份失敗，也無法放回原本的資料，程式不會繼續執行：

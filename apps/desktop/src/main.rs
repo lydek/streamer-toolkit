@@ -86,6 +86,10 @@ fn main() {
                 Err(e @ host::BackupError::PutBack(_)) => {
                     fail(&text::restore_put_back_failed(&data_dir.display().to_string(), &e.to_string()))
                 }
+                Err(e @ host::BackupError::MarkerLeft(_)) => {
+                    tracing::error!(code = "backup.marker_left", error = %e, "restore marker left behind");
+                    message_box(&text::restore_marker_left(&data_dir.display().to_string(), &e.to_string()), true);
+                }
                 Err(e) => {
                     tracing::error!(code = "backup.restore_failed", error = %e, "restore not applied");
                     message_box(&text::restore_failed(&e.to_string()), true);

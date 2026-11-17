@@ -67,16 +67,31 @@ async fn open_with(data_dir: &Path, migrations: Vec<Migration>) -> Result<Sqlite
         .max_connections(1)
         .connect_with(options)
         .await?;
+    match migrate(&pool, data_dir, migrations).await {
+        Ok(()) => Ok(pool),
+        Err(e) => {
+            // Releases the file, so a restore can put the previous one back (Windows keeps open files in place).
+            pool.close().await;
+            Err(e)
+        }
+    }
+}
+
+async fn migrate(
+    pool: &SqlitePool,
+    data_dir: &Path,
+    migrations: Vec<Migration>,
+) -> Result<(), DbError> {
     let migrator = Migrator::with_migrations(migrations);
-    let applied = applied_versions(&pool).await?;
+    let applied = applied_versions(pool).await?;
     // A fresh database has nothing to lose; an upgrade with nothing pending needs no copy.
     if !applied.is_empty() && migrator.iter().any(|m| !applied.contains(&m.version)) {
-        let path = backup(&pool, data_dir).await?;
+        let path = backup(pool, data_dir).await?;
         tracing::info!(backup = %path.display(), "database backed up before migrating");
     }
     // A database from a newer version (an applied migration this build does not know) fails here.
-    migrator.run(&pool).await?;
-    Ok(pool)
+    migrator.run(pool).await?;
+    Ok(())
 }
 
 async fn applied_versions(pool: &SqlitePool) -> Result<HashSet<i64>, sqlx::Error> {
