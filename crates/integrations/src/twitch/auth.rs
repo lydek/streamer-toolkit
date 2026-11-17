@@ -15,6 +15,9 @@ use crate::{secrets::SecretStore, tls::HttpsClient};
 
 pub const OAUTH_BASE: &str = "https://id.twitch.tv/oauth2";
 const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+/// A Twitch request with no answer by then fails as unreachable, so a dead connection (sleep, a network switch)
+/// never holds the refresh lock or EventSub forever.
+pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Stable error codes; the admin UI translates them.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -311,6 +314,8 @@ impl TwitchAuth {
                     login: identity.login,
                     scopes: identity.scopes,
                 };
+                // After any refresh in flight, so the refresh can never write over this newer login.
+                let _refreshing = self.0.refresh_lock.lock().await;
                 if self.0.state.lock().unwrap().generation != generation {
                     return Ok(()); // superseded by a newer login or a logout
                 }
@@ -340,16 +345,21 @@ impl TwitchAuth {
 
     /// Refreshes after Twitch rejected `rejected_access`. Only one refresh runs at a time; callers that waited
     /// behind it see the token already changed and return without spending the single-use refresh token again.
+    /// The result is kept only while `rejected_access` is still the token in use: never over a logout or a newer
+    /// login. A sign-in started meanwhile keeps waiting for its own approval.
     pub async fn refresh(&self, rejected_access: &str) -> Result<(), AuthError> {
         let _guard = self.0.refresh_lock.lock().await;
-        let (token, generation) = {
-            let state = self.0.state.lock().unwrap();
-            let token = state.token.clone().ok_or(AuthError::SignInRequired)?;
-            (token, state.generation)
-        };
+        let token = self.0.state.lock().unwrap().token.clone();
+        let token = token.ok_or(AuthError::SignInRequired)?;
         if token.access.expose_secret() != rejected_access {
             return Ok(());
         }
+        let still_current = |state: &State| {
+            state
+                .token
+                .as_ref()
+                .is_some_and(|t| t.access.expose_secret() == rejected_access)
+        };
         let fields = [
             ("client_id", self.0.client_id.as_str()),
             ("grant_type", "refresh_token"),
@@ -357,9 +367,14 @@ impl TwitchAuth {
         ];
         let (status, body) = self.form("token", &fields).await?;
         if matches!(status, 400 | 401) {
-            // Only sign out the session this refresh belonged to, never a newer login.
-            if self.0.state.lock().unwrap().generation == generation {
-                self.clear();
+            let mut state = self.0.state.lock().unwrap();
+            if still_current(&state) {
+                state.token = None;
+                if let Err(e) = self.0.store.delete() {
+                    tracing::error!(code = "twitch.storage_failed", error = %e, "rejected token left stored");
+                }
+                drop(state);
+                self.0.account.send_replace(None);
             }
             return Err(AuthError::SignInRequired);
         }
@@ -374,41 +389,41 @@ impl TwitchAuth {
         };
         {
             let mut state = self.0.state.lock().unwrap();
-            if state.generation != generation {
+            if !still_current(&state) {
                 return Err(AuthError::SignInRequired); // signed out while refreshing
             }
             // The old refresh token is already spent: keep the new pair in memory even if persisting fails.
             state.token = Some(updated.clone());
         }
         let persisted = self.persist(&updated).await;
-        let state = self.0.state.lock().unwrap();
-        if state.generation != generation {
-            self.undo_write(&state);
-        }
+        self.undo_write(&self.0.state.lock().unwrap());
         persisted
     }
 
-    /// Called when a login or logout superseded a token that was being written: if the user is now signed out,
-    /// the entry just written must not survive. A newer login keeps its own entry.
+    /// Called after writing a token that a logout may have superseded: if the user is now signed out, the entry
+    /// just written must not survive. A newer login keeps its own entry.
     fn undo_write(&self, state: &State) {
-        if state.token.is_none() {
-            let _ = self.0.store.delete();
+        if state.token.is_none()
+            && let Err(e) = self.0.store.delete()
+        {
+            tracing::error!(code = "twitch.storage_failed", error = %e, "signed-out token left stored");
         }
     }
 
+    /// Signs out in memory at once; fails with [`AuthError::StorageFailed`] when the stored token could not be
+    /// deleted, which would sign in again on the next start.
     pub fn logout(&self) -> Result<(), AuthError> {
-        self.clear();
-        Ok(())
-    }
-
-    fn clear(&self) {
         let mut state = self.0.state.lock().unwrap();
         state.token = None;
         state.status_override = None;
         state.generation += 1;
-        let _ = self.0.store.delete();
+        let deleted = self.0.store.delete();
         drop(state);
         self.0.account.send_replace(None);
+        deleted.map_err(|e| {
+            tracing::error!(code = "twitch.storage_failed", error = %e, "stored token not deleted");
+            AuthError::StorageFailed
+        })
     }
 
     /// Writes the token to the secret store, retrying briefly before giving up. Credential Manager calls block,
@@ -464,20 +479,24 @@ impl TwitchAuth {
     }
 
     async fn send(&self, req: Request<Full<Bytes>>) -> Result<(u16, Bytes), AuthError> {
-        let res = self
-            .0
-            .http
-            .request(req)
-            .await
-            .map_err(|_| AuthError::Unreachable)?;
-        let status = res.status().as_u16();
-        let body = res
-            .into_body()
-            .collect()
-            .await
-            .map_err(|_| AuthError::Unreachable)?
-            .to_bytes();
-        Ok((status, body))
+        tokio::time::timeout(REQUEST_TIMEOUT, async {
+            let res = self
+                .0
+                .http
+                .request(req)
+                .await
+                .map_err(|_| AuthError::Unreachable)?;
+            let status = res.status().as_u16();
+            let body = res
+                .into_body()
+                .collect()
+                .await
+                .map_err(|_| AuthError::Unreachable)?
+                .to_bytes();
+            Ok((status, body))
+        })
+        .await
+        .map_err(|_| AuthError::Unreachable)?
     }
 }
 
@@ -746,5 +765,134 @@ mod tests {
             store.value.lock().unwrap().is_none(),
             "nothing written back after logout"
         );
+    }
+
+    /// Fake id.twitch.tv for races: a refresh answers after `refresh_delay`; a device poll signs in at once.
+    async fn racing_oauth(refresh_delay: Duration) -> String {
+        let app = Router::new()
+            // Reads the body: a server that leaves it unread closes the connection, which the client may reuse.
+            .route("/device", post(|Form(_): Form<HashMap<String, String>>| async {
+                Json(json!({"device_code":"dev","user_code":"ABCD-EFGH","verification_uri":"https://www.twitch.tv/activate","expires_in":30,"interval":1}))
+            }))
+            .route("/token", post(move |Form(f): Form<HashMap<String, String>>| async move {
+                if f.get("grant_type").map(String::as_str) == Some("refresh_token") {
+                    tokio::time::sleep(refresh_delay).await;
+                    Json(json!({"access_token":"access-2","refresh_token":"refresh-2"}))
+                } else {
+                    Json(json!({"access_token":"access-new","refresh_token":"refresh-new"}))
+                }
+            }))
+            .route("/validate", get(|| async { Json(json!({"user_id":"42","login":"streamer","scopes":crate::twitch::MVP_SCOPES})) }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    fn signed_in_store() -> Arc<MemoryStore> {
+        store_with(
+            json!({"client_id":"client","access_token":"access-1","refresh_token":"refresh-1",
+                   "user_id":"42","login":"streamer","scopes":crate::twitch::MVP_SCOPES}),
+        )
+    }
+
+    async fn wait_for_access(auth: &TwitchAuth, access: &str) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while auth
+                .token()
+                .is_none_or(|t| t.access.expose_secret() != access)
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("never got {access}"));
+    }
+
+    #[tokio::test]
+    async fn a_sign_in_finishing_during_a_refresh_is_the_token_kept() {
+        let store = signed_in_store();
+        let auth = auth(
+            &racing_oauth(Duration::from_millis(1500)).await,
+            store.clone(),
+        );
+        // The device poll answers after its 1 s interval, while the refresh is still waiting.
+        auth.start_login(&[]).await.unwrap();
+        let refreshing = tokio::spawn({
+            let auth = auth.clone();
+            async move { auth.refresh("access-1").await }
+        });
+        refreshing.await.unwrap().unwrap();
+        wait_for_access(&auth, "access-new").await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(auth.token().unwrap().access.expose_secret(), "access-new");
+        assert!(
+            store
+                .value
+                .lock()
+                .unwrap()
+                .as_deref()
+                .unwrap()
+                .contains("refresh-new")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refresh_survives_a_sign_in_started_meanwhile() {
+        let store = signed_in_store();
+        let auth = auth(
+            &racing_oauth(Duration::from_millis(300)).await,
+            store.clone(),
+        );
+        let refreshing = tokio::spawn({
+            let auth = auth.clone();
+            async move { auth.refresh("access-1").await }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        auth.start_login(&[]).await.unwrap();
+        // The spent refresh token is replaced, not lost while the new sign-in waits for approval.
+        assert_eq!(refreshing.await.unwrap(), Ok(()));
+        assert_eq!(auth.token().unwrap().access.expose_secret(), "access-2");
+        assert!(matches!(auth.status(), AuthStatus::Pending { .. }));
+        wait_for_access(&auth, "access-new").await;
+        assert!(
+            store
+                .value
+                .lock()
+                .unwrap()
+                .as_deref()
+                .unwrap()
+                .contains("refresh-new")
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_reports_a_token_it_could_not_delete() {
+        let store = signed_in_store();
+        let auth = auth("http://127.0.0.1:1", store.clone());
+        store.fail_deletes.store(true, Ordering::SeqCst);
+        assert_eq!(auth.logout(), Err(AuthError::StorageFailed));
+        assert!(auth.token().is_none(), "signed out in memory all the same");
+        assert_eq!(auth.status(), AuthStatus::SignedOut);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_request_without_an_answer_fails_as_unreachable() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        // Accepts and never answers.
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            loop {
+                held.push(listener.accept().await.unwrap());
+            }
+        });
+        let auth = auth(&base, Arc::new(MemoryStore::default()));
+        let started = tokio::time::Instant::now();
+        assert_eq!(
+            auth.start_login(&[]).await.unwrap_err(),
+            AuthError::Unreachable
+        );
+        assert!(started.elapsed() >= REQUEST_TIMEOUT);
     }
 }

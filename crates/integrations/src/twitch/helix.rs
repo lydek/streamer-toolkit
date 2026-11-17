@@ -7,8 +7,9 @@ use bytes::Bytes;
 use http::{HeaderMap, Method, Request, header};
 use http_body_util::{BodyExt, Full};
 use secrecy::ExposeSecret;
+use tokio::time::timeout;
 
-use super::auth::{AuthError, TwitchAuth};
+use super::auth::{AuthError, REQUEST_TIMEOUT, TwitchAuth};
 use crate::tls::HttpsClient;
 
 pub const HELIX_BASE: &str = "https://api.twitch.tv/helix";
@@ -81,18 +82,18 @@ impl Helix {
             let req = req
                 .body(Full::new(body.clone().unwrap_or_default()))
                 .map_err(|_| AuthError::InvalidResponse)?;
-            let res = self
-                .http
-                .request(req)
+            let res = timeout(REQUEST_TIMEOUT, self.http.request(req))
                 .await
-                .map_err(|_| AuthError::Unreachable)?;
+                .ok()
+                .and_then(Result::ok)
+                .ok_or(AuthError::Unreachable)?;
             match res.status().as_u16() {
                 200..=299 => {
-                    return Ok(res
-                        .into_body()
-                        .collect()
+                    return Ok(timeout(REQUEST_TIMEOUT, res.into_body().collect())
                         .await
-                        .map_err(|_| AuthError::Unreachable)?
+                        .ok()
+                        .and_then(Result::ok)
+                        .ok_or(AuthError::Unreachable)?
                         .to_bytes());
                 }
                 401 if attempt == 0 => self.auth.refresh(token.access.expose_secret()).await?,
@@ -145,5 +146,37 @@ mod tests {
             reset_wait(&headers(&(now + 3600).to_string())),
             Some(MAX_RATE_LIMIT_WAIT)
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_request_without_an_answer_fails_as_unreachable() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        // Accepts and never answers.
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            loop {
+                held.push(listener.accept().await.unwrap());
+            }
+        });
+        let store = crate::secrets::memory::MemoryStore::default();
+        *store.value.lock().unwrap() = Some(
+            r#"{"client_id":"client","access_token":"a","refresh_token":"r","user_id":"42","login":"s","scopes":[]}"#
+                .into(),
+        );
+        let http = crate::tls::https_client(crate::tls::client_config().unwrap());
+        let auth = TwitchAuth::new(
+            "client".into(),
+            &base,
+            http.clone(),
+            std::sync::Arc::new(store),
+        );
+        let helix = Helix::new(&base, auth, http);
+        let started = tokio::time::Instant::now();
+        assert!(matches!(
+            helix.get_json("/users").await,
+            Err(HelixError::Auth(AuthError::Unreachable))
+        ));
+        assert!(started.elapsed() >= REQUEST_TIMEOUT);
     }
 }
