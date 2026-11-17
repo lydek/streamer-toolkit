@@ -86,7 +86,7 @@
 | UI 字串 | `vue-i18n`＋`@intlify/unplugin-vue-i18n`：資源檔在建置時預先編譯，執行期不需要 `unsafe-eval` |
 | 單一實例 | `tauri-plugin-single-instance` |
 | 開啟外部網址 | `tauri-plugin-opener`，只在 Rust 端呼叫，於系統瀏覽器開外部網址：管理視窗要開的每個外部網址（Twitch 驗證頁、新版下載頁等）各做一個網址寫死、不接受參數的指令；缺少 WebView2 時由啟動流程直接開微軟下載頁。不做接受網址參數的通用指令，也不授予任何視窗 opener plugin 的權限 |
-| 散布 | 只出可攜版 zip（`tauri build --no-bundle` 產生執行檔，再打包成 zip），不出安裝檔；程式不簽章，說明文件附 SmartScreen「仍要執行」與 zip「解除封鎖」的步驟；更新：啟動時查 GitHub Releases 的最新版本，有新版就在管理 UI 提示，並附按鈕開啟下載頁（網址寫死的指令），使用者自己解壓縮覆蓋；zip 絕不包含 `data` 資料夾，覆蓋時不會動到資料；只能升級，舊版程式遇到較新的資料時拒絕開啟 |
+| 散布 | 只出可攜版 zip（`tauri build --no-bundle` 產生執行檔，再打包成 zip），不出安裝檔；程式不簽章，說明文件附 SmartScreen「仍要執行」與 zip「解除封鎖」的步驟；更新：正式版啟動時與之後每 24 小時查 GitHub Releases 的最新正式版（`releases/latest`，不含草稿與 pre-release；固定的 User-Agent、不帶使用者資料、有逾時，失敗時不提示也不顯示錯誤），比目前版本新就在管理 UI 首頁提示，並附按鈕開啟下載頁（網址寫死的指令，不使用回應裡的任何網址），使用者自己解壓縮覆蓋；「這版先不要」記在 `settings.json`，到更新的版本才再提示；設定「一般」可關掉檢查，關掉後不連線；zip 絕不包含 `data` 資料夾，覆蓋時不會動到資料；只能升級，舊版程式遇到較新的資料時拒絕開啟 |
 | WebView2 | 使用系統的 Evergreen WebView2 Runtime（Windows 11 內建）；啟動時偵測，缺少就顯示說明並開啟微軟下載頁，Host、Overlay 與系統匣照常運作；不隨附固定版 |
 | 開發工具 | `@tauri-apps/cli` 與 `lefthook` 為 pnpm devDependencies，版本由 lockfile 鎖定，不需全域安裝；sccache 可選，由開發者自己安裝並設定環境變數，repo 不設定 |
 | 套件管理 | Node 24 LTS（寫在 `.nvmrc`）；pnpm 用 `npm i -g pnpm` 安裝一次，之後依 `package.json` 的 `packageManager` 自動切換版本；不依賴 Corepack |
@@ -131,3 +131,4 @@
 | 2026-11-17 | UI E2E 移出 PR 的 CI 與 pre-push，改成手動觸發與發佈前跑；合併進 `main` 不再重跑 CI | E2E 是最慢的一步（約 5.5 分鐘中的 77 秒），改動又進得快；守住資料規則的 Rust 與前端單元、整合測試仍是每個 PR 的必要檢查；rebase-merge 合併的就是 PR 已檢查過的 commit |
 | 2026-11-17 | `THIRD_PARTY_LICENSES` 在切片 7 建立：只在發佈建置時產生、不 commit，前端建置時內嵌，設定頁「關於」以純文字顯示 | 永遠和當次建置的 lockfile 一致；PR 不必多一步檢查，開發者也不必為了改套件安裝 `cargo-about` |
 | 2026-11-17 | release workflow 在切片 7 建立：推 `v*` tag 後先跑 UI E2E 與版本檢查，再建置 zip，只建立草稿 release；拿掉用不到的 `bundle.targets` | 發佈前由人下載草稿檢查；三處版本一致，程式顯示的版本才會和 tag 相同；`--no-bundle` 不產生安裝檔 |
+| 2026-11-17 | 新版提示在切片 7 建立：Host 查 GitHub 的 `releases/latest`，共用現有的 HTTPS client；dev 版不查 | dev 版的版本號不代表發佈的版本，下載頁的指令也只授權給正式版的管理視窗 |

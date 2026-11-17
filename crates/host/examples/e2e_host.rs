@@ -66,6 +66,7 @@ async fn main() {
         },
         db,
         app_version: "0.0.0-e2e".into(),
+        latest_release_url: None,
         restart: Arc::new(|| {}),
     })
     .await

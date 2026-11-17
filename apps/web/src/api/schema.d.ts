@@ -552,6 +552,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["update"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/update/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Turns the new-version check on or off; turning it on checks at once. */
+        put: operations["set_check"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/update/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** "Not this one": hides the notice until a newer release than `version` comes out. */
+        put: operations["dismiss"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -694,6 +744,9 @@ export interface components {
          * @enum {string}
          */
         ChatTemplate: "default" | "compact" | "bubble" | "custom";
+        CheckBody: {
+            enabled: boolean;
+        };
         /**
          * @description A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's
          *     ID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.
@@ -851,6 +904,10 @@ export interface components {
             expires_in_secs: number;
             user_code: string;
             verification_uri: string;
+        };
+        DismissBody: {
+            /** @description The version in the notice, `major.minor.patch`. */
+            version: string;
         };
         /**
          * @description Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
@@ -1155,6 +1212,14 @@ export interface components {
              */
             error: string | null;
             selected: components["schemas"]["ChatTemplate"];
+        };
+        UpdateState: {
+            /** @description The newer release to tell the broadcaster about; `null`: no notice. */
+            available?: string | null;
+            /** @description Whether the new-version check is on (Settings → General). */
+            check: boolean;
+            /** @description The running version. */
+            current: string;
         };
     };
     responses: never;
@@ -2549,6 +2614,91 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateState"];
+                };
+            };
+        };
+    };
+    set_check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
         };
     };

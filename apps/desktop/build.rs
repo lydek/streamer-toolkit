@@ -5,6 +5,7 @@ fn main() {
             "retry_with_port",
             "get_admin_token",
             "open_twitch_activate",
+            "open_download_page",
             "close_hint",
         ]),
     ))

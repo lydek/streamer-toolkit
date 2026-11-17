@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 pub mod obs;
+pub mod releases;
 pub mod secrets;
 pub mod tls;
 pub mod twitch;
