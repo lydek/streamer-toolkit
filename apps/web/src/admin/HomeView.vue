@@ -41,7 +41,7 @@
         </div>
       </header>
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
-      <UpdateNotice />
+      <UpdateNotice @dismissed="keepFocus(firstTile)" />
 
       <!-- Later slices add pending items; the list shows only when it has some. -->
       <section v-if="pending.length" aria-labelledby="pending-heading">
@@ -243,7 +243,7 @@ import {
 } from './home'
 import HomeTile from './HomeTile.vue'
 import { changesCheckins } from './checkins'
-import { focusReturnTarget } from './page'
+import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import StatusLight from './StatusLight.vue'
@@ -448,8 +448,9 @@ async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound') {
 }
 
 // The section itself shows no focus ring, so it only takes focus while it has nothing focusable (loading, failed).
-const focusTiles = () =>
-  (tilesEl.value?.querySelector<HTMLElement>('[data-drawer-tile], [data-drawer-arrange]') ?? tilesEl.value)?.focus()
+const firstTile = () =>
+  tilesEl.value?.querySelector<HTMLElement>('[data-drawer-tile], [data-drawer-arrange]') ?? tilesEl.value
+const focusTiles = () => firstTile()?.focus()
 
 /** Closes an open drawer first (submitting its changes); a failed submit keeps the drawer and the normal home. */
 async function enterArrange() {
@@ -496,15 +497,16 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   document.addEventListener('keydown', onKeydown, true)
-  await run(async () => {})
-  void loadSounds()
-  await focusReturnTarget()
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
   // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
+  // Started before any await: leaving the page before the first load ends must still stop it.
   timer = window.setInterval(() => {
     const poll = modules.value ? Promise.all([refreshOverview(), refreshTemplate()]) : refresh()
     poll.catch(() => {})
   }, 2000)
+  await run(async () => {})
+  void loadSounds()
+  await focusReturnTarget()
 })
 onBeforeUnmount(() => {
   window.clearInterval(timer)

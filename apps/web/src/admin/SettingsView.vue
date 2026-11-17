@@ -284,9 +284,10 @@ const removePassword = () =>
 onMounted(async () => {
   window.addEventListener('focus', reloadGeneral)
   document.addEventListener('visibilitychange', reloadGeneral)
-  await load().catch(report)
-  // Polled so a sign-in finished in the browser shows up, and so groups that failed to load retry.
+  // Polled so a sign-in finished in the browser shows up, and so groups that failed to load retry. Started before
+  // the first await: leaving the page before the first load ends must still stop it.
   timer = window.setInterval(() => void load().catch(() => {}), 2000)
+  await load().catch(report)
 })
 onBeforeUnmount(() => {
   window.clearInterval(timer)

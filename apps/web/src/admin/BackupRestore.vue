@@ -59,18 +59,21 @@ async function choose() {
   error.value = ''
   const file = input.value?.files?.[0]
   if (!file) return
-  if (file.size > BACKUP_MAX_BYTES) {
-    error.value = t('errors.backup.too_large')
-    return
-  }
+  if (file.size > BACKUP_MAX_BYTES) return refuse(t('errors.backup.too_large'))
   busy.value = true
   try {
     preview.value = await previewRestore(file)
   } catch (e) {
-    error.value = message(e)
+    refuse(message(e))
   } finally {
     busy.value = false
   }
+}
+
+/** Shows why the file was refused and clears the choice, so choosing the same file once fixed fires again. */
+function refuse(text: string) {
+  error.value = text
+  if (input.value) input.value.value = ''
 }
 
 async function restore() {

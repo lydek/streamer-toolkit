@@ -48,6 +48,8 @@ describe('UpdateNotice', () => {
     await flushPromises()
     expect(client.PUT).toHaveBeenCalledWith('/api/admin/update/dismiss', { body: { version: '0.2.0' } })
     expect(wrapper.find('section').exists()).toBe(false)
+    // Home moves focus on: the focused button went with the notice.
+    expect(wrapper.emitted('dismissed')).toHaveLength(1)
   })
 
   it('shows nothing, and no error, without a newer release or when the Host cannot answer', async () => {

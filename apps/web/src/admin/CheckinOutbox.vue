@@ -70,9 +70,10 @@ async function act(eventId: string, action: 'retry' | 'skip') {
 }
 
 onMounted(async () => {
-  await load().catch((e) => emit('error', e))
-  // Redemptions keep arriving while paused, and retried events settle in the background.
+  // Redemptions keep arriving while paused, and retried events settle in the background. Started before the
+  // first await, so unmounting during the first load still stops it.
   timer = window.setInterval(() => void load().catch(() => {}), 2000)
+  await load().catch((e) => emit('error', e))
 })
 onBeforeUnmount(() => window.clearInterval(timer))
 

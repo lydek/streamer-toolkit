@@ -58,7 +58,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -74,9 +74,9 @@ const toast = useToast()
 const search = ref('')
 /** The search of the list shown; the form applies on submit. */
 const applied = ref('')
-const today = localDate()
+const today = ref(localDate())
 /** Day the buttons register: today, or a past day to back-fill. */
-const date = ref(today)
+const date = ref(today.value)
 const pageIndex = ref(0)
 const page = shallowRef<Schemas['CheckinViewerPage']>()
 const failed = ref('')
@@ -112,9 +112,18 @@ function go(step: -1 | 1) {
   void load()
 }
 
+/** The page may stay open past midnight: a date left on today moves on with it. */
+function refreshToday() {
+  const now = localDate()
+  if (now === today.value) return
+  if (date.value === today.value) date.value = now
+  today.value = now
+}
+
 async function register(v: Schemas['CheckinViewer']) {
   busy.value = true
-  const day = date.value === today ? null : date.value
+  refreshToday()
+  const day = date.value === today.value ? null : date.value
   try {
     const { result } = await api(
       client.POST('/api/admin/checkin/viewers/{id}/check-ins', {
@@ -122,7 +131,7 @@ async function register(v: Schemas['CheckinViewer']) {
         body: { date: day },
       }),
     )
-    const shown = day ?? today
+    const shown = day ?? today.value
     toast.add(
       result === 'checked_in'
         ? successToast(t('checkin.page.registered', { name: v.user_name, date: shown }))
@@ -138,6 +147,12 @@ async function register(v: Schemas['CheckinViewer']) {
 
 // Loaded right away, and again on every check-in and reconnect.
 void load()
+window.addEventListener('focus', refreshToday)
+document.addEventListener('visibilitychange', refreshToday)
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshToday)
+  document.removeEventListener('visibilitychange', refreshToday)
+})
 useLiveEvents(2000, (msg) => {
   if (changesCheckins(msg)) void load()
 })

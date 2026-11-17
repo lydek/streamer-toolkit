@@ -24,6 +24,7 @@ const POLL_MS = 60_000
 
 const { t } = useI18n()
 const toast = useToast()
+const emit = defineEmits<{ dismissed: [] }>()
 const available = ref<string | null>(null)
 const current = ref('')
 const busy = ref(false)
@@ -54,6 +55,8 @@ const dismiss = () =>
   act(async () => {
     await api(client.PUT('/api/admin/update/dismiss', { body: { version: available.value! } }))
     available.value = null
+    // The notice, with the focused button, is gone: the page moves focus on.
+    emit('dismissed')
   })
 
 onMounted(() => {

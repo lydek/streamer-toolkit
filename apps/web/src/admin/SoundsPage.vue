@@ -52,6 +52,7 @@ import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast } from './home'
+import { keepFocus } from './page'
 import { importSound, slotLabel } from './sounds'
 import SoundRow from './SoundRow.vue'
 import SoundSlots from './SoundSlots.vue'
@@ -106,9 +107,11 @@ async function choose() {
   }
 }
 
-function deleted(s: Schemas['Sound']) {
+async function deleted(s: Schemas['Sound']) {
   toast.add(successToast(t('sound.deleted', { label: s.label })))
-  void load()
+  await load()
+  // The deleted row took the focused button with it.
+  await keepFocus(() => input.value)
 }
 
 const report = (e: unknown) => toast.add(errorToast(message(e)))

@@ -158,6 +158,8 @@ test('the page imports, renames, changes the volume and deletes sounds', async (
   await row.getByRole('button', { name: zh.sound.delete }).click()
   await row.getByRole('button', { name: zh.sound.confirmDelete }).click()
   await expect(page.getByLabel(zh.sound.label)).toHaveCount(1)
+  // The row took the focused button with it: focus goes to the import field.
+  await expect(page.getByLabel(zh.sound.file)).toBeFocused()
   expect(s.sounds.map((x) => x.id)).toEqual(['s1'])
 })
 

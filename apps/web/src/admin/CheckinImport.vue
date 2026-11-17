@@ -24,6 +24,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { successToast } from './home'
+import { keepFocus } from './page'
 
 // The file is only read here; its content is posted for a preview, then again to import it.
 const MAX_BYTES = 5 * 1024 * 1024
@@ -39,26 +40,29 @@ let content: Record<string, never> | undefined
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 
+/** Shows why the file was refused and clears the choice, so choosing the same file once fixed fires again. */
+function refuse(text: string) {
+  error.value = text
+  content = undefined
+  if (input.value) input.value.value = ''
+}
+
 async function choose() {
   preview.value = undefined
   error.value = ''
   content = undefined
   const file = input.value?.files?.[0]
   if (!file) return
-  if (file.size > MAX_BYTES) {
-    error.value = t('errors.checkin.import_too_large')
-    return
-  }
+  if (file.size > MAX_BYTES) return refuse(t('errors.checkin.import_too_large'))
   try {
     content = JSON.parse(await file.text())
   } catch {
-    error.value = t('errors.checkin.import_invalid')
-    return
+    return refuse(t('errors.checkin.import_invalid'))
   }
   try {
     preview.value = await api(client.POST('/api/admin/checkin/import/preview', { body: content! }))
   } catch (e) {
-    error.value = message(e)
+    refuse(message(e))
   }
 }
 
@@ -72,6 +76,8 @@ async function apply() {
     content = undefined
     if (input.value) input.value.value = ''
     emit('imported')
+    // The confirm button is gone with the preview.
+    void keepFocus(() => input.value)
   } catch (e) {
     error.value = message(e)
   } finally {
