@@ -241,7 +241,7 @@
         "invalid_id": "不是數字的 Twitch user ID",
         "owner": "實況主本人（isOwner）",
         "excluded": "標為排除（excluded）",
-        "invalid_total": "totalCheckIns 缺少或不是 0 以上的整數",
+        "invalid_total": "totalCheckIns 缺少，或不是 0 到 1,000,000,000 的整數",
         "invalid_date": "lastCheckInDate 不是 YYYY-MM-DD"
       }
     },

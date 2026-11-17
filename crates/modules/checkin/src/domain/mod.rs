@@ -219,7 +219,7 @@ pub(crate) enum SkipReason {
     InvalidId,
     Owner,
     Excluded,
-    /// `totalCheckIns` is missing, not an integer, or negative.
+    /// `totalCheckIns` is missing, not an integer, negative, or above [`MAX_IMPORTED_TOTAL`].
     InvalidTotal,
     /// `lastCheckInDate` is not a `YYYY-MM-DD` date.
     InvalidDate,
@@ -249,6 +249,10 @@ pub(crate) struct ImportEntry<'a> {
     pub(crate) profile_image: Option<&'a str>,
 }
 
+/// The largest imported `totalCheckIns`: far above any real count, and small enough that the baseline plus
+/// recorded check-ins always stays an SQLite integer.
+pub(crate) const MAX_IMPORTED_TOTAL: u64 = 1_000_000_000;
+
 impl ImportedViewer {
     pub(crate) fn check(e: &ImportEntry) -> Result<Self, SkipReason> {
         if e.key.is_empty() || e.key.len() > 20 || !e.key.bytes().all(|b| b.is_ascii_digit()) {
@@ -263,6 +267,7 @@ impl ImportedViewer {
         let total = e
             .total
             .and_then(|t| u64::try_from(t).ok())
+            .filter(|t| *t <= MAX_IMPORTED_TOTAL)
             .ok_or(SkipReason::InvalidTotal)?;
         let last_day = e
             .last_date
@@ -424,6 +429,15 @@ mod tests {
             Err(SkipReason::InvalidTotal)
         );
         assert!(ImportedViewer::check(&entry("1", Some(0))).is_ok());
+        assert!(ImportedViewer::check(&entry("1", Some(MAX_IMPORTED_TOTAL as i64))).is_ok());
+        assert_eq!(
+            ImportedViewer::check(&entry("1", Some(MAX_IMPORTED_TOTAL as i64 + 1))),
+            Err(SkipReason::InvalidTotal)
+        );
+        assert_eq!(
+            ImportedViewer::check(&entry("1", Some(i64::MAX))),
+            Err(SkipReason::InvalidTotal)
+        );
         let owner = ImportEntry {
             is_owner: true,
             ..entry("1", Some(1))

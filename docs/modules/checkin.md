@@ -31,7 +31,7 @@
 ## 匯入
 - 在完整頁選一個 JSON 檔：管理 UI 讀取檔案內容後送到 Host 預覽（會新增幾位、更新幾位、略過幾筆與原因），確認後才在同一個交易裡寫入。原始檔不會被修改。檔案最大 5 MB。
 - 格式：一個以 Twitch user ID 為鍵的 JSON 物件，每一項可以有：
-  - `totalCheckIns`（必填，0 以上的整數）：累計次數。
+  - `totalCheckIns`（必填，0 到 1,000,000,000 的整數）：累計次數。
   - `lastName` 或 `name`：顯示名稱（兩者都有時用 `lastName`）；新觀眾的登入名稱要等他之後打卡才知道。
   - `profileImage`：頭像網址，只接受 Twitch 圖片 CDN，已有頭像時不覆蓋。
   - `lastCheckInDate`（`YYYY-MM-DD`）：最後打卡日，當成日期讀，不換算時區；沒有就留空。它不會擋住當天打卡。
