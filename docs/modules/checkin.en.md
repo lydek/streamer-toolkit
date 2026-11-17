@@ -30,7 +30,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - The simulator in the drawer tests the overlay without writing records. Details in [architecture.en.md](../architecture.en.md) "Stamp card overlay".
 
 ## Import
-- Pick a JSON file on the full page: the admin UI reads the file and sends its content to the Host for a preview (how many viewers would be added, updated and skipped, with reasons), and writes it in one transaction only after confirmation. The original file is never changed. Files are limited to 5 MB.
+- Pick a JSON file on the full page: the admin UI reads the file and sends its content to the Host for a preview (how many viewers would be added or updated, and how many entries would be skipped, with reasons), and writes it in one transaction only after confirmation. The original file is never changed. Files are limited to 5 MB.
 - Format: a JSON object keyed by Twitch user ID, where each entry may have:
   - `totalCheckIns` (required, an integer of 0 or more): the total.
   - `lastName` or `name`: the display name (`lastName` wins when both exist); a new viewer's login stays unknown until they check in.

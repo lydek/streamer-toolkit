@@ -1,4 +1,4 @@
-<!-- source: README.md source-sha256: d07e78ba15c9b4ee7b1722ee0ad11fa8cf56f35acefe7c67a38e9d595d59c06f -->
+<!-- source: README.md source-sha256: 322a8641c27f2bf4da54749ef96b86519ae99e9a1e84ffa8379dda9a814ebe3a -->
 [繁體中文](README.md) | **English**
 
 # Streamer Toolkit
@@ -7,12 +7,12 @@ A local-first Twitch streaming toolkit. It provides a customizable OBS chat over
 
 **Principle: feature-first, fast iteration.** Build one feature slice at a time, then try it on a real stream.
 
-**Status:** not implemented yet; the next step is a walking skeleton (see [scope](docs/scope.en.md)).
+**Status:** all MVP slices are done; real-machine checks are under way before the first stable release (see [scope](docs/scope.en.md)).
 
 **Stack:** Rust + Axum, Tauri 2 + Vue 3 + TypeScript, SQLite + SQLx.
 
 ## How to run
-To be added once the walking skeleton is done. For environment requirements, see [dev](docs/dev.en.md).
+Once the first stable release is out, download the portable zip from GitHub Releases, extract it and run `Streamer Toolkit.exe`; the SmartScreen and "Unblock" steps are in the zip's `使用說明.txt`. To build from source and develop, see [dev](docs/dev.en.md).
 
 ## Documents
 Only these are maintained: the four documents below, complex-module specs `docs/modules/<module>.md`, and [AGENTS.md](AGENTS.md) for AI coding agents. Traditional Chinese is authoritative; English versions are the matching `.en.md` files.
