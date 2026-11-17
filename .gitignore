@@ -8,6 +8,8 @@ target/
 node_modules/
 dist/
 dist-port/
+# THIRD_PARTY_LICENSES, generated at release build time (scripts/third-party-licenses.mjs)
+apps/web/public/
 *.tsbuildinfo
 # Playwright results and traces
 test-results/

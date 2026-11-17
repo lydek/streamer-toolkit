@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: a8230dc81dac2bdbda28709fced15b9c2d3b4902a4d6a61de974244c8ca08044 -->
+<!-- source: docs/decisions.md source-sha256: fd096ca713195b6a91886c4d9acbc8a43f69d8fb03fa3457c2f68fd8cdc9d003 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -37,7 +37,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Remote repo | GitHub public |
 | License | MIT (`LICENSE`) |
 | Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
-| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) combined into `THIRD_PARTY_LICENSES`, shipped in the portable zip and the About screen |
+| Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) + `assets/CREDITS.md` combined into `THIRD_PARTY_LICENSES`, generated only by release builds and never committed; shipped in the portable zip and the settings page's About section |
 | Bundled assets | Only redistributable assets (CC0, CC-BY, OFL for fonts, etc.), with source and license recorded in `assets/CREDITS.md`; user-imported assets never go into the repo |
 | Branches | Default `main`; work happens on short-lived branches, rebase-merged by PR after CI passes (the only merge method the repo allows), so `main` stays one straight line; exactly one commit per issue, and one PR may hold several independent issues from the same stage |
 | Line endings | `.gitattributes`: LF everywhere; CRLF for `.ps1`/`.bat`/`.cmd`; images, sounds, videos and fonts marked binary |
@@ -96,7 +96,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | When | Items |
 |---|---|
 | **Build with the skeleton** | Module enable/disable switch (data kept when disabled; in-memory events dropped while disabled), small port-change page shown when the port is taken, structured logs + error codes, event simulator (`source=simulation`), data directory layout (program and data kept apart; see "Data directory" above), UI string resource keys (vue-i18n, `zh-TW` only at first), a11y baseline (defined in dev.en.md), tokens in Windows Credential Manager, CI, architecture tests, `cargo-deny` license and security advisory checks, local API security (admin token, Host and Origin checks, no CORS on the API), Twitch app registration guide and Device Code Flow login, automatic token refresh |
-| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (check-in slice; built in slice 4), portable backup format `.stbackup` (backup and restore slice; built in slice 6), release workflow and `THIRD_PARTY_LICENSES` (portable package slice) |
+| **When the slice needs it** | SQLite and the automatic backup before migrations (redemption records slice, the first table; built in slice 3), outbox and the "pause/off" choice when disabling (check-in slice; built in slice 4), portable backup format `.stbackup` (backup and restore slice; built in slice 6), release workflow and `THIRD_PARTY_LICENSES` (portable package slice; `THIRD_PARTY_LICENSES` built in slice 7) |
 | **After the MVP** | OBS Dock, macOS installer, PostgreSQL/NAS storage (Storage Port), plugin SDK, mutation testing, second language `en`, remote/mobile control, portable auto-update (verify an ed25519 signature after download; replace only when the user chooses to), sandbox for custom overlay JS, diagnostic report export, dark/light theme and DPI checks |
 | **Not doing** | Lightweight harness (only the "never loosen acceptance criteria" rule is kept, in dev.en.md), microservices, GraphQL/gRPC, WebSocket RPC, general rules engine, Linux, native mobile apps |
 
@@ -130,3 +130,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-17 | `.stbackup` was built in slice 6: a zip (`zip` crate, deflate only) plus `manifest.json` (each file's size and SHA-256); the save dialog is the WebView's `showSaveFilePicker`, with no Tauri dialog plugin | No extra plugin and capability; any common tool can open the zip to inspect it |
 | 2026-11-17 | A restore is applied after a restart, before the database opens: the current data is first saved as `backups/before-restore-*.stbackup`, then replaced whole by renames, and put back on failure | The open database cannot be swapped safely; renames inside the same directory can be undone completely, and the pre-restore backup restores back through the same screen |
 | 2026-11-17 | UI E2E moved out of PR CI and pre-push; it now runs by hand and before a release. Merging into `main` no longer reruns CI | E2E is the slowest step (77 s of about 5.5 min) and changes land fast; Rust and frontend unit and integration tests, which guard the data rules, still gate every PR; rebase-merge lands exactly the commits the PR already checked |
+| 2026-11-17 | `THIRD_PARTY_LICENSES` built in slice 7: generated only by release builds and never committed, embedded by the frontend build and shown as plain text in the settings page's About section | It always matches the lockfiles of that build; PRs need no extra check, and developers need not install `cargo-about` to change dependencies |

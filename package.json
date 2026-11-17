@@ -13,6 +13,7 @@
     "check:translations": "node scripts/check-translations.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
+    "licenses:gen": "node scripts/third-party-licenses.mjs",
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
     "web:e2e": "pnpm --filter web e2e",

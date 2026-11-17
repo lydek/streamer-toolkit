@@ -189,7 +189,8 @@
     },
     "backup": "備份與還原",
     "about": "關於",
-    "license": "以 MIT 授權釋出。"
+    "license": "以 MIT 授權釋出。",
+    "thirdParty": "第三方授權"
   },
   "backup": {
     "export": "匯出備份",

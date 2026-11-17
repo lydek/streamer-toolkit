@@ -1,0 +1,17 @@
+# cargo-about config for THIRD_PARTY_LICENSES (scripts/third-party-licenses.mjs). Same allowlist and target as
+# deny.toml; only what ships in the app (no dev or build dependencies, no unpublished workspace crates).
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+targets = ["x86_64-pc-windows-msvc"]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+private = { ignore = true }

@@ -84,6 +84,30 @@ describe('SettingsView', () => {
     wrapper.unmount()
   })
 
+  it('shows the third-party licenses as plain text when opened, and a load failure without the file', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const wrapper = await mountSettings()
+    const details = wrapper.get<HTMLDetailsElement>('details')
+
+    fetch.mockResolvedValueOnce(new Response('<b>x</b>', { status: 404, headers: { 'content-type': 'text/html' } }))
+    details.element.open = true
+    await details.trigger('toggle')
+    await vi.waitFor(() => expect(details.text()).toContain(i18n.global.t('home.loadFailed')))
+
+    details.element.open = false
+    await details.trigger('toggle')
+    fetch.mockResolvedValueOnce(new Response('<b>MIT</b>', { headers: { 'content-type': 'text/plain; charset=utf-8' } }))
+    details.element.open = true
+    await details.trigger('toggle')
+    await vi.waitFor(() => expect(details.find('pre').exists()).toBe(true))
+    expect(fetch).toHaveBeenCalledWith('/THIRD_PARTY_LICENSES.txt')
+    expect(details.get('pre').text()).toBe('<b>MIT</b>')
+    expect(details.find('b').exists()).toBe(false)
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
   it('keeps the module switches usable when the OBS settings fail to load', async () => {
     client.GET.mockImplementation(async (path: string) =>
       path === '/api/admin/obs'
