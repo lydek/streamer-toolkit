@@ -7,6 +7,10 @@
         <Checkbox v-model="ask.value.value" input-id="ask-before-close" binary @update:model-value="ask.commit()" />
         <label for="ask-before-close">{{ t('settings.askBeforeClose') }}</label>
       </div>
+      <div v-if="checkUpdates.value.value !== undefined" class="choice">
+        <Checkbox v-model="checkUpdates.value.value" input-id="check-updates" binary @update:model-value="checkUpdates.commit()" />
+        <label for="check-updates">{{ t('update.check') }}</label>
+      </div>
     </section>
 
     <section aria-labelledby="twitch">
@@ -132,6 +136,11 @@ const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names
 const askSaved = ref<boolean>()
 const ask = useDrawerSetting(askSaved, (v) => api(client.PUT('/api/admin/general', { body: { ask_before_close: v! } })))
 
+const checkSaved = ref<boolean>()
+const checkUpdates = useDrawerSetting(checkSaved, (v) =>
+  api(client.PUT('/api/admin/update/check', { body: { enabled: v! } })),
+)
+
 // PUT /api/admin/obs takes the whole address, so saves run one at a time from the last saved one: two fields
 // committed in a row must not undo each other.
 const savedAddress = { host: '', port: 0 }
@@ -215,6 +224,10 @@ async function loadGeneral() {
   if (askSaved.value === before) askSaved.value = ask_before_close
 }
 
+async function loadUpdateCheck() {
+  checkSaved.value = (await api(client.GET('/api/admin/update'))).check
+}
+
 async function loadObs() {
   const obs = await api(client.GET('/api/admin/obs'))
   Object.assign(savedAddress, { host: obs.host, port: obs.port })
@@ -228,6 +241,7 @@ async function loadObs() {
 async function load() {
   const results = await Promise.allSettled([
     askSaved.value === undefined && loadGeneral(),
+    checkSaved.value === undefined && loadUpdateCheck(),
     hostSaved.value === undefined && loadObs(),
     modules.value === undefined && refreshModules(),
     refreshTwitch(),

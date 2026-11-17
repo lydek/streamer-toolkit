@@ -21,6 +21,7 @@ const GETS: Record<string, unknown> = {
   '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
   '/api/admin/checkin/outbox': { pending: 0, oldest_pending_at: null, dead_letters: [] },
   '/api/admin/sounds': { sounds: [], slots: {} },
+  '/api/admin/update': { current: '0.1.0', available: null, check: true },
 }
 
 async function mountSettings() {
@@ -81,6 +82,17 @@ describe('SettingsView', () => {
 
     await field.trigger('blur')
     expect(client.PUT).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('turns the new-version check off from the general section', async () => {
+    client.PUT.mockResolvedValue(ok())
+    const wrapper = await mountSettings()
+    await vi.waitFor(() => expect(wrapper.find('#check-updates').exists()).toBe(true))
+    expect(wrapper.get<HTMLInputElement>('#check-updates').element.checked).toBe(true)
+
+    await wrapper.get('#check-updates').setValue(false)
+    await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledWith('/api/admin/update/check', { body: { enabled: false } }))
     wrapper.unmount()
   })
 

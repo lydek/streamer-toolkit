@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 1bc93f762de063a5942454f790255d2a88225299db7c87045f3aa97265ad31c0 -->
+<!-- source: docs/architecture.md source-sha256: d1a38d8a8d87136682a174d78e9441894c33619c3ca84de5dd69c1a0ca41cabe -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -119,7 +119,7 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 - **Tauri IPC permissions**: app commands are declared in `build.rs` with `tauri_build::AppManifest`, and every command needs an explicit grant. There are three capabilities:
   1. Small port-change page (local origin, `port` window only): grants only the commands that validate and save the port and retry the bind.
   2. Admin window, dev (local origin through `devUrl`, `admin` window only): grants admin commands such as fetching the token.
-  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>` and the `admin` window only (Tauri matches the IPC request's Origin, which has no path, so it cannot be limited to `/admin`; `on_navigation` restricts the path). It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
+  3. Admin window, release build (the Host URL is a remote origin): created at startup with `Manager::add_capability`, with URLs limited to `http://127.0.0.1:<port>` and the `admin` window only (Tauri matches the IPC request's Origin, which has no path, so it cannot be limited to `/admin`; `on_navigation` restricts the path). The command that opens the new-version download page is granted only here: dev builds do not check for new versions, so they never show the notice. It is not placed in the auto-enabled `capabilities/` folder; keep Tauri's `dynamic-acl` feature (on by default).
   - Besides app commands, the admin window (capabilities 2 and 3) is granted only `core:event:allow-listen` and `core:event:allow-unlisten` (to receive the close-hint event), never `core:default` or `core:window:*` (the release capability covers the whole Host origin).
 - **User templates**:
   - Custom templates and overlays are never rendered directly in the admin window; previews go in an iframe with only `sandbox="allow-scripts"` (no `allow-same-origin`), so template code cannot reach the admin window's IPC or token; a test checks that `invoke` from the preview iframe is rejected.

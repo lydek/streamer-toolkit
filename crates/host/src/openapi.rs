@@ -3,7 +3,7 @@
 
 use utoipa::OpenApi;
 
-use crate::{admin, backup, home_tiles, obs, overlay, templates};
+use crate::{admin, backup, home_tiles, obs, overlay, templates, update};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -40,6 +40,9 @@ use crate::{admin, backup, home_tiles, obs, overlay, templates};
         templates::select_chat_template,
         templates::alert_template,
         templates::select_alert_template,
+        update::update,
+        update::set_check,
+        update::dismiss,
     ),
     components(schemas(
         overlay::Snapshot,

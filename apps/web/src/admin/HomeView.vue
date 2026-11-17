@@ -41,6 +41,7 @@
         </div>
       </header>
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
+      <UpdateNotice />
 
       <!-- Later slices add pending items; the list shows only when it has some. -->
       <section v-if="pending.length" aria-labelledby="pending-heading">
@@ -247,6 +248,7 @@ import RedemptionList from './RedemptionList.vue'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import StatusLight from './StatusLight.vue'
 import TwitchSignIn from './TwitchSignIn.vue'
+import UpdateNotice from './UpdateNotice.vue'
 
 const { t, te, locale } = useI18n()
 const toast = useToast()

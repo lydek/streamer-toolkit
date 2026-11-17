@@ -36,6 +36,11 @@ pub struct Settings {
     pub checkin: CheckinSettings,
     /// Imported sound files; the sound module checks them.
     pub sound: SoundSettings,
+    /// Look for a newer release on GitHub at start and every 24 h; off means no request at all.
+    pub update_check: bool,
+    /// The release the broadcaster chose to skip ("not this one"); only a newer one shows the notice again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dismissed_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +122,8 @@ impl Default for Settings {
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
             sound: SoundSettings::default(),
+            update_check: true,
+            dismissed_version: None,
         }
     }
 }

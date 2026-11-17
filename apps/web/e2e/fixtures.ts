@@ -19,6 +19,8 @@ export interface AdminState {
   homeTiles: string[] | null
   /** PUT stores it and answers it back. */
   checkin: Schemas['CheckinSettingsBody']
+  /** The new-version notice: none by default. */
+  update: Schemas['UpdateState']
 }
 
 export interface Invoke {
@@ -98,6 +100,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     homeTiles: null,
     checkin: { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+    update: { current: '0.1.0', available: null, check: true },
     ...state,
   }
   await mockIpc(page)
@@ -118,6 +121,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   })
   await page.route('**/api/admin/general', get(() => s.general))
   await page.route('**/api/admin/obs', get(() => s.obs))
+  await page.route('**/api/admin/update', get(() => s.update))
   await page.route('**/api/admin/home-tiles', (r) => {
     if (r.request().method() !== 'PUT') return r.fulfill({ json: s.homeTiles })
     s.homeTiles = r.request().postDataJSON()

@@ -30,6 +30,8 @@ const PORT_PAGE: &str = "port";
 /// Sent to the admin window: `true` shows the close hint, `false` closes it.
 const CLOSE_HINT_EVENT: &str = "close-hint";
 const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
+/// The new-version notice's download page; never a URL from the release API's response.
+const RELEASES_URL: &str = "https://github.com/lydek/streamer-toolkit/releases/latest";
 const WEBVIEW2_DOWNLOAD_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 const LOG_DAYS: usize = 14;
 
@@ -138,6 +140,7 @@ fn main() {
             retry_with_port,
             get_admin_token,
             open_twitch_activate,
+            open_download_page,
             close_hint
         ])
         .build(context)
@@ -276,6 +279,14 @@ fn open_twitch_activate(app: AppHandle) -> Result<(), &'static str> {
         .map_err(|_| "admin.open_failed")
 }
 
+/// Opens the fixed releases page in the system browser for the new-version notice; takes no URL.
+#[tauri::command]
+fn open_download_page(app: AppHandle) -> Result<(), &'static str> {
+    app.opener()
+        .open_url(RELEASES_URL, None::<&str>)
+        .map_err(|_| "admin.open_failed")
+}
+
 /// The admin window reports what happened to the close hint.
 #[tauri::command]
 fn close_hint(app: AppHandle, state: State<'_, AppState>, action: close_hint::Action) {
@@ -358,6 +369,8 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         checkin_timing: CheckinTiming::default(),
         db: state.db.clone(),
         app_version: app.package_info().version.to_string(),
+        // A dev build's version says nothing about releases, and its admin window may not open the download page.
+        latest_release_url: (!cfg!(dev)).then(|| integrations::releases::LATEST_RELEASE_URL.into()),
         restart: Arc::new({
             let app = app.clone();
             move || app.request_restart()
@@ -399,6 +412,7 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
                 .window(ADMIN)
                 .permission("allow-get-admin-token")
                 .permission("allow-open-twitch-activate")
+                .permission("allow-open-download-page")
                 .permission("allow-close-hint")
                 // Receives the close hint event; no core:default or core:window:*, the capability covers the whole Host origin.
                 .permission("core:event:allow-listen")

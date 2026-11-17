@@ -118,7 +118,7 @@ apps/
 - **Tauri IPC 權限**：app 指令在 `build.rs` 用 `tauri_build::AppManifest` 宣告，每個指令都要明確授權。共三組 capability：
   1. port 修改小頁面（本機 origin，只限 `port` 視窗）：只授權「驗證並儲存 port、重試綁定」的指令。
   2. 管理視窗 dev 版（經 `devUrl` 為本機 origin，只限 `admin` 視窗）：授權取得 token 等管理指令。
-  3. 管理視窗正式版（Host 網址為遠端 origin）：啟動時用 `Manager::add_capability` 建立，URL 限 `http://127.0.0.1:<port>`，只限 `admin` 視窗（Tauri 用 IPC 請求的 Origin 比對，不含路徑，因此無法限定到 `/admin`；路徑由 `on_navigation` 限制）。這組不放在會自動啟用的 `capabilities/` 目錄；保留 Tauri 的 `dynamic-acl` feature（預設開啟）。
+  3. 管理視窗正式版（Host 網址為遠端 origin）：啟動時用 `Manager::add_capability` 建立，URL 限 `http://127.0.0.1:<port>`，只限 `admin` 視窗（Tauri 用 IPC 請求的 Origin 比對，不含路徑，因此無法限定到 `/admin`；路徑由 `on_navigation` 限制）。開啟新版下載頁的指令只授權在這組：dev 版不查新版，也就不會出現新版提示。這組不放在會自動啟用的 `capabilities/` 目錄；保留 Tauri 的 `dynamic-acl` feature（預設開啟）。
   - 管理視窗（第 2、3 組）除了 app 指令，只另外授權 `core:event:allow-listen`、`core:event:allow-unlisten`（用來接收關閉提示事件），不加 `core:default` 或 `core:window:*`（正式版這組 capability 涵蓋整個 Host origin）。
 - **使用者樣板**：
   - 自訂樣板與 Overlay 絕不在管理視窗裡直接渲染；預覽放在只設 `sandbox="allow-scripts"`（不帶 `allow-same-origin`）的 iframe，樣板裡的程式拿不到管理視窗的 IPC 與 token；有測試確認預覽 iframe 呼叫 `invoke` 會被拒絕。

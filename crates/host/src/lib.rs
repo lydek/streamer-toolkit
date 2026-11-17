@@ -8,6 +8,7 @@ mod obs;
 mod openapi;
 mod overlay;
 mod templates;
+mod update;
 
 pub use backup::{BackupError, apply_pending};
 pub use openapi::openapi;
@@ -78,8 +79,10 @@ pub struct HostConfig {
     pub checkin_timing: CheckinTiming,
     /// The database, opened and migrated by [`db::open`] before the Host starts.
     pub db: db::SqlitePool,
-    /// The app's version, recorded in backups.
+    /// The app's version, recorded in backups and compared with the newest release.
     pub app_version: String,
+    /// GitHub's latest-release API for the new-version notice; `None` (dev builds, tests): never checked.
+    pub latest_release_url: Option<String>,
     /// Restarts the app; a confirmed restore is applied on the next start.
     pub restart: Arc<dyn Fn() + Send + Sync>,
 }
@@ -220,10 +223,16 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
+    let updates = update::start(
+        config.data_dir.clone(),
+        config.app_version.clone(),
+        http.clone(),
+        config.latest_release_url,
+    );
     let backup = backup::routes(backup::BackupState {
         db: config.db.clone(),
         data_dir: config.data_dir.clone(),
-        app_version: config.app_version,
+        app_version: config.app_version.clone(),
         restart: config.restart,
         lock: Default::default(),
     });
@@ -281,6 +290,12 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin.clone(),
             admin::require_token,
         )))
+        .merge(
+            update::routes(updates).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
+        )
         .merge(
             templates::admin_routes(templates.clone()).layer(middleware::from_fn_with_state(
                 admin.clone(),
@@ -416,6 +431,7 @@ mod tests {
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
             app_version: "0.0.0-test".into(),
+            latest_release_url: None,
             restart: Arc::new(|| {}),
         }
     }
@@ -426,6 +442,22 @@ mod tests {
             (Method::GET, "/api/admin/backup"),
             (Method::POST, "/api/admin/backup/restore/preview"),
             (Method::POST, "/api/admin/backup/restore"),
+        ] {
+            let req = get_req(uri, "127.0.0.1:47810")
+                .method(method)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .body(Body::empty())
+                .unwrap();
+            assert_eq!(status(req).await, StatusCode::UNAUTHORIZED, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn update_routes_require_the_token() {
+        for (method, uri) in [
+            (Method::GET, "/api/admin/update"),
+            (Method::PUT, "/api/admin/update/check"),
+            (Method::PUT, "/api/admin/update/dismiss"),
         ] {
             let req = get_req(uri, "127.0.0.1:47810")
                 .method(method)
@@ -717,6 +749,7 @@ mod tests {
             checkin_timing: CheckinTiming::default(),
             db: db::memory(),
             app_version: "0.0.0-test".into(),
+            latest_release_url: None,
             restart: Arc::new(|| {}),
         })
         .unwrap();

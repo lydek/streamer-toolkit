@@ -192,6 +192,13 @@
     "license": "以 MIT 授權釋出。",
     "thirdParty": "第三方授權"
   },
+  "update": {
+    "available": "有新版 {version}",
+    "current": "目前版本 {version}",
+    "download": "下載新版",
+    "dismiss": "這版先不要",
+    "check": "檢查新版"
+  },
   "backup": {
     "export": "匯出備份",
     "exported": "已匯出備份。",
@@ -325,6 +332,9 @@
     },
     "home": {
       "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "update": {
+      "invalid_version": "版本號格式不正確。"
     },
     "outbox": {
       "storage_failed": "無法讀取或更新待處理的事件。",

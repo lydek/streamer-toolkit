@@ -1639,6 +1639,96 @@
           "204": {}
         }
       }
+    },
+    "/api/admin/update": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/update/check": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Turns the new-version check on or off; turning it on checks at once.",
+        "operationId": "set_check",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/update/dismiss": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "\"Not this one\": hides the notice until a newer release than `version` comes out.",
+        "operationId": "dismiss",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2082,6 +2172,17 @@
           "custom"
         ]
       },
+      "CheckBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "CheckinChangedEvent": {
         "type": "object",
         "description": "A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's\nID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.",
@@ -2504,6 +2605,18 @@
           },
           "verification_uri": {
             "type": "string"
+          }
+        }
+      },
+      "DismissBody": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "The version in the notice, `major.minor.patch`."
           }
         }
       },
@@ -3350,6 +3463,30 @@
           },
           "selected": {
             "$ref": "#/components/schemas/ChatTemplate"
+          }
+        }
+      },
+      "UpdateState": {
+        "type": "object",
+        "required": [
+          "current",
+          "check"
+        ],
+        "properties": {
+          "available": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The newer release to tell the broadcaster about; `null`: no notice."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "Whether the new-version check is on (Settings → General)."
+          },
+          "current": {
+            "type": "string",
+            "description": "The running version."
           }
         }
       }
