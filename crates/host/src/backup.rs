@@ -43,10 +43,13 @@ const MAX_ENTRIES: usize = 10_000;
 const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 /// A checked backup waiting for the restart, in the data folder; its `manifest.json` is written last, once complete.
 const STAGING_DIR: &str = "restore-staging";
-/// Written when the broadcaster confirms; the next start applies the staged backup.
+/// Written when the broadcaster confirms, holding a new restore ID; the next start applies the staged backup.
 const PENDING: &str = "restore-pending";
 /// The data a restore replaced, kept until the restore has finished so a failure can put it back.
 const PREVIOUS_DIR: &str = "restore-previous";
+/// In `restore-previous/` before anything moves: the ID of the restore it belongs to. Only that restore's
+/// marker puts it back; one left over from an earlier restore never does.
+const RESTORE_ID: &str = ".restore-id";
 /// In `restore-previous/` once every current item is in it; from then on, items without a copy there came from
 /// the backup.
 const MOVED: &str = ".moved";
@@ -138,6 +141,10 @@ pub enum BackupError {
     /// and the next start tries again.
     #[error("backup.put_back_failed: {0}")]
     PutBack(String),
+    /// `restore-pending` could not be removed after the restore ended (applied or not). It no longer points at
+    /// any `restore-previous/`, so the next start never puts data back because of it.
+    #[error("backup.marker_left: {0}")]
+    MarkerLeft(String),
 }
 
 impl BackupError {
@@ -148,9 +155,11 @@ impl BackupError {
             Self::NewerVersion => (StatusCode::BAD_REQUEST, "backup.newer_version"),
             Self::NothingStaged => (StatusCode::CONFLICT, "backup.nothing_staged"),
             Self::Export(_) => (StatusCode::INTERNAL_SERVER_ERROR, "backup.export_failed"),
-            Self::Stage(_) | Self::Restore(_) | Self::Interrupted | Self::PutBack(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "backup.restore_failed")
-            }
+            Self::Stage(_)
+            | Self::Restore(_)
+            | Self::Interrupted
+            | Self::PutBack(_)
+            | Self::MarkerLeft(_) => (StatusCode::INTERNAL_SERVER_ERROR, "backup.restore_failed"),
         };
         if status.is_server_error() {
             tracing::error!(code, error = %self, "backup or restore failed");
@@ -257,7 +266,8 @@ pub(crate) async fn confirm_restore(State(s): State<Arc<BackupState>>) -> Respon
     if !s.data_dir.join(STAGING_DIR).join(MANIFEST).is_file() {
         return BackupError::NothingStaged.response();
     }
-    if let Err(e) = fs::write(s.data_dir.join(PENDING), b"") {
+    let id = uuid::Uuid::now_v7().to_string();
+    if let Err(e) = fs::write(s.data_dir.join(PENDING), id) {
         return restore_failed(e).response();
     }
     let restart = s.restart.clone();
@@ -598,41 +608,66 @@ pub async fn apply_pending(data_dir: &Path, app_version: &str) -> Result<bool, B
     let previous = data_dir.join(PREVIOUS_DIR);
     let result = if !pending.exists() {
         Ok(false)
-    } else if previous.exists() {
-        // The app ended in the middle of a restore.
-        put_back(data_dir, &previous)
-            .map_err(|e| BackupError::PutBack(e.to_string()))
-            .and(Err(BackupError::Interrupted))
     } else {
-        apply(data_dir, &staging, &previous, app_version)
-            .await
-            .map(|()| true)
+        match fs::read_to_string(&pending) {
+            Err(e) => Err(restore_failed(e)),
+            // The app ended in the middle of this restore.
+            Ok(id) if previous.exists() && read_id(&previous) == id => {
+                put_back(data_dir, &previous)
+                    .map_err(|e| BackupError::PutBack(e.to_string()))
+                    .and(Err(BackupError::Interrupted))
+            }
+            Ok(id) => apply(data_dir, &staging, &previous, &id, app_version)
+                .await
+                .map(|()| true),
+        }
     };
     if matches!(result, Err(BackupError::PutBack(_))) {
         // The marker and the replaced data stay: the next start tries again.
         return result;
     }
-    let _ = fs::remove_file(&pending);
+    // Unlinked first: if the marker then cannot be removed, the next start neither puts `restore-previous/`
+    // back nor applies the staged backup again.
+    for link in [previous.join(RESTORE_ID), staging.join(MANIFEST)] {
+        if let Err(e) = remove(&link) {
+            tracing::warn!(code = "backup.cleanup_failed", file = %link.display(), error = %e, "left behind");
+        }
+    }
+    let marker = remove(&pending);
     for dir in [&previous, &staging] {
         if let Err(e) = remove(dir) {
             tracing::warn!(code = "backup.cleanup_failed", dir = %dir.display(), error = %e, "left behind");
         }
     }
-    result
+    match (marker, result) {
+        (Err(e), Ok(_)) => Err(BackupError::MarkerLeft(e.to_string())),
+        (Err(e), Err(r)) => Err(BackupError::MarkerLeft(format!("{r}; {e}"))),
+        (Ok(()), result) => result,
+    }
+}
+
+/// The restore ID in `restore-previous/`; empty when there is none.
+fn read_id(previous: &Path) -> String {
+    fs::read_to_string(previous.join(RESTORE_ID)).unwrap_or_default()
 }
 
 async fn apply(
     data_dir: &Path,
     staging: &Path,
     previous: &Path,
+    id: &str,
     app_version: &str,
 ) -> Result<(), BackupError> {
     if !staging.join(MANIFEST).is_file() {
         return Err(BackupError::NothingStaged);
     }
+    // Left by an earlier restore that finished but could not clean up; what it holds was saved to `backups/`
+    // before that restore. Never put back.
+    remove(previous)
+        .map_err(|e| restore_failed(format!("removing an old {PREVIOUS_DIR}/: {e}")))?;
     back_up_current(data_dir, app_version).await?;
     let result = async {
-        swap(data_dir, staging, previous).map_err(restore_failed)?;
+        swap(data_dir, staging, previous, id).map_err(restore_failed)?;
         // The normal start path: pending migrations run, after their own backup.
         db::open(data_dir)
             .await
@@ -670,8 +705,9 @@ async fn back_up_current(data_dir: &Path, app_version: &str) -> Result<PathBuf, 
 
 /// Moves the current items into `restore-previous/`, then the staged ones into place; renames only, all inside the
 /// data folder.
-fn swap(data_dir: &Path, staging: &Path, previous: &Path) -> io::Result<()> {
+fn swap(data_dir: &Path, staging: &Path, previous: &Path, id: &str) -> io::Result<()> {
     fs::create_dir_all(previous)?;
+    fs::write(previous.join(RESTORE_ID), id)?;
     for item in REPLACED {
         let current = data_dir.join(item);
         if fs::symlink_metadata(&current).is_ok() {
@@ -1202,6 +1238,111 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join(db::DB_FILE)).unwrap(), "old db");
         assert!(dir.join("templates/old.css").exists());
         assert!(!dir.join("sounds").exists(), "came from the backup");
+        assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_restore_previous_left_by_an_earlier_restore_is_never_put_back() {
+        let (dir, pool) = sample_folder("stale-previous").await;
+        let exported = export(&pool, &dir, "1.2.3").await.unwrap();
+        let before = state_of(&dir).await;
+        toolkit_core::settings::update(&dir, |s| s.twitch_client_id = "changed".into()).unwrap();
+        let changed = state_of(&dir).await;
+        // An earlier restore finished but could not remove its folder.
+        let previous = dir.join(PREVIOUS_DIR);
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join(RESTORE_ID), "earlier").unwrap();
+        fs::write(previous.join(MOVED), "").unwrap();
+        fs::write(previous.join(SETTINGS), "stale settings").unwrap();
+        stage(&dir, exported.into()).await.unwrap();
+        let state = test_state(&dir, pool.clone(), Arc::default());
+        assert_eq!(
+            confirm_restore(State(state)).await.status(),
+            StatusCode::ACCEPTED
+        );
+        pool.close().await;
+
+        assert!(apply_pending(&dir, "1.2.3").await.unwrap());
+        assert_eq!(
+            state_of(&dir).await,
+            before,
+            "the confirmed backup, never the leftover"
+        );
+        assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+        // The data in use until then was backed up first.
+        let [saved] = fs::read_dir(dir.join(db::BACKUP_DIR))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains("before-restore-"))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        stage(&dir, fs::read(saved).unwrap().into()).await.unwrap();
+        fs::write(dir.join(PENDING), "again").unwrap();
+        assert!(apply_pending(&dir, "1.2.3").await.unwrap());
+        assert_eq!(state_of(&dir).await, changed);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_restored_database_whose_migration_fails_is_put_back_in_full() {
+        let (dir, pool) = sample_folder("failing-migration").await;
+        pool.close().await;
+        let before = state_of(&dir).await;
+        let staging = dir.join(STAGING_DIR);
+        fs::create_dir_all(&staging).unwrap();
+        let staged = SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(staging.join(db::DB_FILE))
+                .create_if_missing(true),
+        )
+        .await
+        .unwrap();
+        redemption::MIGRATOR.run(&staged).await.unwrap();
+        // A later migration creates this table, so it fails.
+        sqlx::query("CREATE TABLE checkin_viewers (id TEXT)")
+            .execute(&staged)
+            .await
+            .unwrap();
+        staged.close().await;
+        fs::write(staging.join(MANIFEST), "{}").unwrap();
+        fs::write(dir.join(PENDING), "r1").unwrap();
+
+        let e = apply_pending(&dir, "1.2.3").await.unwrap_err();
+        assert!(matches!(e, BackupError::Restore(_)), "{e}");
+        assert_eq!(state_of(&dir).await, before);
+        assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // A file held without delete sharing cannot be removed on Windows.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_marker_that_cannot_be_removed_is_reported_and_never_undoes_the_restore() {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        let (dir, pool) = sample_folder("marker-left").await;
+        let exported = export(&pool, &dir, "1.2.3").await.unwrap();
+        let before = state_of(&dir).await;
+        toolkit_core::settings::update(&dir, |s| s.twitch_client_id = "changed".into()).unwrap();
+        stage(&dir, exported.into()).await.unwrap();
+        fs::write(dir.join(PENDING), "r1").unwrap();
+        pool.close().await;
+
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(dir.join(PENDING))
+            .unwrap();
+        let e = apply_pending(&dir, "1.2.3").await.unwrap_err();
+        drop(held);
+        assert!(matches!(e, BackupError::MarkerLeft(_)), "{e}");
+        assert_eq!(state_of(&dir).await, before, "the restore went through");
+        // The next start puts nothing back and applies nothing again.
+        let e = apply_pending(&dir, "1.2.3").await.unwrap_err();
+        assert!(matches!(e, BackupError::NothingStaged), "{e}");
+        assert_eq!(state_of(&dir).await, before);
         assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
         let _ = fs::remove_dir_all(dir);
     }

@@ -195,9 +195,9 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 匯出：管理 API `GET /api/admin/backup` 回傳備份檔。管理 UI 先開另存新檔對話方塊（`showSaveFilePicker`）選位置，再把回應寫進去；沒有這個 API 時改由瀏覽器下載。
 - 還原只會整份取代，不合併：
   1. 選檔：管理 UI 把檔案原樣送到 `POST /api/admin/backup/restore/preview`（上限 512 MB，`DefaultBodyLimit`）。寫入任何東西之前，先在記憶體檢查上限、每個路徑、每個檔案的大小與 SHA-256（只讀到 manifest 寫的大小再多 1 byte，不相信 zip 自己記的大小）、zip 裡剛好是 manifest 列的檔案加上 manifest；`format_version` 或 `schema_version` 比這一版新時回 400 `backup.newer_version`，其他不符回 400 `backup.invalid`。通過後解到資料夾的 `restore-staging/`，再檢查資料庫本身（套用過的 migration 都必須是這一版認得、checksum 相同且已完成的；有不認得的也回 `backup.newer_version`）與 `settings.json` 讀得懂，最後才寫入 `manifest.json` 表示暫存完成，回傳預覽（備份時間、程式版本、兌換與打卡紀錄筆數、樣板資料夾數、音效檔數）。任何一步失敗就刪掉 `restore-staging/`；使用中的資料都不動。
-  2. 確認：`POST /api/admin/backup/restore`（沒有暫存時回 409 `backup.nothing_staged`）寫入 `restore-pending`，回 202 後重新啟動程式（`AppHandle::request_restart`，沿用原本的命令列參數）。
-  3. 啟動時（見「啟動順序」）：先把目前的資料存成 `backups/before-restore-<UTC 時間>.stbackup`（之後可以照樣還原回去）；再把目前的 `settings.json`、資料庫（含 `-wal`、`-shm`）、`templates/`、`sounds/` 搬進 `restore-previous/`，把暫存的搬到原位（都在資料夾內改名）；接著走一般的開資料庫流程（有待套用的 migration 時照樣先備份）。任一步失敗就把 `restore-previous/` 的東西放回原位，顯示原因後照常啟動；成功時顯示提醒：備份不含 Twitch 登入與 OBS 密碼，需要時重新登入、重填。最後刪掉 `restore-pending`、`restore-previous/`、`restore-staging/`。
-  - 程式在搬移途中結束時，下次啟動看到 `restore-pending` 與 `restore-previous/` 同時存在，就先放回原本的資料並說明還原中斷。連放回都失敗時保留兩者、顯示錯誤並結束，下次啟動再試。
+  2. 確認：`POST /api/admin/backup/restore`（沒有暫存時回 409 `backup.nothing_staged`）寫入 `restore-pending`（內容是這次還原的新 ID），回 202 後重新啟動程式（`AppHandle::request_restart`，沿用原本的命令列參數）。
+  3. 啟動時（見「啟動順序」）：先把目前的資料存成 `backups/before-restore-<UTC 時間>.stbackup`（之後可以照樣還原回去）；再把目前的 `settings.json`、資料庫（含 `-wal`、`-shm`）、`templates/`、`sounds/` 搬進 `restore-previous/`，把暫存的搬到原位（都在資料夾內改名；`restore-previous/` 在搬移前先寫入同一個還原 ID）；接著走一般的開資料庫流程（有待套用的 migration 時照樣先備份）。任一步失敗就把 `restore-previous/` 的東西放回原位，顯示原因後照常啟動；成功時顯示提醒：備份不含 Twitch 登入與 OBS 密碼，需要時重新登入、重填。最後刪掉 `restore-pending`、`restore-previous/`、`restore-staging/`；刪除前先刪掉還原 ID 與暫存的 `manifest.json`，所以 `restore-pending` 刪不掉時（顯示錯誤，請使用者手動刪除），下次啟動既不會放回舊資料，也不會再套用一次。
+  - 程式在搬移途中結束時，下次啟動看到 `restore-pending` 與 `restore-previous/` 同時存在、且還原 ID 相同，就先放回原本的資料並說明還原中斷。ID 不同（或沒有 ID）的 `restore-previous/` 是先前已結束的還原沒清掉的，裡面的資料當時已備份到 `backups/`：絕不放回，套用新的還原前直接刪掉。連放回都失敗時保留兩者、顯示錯誤並結束，下次啟動再試。
   - 暫存後沒有確認：下次啟動直接刪掉 `restore-staging/`。
   - `instance-id` 不在備份裡，還原後不變；Credential Manager 的項目依它命名，所以還原到另一個資料夾或另一台電腦時要重新登入 Twitch、重填 OBS 密碼。
 
