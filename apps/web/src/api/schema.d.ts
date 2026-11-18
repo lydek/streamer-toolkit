@@ -527,6 +527,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/text-size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The text size in percent; `null` when never changed (100). */
+        get: operations["text_size"];
+        /** Saves the text size: 90-150 in steps of 10. */
+        put: operations["set_text_size"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/twitch": {
         parameters: {
             query?: never;
@@ -2651,6 +2669,62 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TemplateChoice"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    text_size: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number | null;
+                };
+            };
+        };
+    };
+    set_text_size: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/plain": number;
             };
         };
         responses: {

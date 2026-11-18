@@ -3,7 +3,9 @@
 
 use utoipa::OpenApi;
 
-use crate::{admin, backup, chat_dock, home_tiles, obs, overlay, tab_bar, templates, update};
+use crate::{
+    admin, backup, chat_dock, home_tiles, obs, overlay, tab_bar, templates, text_size, update,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -38,6 +40,8 @@ use crate::{admin, backup, chat_dock, home_tiles, obs, overlay, tab_bar, templat
         chat_dock::set_chat_dock,
         tab_bar::tab_bar,
         tab_bar::set_tab_bar,
+        text_size::text_size,
+        text_size::set_text_size,
         obs::obs_overview,
         obs::update_obs,
         templates::chat_template,

@@ -21,6 +21,27 @@
             <Checkbox v-model="checkUpdates.value.value" input-id="check-updates" binary @update:model-value="checkUpdates.commit()" />
             <label for="check-updates">{{ t('update.check') }}</label>
           </div>
+          <!-- Dragging changes only the preview; letting go applies it to the window, so the page does not jump. -->
+          <div class="text-size">
+            <label for="text-size">{{ t('settings.textSize') }}</label>
+            <span class="slider">
+              <input
+                id="text-size"
+                type="range"
+                :min="TEXT_SIZE.min"
+                :max="TEXT_SIZE.max"
+                :step="TEXT_SIZE.step"
+                :value="textDraft"
+                aria-describedby="text-size-preview"
+                @input="textDraft = Number(($event.target as HTMLInputElement).value)"
+                @change="commitTextSize"
+              />
+              <output for="text-size">{{ textDraft }}%</output>
+            </span>
+            <p id="text-size-preview" class="preview" :style="{ fontSize: `${textDraft / textSize}rem` }">
+              {{ t('settings.textSizePreview') }}
+            </p>
+          </div>
         </section>
 
         <section v-show="section === 'connections'" aria-labelledby="twitch">
@@ -132,6 +153,7 @@ import FeatureList from './FeatureList.vue'
 import { shareModules } from './features'
 import { errorToast } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
+import { TEXT_SIZE, saveTextSize, useTextSize } from './textsize'
 
 // Settings apply at once, like a drawer's (no Save button); leaving the page submits a field still being edited.
 const { t } = useI18n()
@@ -162,6 +184,18 @@ const passwordSet = ref(false)
 let timer: number | undefined
 
 const loadText = computed(() => t(loadFailed.value ? 'home.loadFailed' : 'app.loading'))
+
+const textSize = useTextSize()
+const textDraft = ref(textSize.value)
+watch(textSize, (n) => (textDraft.value = n))
+async function commitTextSize() {
+  try {
+    await saveTextSize(textDraft.value)
+  } catch (e) {
+    textDraft.value = textSize.value
+    report(e)
+  }
+}
 
 // Saved values are undefined until loaded; their fields show only after that.
 const askSaved = ref<boolean>()
@@ -377,6 +411,29 @@ onBeforeUnmount(() => {
     flex: none;
     white-space: nowrap;
   }
+}
+
+.text-size {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 20rem;
+}
+
+.slider input {
+  flex: 1;
+  accent-color: var(--p-primary-color);
+}
+
+.preview {
+  margin: 0;
+  color: var(--p-text-muted-color);
 }
 
 .soon {

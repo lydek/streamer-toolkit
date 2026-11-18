@@ -34,6 +34,9 @@ pub struct Settings {
     /// The admin UI's tab bar. `None`: never edited, every group is in the bar on top.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tab_bar: Option<TabBar>,
+    /// The admin UI's text size in percent (the Host checks the range). `None`: never changed, 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_size: Option<u16>,
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
@@ -149,6 +152,7 @@ impl Default for Settings {
             home_tiles: None,
             chat_dock: None,
             tab_bar: None,
+            text_size: None,
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),

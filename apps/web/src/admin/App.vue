@@ -19,7 +19,13 @@
 import Toast from 'primevue/toast'
 import AppBar from './AppBar.vue'
 import ChatDock from './ChatDock.vue'
+import { applyTextSize, useTextSize } from './textsize'
 import CloseHint from './CloseHint.vue'
+import { watchEffect } from 'vue'
+
+// The saved text size applies to the whole window.
+const textSize = useTextSize()
+watchEffect(() => applyTextSize(textSize.value))
 </script>
 
 <style>
