@@ -71,7 +71,7 @@ function receive(msg: Incoming) {
 
 function connect() {
   status.value = 'connecting'
-  ws = new WebSocket(`ws://${location.host}/ws/overlay`)
+  ws = new WebSocket(`ws://${location.host}/ws/overlay?kind=chat`)
   ws.onopen = () => (status.value = 'open')
   ws.onmessage = (e) => receive(JSON.parse(e.data) as Incoming)
   ws.onclose = () => {

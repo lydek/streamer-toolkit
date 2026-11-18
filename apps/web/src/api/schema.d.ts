@@ -336,6 +336,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/overlays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many OBS sources each overlay has open right now. */
+        get: operations["overlay_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/redemptions": {
         parameters: {
             query?: never;
@@ -1116,6 +1133,14 @@ export interface components {
         };
         /** @enum {string} */
         ObsStatusType: "obs.status";
+        /** @description Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included. */
+        OverlayCounts: {
+            alerts: number;
+            chat: number;
+            checkin: number;
+            other: number;
+            sound: number;
+        };
         Overview: {
             client_id: string;
             status: components["schemas"]["AuthStatus"];
@@ -2217,6 +2242,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    overlay_counts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayCounts"];
                 };
             };
         };

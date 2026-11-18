@@ -101,7 +101,7 @@ function receive(msg: Incoming) {
 }
 
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws/overlay`)
+  ws = new WebSocket(`ws://${location.host}/ws/overlay?kind=alerts`)
   ws.onmessage = (e) => receive(JSON.parse(e.data) as Incoming)
   ws.onclose = () => {
     if (!stopped) retry = setTimeout(connect, RETRY_MS)
