@@ -472,6 +472,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sounds/{id}/duration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Records how long a sound plays; the admin window measures each sound after import, and older ones once. */
+        put: operations["set_duration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds/{id}/play": {
         parameters: {
             query?: never;
@@ -1292,6 +1309,11 @@ export interface components {
         SnapshotType: "snapshot";
         /** @description One imported sound. `label` is broadcaster text: render it as text. Its file is `GET /sounds/{id}`. */
         Sound: {
+            /**
+             * Format: int32
+             * @description How long it plays; `null` until the admin window has measured it (`PUT /api/admin/sounds/{id}/duration`).
+             */
+            duration_ms: number | null;
             id: string;
             label: string;
             /** @description Slots that play it; deleting it puts them back to their defaults. */
@@ -1301,6 +1323,13 @@ export interface components {
              * @description 0–100 (%).
              */
             volume: number;
+        };
+        SoundDuration: {
+            /**
+             * Format: int32
+             * @description How long the sound plays, 1 ms to 10 minutes.
+             */
+            duration_ms: number;
         };
         SoundLibrary: {
             /**
@@ -2596,6 +2625,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `sound.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_duration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoundDuration"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `sound.invalid`: not between 1 ms and 10 minutes */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             /** @description `sound.not_found` */
             404: {

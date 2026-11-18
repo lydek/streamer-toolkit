@@ -190,6 +190,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
         modules.clone(),
         bus.clone(),
+        presenter.clone(),
     ));
     let alerts = Arc::new(alerts::AlertsService::new(
         bus.clone(),

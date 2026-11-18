@@ -53,7 +53,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast } from './home'
 import { keepFocus } from './page'
-import { importSound, slotLabel } from './sounds'
+import { importSound, measureUnmeasured, slotLabel } from './sounds'
 import SoundRow from './SoundRow.vue'
 import SoundSlots from './SoundSlots.vue'
 
@@ -98,6 +98,8 @@ async function choose() {
   try {
     const sound = await importSound(file)
     toast.add(successToast(t('sound.imported', { label: sound.label })))
+    // Its length decides how long it holds the presentation queue; a failure is retried when the window opens.
+    void measureUnmeasured().catch(() => {})
     await load()
   } catch (e) {
     importError.value = message(e)

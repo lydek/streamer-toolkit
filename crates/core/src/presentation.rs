@@ -1,4 +1,4 @@
-//! One queue for what the overlays present (alerts and stamp cards): items play one at a time, in the order they
+//! One queue for what the overlays present (alerts, stamp cards, reward sounds): items play one at a time, in the order they
 //! came, with no size limit, so nothing overlaps and nothing is dropped. Modules still decide what to show; the
 //! queue only paces it.
 
@@ -18,6 +18,7 @@ pub const DEFAULT_GAP: Duration = Duration::from_secs(1);
 pub enum Stage {
     Alerts,
     Checkin,
+    Sound,
 }
 
 pub struct Item {

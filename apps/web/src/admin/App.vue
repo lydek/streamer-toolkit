@@ -22,10 +22,14 @@ import ChatDock from './ChatDock.vue'
 import { applyTextSize, useTextSize } from './textsize'
 import CloseHint from './CloseHint.vue'
 import { watchEffect } from 'vue'
+import { measureUnmeasured } from './sounds'
 
 // The saved text size applies to the whole window.
 const textSize = useTextSize()
 watchEffect(() => applyTextSize(textSize.value))
+
+// Sounds imported before their length was kept get measured once; failures are retried the next time.
+void measureUnmeasured().catch(() => {})
 </script>
 
 <style>

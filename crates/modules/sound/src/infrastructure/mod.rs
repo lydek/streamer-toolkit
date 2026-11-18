@@ -18,6 +18,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     modules::Modules,
+    presentation::Presenter,
     settings::SoundEntry,
 };
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -61,6 +62,9 @@ pub struct Sound {
     pub volume: u8,
     /// Slots that play it; deleting it puts them back to their defaults.
     pub used_by: Vec<String>,
+    /// How long it plays; `null` until the admin window has measured it (`PUT /api/admin/sounds/{id}/duration`).
+    #[schema(required)]
+    pub duration_ms: Option<u32>,
 }
 
 fn sound(e: SoundEntry, slots: &BTreeMap<String, String>) -> Sound {
@@ -73,6 +77,7 @@ fn sound(e: SoundEntry, slots: &BTreeMap<String, String>) -> Sound {
         id: e.id,
         label: e.label,
         volume: e.volume,
+        duration_ms: e.duration_ms,
     }
 }
 
@@ -137,9 +142,14 @@ enum SoundPlayType {
 }
 
 impl SoundService {
-    /// Plays reward and test sounds by publishing on `bus`.
-    pub fn new(data_dir: PathBuf, modules: Arc<Modules>, bus: Arc<EventBus>) -> Self {
-        Self::with_player(data_dir, modules, move |id, volume, source| {
+    /// Plays reward sounds as `presenter` paces them, and test sounds at once, by publishing on `bus`.
+    pub fn new(
+        data_dir: PathBuf,
+        modules: Arc<Modules>,
+        bus: Arc<EventBus>,
+        presenter: Arc<Presenter>,
+    ) -> Self {
+        Self::with_player(data_dir, modules, presenter, move |id, volume, source| {
             publish_play(&bus, id, volume, source)
         })
     }
@@ -190,6 +200,12 @@ pub struct ImportQuery {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SoundDuration {
+    /// How long the sound plays, 1 ms to 6 hours.
+    pub duration_ms: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SoundUpdate {
     /// 1–100 characters after trimming.
     pub label: String,
@@ -212,6 +228,7 @@ pub fn routes(service: Arc<SoundService>) -> Router {
         )
         .route("/api/admin/sounds/slots/{slot}", put(set_slot))
         .route("/api/admin/sounds/{id}/play", post(play_sound))
+        .route("/api/admin/sounds/{id}/duration", put(set_duration))
         .with_state(service)
 }
 
@@ -348,6 +365,34 @@ pub(crate) async fn update_sound(
     }
 }
 
+/// Records how long a sound plays; the admin window measures each sound after import, and older ones once.
+#[utoipa::path(
+    put,
+    path = "/api/admin/sounds/{id}/duration",
+    tag = "admin",
+    params(("id" = String, Path)),
+    request_body = SoundDuration,
+    responses(
+        (status = 204),
+        (status = 400, description = "`sound.invalid`: not between 1 ms and 6 hours", body = ErrorBody),
+        (status = 404, description = "`sound.not_found`", body = ErrorBody),
+        (status = 500, description = "`sound.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_duration(
+    State(s): State<Arc<SoundService>>,
+    Path(id): Path<String>,
+    body: Result<Json<SoundDuration>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "sound.invalid");
+    };
+    match s.set_duration(&id, b.duration_ms) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => sound_error(e),
+    }
+}
+
 /// Deletes a sound and its file.
 #[utoipa::path(
     delete,
@@ -400,7 +445,8 @@ async fn sound_file(State(s): State<Arc<SoundService>>, Path(id): Path<String>) 
         update_sound,
         delete_sound,
         set_slot,
-        play_sound
+        play_sound,
+        set_duration
     ),
     components(schemas(SoundPlayEvent))
 )]
@@ -432,6 +478,10 @@ mod tests {
             dir.to_path_buf(),
             modules,
             Arc::new(EventBus::default()),
+            toolkit_core::presentation::Presenter::start(
+                toolkit_core::presentation::DEFAULT_GAP,
+                |_| true,
+            ),
         ));
         routes(service.clone()).merge(file_routes(service))
     }
@@ -552,7 +602,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             json(res).await,
-            serde_json::json!({ "id": id, "label": "Ding", "volume": 40, "used_by": [] })
+            serde_json::json!({ "id": id, "label": "Ding", "volume": 40, "used_by": [], "duration_ms": null })
         );
         for bad in [
             serde_json::json!({ "label": " ", "volume": 40 }),
@@ -601,6 +651,7 @@ mod tests {
                 label: "x".into(),
                 volume: 100,
                 format: "json".into(),
+                duration_ms: None,
             })
         })
         .unwrap();
@@ -628,6 +679,10 @@ mod tests {
             dir.clone(),
             modules.clone(),
             Arc::new(EventBus::default()),
+            toolkit_core::presentation::Presenter::start(
+                toolkit_core::presentation::DEFAULT_GAP,
+                |_| true,
+            ),
         ));
         let app = routes(service.clone());
         let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
@@ -752,6 +807,83 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[tokio::test]
+    async fn the_admin_window_records_each_sounds_length() {
+        let dir = data_dir("duration");
+        let app = app(&dir);
+        let id = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let set = |id: &str, body: serde_json::Value| {
+            Request::put(format!("/api/admin/sounds/{id}/duration"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        let list = || {
+            Request::get("/api/admin/sounds")
+                .body(Body::empty())
+                .unwrap()
+        };
+        assert_eq!(
+            json(send(&app, list()).await.1).await["sounds"][0]["duration_ms"],
+            serde_json::Value::Null,
+            "unmeasured after import"
+        );
+        let ok = send(&app, set(&id, serde_json::json!({"duration_ms": 1500}))).await;
+        assert_eq!(ok.0, StatusCode::NO_CONTENT);
+        assert_eq!(
+            json(send(&app, list()).await.1).await["sounds"][0]["duration_ms"],
+            1500
+        );
+        for bad in [
+            serde_json::json!({"duration_ms": 0}),
+            serde_json::json!({"duration_ms": 6 * 60 * 60 * 1000 + 1}),
+            serde_json::json!({"duration_ms": "1500"}),
+        ] {
+            assert_eq!(send(&app, set(&id, bad)).await.0, StatusCode::BAD_REQUEST);
+        }
+        let missing = set("nope", serde_json::json!({"duration_ms": 1500}));
+        assert_eq!(send(&app, missing).await.0, StatusCode::NOT_FOUND);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_reward_sound_holds_the_queue_for_its_length() {
+        use toolkit_core::events::RedemptionChange::Added;
+        let dir = data_dir("reward-length");
+        let bus = Arc::new(EventBus::default());
+        let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
+        let gap = std::time::Duration::from_millis(10);
+        let service = Arc::new(SoundService::new(
+            dir.clone(),
+            modules,
+            bus.clone(),
+            toolkit_core::presentation::Presenter::start(gap, |_| true),
+        ));
+        let app = routes(service.clone());
+        let id = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let reward = "92af127c-7326-4483-a52b-b0da0be61c01";
+        send(&app, choose(&format!("reward.{reward}"), id.clone().into())).await;
+        service.set_duration(&id, 300).unwrap();
+        let (_, mut rx) = bus.subscribe();
+
+        service.receive_redemption(&redemption(reward, Added));
+        service.receive_redemption(&redemption(reward, Added));
+        rx.recv().await.unwrap();
+        let first = std::time::Instant::now();
+        rx.recv().await.unwrap();
+        assert!(
+            first.elapsed() >= std::time::Duration::from_millis(300),
+            "the second waits until the first has played"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn redemption(
         reward: &str,
         change: toolkit_core::events::RedemptionChange,
@@ -777,7 +909,15 @@ mod tests {
         let dir = data_dir("rewards");
         let bus = Arc::new(EventBus::default());
         let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
-        let service = Arc::new(SoundService::new(dir.clone(), modules.clone(), bus.clone()));
+        let service = Arc::new(SoundService::new(
+            dir.clone(),
+            modules.clone(),
+            bus.clone(),
+            toolkit_core::presentation::Presenter::start(
+                toolkit_core::presentation::DEFAULT_GAP,
+                |_| true,
+            ),
+        ));
         let app = routes(service.clone());
         let id = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
             .as_str()
@@ -807,7 +947,8 @@ mod tests {
         );
 
         service.receive_redemption(&redemption(reward, Added));
-        let event: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+        // The presentation queue publishes it on its own task.
+        let event: serde_json::Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
         assert_eq!(event["type"], "sound.play");
         assert_eq!(event["source"], "twitch");
         assert_eq!(
