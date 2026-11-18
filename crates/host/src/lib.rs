@@ -18,6 +18,7 @@ pub use openapi::openapi;
 
 pub use alerts::Timing as AlertTiming;
 pub use checkin::Timing as CheckinTiming;
+pub use toolkit_core::presentation::DEFAULT_GAP as PRESENTATION_GAP;
 pub use toolkit_core::{DEFAULT_PORT, settings};
 
 use std::{
@@ -80,6 +81,8 @@ pub struct HostConfig {
     pub alert_timing: AlertTiming,
     /// How long stamp cards show; the default except in tests.
     pub checkin_timing: CheckinTiming,
+    /// The pause between two alerts or stamp cards; [`PRESENTATION_GAP`] except in tests.
+    pub presentation_gap: std::time::Duration,
     /// The database, opened and migrated by [`db::open`] before the Host starts.
     pub db: db::SqlitePool,
     /// The app's version, recorded in backups and compared with the newest release.
@@ -177,6 +180,12 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         config.data_dir.clone(),
     ));
     let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
+    let overlays = Arc::new(overlay::OverlayConnections::default());
+    let on_air = overlays.clone();
+    let presenter =
+        toolkit_core::presentation::Presenter::start(config.presentation_gap, move |stage| {
+            on_air.count(overlay::OverlayKind::from(stage)) > 0
+        });
     let sounds = Arc::new(sound::SoundService::new(
         config.data_dir.clone(),
         modules.clone(),
@@ -186,6 +195,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         bus.clone(),
         modules.clone(),
         config.alert_timing,
+        presenter.clone(),
         sounds.clone(),
     ));
     let http = integrations::tls::https_client(tls.clone());
@@ -210,6 +220,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         profiles,
         sounds.clone(),
         config.checkin_timing,
+        presenter,
     ));
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
@@ -224,7 +235,6 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         outbox.clone(),
     ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
-    let overlays = Arc::new(overlay::OverlayConnections::default());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
@@ -456,6 +466,7 @@ mod tests {
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
             checkin_timing: CheckinTiming::default(),
+            presentation_gap: PRESENTATION_GAP,
             db: db::memory(),
             app_version: "0.0.0-test".into(),
             latest_release_url: None,
@@ -826,6 +837,7 @@ mod tests {
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
             checkin_timing: CheckinTiming::default(),
+            presentation_gap: PRESENTATION_GAP,
             db: db::memory(),
             app_version: "0.0.0-test".into(),
             latest_release_url: None,

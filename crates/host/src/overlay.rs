@@ -20,7 +20,7 @@ use chat::ChatMessageEvent;
 
 use crate::obs::{ObsStateEvent, ObsStatusEvent};
 use serde::{Deserialize, Serialize};
-use toolkit_core::bus::EventBus;
+use toolkit_core::{bus::EventBus, presentation::Stage};
 use utoipa::ToSchema;
 
 /// The overlay pages that count their sockets.
@@ -45,6 +45,15 @@ impl OverlayKind {
     }
 }
 
+impl From<Stage> for OverlayKind {
+    fn from(stage: Stage) -> Self {
+        match stage {
+            Stage::Alerts => Self::Alerts,
+            Stage::Checkin => Self::Checkin,
+        }
+    }
+}
+
 /// Open `/ws/overlay` sockets per overlay kind.
 #[derive(Default)]
 pub(crate) struct OverlayConnections {
@@ -64,6 +73,11 @@ impl OverlayConnections {
             Some(OverlayKind::Sound) => &self.sound,
             None => &self.other,
         }
+    }
+
+    /// How many sockets of `kind` are open; the presentation queue skips an overlay with none.
+    pub(crate) fn count(&self, kind: OverlayKind) -> usize {
+        self.counter(Some(kind)).load(Ordering::Relaxed)
     }
 
     /// Counts a socket until the returned guard drops.

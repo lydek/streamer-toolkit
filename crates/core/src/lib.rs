@@ -6,6 +6,7 @@ pub mod bus;
 pub mod events;
 pub mod modules;
 pub mod outbox;
+pub mod presentation;
 pub mod settings;
 pub mod streaming;
 

@@ -9,6 +9,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::{Alert, AlertKind, Source},
     modules::Modules,
+    presentation::Presenter,
 };
 use utoipa::ToSchema;
 
@@ -18,15 +19,15 @@ const ALERT: &str = "alert";
 const ALERT_VERSION: u32 = 1;
 
 impl AlertsService {
-    /// Publishes alerts on `bus`, with the sound each kind plays; starts the player task, so it needs a Tokio
-    /// runtime.
+    /// Publishes alerts on `bus` as `presenter` paces them, with the sound each kind plays.
     pub fn new(
         bus: Arc<EventBus>,
         modules: Arc<Modules>,
         timing: Timing,
+        presenter: Arc<Presenter>,
         sounds: Arc<SoundService>,
     ) -> Self {
-        Self::with_publisher(modules, timing, move |alert, source, show| {
+        Self::with_publisher(modules, timing, presenter, move |alert, source, show| {
             bus.publish(Event {
                 id: alert.id.clone(),
                 event_type: ALERT,
