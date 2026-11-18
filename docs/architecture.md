@@ -88,7 +88,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -160,7 +160,8 @@ apps/
 
 ### OBS 連線
 - 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows Credential Manager，取出後立即包成 `SecretString`，不寫入 `settings.json` 與 log；沒設密碼就不帶驗證連線（OBS 關閉驗證時這是正常狀態）。交握時只送 challenge 回應，不送密碼本身。
-- 目前只看連線狀態，不控制場景或來源：不訂閱任何 OBS 事件，只從連線關閉得知 OBS 結束。
+- 直播軟體介面：場景、物件、輸入與輸出的狀態定義在 `core` 的 `streaming`（`StreamingState` 與 `StreamingSoftware` trait），OBS 只是它的一種實作；之後的場景、模式等功能只透過這個介面，不直接用 `obws`。目前只讀狀態，切場景、顯示物件、靜音等指令等功能需要時再加。
+- 連上後先讀一次完整狀態（目前場景、每個場景的物件與是否顯示、每個輸入是否靜音、是否在串流與錄影），之後依 OBS 事件更新：切場景、物件顯示、靜音、串流與錄影狀態直接更新；新增、刪除、改名或重排場景、物件、輸入時重新讀一次。群組裡的物件不列出。斷線時狀態清空（場景為 `null`，表示未知），重連後重新讀取。狀態以事件 `obs.state` 發布，`payload` 是整份狀態；管理 UI 頁首依它顯示「串流中」「錄影中」。
 - 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新從 1 秒計算。每次連線嘗試（含交握與版本檢查）最多 10 秒。
 - 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼，`connected` 與剛啟動時為 `null`）：
   - `connected`：已連上。

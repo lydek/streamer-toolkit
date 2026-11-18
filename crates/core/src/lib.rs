@@ -7,6 +7,7 @@ pub mod events;
 pub mod modules;
 pub mod outbox;
 pub mod settings;
+pub mod streaming;
 
 /// Default Host port; OBS Browser Source URLs depend on it staying stable.
 pub const DEFAULT_PORT: u16 = 47810;

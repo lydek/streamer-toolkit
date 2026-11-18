@@ -24,7 +24,7 @@ const { t } = useI18n()
 
 /** A sample resub with a message, which a preview plays over and over; live alerts take its place. */
 const start = (): Incoming[] => [
-  { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [] } },
+  { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [] } },
   {
     id: 'sample',
     type: 'alert',

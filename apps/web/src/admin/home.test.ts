@@ -47,7 +47,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.message': [], 'obs.status': [], ...payload },
+  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], ...payload },
 })
 
 afterEach(() => {
@@ -117,6 +117,23 @@ describe('applyLive', () => {
     s = applyLive(s, obsEvent(6, 'error'))
     s = applyLive(s, chat(7, 'hi'))
     expect(s).toMatchObject({ lastSeq: 7, obs: { state: 'error' }, lastChat: { payload: { text: 'hi' } } })
+  })
+
+  it('takes the OBS scenes and outputs from the snapshot, then from newer events', () => {
+    const state = (streaming: boolean): Schemas['StreamingState'] => ({ scene: 'Live', scenes: [], inputs: [], streaming, recording: false })
+    const stateEvent = (seq: number, streaming: boolean): Schemas['ObsStateEvent'] => ({
+      id: `s${seq}`,
+      type: 'obs.state',
+      version: 1,
+      seq,
+      occurredAt: '',
+      source: 'obs',
+      payload: state(streaming),
+    })
+    let s = applyLive(start, snapshot(2, { 'obs.state': [stateEvent(1, false)] }))
+    expect(s.obsState).toEqual(state(false))
+    s = applyLive(s, stateEvent(3, true))
+    expect(s.obsState?.streaming).toBe(true)
   })
 
   it('keeps the latest alert until a new snapshot, which never holds alerts', () => {

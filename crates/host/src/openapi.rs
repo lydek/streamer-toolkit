@@ -57,6 +57,7 @@ use crate::{
         chat::ChatMessageEvent,
         alerts::AlertEvent,
         obs::ObsStatusEvent,
+        obs::ObsStateEvent,
         templates::TemplateChangedEvent,
         checkin::CheckinChangedEvent,
         checkin::CheckinStampedEvent

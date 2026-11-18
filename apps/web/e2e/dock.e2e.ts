@@ -28,7 +28,7 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
         type: 'snapshot',
         version: 1,
         seq: 2,
-        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [] },
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [], 'obs.state': [] },
       }),
     ),
   )

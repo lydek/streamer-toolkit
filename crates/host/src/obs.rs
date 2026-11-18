@@ -1,9 +1,13 @@
-//! OBS connection: runs the `integrations` adapter, publishes its status as `obs.status` (kept in the WebSocket
-//! snapshot) and lets the admin API change host, port and password. Admin routes; the caller adds the token check.
+//! OBS connection: runs the `integrations` adapter, publishes its status as `obs.status` and the streaming-software
+//! state as `obs.state` (both kept in the WebSocket snapshot), and lets the admin API change host, port and
+//! password. Admin routes; the caller adds the token check.
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use axum::{
@@ -24,6 +28,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     settings,
+    streaming::{StreamingSoftware, StreamingState},
 };
 use utoipa::ToSchema;
 
@@ -31,6 +36,8 @@ use crate::admin::{ErrorBody, error};
 
 pub(crate) const STATUS_EVENT: &str = "obs.status";
 const STATUS_VERSION: u32 = 1;
+pub(crate) const STATE_EVENT: &str = "obs.state";
+const STATE_VERSION: u32 = 1;
 
 /// The `payload` of an `obs.status` event, and the `status` of `GET /api/admin/obs`.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -71,9 +78,41 @@ enum ObsStatusType {
     ObsStatus,
 }
 
-/// Keeps the latest `obs.status` for snapshots.
+/// An `obs.state` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ObsStateEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: ObsStateType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: StreamingState,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum ObsStateType {
+    #[serde(rename = "obs.state")]
+    ObsState,
+}
+
+/// Keeps the latest `obs.status` and `obs.state` for snapshots.
 pub(crate) fn retain(bus: &EventBus) {
     bus.retain(STATUS_EVENT, 1);
+    bus.retain(STATE_EVENT, 1);
+}
+
+pub(crate) fn publish_state(bus: &EventBus, state: &StreamingState) {
+    bus.publish(Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type: STATE_EVENT,
+        version: STATE_VERSION,
+        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        source: Source::Obs,
+        payload: serde_json::to_value(state).expect("state serializes"),
+    });
 }
 
 pub(crate) fn publish(bus: &EventBus, status: ObsStatus) {
@@ -91,11 +130,14 @@ pub(crate) struct ObsLink {
     data_dir: PathBuf,
     secrets: Arc<dyn SecretStore>,
     status: Arc<watch::Sender<ObsStatus>>,
+    state: Arc<watch::Sender<StreamingState>>,
+    /// The current connection's number; a replaced one stops writing (see [`Obs::generation`]).
+    generation: Arc<AtomicU64>,
     task: Mutex<Option<AbortHandle>>,
 }
 
 impl ObsLink {
-    /// Connects with the saved settings and forwards every status change to the bus.
+    /// Connects with the saved settings and forwards every status and state change to the bus.
     pub(crate) fn start(
         data_dir: PathBuf,
         secrets: Arc<dyn SecretStore>,
@@ -104,11 +146,23 @@ impl ObsLink {
         let status = Arc::new(watch::channel(ObsStatus::CONNECTING).0);
         retain(&bus);
         let mut changes = status.subscribe();
+        let status_bus = bus.clone();
         tokio::spawn(async move {
             loop {
                 let current = *changes.borrow_and_update();
-                publish(&bus, current);
+                publish(&status_bus, current);
                 if changes.changed().await.is_err() {
+                    return;
+                }
+            }
+        });
+        let state = Arc::new(watch::channel(StreamingState::default()).0);
+        let mut state_changes = state.subscribe();
+        tokio::spawn(async move {
+            loop {
+                let current = state_changes.borrow_and_update().clone();
+                publish_state(&bus, &current);
+                if state_changes.changed().await.is_err() {
                     return;
                 }
             }
@@ -117,6 +171,8 @@ impl ObsLink {
             data_dir,
             secrets,
             status,
+            state,
+            generation: Arc::new(AtomicU64::new(0)),
             task: Mutex::new(None),
         });
         link.restart();
@@ -128,18 +184,31 @@ impl ObsLink {
         // Held while reading settings too, so concurrent restarts end with the task for the latest settings.
         let mut current = self.task.lock().unwrap();
         let saved = settings::load(&self.data_dir).obs;
+        // The old connection stops writing first, then its scenes and outputs go: they belong to the old settings.
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        if let Some(old) = current.take() {
+            old.abort();
+        }
+        self.state.send_replace(StreamingState::default());
         let task = tokio::spawn(
             Obs {
                 host: saved.host,
                 port: saved.port,
                 secrets: self.secrets.clone(),
                 status: self.status.clone(),
+                state: self.state.clone(),
+                generation,
+                current: self.generation.clone(),
             }
             .run(),
         );
-        if let Some(old) = current.replace(task.abort_handle()) {
-            old.abort();
-        }
+        *current = Some(task.abort_handle());
+    }
+}
+
+impl StreamingSoftware for ObsLink {
+    fn state(&self) -> StreamingState {
+        self.state.borrow().clone()
     }
 }
 

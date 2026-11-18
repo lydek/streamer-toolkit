@@ -49,6 +49,8 @@ export interface LiveState {
   status: 'loading' | 'open' | 'failed'
   lastSeq: number
   obs?: Schemas['ObsStatusPayload']
+  /** Scenes, inputs and outputs; empty while OBS is not connected. */
+  obsState?: Schemas['StreamingState']
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -60,6 +62,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       status: 'open',
       lastSeq: msg.seq,
       obs: msg.payload['obs.status'].at(-1)?.payload,
+      obsState: msg.payload['obs.state'].at(-1)?.payload,
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -67,6 +70,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (state.status !== 'open' || msg.seq <= state.lastSeq) return state
   const next = { ...state, lastSeq: msg.seq }
   if (msg.type === 'obs.status') next.obs = msg.payload
+  if (msg.type === 'obs.state') next.obsState = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'alert') next.lastAlert = msg
   return next

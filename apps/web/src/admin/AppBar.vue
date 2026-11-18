@@ -4,6 +4,9 @@
     <div class="bar-top">
       <span class="brand"><i class="pi pi-video" aria-hidden="true"></i>{{ t('app.name') }}</span>
       <div class="bar-status">
+        <!-- What OBS is sending out right now; nothing while it is idle or not connected. -->
+        <span v-if="live.obsState?.streaming" class="on-air">{{ t('nav.streaming') }}</span>
+        <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
              warning button instead, and only while a connection has a problem. -->
         <StatusLight
@@ -345,6 +348,26 @@ onBeforeUnmount(() => {
   min-width: 0;
   align-items: center;
   gap: 0.5rem;
+}
+
+.on-air {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--p-red-950, #450a0a);
+  color: var(--p-red-200, #fecaca);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.on-air::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--p-red-500, #ef4444);
 }
 
 .all-healthy,
