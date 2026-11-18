@@ -15,7 +15,7 @@ const chat = (n: number, payload: Partial<ChatEvent['payload']> = {}): ChatEvent
   seq: n,
   occurredAt: '2026-11-15T10:00:00.000Z',
   source: 'twitch',
-  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [], ...payload },
+  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [], badges: [], highlighted: false, ...payload },
 })
 
 function setup(log: ChatLog, broadcasterId?: string) {

@@ -581,6 +581,10 @@ async fn simulate_chat(
             color: None,
             text: text.into(),
             fragments: vec![Fragment::Text(text.into())],
+            badges: Vec::new(),
+            highlighted: false,
+            bits: 0,
+            reply: None,
             sent_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         },
         Source::Simulation,
@@ -650,8 +654,11 @@ fn simulated_alerts(body: SimulatedAlert) -> Result<Vec<Alert>, &'static str> {
         AlertKindName::Raid => AlertKind::Raid { viewers: amount()? },
     };
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    // Like the simulated chat, every simulated viewer is the "simulator" account.
     let alert = |user_name: Option<String>, kind| Alert {
         id: uuid::Uuid::now_v7().to_string(),
+        user_id: Some("simulator".into()),
+        user_login: Some("simulator".into()),
         user_name,
         kind,
         occurred_at: now.clone(),

@@ -31,7 +31,7 @@ function sample(n: number, userName: string, color: string | null, text: string)
     seq: 0,
     occurredAt: new Date(0).toISOString(),
     source: 'simulation',
-    payload: { userId: `sample-${n}`, userLogin: userName.toLowerCase(), userName, color, text, fragments: [] },
+    payload: { userId: `sample-${n}`, userLogin: userName.toLowerCase(), userName, color, text, fragments: [], badges: [], highlighted: false },
   }
 }
 

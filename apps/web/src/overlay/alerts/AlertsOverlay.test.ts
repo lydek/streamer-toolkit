@@ -41,7 +41,7 @@ const alert = (seq: number, durationMs = 6000): AlertEvent => ({
   seq,
   occurredAt: '',
   source: 'simulation',
-  payload: { kind: 'raid', userName: `R${seq}`, viewers: seq, durationMs, sound: { kind: 'built_in' } },
+  payload: { kind: 'raid', userId: `${seq}`, userLogin: `r${seq}`, userName: `R${seq}`, viewers: seq, durationMs, sound: { kind: 'built_in' } },
 })
 const changed: Incoming = {
   type: 'template.changed',

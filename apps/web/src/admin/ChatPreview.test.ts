@@ -79,7 +79,7 @@ describe('ChatPreview', () => {
       seq: 1,
       occurredAt: '',
       source: 'twitch',
-      payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: 'hi', fragments: [] },
+      payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: 'hi', fragments: [], badges: [], highlighted: false },
     }
     calls.listener!(event)
     for (const p of [post, ...otherPosts]) expect(p).toHaveBeenLastCalledWith(event, '*')

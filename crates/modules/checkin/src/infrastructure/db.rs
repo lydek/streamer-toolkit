@@ -380,6 +380,10 @@ pub(crate) mod tests {
             color: None,
             text: text.into(),
             fragments: Vec::new(),
+            badges: Vec::new(),
+            highlighted: false,
+            bits: 0,
+            reply: None,
             sent_at: sent_at.into(),
         }
     }

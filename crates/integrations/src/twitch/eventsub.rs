@@ -9,8 +9,8 @@ use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
 use toolkit_core::events::{
-    Alert, AlertKind, ChannelPointsRedemption, ChatMessage, Fragment, RedemptionChange,
-    RedemptionStatus,
+    Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatReply, Fragment,
+    RedemptionChange, RedemptionStatus,
 };
 
 use super::{
@@ -387,6 +387,32 @@ struct ChatEvent {
     #[serde(default)]
     color: String,
     message: ChatBody,
+    #[serde(default)]
+    badges: Vec<BadgeRef>,
+    #[serde(default)]
+    message_type: String,
+    #[serde(default)]
+    cheer: Option<CheerRef>,
+    #[serde(default)]
+    reply: Option<ReplyRef>,
+}
+
+#[derive(Deserialize)]
+struct BadgeRef {
+    set_id: String,
+}
+
+#[derive(Deserialize)]
+struct CheerRef {
+    bits: u32,
+}
+
+#[derive(Deserialize)]
+struct ReplyRef {
+    parent_message_id: String,
+    parent_user_id: String,
+    parent_user_login: String,
+    parent_user_name: String,
 }
 
 #[derive(Deserialize)]
@@ -428,6 +454,20 @@ impl ChatEvent {
                 _ => Fragment::Text(f.text),
             })
             .collect();
+        // Badges for other things (Turbo, bits, predictions…) are dropped.
+        let mut badges: Vec<ChatBadge> = Vec::new();
+        for badge in self.badges {
+            let role = match badge.set_id.as_str() {
+                "broadcaster" => ChatBadge::Broadcaster,
+                "moderator" => ChatBadge::Moderator,
+                "vip" => ChatBadge::Vip,
+                "subscriber" | "founder" => ChatBadge::Subscriber,
+                _ => continue,
+            };
+            if !badges.contains(&role) {
+                badges.push(role);
+            }
+        }
         ChatMessage {
             id: self.message_id,
             user_id: self.chatter_user_id,
@@ -436,6 +476,15 @@ impl ChatEvent {
             color: valid_color.then_some(self.color),
             text: self.message.text,
             fragments,
+            badges,
+            highlighted: self.message_type == "channel_points_highlighted",
+            bits: self.cheer.map_or(0, |c| c.bits),
+            reply: self.reply.map(|r| ChatReply {
+                message_id: r.parent_message_id,
+                user_id: r.parent_user_id,
+                user_login: r.parent_user_login,
+                user_name: r.parent_user_name,
+            }),
             sent_at,
         }
     }
@@ -445,7 +494,15 @@ impl ChatEvent {
 #[derive(Deserialize)]
 struct AlertEvent {
     #[serde(default)]
+    user_id: Option<String>,
+    #[serde(default)]
+    user_login: Option<String>,
+    #[serde(default)]
     user_name: Option<String>,
+    #[serde(default)]
+    from_broadcaster_user_id: Option<String>,
+    #[serde(default)]
+    from_broadcaster_user_login: Option<String>,
     #[serde(default)]
     from_broadcaster_user_name: Option<String>,
     #[serde(default)]
@@ -510,12 +567,19 @@ impl AlertEvent {
             },
             _ => return None,
         };
-        let user_name = match self.is_anonymous {
-            true => None,
-            false => self.from_broadcaster_user_name.or(self.user_name),
+        // A raid's viewer is the raiding channel.
+        let (user_id, user_login, user_name) = match self.is_anonymous {
+            true => (None, None, None),
+            false => (
+                self.from_broadcaster_user_id.or(self.user_id),
+                self.from_broadcaster_user_login.or(self.user_login),
+                self.from_broadcaster_user_name.or(self.user_name),
+            ),
         };
         Some(Alert {
             id,
+            user_id,
+            user_login,
             user_name,
             kind,
             occurred_at,
@@ -886,6 +950,13 @@ mod tests {
         for (alert, (id, user_name, kind)) in received.iter().zip(expected) {
             assert_eq!(alert.id, id);
             assert_eq!(alert.user_name, user_name, "{id}");
+            // Each fixture's login is its name in lower case; the raider's ID is 9, everyone else's 7.
+            let login = user_name.as_ref().map(|n| n.to_lowercase());
+            assert_eq!(alert.user_login, login, "{id}");
+            let user_id = user_name
+                .as_ref()
+                .map(|n| if n == "Raider" { "9" } else { "7" }.to_owned());
+            assert_eq!(alert.user_id, user_id, "{id}");
             assert_eq!(alert.kind, kind, "{id}");
             assert_eq!(alert.occurred_at, "2026-11-16T10:00:00Z");
         }
@@ -1160,6 +1231,76 @@ mod tests {
         // Longer than the 1 s backoff: at least until the reset, 3 to 4 s away when the 429 came.
         assert!(c[1] - c[0] >= Duration::from_secs(2), "{:?}", c[1] - c[0]);
         task.abort();
+    }
+
+    fn chat_event(extra: Value) -> ChatMessage {
+        let mut event = json!({"message_id":"c","chatter_user_id":"7","chatter_user_login":"viewer",
+                               "chatter_user_name":"Viewer","color":"","message":{"text":"hi","fragments":[]}});
+        event
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value::<ChatEvent>(event)
+            .unwrap()
+            .into_message("2026-11-19T10:00:00Z".into())
+    }
+
+    #[test]
+    fn chat_carries_roles_highlight_bits_and_reply() {
+        let plain =
+            chat_event(json!({"message_type":"text","badges":[],"cheer":null,"reply":null}));
+        assert_eq!(
+            (plain.badges, plain.highlighted, plain.bits, plain.reply),
+            (vec![], false, 0, None)
+        );
+
+        let full = chat_event(json!({
+            "message_type":"channel_points_highlighted",
+            "badges":[{"set_id":"moderator","id":"1","info":""},{"set_id":"founder","id":"0","info":"3"},
+                      {"set_id":"subscriber","id":"12","info":"12"},{"set_id":"turbo","id":"1","info":""}],
+            "cheer":{"bits":250},
+            "reply":{"parent_message_id":"p","parent_message_body":"hello","parent_user_id":"8",
+                     "parent_user_login":"other","parent_user_name":"Other","thread_message_id":"p",
+                     "thread_user_id":"8","thread_user_login":"other","thread_user_name":"Other"}}));
+        // Founder and subscriber are one role; Turbo is not a role.
+        assert_eq!(
+            full.badges,
+            vec![ChatBadge::Moderator, ChatBadge::Subscriber]
+        );
+        assert!(full.highlighted);
+        assert_eq!(full.bits, 250);
+        assert_eq!(
+            full.reply,
+            Some(ChatReply {
+                message_id: "p".into(),
+                user_id: "8".into(),
+                user_login: "other".into(),
+                user_name: "Other".into(),
+            })
+        );
+
+        for (set_id, role) in [
+            ("broadcaster", ChatBadge::Broadcaster),
+            ("vip", ChatBadge::Vip),
+        ] {
+            let m = chat_event(json!({"badges":[{"set_id":set_id,"id":"1","info":""}]}));
+            assert_eq!(m.badges, vec![role]);
+        }
+    }
+
+    #[test]
+    fn an_anonymous_cheer_has_no_viewer() {
+        let event: AlertEvent = serde_json::from_value(json!({
+            "is_anonymous":true,"user_id":null,"user_login":null,"user_name":null,"bits":100,"message":"Cheer100"
+        }))
+        .unwrap();
+        let alert = event
+            .into_alert("channel.cheer", "a".into(), "2026-11-19T10:00:00Z".into())
+            .unwrap();
+        assert_eq!(
+            (alert.user_id, alert.user_login, alert.user_name),
+            (None, None, None)
+        );
     }
 
     #[test]

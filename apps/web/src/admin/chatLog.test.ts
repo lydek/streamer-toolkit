@@ -96,7 +96,7 @@ const chat = (n: number): ChatEvent => ({
   seq: n,
   occurredAt: '2026-11-15T10:00:00.000Z',
   source: 'twitch',
-  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [] },
+  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [], badges: [], highlighted: false },
 })
 const snapshot = (...ns: number[]): Incoming => ({
   type: 'snapshot',

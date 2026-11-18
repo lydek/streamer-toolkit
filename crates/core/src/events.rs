@@ -24,8 +24,34 @@ pub struct ChatMessage {
     pub color: Option<String>,
     pub text: String,
     pub fragments: Vec<Fragment>,
+    /// The roles the sender's badges show; other badges are left out.
+    pub badges: Vec<ChatBadge>,
+    /// Highlighted with channel points.
+    pub highlighted: bool,
+    /// Bits cheered with this message; 0 when none.
+    pub bits: u32,
+    /// The message this one replies to.
+    pub reply: Option<ChatReply>,
     /// RFC 3339 time the message was sent.
     pub sent_at: String,
+}
+
+/// A role shown by a chat badge (a founder counts as a subscriber).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatBadge {
+    Broadcaster,
+    Moderator,
+    Vip,
+    Subscriber,
+}
+
+/// The message a reply answers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatReply {
+    pub message_id: String,
+    pub user_id: String,
+    pub user_login: String,
+    pub user_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +64,10 @@ pub enum Fragment {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Alert {
     pub id: String,
-    /// Display name; `None` for an anonymous gift or cheer.
+    /// The viewer, or for a raid the raiding channel; all three are `None` for an anonymous gift or cheer.
+    pub user_id: Option<String>,
+    pub user_login: Option<String>,
+    /// Display name.
     pub user_name: Option<String>,
     pub kind: AlertKind,
     /// RFC 3339 time Twitch sent it.

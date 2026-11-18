@@ -32,7 +32,7 @@ const chat = (seq: number, text = `msg ${seq}`): Schemas['ChatMessageEvent'] => 
   seq,
   occurredAt: '2026-11-14T10:00:00.000Z',
   source: 'simulation',
-  payload: { userId: '1', userLogin: 'u', userName: 'U', color: null, text, fragments: [] },
+  payload: { userId: '1', userLogin: 'u', userName: 'U', color: null, text, fragments: [], badges: [], highlighted: false },
 })
 const obsEvent = (seq: number, state: Schemas['ObsState']): Schemas['ObsStatusEvent'] => ({
   id: `o${seq}`,
@@ -127,7 +127,7 @@ describe('applyLive', () => {
       seq,
       occurredAt: '',
       source: 'simulation',
-      payload: { kind: 'follow', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
+      payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
     })
     let s = applyLive(start, snapshot(1, {}))
     s = applyLive(s, alert(2))

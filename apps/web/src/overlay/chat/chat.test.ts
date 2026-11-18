@@ -8,7 +8,7 @@ const chat = (seq: number): ChatEvent => ({
   seq,
   occurredAt: '2026-11-13T10:00:00.000Z',
   source: 'twitch',
-  payload: { userId: '7', userLogin: 'viewer', userName: 'Viewer', color: null, text: `msg ${seq}`, fragments: [] },
+  payload: { userId: '7', userLogin: 'viewer', userName: 'Viewer', color: null, text: `msg ${seq}`, fragments: [], badges: [], highlighted: false },
 })
 
 describe('apply', () => {
