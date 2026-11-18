@@ -53,7 +53,7 @@
           text
           rounded
           :aria-label="t('settings.title')"
-          :aria-current="route.path === '/settings' ? 'page' : undefined"
+          :aria-current="route.path.startsWith('/settings') ? 'page' : undefined"
           data-page-opener="settings"
           @click="router.push('/settings')"
         />
@@ -152,7 +152,7 @@ const lightAttrs = computed(() =>
     : {},
 )
 function openConnections(section: 'twitch' | 'obs', el: EventTarget | null) {
-  if (route.path !== '/') void router.push({ path: '/settings', hash: `#${section}` })
+  if (route.path !== '/') void router.push({ path: '/settings/connections', hash: `#${section}` })
   else if (drawer.current.value === 'connections') void drawer.close()
   else void drawer.open('connections', el)
 }

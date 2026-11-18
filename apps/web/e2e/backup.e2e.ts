@@ -37,6 +37,7 @@ async function openSettings(page: Page) {
     return r.fulfill({ body: Buffer.from(BACKUP), contentType: 'application/octet-stream' })
   })
   await page.getByRole('button', { name: zh.settings.title, exact: true }).click()
+  await page.getByRole('navigation', { name: zh.settings.sections }).getByRole('link', { name: zh.settings.menu.backup }).click()
   return () => exports
 }
 

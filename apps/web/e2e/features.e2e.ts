@@ -14,6 +14,7 @@ async function openFeatures(page: Page) {
     return r.fulfill({ status: 204 })
   })
   await page.getByRole('button', { name: zh.settings.title, exact: true }).click()
+  await page.getByRole('navigation', { name: zh.settings.sections }).getByRole('link', { name: zh.settings.menu.features }).click()
   await expect(page.getByRole('heading', { level: 3, name: zh.nav.groups.media })).toBeVisible()
 }
 
@@ -38,7 +39,7 @@ test('turning a built feature off hides its tabs, also after a reload, and on br
   await expect(subTab(page, zh.pages.scenes.name)).toBeVisible()
   await expect(subTab(page, zh.modules.names.sound)).toHaveCount(0)
 
-  await page.getByRole('button', { name: zh.settings.title, exact: true }).click()
+  await page.goto('/admin/settings/features')
   await sw(page, 'sound').click()
   await expect(sw(page, 'sound')).toBeChecked()
   await tabs(page).getByRole('link', { name: zh.nav.groups.media }).click()

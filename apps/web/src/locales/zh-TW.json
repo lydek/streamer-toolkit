@@ -54,6 +54,7 @@
     "groupCount": "{on} / {all} 開啟",
     "empty": "找不到符合的功能。",
     "alwaysOn": "一定開著",
+    "settings": "設定",
     "open": "頁面",
     "cancel": "取消",
     "needs": {
@@ -453,6 +454,22 @@
   },
   "settings": {
     "title": "設定",
+    "sections": "設定分區",
+    "menu": {
+      "general": "一般",
+      "connections": "連線",
+      "features": "功能",
+      "profiles": "設定檔",
+      "hotkeys": "快捷鍵",
+      "debug": "問題排解",
+      "backup": "資料與備份",
+      "about": "關於"
+    },
+    "soon": {
+      "profiles": "把一組設定存起來，依直播類型快速切換。",
+      "hotkeys": "用鍵盤快捷鍵播放音效、切換場景和執行常用動作。",
+      "debug": "查看連線狀態與紀錄檔，匯出診斷資訊。"
+    },
     "general": "一般",
     "askBeforeClose": "關閉視窗前先詢問",
     "unreadable": "資料夾裡的 settings.json 讀不到或格式不正確，目前使用預設值。修好或刪掉這個檔案之前，設定都不會儲存；改壞的版本已另存成 settings.json.<時間>.bak。",

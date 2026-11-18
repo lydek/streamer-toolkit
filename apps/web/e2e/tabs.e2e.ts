@@ -49,8 +49,8 @@ test('tabs work from the keyboard', async ({ page }) => {
 test('the app bar stays in view while the page scrolls', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 360 })
   await openAdmin(page)
-  await page.getByRole('button', { name: zh.settings.title, exact: true }).click()
-  await expect(page).toHaveURL(/\/admin\/settings$/)
+  // The feature list is the longest settings section.
+  await page.goto('/admin/settings/features')
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await expect(tabs(page)).toBeInViewport()
@@ -80,7 +80,15 @@ test('away from home, a status light goes to its section of settings', async ({ 
   await openAdmin(page)
   await tab(page, 'chat').click()
   await page.getByRole('button', { name: /^OBS：/ }).click()
-  await expect(page).toHaveURL(/\/admin\/settings#obs$/)
+  await expect(page).toHaveURL(/\/admin\/settings\/connections#obs$/)
+  await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
+
+  // Already in that section: Twitch, then OBS again, each lands on its own heading.
+  await page.getByRole('button', { name: /^Twitch：/ }).click()
+  await expect(page).toHaveURL(/#twitch$/)
+  await expect(page.getByRole('heading', { name: 'Twitch', exact: true })).toBeFocused()
+  await page.getByRole('button', { name: /^OBS：/ }).click()
+  await expect(page).toHaveURL(/#obs$/)
   await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
 })
 
