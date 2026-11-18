@@ -8,6 +8,8 @@
 
 body {
   margin: 0;
+  /* Long viewer names and titles wrap instead of widening the page. */
+  overflow-wrap: break-word;
   background: var(--p-surface-950);
   color: var(--p-text-color);
   font-size: 1rem;
@@ -22,7 +24,10 @@ h2 {
   font-size: 1.125rem;
 }
 
+/* Each page lays out by its own width (`@container view`), not the window's, so it also reflows when a panel
+   takes room beside it. */
 main {
+  container: view / inline-size;
   max-width: 48rem;
   margin: 0 auto;
   padding: 1rem;
@@ -80,4 +85,55 @@ a {
 
 .skip-link:focus {
   transform: none;
+}
+
+/* Touch screens: every control is at least 44px tall. */
+@media (pointer: coarse) {
+  :is(button, a, input, select, textarea, .p-button, .p-select, .p-inputtext) {
+    min-height: 2.75rem;
+  }
+}
+
+/*
+ * Below 600px a dialog with class "sheet" is a full-width sheet from the bottom: its content scrolls, its buttons
+ * stay at the bottom edge, at least 44px tall and sharing the width. Higher specificity than a component's own
+ * scoped `dialog` rules on purpose.
+ */
+@media (max-width: 599.98px) {
+  dialog.sheet[open] {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    max-height: 88dvh;
+    margin: auto 0 0;
+    overflow-y: auto;
+    align-items: stretch;
+    border-width: 1px 0 0;
+    border-radius: 6px 6px 0 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  dialog.sheet .sheet-actions {
+    position: sticky;
+    bottom: 0;
+    padding-top: 0.5rem;
+    background: inherit;
+  }
+
+  dialog.sheet .sheet-actions > * {
+    flex: 1 1 8rem;
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 599.98px) and (prefers-reduced-motion: no-preference) {
+  dialog.sheet[open] {
+    animation: sheet-up 0.2s ease-out;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
 }

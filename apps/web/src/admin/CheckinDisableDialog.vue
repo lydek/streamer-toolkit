@@ -1,12 +1,12 @@
 <template>
-  <dialog ref="dialog" aria-labelledby="checkin-disable-title" @close="onClose">
+  <dialog ref="dialog" class="sheet" aria-labelledby="checkin-disable-title" @close="onClose">
     <h2 id="checkin-disable-title">{{ t('checkin.disable.title') }}</h2>
     <p>{{ t('checkin.disable.pause') }}</p>
     <p id="checkin-close-warning" role="alert">
       {{ t('checkin.disable.closeWarning') }}
       <template v-if="pending > 0">{{ t('checkin.disable.pendingSkipped', { n: pending }) }}</template>
     </p>
-    <div class="buttons">
+    <div class="buttons sheet-actions">
       <Button :label="t('checkin.disable.pauseButton')" autofocus @click="choose('pause')" />
       <Button
         :label="t('checkin.disable.closeButton')"

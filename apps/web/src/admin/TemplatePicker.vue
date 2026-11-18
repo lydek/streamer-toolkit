@@ -1,6 +1,7 @@
 <template>
   <section class="preview-section" aria-labelledby="preview-heading">
     <h2 id="preview-heading">{{ t('preview.heading') }}</h2>
+    <p v-if="loadFailed" role="alert">{{ t('preview.loadFailed') }}</p>
     <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
     <div class="options" role="radiogroup" aria-labelledby="preview-heading">
       <!-- Picking applies at once; clicks on a preview reach the radio because the iframe ignores the pointer. -->
@@ -56,6 +57,7 @@ const toast = useToast()
 const frames = ref<HTMLIFrameElement[]>([])
 const selected = ref<string>()
 const templateError = ref<string | null>(null)
+const loadFailed = ref(false)
 
 let choosing = false
 let next: string | undefined
@@ -89,8 +91,10 @@ async function refresh() {
     // A switch still in flight wins over an older answer.
     if (!choosing) selected.value = status.selected
     templateError.value = 'error' in status ? status.error : null
+    loadFailed.value = false
   } catch {
-    // The next template change tries again.
+    // Say so instead of showing no template picked; the next template change tries again.
+    loadFailed.value = true
   }
 }
 

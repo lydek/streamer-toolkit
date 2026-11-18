@@ -1,6 +1,23 @@
 <template>
   <FullPage :title="t('modules.names.redemption')">
-    <form class="filters" :aria-label="t('redemption.filters')" @submit.prevent="apply">
+    <!-- A narrow page folds the filters behind this button (rules below). -->
+    <Button
+      class="filters-toggle"
+      :label="filtered ? t('redemption.filtersActive') : t('redemption.filtersToggle')"
+      icon="pi pi-filter"
+      severity="secondary"
+      outlined
+      :aria-expanded="filtersOpen"
+      aria-controls="redemption-filters"
+      @click="filtersOpen = !filtersOpen"
+    />
+    <form
+      id="redemption-filters"
+      class="filters"
+      :class="{ open: filtersOpen }"
+      :aria-label="t('redemption.filters')"
+      @submit.prevent="apply"
+    >
       <div class="field">
         <label for="rf-from">{{ t('redemption.from') }}</label>
         <InputText id="rf-from" v-model="form.from" type="date" />
@@ -81,6 +98,7 @@ const applied = ref<Filters>(noFilters())
 const pageIndex = ref(0)
 const page = shallowRef<Schemas['RedemptionPage']>()
 const failed = ref('')
+const filtersOpen = ref(false)
 let request = 0
 
 const statusOptions = computed(() => [
@@ -154,6 +172,32 @@ useLiveEvents(2000, (msg) => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.filters-toggle {
+  display: none;
+}
+
+/* A narrow page: five fields would fill the screen, so they fold behind the toggle and stack full width. */
+@container view (max-width: 45rem) {
+  .filters-toggle {
+    display: inline-flex;
+    margin-bottom: 0.75rem;
+  }
+
+  .filters:not(.open) {
+    display: none;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .field :deep(.p-inputtext),
+  .field :deep(.p-select) {
+    width: 100%;
+  }
 }
 
 .pager {

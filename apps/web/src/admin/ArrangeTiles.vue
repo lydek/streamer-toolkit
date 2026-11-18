@@ -245,12 +245,12 @@ function onDrop(target: string) {
 .grid {
   display: grid;
   /* 12.5rem = 200px at the default font size. */
-  grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(12.5rem, 100%), 1fr));
   gap: 0.75rem;
 }
 
-/* Below 600px: one column, buttons wrap. */
-@media (max-width: 599.98px) {
+/* A page narrower than 36rem (a window below about 600px): one column, buttons wrap. */
+@container view (max-width: 36rem) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }
