@@ -53,7 +53,7 @@
 | 資料夾 | 每個資料夾是一個執行單位，以 `instance-id` 識別：`--data-dir` 指定的資料夾，沒有指定就用執行檔旁的 `data`；設定、記錄檔、快取、WebView2 資料都在裡面；一個資料夾同時只跑一份，不同資料夾可同時執行；Twitch 登入依資料夾分開；無法寫入時顯示錯誤並結束（細節見 architecture.md §6） |
 | 前端檔案 | 管理 UI 與 Overlay 用 `rust-embed` 內嵌進執行檔，由 Host 提供；port 修改小頁面作為 Tauri 的 `frontendDist`；`app.windows: []`，視窗都由 Rust 建立（`setup` 中或 port 重試成功後）；建置產物的 `assets/` 目錄與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`，供預覽 iframe 載入 |
 | 開發模式 | Vite dev server＋proxy（`/api`、`/ws`、`/templates`、`/sounds`，目標 `http://127.0.0.1:<port>`，port 每個請求都從 dev 資料夾的 `settings.json` 讀取，`changeOrigin: true`、`ws: true`）到 Host；Tauri `build.devUrl` 設為 Vite 網址，Vite `server.strictPort: true`；Vite 送出與 Host 相同的 CSP（`/admin` 或 Overlay 的）；dev 模式下 Vite 除了 `/api`、`/ws`、`/templates`、`/sounds` 以外都允許 `null` origin（`server.cors: false`＋middleware），`server.fs.deny` 另加 Cargo 的 `target` 資料夾（dev 資料夾在裡面，`null` origin 不得讀到）；dev 模式的 Origin 白名單加入 Vite origin |
-| 管理 UI 版面 | 功能磚首頁＋抽屜＋完整頁（`/admin/<功能>`），不用側欄。抽屜依序分「動作」「現在」「常改的設定」「開啟完整頁」四段，功能用不到的段省略。功能磚分「直播中」「功能」兩組，使用者可整理（組內排序、移除、加入），清單與順序存在 `settings.json`（「沒存過」與「已清空」要能區分），會一併備份還原 |
+| 管理 UI 版面 | 固定頂部＋上方群組分頁，不用側欄。頂部有程式名稱、Twitch 與 OBS 狀態（在首頁打開連線抽屜，其他頁前往設定的對應區段）與設定按鈕，往下捲也看得到。群組最多兩層：一個群組有多個頁面時，第二排是子分頁；放不下的群組收進「更多」，放得下就沒有「更多」；設定不是分頁。首頁仍是功能磚＋抽屜，各功能的完整頁在 `/admin/<功能>`。抽屜依序分「動作」「現在」「常改的設定」「開啟完整頁」四段，功能用不到的段省略。功能磚分「直播中」「功能」兩組，使用者可整理（組內排序、移除、加入），清單與順序存在 `settings.json`（「沒存過」與「已清空」要能區分），會一併備份還原 |
 | 抽屜元件 | 自製：Vue `Teleport` 在並排的 `<aside>`（視窗 > 1000px）與 modal 的原生 `<dialog>`（≤ 1000px）之間移動同一份內容，不重新掛載；不用 PrimeVue Drawer（只有覆蓋模式）；抽屜內的 PrimeVue 浮層元件設 `appendTo="self"`；換位置前記下焦點與各捲動容器的 `scrollTop`，換完還原 |
 | 視覺風格 | 藍紫灰基底（OKLCH 色相 278°、彩度 0.028）＋薰衣草強調色 `#d8b7ff`（以色相 300°、彩度 0.13 為目標，裁切進 sRGB）；平面：不用光暈、漸層、半透明面板，圓角 6px；字型用系統字（Segoe UI＋微軟正黑體），不打包文字字型（PrimeIcons 的圖示字型除外）；MVP 只有深色 |
 
@@ -132,3 +132,4 @@
 | 2026-11-17 | `THIRD_PARTY_LICENSES` 在切片 7 建立：只在發佈建置時產生、不 commit，前端建置時內嵌，設定頁「關於」以純文字顯示 | 永遠和當次建置的 lockfile 一致；PR 不必多一步檢查，開發者也不必為了改套件安裝 `cargo-about` |
 | 2026-11-17 | release workflow 在切片 7 建立：推 `v*` tag 後先跑 UI E2E 與版本檢查，再建置 zip，只建立草稿 release；拿掉用不到的 `bundle.targets` | 發佈前由人下載草稿檢查；三處版本一致，程式顯示的版本才會和 tag 相同；`--no-bundle` 不產生安裝檔 |
 | 2026-11-17 | 新版提示在切片 7 建立：Host 查 GitHub 的 `releases/latest`，共用現有的 HTTPS client；dev 版不查 | dev 版的版本號不代表發佈的版本，下載頁的指令也只授權給正式版的管理視窗 |
+| 2026-11-18 | 管理 UI 版面改成固定頂部＋上方群組分頁（最多兩層），首頁維持功能磚＋抽屜 | 功能變多後只靠首頁磚找不到功能；分頁讓每個頁面一鍵可達，固定頂部讓連線狀態一直看得到 |

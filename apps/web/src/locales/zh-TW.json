@@ -17,6 +17,17 @@
     "settings": "常改的設定",
     "fullPage": "開啟完整頁"
   },
+  "nav": {
+    "label": "功能分頁",
+    "sub": "子分頁",
+    "more": "更多",
+    "groups": {
+      "home": "首頁",
+      "chat": "聊天",
+      "interact": "互動",
+      "media": "畫面與聲音"
+    }
+  },
   "home": {
     "skip": "跳到功能磚",
     "tiles": "功能磚",
