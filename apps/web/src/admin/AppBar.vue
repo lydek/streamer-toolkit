@@ -100,7 +100,7 @@ import { type Schemas, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
 import { obsLight, twitchLight, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
-import { GROUPS, type TabGroup, fittingTabs, groupOf } from './tabs'
+import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf } from './tabs'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -153,7 +153,7 @@ watch(
   },
   { immediate: true },
 )
-const target = (g: TabGroup) => lastPage[g.id] ?? g.pages[0].path
+const target = (g: TabGroup) => lastPage[g.id] ?? firstPage(g)
 // A one-page group is the page itself; a group with sub-tabs is only the current group, its sub-tab is the page.
 const groupCurrent = (g: TabGroup) => (g !== group.value ? undefined : g.pages.length === 1 ? 'page' : 'true')
 

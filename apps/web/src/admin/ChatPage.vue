@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.chat')">
+  <FullPage :title="t('pages.chatTemplates.name')">
     <ChatPreview />
   </FullPage>
 </template>

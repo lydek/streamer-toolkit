@@ -9,12 +9,15 @@ const more = (page: Page) => tabs(page).getByRole('button', { name: zh.nav.more 
 
 test('every group and sub-page is one click away, and the current one is marked', async ({ page }) => {
   await openAdmin(page)
-  await expect(tab(page, 'home')).toHaveAttribute('aria-current', 'page')
-  await expect(page.getByRole('navigation', { name: zh.nav.sub })).toHaveCount(0)
+  // Every group has sub-tabs: the group tab marks the current group, the sub-tab the current page.
+  await expect(tab(page, 'home')).toHaveAttribute('aria-current', 'true')
+  await expect(subTab(page, zh.nav.groups.home)).toHaveAttribute('aria-current', 'page')
 
+  // A group goes to its first built page: the chat log is not built yet, the overlay templates are.
   await tab(page, 'chat').click()
   await expect(page).toHaveURL(/\/admin\/chat$/)
-  await expect(tab(page, 'chat')).toHaveAttribute('aria-current', 'page')
+  await expect(tab(page, 'chat')).toHaveAttribute('aria-current', 'true')
+  await expect(subTab(page, zh.pages.chatTemplates.name)).toHaveAttribute('aria-current', 'page')
 
   await tab(page, 'interact').click()
   await expect(page).toHaveURL(/\/admin\/alerts$/)
@@ -55,11 +58,12 @@ test('the app bar stays in view while the page scrolls', async ({ page }) => {
 })
 
 test('"More" shows only when the groups do not fit, and holds the ones that do not', async ({ page }) => {
-  await page.setViewportSize({ width: 640, height: 640 })
+  await page.setViewportSize({ width: 1280, height: 640 })
   await openAdmin(page)
   await expect(more(page)).toBeHidden()
 
-  // Large text: the four groups no longer fit in one row at 640px.
+  // Large text: the groups no longer fit in one row at 640px.
+  await page.setViewportSize({ width: 640, height: 640 })
   await page.evaluate(() => (document.documentElement.style.fontSize = '32px'))
   await expect(more(page)).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
@@ -68,7 +72,7 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
   const items = page.locator('#tabs-more').getByRole('menuitem')
   expect(visible + (await items.count())).toBe(Object.keys(zh.nav.groups).length)
   await items.last().click()
-  await expect(page).toHaveURL(/\/admin\/sounds$/)
+  await expect(page).toHaveURL(/\/admin\/viewers$/)
   await expect(more(page)).toHaveClass(/current/)
 })
 
@@ -94,8 +98,15 @@ test('below 600px the tabs are a bottom bar, and a warning replaces the status l
   await expect(problem(page)).toBeVisible()
   await expect(problem(page)).toHaveAccessibleName(zh.nav.problem.replace('{names}', 'Twitch'))
 
-  for (const [group, url] of [['chat', /\/admin\/chat$/], ['interact', /\/admin\/alerts$/], ['media', /\/admin\/sounds$/], ['home', /\/admin\/$/]] as const) {
+  // The first four groups are in the bar; the rest are in "More".
+  for (const [group, url] of [['song', /\/admin\/songs$/], ['chat', /\/admin\/chat$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
     await tab(page, group).click()
+    await expect(page).toHaveURL(url)
+    expect(await scrollsSideways(page), group).toBe(false)
+  }
+  for (const [group, url] of [['media', /\/admin\/sounds$/], ['viewers', /\/admin\/viewers$/]] as const) {
+    await more(page).click()
+    await page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups[group] }).click()
     await expect(page).toHaveURL(url)
     expect(await scrollsSideways(page), group).toBe(false)
   }
@@ -141,4 +152,31 @@ test('sub-tabs stay one row, faded at the edge while more are off to the right',
   await expect(sub).not.toHaveClass(/at-end/)
   const rows = await sub.getByRole('link').evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().top))).size)
   expect(rows).toBe(1)
+})
+
+test('an unbuilt page says it is not available yet and calls no API beyond the app bar status', async ({ page }) => {
+  await openAdmin(page)
+  const calls: string[] = []
+  page.on('request', (r) => {
+    const path = new URL(r.url()).pathname
+    if (/^\/(api|templates|sounds)\//.test(path) && path !== '/api/admin/twitch') calls.push(path)
+  })
+  await tab(page, 'song').click()
+  await expect(page).toHaveURL(/\/admin\/songs$/)
+  await expect(page.getByRole('heading', { level: 1, name: zh.pages.songs.name })).toBeVisible()
+  await expect(page.getByText(zh.pages.soon)).toBeVisible()
+  await subTab(page, zh.pages.songList.name).click()
+  await expect(page.getByText(zh.pages.songList.desc)).toBeVisible()
+  await page.waitForTimeout(500)
+  expect(calls).toEqual([])
+})
+
+test('a coming-soon home tile opens its page, and going home puts focus back on it', async ({ page }) => {
+  await openAdmin(page)
+  const tile = page.getByRole('link', { name: new RegExp(zh.pages.scenes.name) })
+  await tile.click()
+  await expect(page).toHaveURL(/\/admin\/scenes$/)
+  await page.getByRole('button', { name: zh.app.home }).click()
+  await expect(page).toHaveURL(/\/admin\/$/)
+  await expect(tile).toBeFocused()
 })

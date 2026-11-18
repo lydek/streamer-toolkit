@@ -64,6 +64,21 @@
           </ul>
         </template>
       </section>
+
+      <!-- Features of the design not built yet: each tile opens its coming-soon page (no drawer). -->
+      <section v-if="!arranging" aria-labelledby="soon-heading">
+        <h2 id="soon-heading">{{ t('home.soon') }}</h2>
+        <ul class="plain grid">
+          <li v-for="p in soonTiles" :key="p.path">
+            <RouterLink :to="p.path" class="soon-tile" :data-page-opener="`soon-${p.soon!.id}`">
+              <i :class="p.soon!.icon" aria-hidden="true"></i>
+              <span class="name">{{ t(p.label) }}</span>
+              <span class="line">{{ t(`pages.${p.soon!.id}.desc`) }}</span>
+              <span class="tag">{{ t('home.soon') }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
     </main>
 
     <AppDrawer id="connections" :title="t('home.connections')">
@@ -222,6 +237,7 @@ import {
 } from './home'
 import HomeTile from './HomeTile.vue'
 import { changesCheckins } from './checkins'
+import { SOON_PAGES } from './tabs'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
@@ -310,6 +326,7 @@ const broadcasterId = computed(() =>
 )
 const obs = computed(() => obsLight(live.value))
 const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(savedTiles.value)))
+const soonTiles = SOON_PAGES.filter((p) => p.soon!.tile)
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
 
 const lines = computed<Record<string, Line>>(() => {
@@ -534,6 +551,51 @@ onBeforeUnmount(() => {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.soon-tile {
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px dashed var(--p-surface-500);
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.soon-tile:hover {
+  border-color: var(--p-surface-400);
+}
+
+.soon-tile i {
+  font-size: 1.25rem;
+  color: var(--p-text-muted-color);
+}
+
+.soon-tile .name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* One line; long values end in an ellipsis on purpose, like the feature tiles. */
+.soon-tile .line {
+  overflow: hidden;
+  color: var(--p-text-muted-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soon-tile .tag {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--p-surface-800);
+  color: var(--p-text-muted-color);
+  font-size: 0.75rem;
 }
 
 #tiles:focus {
