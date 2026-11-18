@@ -526,11 +526,11 @@ onBeforeUnmount(() => {
 .grid {
   display: grid;
   /* 12.5rem = 200px at the default font size. */
-  grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(12.5rem, 100%), 1fr));
   gap: 0.75rem;
 }
 
-@media (max-width: 599.98px) {
+@container view (max-width: 36rem) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

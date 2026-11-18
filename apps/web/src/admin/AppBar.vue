@@ -358,7 +358,8 @@ onBeforeUnmount(() => {
 .sub-tabs a {
   flex: none;
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--p-surface-600);
+  /* surface-500: 4.1:1 on surface-950 (WCAG 1.4.11). */
+  border: 1px solid var(--p-surface-500);
   border-radius: 999px;
   color: var(--p-text-muted-color);
   white-space: nowrap;

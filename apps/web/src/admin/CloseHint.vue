@@ -1,11 +1,11 @@
 <template>
-  <dialog ref="dialog" aria-labelledby="close-hint-message" @close="onClose">
+  <dialog ref="dialog" class="sheet" aria-labelledby="close-hint-message" @close="onClose">
     <p id="close-hint-message">{{ t('closeHint.message') }}</p>
     <div class="choice">
       <Checkbox v-model="dontAskAgain" input-id="close-hint-dont-ask" binary />
       <label for="close-hint-dont-ask">{{ t('closeHint.dontAskAgain') }}</label>
     </div>
-    <Button :label="t('closeHint.ok')" autofocus @click="hide" />
+    <div class="sheet-actions"><Button :label="t('closeHint.ok')" autofocus @click="hide" /></div>
   </dialog>
 </template>
 

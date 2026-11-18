@@ -130,6 +130,8 @@
       "unknown": "不明"
     },
     "filters": "篩選",
+    "filtersToggle": "篩選條件",
+    "filtersActive": "篩選條件（使用中）",
     "from": "開始日期",
     "to": "結束日期",
     "viewer": "觀眾",
@@ -147,6 +149,7 @@
   },
   "preview": {
     "heading": "樣板",
+    "loadFailed": "無法取得目前使用的樣板，重新選一次會再試。",
     "templates": {
       "default": "預設",
       "compact": "精簡單行",
