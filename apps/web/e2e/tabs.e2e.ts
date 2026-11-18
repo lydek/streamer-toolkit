@@ -69,7 +69,8 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
   expect(await scrollsSideways(page)).toBe(false)
   const visible = await tabs(page).getByRole('link').count()
   await more(page).click()
-  const items = page.locator('#tabs-more').getByRole('menuitem')
+  // The last item of "More" is always 「編輯分頁」.
+  const items = page.locator('#tabs-more').getByRole('menuitem').filter({ hasNotText: zh.nav.edit })
   expect(visible + (await items.count())).toBe(Object.keys(zh.nav.groups).length)
   await items.last().click()
   await expect(page).toHaveURL(/\/admin\/viewers$/)
@@ -187,4 +188,72 @@ test('a coming-soon home tile opens its page, and going home puts focus back on 
   await page.getByRole('button', { name: zh.app.home }).click()
   await expect(page).toHaveURL(/\/admin\/$/)
   await expect(tile).toBeFocused()
+})
+
+/** Opens home with the saved tab bar `saved`; returns the bodies of every save. */
+async function openWithTabBar(page: Page, saved: unknown = null) {
+  await mockAdmin(page)
+  const puts: unknown[] = []
+  await page.route('**/api/admin/tab-bar', (r) => {
+    if (r.request().method() === 'GET') return r.fulfill({ json: saved })
+    saved = r.request().postDataJSON()
+    puts.push(saved)
+    return r.fulfill({ status: 204 })
+  })
+  await page.goto('/admin/')
+  await page.locator('[data-drawer-tile], [data-drawer-arrange]').first().waitFor()
+  return puts
+}
+
+test('with nothing in "More", 編輯分頁 is in the bar; pinning and order are saved and shown', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const puts = await openWithTabBar(page)
+  await expect(more(page)).toBeHidden()
+  await tabs(page).getByRole('button', { name: zh.nav.edit }).click()
+  const editor = page.getByRole('dialog', { name: zh.nav.editor.title })
+  await editor.getByRole('checkbox', { name: zh.nav.groups.viewers, exact: true }).uncheck()
+  await editor.getByRole('button', { name: `${zh.arrange.earlier}：${zh.nav.groups.media}` }).click()
+  await editor.getByRole('button', { name: zh.nav.editor.save }).click()
+  await expect(editor).toBeHidden()
+  await expect.poll(() => puts).toEqual([{ groups: ['home', 'song', 'chat', 'media', 'interact'], position: 'top' }])
+
+  const order = await tabs(page).getByRole('link').allTextContents()
+  expect(order.map((t) => t.trim())).toEqual(['home', 'song', 'chat', 'media', 'interact'].map((g) => zh.nav.groups[g]))
+  await expect(more(page)).toBeVisible()
+  await more(page).click()
+  const items = page.locator('#tabs-more').getByRole('menuitem')
+  await expect(items).toHaveText([zh.nav.groups.viewers, zh.nav.edit])
+})
+
+/** How far the last shown item ("More" or 編輯分頁) reaches past the tab bar's content box, in pixels. */
+const lastItemOverflow = (page: Page) =>
+  tabs(page).evaluate((nav) => {
+    const right = nav.getBoundingClientRect().right - parseFloat(getComputedStyle(nav).paddingRight)
+    const items = [...nav.children].filter((el) => el.matches('a, button') && (el as HTMLElement).offsetWidth > 0)
+    return items.at(-1)!.getBoundingClientRect().right - right
+  })
+
+for (const position of ['top', 'bottom']) {
+  test(`at any width the ${position} tab bar keeps "More" or 編輯分頁 whole`, async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 800 })
+    await openWithTabBar(page, { groups: ['home', 'song', 'chat', 'interact', 'media', 'viewers'], position })
+    for (let width = 1400; width >= 600; width -= 5) {
+      await page.setViewportSize({ width, height: 800 })
+      await expect.poll(() => lastItemOverflow(page), `${width}px`).toBeLessThanOrEqual(0.5)
+    }
+  })
+}
+
+test('the tab bar can sit at the bottom, also after a restart, and restoring the defaults puts it back', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const puts = await openWithTabBar(page, { groups: ['home', 'song', 'chat', 'interact', 'media', 'viewers'], position: 'bottom' })
+  const box = (await tabs(page).boundingBox())!
+  expect(Math.round(box.y + box.height)).toBe(800)
+  await tab(page, 'chat').click()
+  await expect(page).toHaveURL(/\/admin\/chat$/)
+
+  await tabs(page).getByRole('button', { name: zh.nav.edit }).click()
+  await page.getByRole('dialog', { name: zh.nav.editor.title }).getByRole('button', { name: zh.nav.editor.restore }).click()
+  await expect.poll(() => puts).toEqual([null])
+  expect(Math.round((await tabs(page).boundingBox())!.y)).toBeLessThan(200)
 })

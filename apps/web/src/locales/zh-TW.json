@@ -21,6 +21,18 @@
     "label": "功能分頁",
     "sub": "子分頁",
     "more": "更多",
+    "edit": "編輯分頁",
+    "editor": {
+      "title": "編輯分頁",
+      "pinned": "放在分頁列的群組",
+      "position": "分頁列位置",
+      "top": "上方",
+      "bottom": "下方",
+      "save": "儲存",
+      "restore": "還原預設",
+      "cancel": "取消",
+      "phoneNote": "視窗窄於 600px 時，一律用底部分頁列，只放前 4 個。"
+    },
     "connections": "連線",
     "problem": "連線有問題：{names}",
     "groups": {
@@ -638,6 +650,9 @@
     },
     "chat_dock": {
       "invalid": "聊天室的寬度不正確。"
+    },
+    "tab_bar": {
+      "invalid": "分頁列設定的格式不正確。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

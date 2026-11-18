@@ -1476,6 +1476,77 @@
         }
       }
     },
+    "/api/admin/tab-bar": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The tab bar; `null` when never edited (every group pinned, on top).",
+        "operationId": "tab_bar",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TabBar"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the tab bar: up to 20 group IDs of 1-32 characters `[a-z0-9-]`, duplicates keep their first position;\n`null` restores the defaults.",
+        "operationId": "set_tab_bar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TabBar"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/templates/alerts": {
       "get": {
         "tags": [
@@ -3478,6 +3549,32 @@
           "obs",
           "simulation",
           "system"
+        ]
+      },
+      "TabBar": {
+        "type": "object",
+        "description": "Which tab groups the admin UI pins in its tab bar, in order (the rest go into \"More\"; `[]` pins none), and\nwhere the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.",
+        "required": [
+          "groups",
+          "position"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "position": {
+            "$ref": "#/components/schemas/TabBarPosition"
+          }
+        }
+      },
+      "TabBarPosition": {
+        "type": "string",
+        "enum": [
+          "top",
+          "bottom"
         ]
       },
       "TemplateChangedEvent": {

@@ -59,9 +59,10 @@
         />
       </div>
     </div>
-    <nav ref="tabsEl" class="tabs" :aria-label="t('nav.label')">
+    <Teleport to="#bottom-tabs" defer :disabled="tabBar.position !== 'bottom'">
+    <nav ref="tabsEl" class="tabs" :class="{ bottom: tabBar.position === 'bottom' }" :aria-label="t('nav.label')">
       <a
-        v-for="(g, i) in groups"
+        v-for="(g, i) in pinned"
         :key="g.id"
         :href="router.resolve(target(g)).href"
         :hidden="i >= shown"
@@ -76,7 +77,7 @@
         type="button"
         class="more"
         :class="{ current: currentInMore }"
-        :hidden="!measuring && shown >= groups.length"
+        :hidden="!measuring && !needMore"
         aria-haspopup="true"
         aria-controls="tabs-more"
         :aria-expanded="moreOpen"
@@ -84,8 +85,14 @@
       >
         <i class="pi pi-ellipsis-h" aria-hidden="true"></i>{{ t('nav.more') }}
       </button>
+      <!-- With nothing in "More", 「編輯分頁」 sits in the bar itself; otherwise it is the last item of "More". -->
+      <button ref="editEl" :hidden="!measuring && needMore" type="button" class="more" @click="editor?.open()">
+        <i class="pi pi-pencil" aria-hidden="true"></i>{{ t('nav.edit') }}
+      </button>
       <Menu id="tabs-more" ref="moreMenu" :model="moreItems" popup @show="moreOpen = true" @hide="moreOpen = false" />
     </nav>
+    </Teleport>
+    <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
     <nav
       v-if="group && subPages.length > 1"
       ref="subTabsEl"
@@ -114,6 +121,8 @@ import { errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from
 import StatusLight from './StatusLight.vue'
 import { saveDock, useDock } from './dock'
 import { useModules } from './features'
+import { useTabBar } from './tabbar'
+import TabBarEditor from './TabBarEditor.vue'
 import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf } from './tabs'
 
 const { t } = useI18n()
@@ -186,6 +195,13 @@ function toggleChat() {
   saveDock().catch((e) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e))))
 }
 const groups = computed(() => GROUPS.filter((g) => g.pages.some((p) => !hidden.value.has(p.path))))
+// The user's tab bar: pinned groups in their order are in the bar; the others are always in "More".
+const tabBar = useTabBar()
+const editor = ref<InstanceType<typeof TabBarEditor>>()
+const pinned = computed(() =>
+  tabBar.groups === null ? groups.value : tabBar.groups.flatMap((id) => groups.value.find((g) => g.id === id) ?? []),
+)
+const unpinned = computed(() => groups.value.filter((g) => !pinned.value.includes(g)))
 const subPages = computed(() => group.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
 const target = (g: TabGroup) => {
   const last = lastPage[g.id]
@@ -197,19 +213,24 @@ const groupCurrent = (g: TabGroup) => (g !== group.value ? undefined : g.pages.l
 // Tabs that do not fit go into "More"; with room for all of them there is no "More".
 const tabsEl = ref<HTMLElement>()
 const moreEl = ref<HTMLElement>()
+const editEl = ref<HTMLElement>()
 const moreMenu = ref<InstanceType<typeof Menu>>()
 const moreOpen = ref(false)
 const shown = ref(GROUPS.length)
 const measuring = ref(false)
-const currentInMore = computed(() => !!group.value && groups.value.indexOf(group.value) >= shown.value)
-const moreItems = computed<MenuItem[]>(() =>
-  groups.value.slice(shown.value).map((g) => ({
+const inMore = computed(() => [...pinned.value.slice(shown.value), ...unpinned.value])
+const needMore = computed(() => inMore.value.length > 0)
+const currentInMore = computed(() => !!group.value && inMore.value.includes(group.value))
+const moreItems = computed<MenuItem[]>(() => [
+  ...inMore.value.map((g) => ({
     label: t(`nav.groups.${g.id}`),
     icon: g.icon,
     class: g === group.value ? 'current' : undefined,
     command: () => void router.push(target(g)),
   })),
-)
+  { separator: true },
+  { label: t('nav.edit'), icon: 'pi pi-pencil', command: () => editor.value?.open() },
+])
 
 // Below 600px the tabs are a bottom bar with room for the first PHONE_TABS groups; the rest go into "More".
 const PHONE_TABS = 4
@@ -217,18 +238,21 @@ const phone = window.matchMedia('(max-width: 599.98px)')
 
 async function fit() {
   measuring.value = true
-  shown.value = groups.value.length
+  shown.value = pinned.value.length
   await nextTick()
   const nav = tabsEl.value
-  if (phone.matches) shown.value = Math.min(groups.value.length, PHONE_TABS)
-  else if (nav && moreEl.value) {
+  if (phone.matches) shown.value = Math.min(pinned.value.length, PHONE_TABS)
+  else if (nav && moreEl.value && editEl.value) {
     const tabs = [...nav.querySelectorAll<HTMLElement>('[data-group-tab]')]
-    const gap = parseFloat(getComputedStyle(nav).columnGap) || 0
+    const style = getComputedStyle(nav)
+    // Exact widths: offsetWidth rounds, and the rounding adds up over six tabs.
+    const width = (el: HTMLElement) => el.getBoundingClientRect().width
     shown.value = fittingTabs(
-      tabs.map((el) => el.offsetWidth),
-      gap,
-      nav.clientWidth,
-      moreEl.value.offsetWidth,
+      tabs.map(width),
+      parseFloat(style.columnGap) || 0,
+      nav.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      width(moreEl.value),
+      width(editEl.value),
     )
   }
   measuring.value = false
@@ -242,7 +266,7 @@ function checkSubEnd() {
   subAtEnd.value = !el || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
 }
 watch(group, () => void nextTick(checkSubEnd), { flush: 'post' })
-watch(groups, () => void fit())
+watch([pinned, () => tabBar.position], () => void fit())
 
 const bar = ref<HTMLElement>()
 const scrolled = ref(false)
@@ -381,6 +405,26 @@ onBeforeUnmount(() => {
 
 .tabs > [hidden] {
   display: none;
+}
+
+/* The user put the group tabs at the bottom (wide windows; phones always have them there). */
+/* The holder in App.vue is what sticks: a sticky element cannot leave its parent's box. */
+.tabs.bottom {
+  margin: 0;
+  padding: 0 1rem;
+  border-top: 1px solid var(--p-surface-800);
+  background: var(--p-surface-950);
+}
+
+.tabs.bottom > a,
+.tabs.bottom > .more {
+  border-top: 2px solid transparent;
+  border-bottom: 0;
+}
+
+.tabs.bottom > a[aria-current],
+.tabs.bottom > .more.current {
+  border-top-color: var(--p-primary-color);
 }
 
 .sub-tabs {
