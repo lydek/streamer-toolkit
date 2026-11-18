@@ -50,7 +50,7 @@ apps/
 |---|---|---|
 | 兌換紀錄 | 複雜 | 去重、`UNFULFILLED`／`FULFILLED`／`CANCELED` 狀態轉換、紀錄可能不完整的標記 |
 | 打卡簽到 | 複雜 | 每日一次、營運時區、三種觸發來源、匯入去重 |
-| 個人徽章（MVP 後） | 薄 | 初版只有「觀眾／身分組 → 徽章」；出現多規則優先順序時升級 |
+| 個人徽章（之後的階段） | 薄 | 初版只有「觀眾／身分組 → 徽章」；出現多規則優先順序時升級 |
 | 事件特效 | 薄 | 佇列、優先順序、重播屬於播放邏輯，放在 application 層 |
 | 聊天室顯示、音效管理、SO 剪輯、設定 | 薄 | CRUD 或渲染，沒有資料規則 |
 
@@ -87,7 +87,7 @@ apps/
 - 外部平台（Twitch、OBS）只出現在 `integrations`；業務模組不依賴外部 SDK，只接收內部事件。外部值在整合層轉換，例如 EventSub 的兌換狀態是小寫（`unfulfilled`／`fulfilled`／`canceled`，另有 `unknown`），Helix API 是大寫，一律轉成內部狀態並處理 `unknown`。
 
 ## 5. 對外通訊
-- MVP 的用戶端只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制在 MVP 之後。
+- 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
 - HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
@@ -147,7 +147,7 @@ apps/
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。
 - **Overlay**：路由唯讀，只能讀快照與訂閱公開事件，沒有任何會改變狀態的端點；OBS 網址不含 token。
-- **OBS Dock**：MVP 不做；之後與手機遠端控制一起設計配對方式。
+- **OBS Dock**：目前不做；之後與手機遠端控制一起設計配對方式。
 
 ### Twitch 流量限制
 數字以 Twitch 官方文件為準；Twitch 調整時更新這裡。
@@ -156,11 +156,11 @@ apps/
   - 每條連線訂閱 9 個事件：`channel.chat.message`；特效用的 `channel.follow`（v2）、`channel.subscribe`、`channel.subscription.message`、`channel.subscription.gift`、`channel.cheer`、`channel.raid`（條件為 `to_broadcaster_user_id`）；兌換紀錄用的 `channel.channel_points_custom_reward_redemption.add` 與 `.update`。揪團不需要實況主授權，cost 為 1；其他由實況主授權，cost 為 0，合計遠低於 10。
   - 更新前的登入缺少某個事件所需 scope 時，不訂閱那個事件；Twitch 對聊天以外的訂閱回錯誤狀態碼（含 429，或頻道沒有頻道點數）時只記錄警告，聊天與其他事件照常。聊天訂閱失敗，或任何訂閱遇到登入失效、連不上 Twitch，才算連線失敗並重連。
 - **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止，不自行加快；間隔最少 1 秒。
-- **聊天發訊**：MVP 沒有發訊功能。之後要發訊（例如打卡回覆）時，必須在本機排隊並限速，採保守值 20 則／30 秒。Twitch 的上限是一般帳號 20 則／30 秒、實況主／mod／VIP 100 則／30 秒（實況主發的訊息也會算進 20 則的桶）；超過時 Twitch 會忽略該帳號的訊息 1 小時。
+- **聊天發訊**：目前沒有發訊功能。之後要發訊（例如打卡回覆）時，必須在本機排隊並限速，採保守值 20 則／30 秒。Twitch 的上限是一般帳號 20 則／30 秒、實況主／mod／VIP 100 則／30 秒（實況主發的訊息也會算進 20 則的桶）；超過時 Twitch 會忽略該帳號的訊息 1 小時。
 
 ### OBS 連線
 - 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows Credential Manager，取出後立即包成 `SecretString`，不寫入 `settings.json` 與 log；沒設密碼就不帶驗證連線（OBS 關閉驗證時這是正常狀態）。交握時只送 challenge 回應，不送密碼本身。
-- MVP 只看連線狀態，不控制場景或來源：不訂閱任何 OBS 事件，只從連線關閉得知 OBS 結束。
+- 目前只看連線狀態，不控制場景或來源：不訂閱任何 OBS 事件，只從連線關閉得知 OBS 結束。
 - 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新從 1 秒計算。每次連線嘗試（含交握與版本檢查）最多 10 秒。
 - 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼，`connected` 與剛啟動時為 `null`）：
   - `connected`：已連上。

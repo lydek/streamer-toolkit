@@ -1,4 +1,4 @@
-<!-- source: README.md source-sha256: 322a8641c27f2bf4da54749ef96b86519ae99e9a1e84ffa8379dda9a814ebe3a -->
+<!-- source: README.md source-sha256: c6c9cf3e2365496bbe5814f2672927b030a4618ff270e2d4f315b45237ffbffd -->
 [繁體中文](README.md) | **English**
 
 # Streamer Toolkit
@@ -7,7 +7,7 @@ A local-first Twitch streaming toolkit. It provides a customizable OBS chat over
 
 **Principle: feature-first, fast iteration.** Build one feature slice at a time, then try it on a real stream.
 
-**Status:** all MVP slices are done; real-machine checks are under way before the first stable release (see [scope](docs/scope.en.md)).
+**Status:** the base features (chat, alerts, redemption records, check-in, sounds, backup and restore, portable build) are done; the remaining features are being added in phases toward the prototype, and there is no stable release yet (see [scope](docs/scope.en.md)).
 
 **Stack:** Rust + Axum, Tauri 2 + Vue 3 + TypeScript, SQLite + SQLx.
 

@@ -1,9 +1,9 @@
 # AGENTS.md
 
-Streamer Toolkit: a local-first Twitch streaming toolkit for Windows. Goal: feature-first, fast iteration. Build one MVP slice at a time.
+Streamer Toolkit: a local-first Twitch streaming toolkit for Windows. Goal: feature-first, fast iteration. Build toward the prototype design one phase at a time, one issue at a time.
 
 ## Read first
-- `docs/scope.md`: what to build (MVP slices) and what not to build.
+- `docs/scope.md`: the goal, the phases and what not to build.
 - `docs/architecture.md`: DDD + Clean Architecture rules; complex vs thin modules.
 - `docs/decisions.md`: tech stack and when each item is adopted.
 - `docs/dev.md`: setup, tests, security constraints, documentation rules.

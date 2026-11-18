@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: dfb51ce0b89a509d1f5d6e657f0bff6ca728148814ea1453a0d8906749b8db89 -->
+<!-- source: docs/architecture.md source-sha256: a99b688d7c8ceb34e808a9821c6e7b85b344ae97530a5525712ad7e24df271e2 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -51,7 +51,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 |---|---|---|
 | Redemption records | Complex | Deduplication, `UNFULFILLED`/`FULFILLED`/`CANCELED` state transitions, marking records as possibly incomplete |
 | Daily check-in | Complex | Once per day, business time zone, three trigger sources, import deduplication |
-| Personal badges (after MVP) | Thin | First version is only "viewer/role → badge"; upgrade when rule priorities appear |
+| Personal badges (a later phase) | Thin | First version is only "viewer/role → badge"; upgrade when rule priorities appear |
 | Event alerts | Thin | Queueing, priority and replay are playback logic in the application layer |
 | Chat display, sound management, shoutout clips, settings | Thin | CRUD or rendering, no data rules |
 
@@ -88,7 +88,7 @@ If all four are "no", the module is **thin**: settings CRUD, or turning events i
 - External platforms (Twitch, OBS) appear only in `integrations`; business modules never depend on external SDKs and only receive internal events. External values are converted at the integration layer; for example, EventSub redemption statuses are lowercase (`unfulfilled`/`fulfilled`/`canceled`, plus `unknown`) while the Helix API uses uppercase, so both are mapped to internal statuses and `unknown` is handled.
 
 ## 5. External communication
-- The only MVP clients are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control come after the MVP.
+- The only clients for now are the admin UI (Tauri window) and OBS overlays, both using HTTP + WebSocket (except the IPC commands listed under "Tauri IPC permissions" below), bound to `127.0.0.1` only. OBS Dock and mobile browser control will be designed later.
 - HTTP carries commands and queries; WebSocket pushes events. Every time a client connects to the WebSocket, the first message is a snapshot (the Host subscribes to events before taking the snapshot, to ensure that no events are lost or duplicated during snapshot initialization), and later events follow in increasing `seq`; a reconnect gets a fresh snapshot. The snapshot's `payload` lists, per event type, the recent events kept in memory (for example the last 50 `chat.message` events); `alert` events are not kept, so a reloaded overlay never replays one. Connection status is an event too: only the latest `obs.status` is kept. Status contains no secrets, so it goes on the public `/ws/overlay`: the admin UI and overlays get the current status from the snapshot as soon as they connect, and the admin UI can also read it with `GET /api/admin/obs`. When a redemption record is created or changes status, `redemption.changed` is published: it carries only the record ID, so viewer text never goes over `/ws/overlay`, and it is not kept in snapshots; on it, or on a new snapshot, the admin UI reads `GET /api/admin/redemptions` again. When a check-in is recorded, `checkin.changed` is published, likewise carrying only the viewer ID and not kept in snapshots; on it, or on a new snapshot, the admin UI reads the check-in data again.
 - WebSocket events use a fixed envelope from the first version: `id`, `type`, `version`, `seq`, `occurredAt`, `source`. Internal domain events are never exposed directly; `infrastructure` maps them to public events.
 - API contract is code-first: OpenAPI and frontend TS types are generated from Rust, and CI checks that the generated files are up to date.
@@ -148,7 +148,7 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
 - **Origin**: every WebSocket connection (overlays included) and every state-changing request checks Origin, accepting only `http://127.0.0.1:<port>` and `http://localhost:<port>` (current port); dev mode also accepts the Vite dev server origin (passed in by `apps/desktop` as runtime configuration). WebSocket connections without an Origin or with `Origin: null` are always rejected.
 - **CORS**: none on `/api`, `/ws` and `/admin`. Only the build `assets/` directory (chunks shared by the admin UI and overlays) and the template paths (`/templates`, built-in templates included) send `Access-Control-Allow-Origin: *` (without credentials; the content is public code and templates), because the preview iframe's origin is `null` and Vite's module scripts, CSS and fonts must load through CORS.
 - **Overlays**: routes are read-only, can only read snapshots and subscribe to public events, and have no state-changing endpoints; OBS URLs contain no token.
-- **OBS Dock**: not in the MVP; its pairing will be designed later together with mobile remote control.
+- **OBS Dock**: not done for now; its pairing will be designed later together with mobile remote control.
 
 ### Twitch rate limits
 Twitch's official documentation is the source for these numbers; update this section when Twitch changes them.
@@ -157,11 +157,11 @@ Twitch's official documentation is the source for these numbers; update this sec
   - Each connection subscribes to 9 events: `channel.chat.message`; `channel.follow` (v2), `channel.subscribe`, `channel.subscription.message`, `channel.subscription.gift`, `channel.cheer` and `channel.raid` (with the `to_broadcaster_user_id` condition) for alerts; `channel.channel_points_custom_reward_redemption.add` and `.update` for redemption records. Raids need no authorization by the broadcaster and cost 1; the others are authorized by the broadcaster and cost 0, well under 10 in total.
   - When a sign-in from before an update lacks the scope an event needs, that event is not subscribed; when Twitch answers a subscription other than chat with an error status (including 429, or a channel without channel points), only a warning is logged and chat and the other events carry on. Only a failed chat subscription, or any subscription that encounters an invalid sign-in or cannot reach Twitch, counts as a failed connection and reconnects.
 - **Device Code Flow**: poll at the `interval` Twitch returns until `expires_in`, never faster, and at least 1 second apart.
-- **Sending chat messages**: the MVP sends no chat messages. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
+- **Sending chat messages**: nothing sends chat messages yet. When sending is added later (for example check-in replies), messages must be queued and rate-limited locally, using the conservative value of 20 messages per 30 seconds. Twitch allows 20 messages per 30 seconds for regular accounts and 100 per 30 seconds for the broadcaster, moderators and VIPs (messages from the broadcaster still count toward the 20-message bucket); going over makes Twitch ignore the account's messages for 1 hour.
 
 ### OBS connection
 - `obws` connects to obs-websocket 5, which is built into OBS, without TLS. The address is stored in `settings.json` as `obs.host`/`obs.port` (default `127.0.0.1`/`4455`); the password is stored in the Windows Credential Manager, wrapped in a `SecretString` as soon as it is read, and never written to `settings.json` or logs; with no password set, the app connects without authentication (a normal state when OBS has authentication turned off). The handshake sends only the challenge response, never the password itself.
-- The MVP only reads the connection status and does not control scenes or sources: it subscribes to no OBS events and learns that OBS exited only from the connection closing.
+- For now only the connection status is read; scenes and sources are not controlled: it subscribes to no OBS events and learns that OBS exited only from the connection closing.
 - When the connection fails or drops, it reconnects with exponential backoff (from 1 second, at most 60 seconds, the same as EventSub); after a successful connection the backoff starts again from 1 second. Each connection attempt (including the handshake and version check) takes at most 10 seconds.
 - Status (event `obs.status`; its `payload` holds `state` and `reason`; `reason` is a stable code, and `null` when `connected` or right after startup):
   - `connected`: connected.
