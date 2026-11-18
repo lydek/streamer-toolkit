@@ -1031,6 +1031,10 @@ export interface components {
             /** Format: int64 */
             updated: number;
         };
+        Input: {
+            muted: boolean;
+            name: string;
+        };
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
         };
@@ -1078,6 +1082,20 @@ export interface components {
         };
         /** @enum {string} */
         ObsState: "connected" | "reconnecting" | "error";
+        /** @description An `obs.state` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
+        ObsStateEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["StreamingState"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ObsStateType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        ObsStateType: "obs.state";
         /** @description An `obs.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
         ObsStatusEvent: {
             id: string;
@@ -1184,6 +1202,22 @@ export interface components {
             id: string;
             title: string;
         };
+        Scene: {
+            /** @description The scene's own items; items inside a group are not listed. */
+            items: components["schemas"]["SceneItem"][];
+            name: string;
+        };
+        SceneItem: {
+            /** @description Whether the item is shown. */
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description Unique within its scene.
+             */
+            id: number;
+            /** @description The source the item shows. */
+            source: string;
+        };
         SimulatedAlert: {
             /**
              * Format: int32
@@ -1224,6 +1258,8 @@ export interface components {
         };
         SnapshotPayload: {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
+            /** @description At most one: the latest streaming-software state. */
+            "obs.state": components["schemas"]["ObsStateEvent"][];
             /** @description At most one: the latest status. */
             "obs.status": components["schemas"]["ObsStatusEvent"][];
         };
@@ -1282,6 +1318,16 @@ export interface components {
          * @enum {string}
          */
         Source: "twitch" | "obs" | "simulation" | "system";
+        /** @description What the streaming software shows right now; [`StreamingState::default`] while it is not connected. */
+        StreamingState: {
+            inputs: components["schemas"]["Input"][];
+            recording: boolean;
+            /** @description The scene on air; `null` while not connected (unknown). */
+            scene: string | null;
+            /** @description In the program's own order. */
+            scenes: components["schemas"]["Scene"][];
+            streaming: boolean;
+        };
         /**
          * @description Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
          *     where the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.

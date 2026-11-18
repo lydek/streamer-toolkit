@@ -3015,6 +3015,21 @@
           }
         }
       },
+      "Input": {
+        "type": "object",
+        "required": [
+          "name",
+          "muted"
+        ],
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "ManualCheckIn": {
         "type": "object",
         "required": [
@@ -3138,6 +3153,52 @@
           "connected",
           "reconnecting",
           "error"
+        ]
+      },
+      "ObsStateEvent": {
+        "type": "object",
+        "description": "An `obs.state` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/StreamingState"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ObsStateType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ObsStateType": {
+        "type": "string",
+        "enum": [
+          "obs.state"
         ]
       },
       "ObsStatusEvent": {
@@ -3439,6 +3500,48 @@
           }
         }
       },
+      "Scene": {
+        "type": "object",
+        "required": [
+          "name",
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneItem"
+            },
+            "description": "The scene's own items; items inside a group are not listed."
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SceneItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the item is shown."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unique within its scene."
+          },
+          "source": {
+            "type": "string",
+            "description": "The source the item shows."
+          }
+        }
+      },
       "SimulatedAlert": {
         "type": "object",
         "required": [
@@ -3545,7 +3648,8 @@
         "type": "object",
         "required": [
           "chat.message",
-          "obs.status"
+          "obs.status",
+          "obs.state"
         ],
         "properties": {
           "chat.message": {
@@ -3553,6 +3657,13 @@
             "items": {
               "$ref": "#/components/schemas/ChatMessageEvent"
             }
+          },
+          "obs.state": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObsStateEvent"
+            },
+            "description": "At most one: the latest streaming-software state."
           },
           "obs.status": {
             "type": "array",
@@ -3699,6 +3810,45 @@
           "simulation",
           "system"
         ]
+      },
+      "StreamingState": {
+        "type": "object",
+        "description": "What the streaming software shows right now; [`StreamingState::default`] while it is not connected.",
+        "required": [
+          "scene",
+          "scenes",
+          "inputs",
+          "streaming",
+          "recording"
+        ],
+        "properties": {
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Input"
+            }
+          },
+          "recording": {
+            "type": "boolean"
+          },
+          "scene": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The scene on air; `null` while not connected (unknown)."
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scene"
+            },
+            "description": "In the program's own order."
+          },
+          "streaming": {
+            "type": "boolean"
+          }
+        }
       },
       "TabBar": {
         "type": "object",

@@ -11,7 +11,7 @@ use axum::{
 };
 use chat::ChatMessageEvent;
 
-use crate::obs::ObsStatusEvent;
+use crate::obs::{ObsStateEvent, ObsStatusEvent};
 use serde::{Deserialize, Serialize};
 use toolkit_core::bus::EventBus;
 use utoipa::ToSchema;
@@ -69,6 +69,9 @@ struct SnapshotPayload {
     /// At most one: the latest status.
     #[serde(rename = "obs.status")]
     obs_status: Vec<ObsStatusEvent>,
+    /// At most one: the latest streaming-software state.
+    #[serde(rename = "obs.state")]
+    obs_state: Vec<ObsStateEvent>,
 }
 
 #[cfg(test)]
@@ -104,6 +107,26 @@ mod tests {
         );
         crate::obs::retain(&bus);
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
+        crate::obs::publish_state(
+            &bus,
+            &toolkit_core::streaming::StreamingState {
+                scene: Some("Live".into()),
+                scenes: vec![toolkit_core::streaming::Scene {
+                    name: "Live".into(),
+                    items: vec![toolkit_core::streaming::SceneItem {
+                        id: 1,
+                        source: "Camera".into(),
+                        enabled: true,
+                    }],
+                }],
+                inputs: vec![toolkit_core::streaming::Input {
+                    name: "Mic".into(),
+                    muted: false,
+                }],
+                streaming: true,
+                recording: false,
+            },
+        );
         let wire: serde_json::Value = serde_json::from_str(&bus.subscribe().0).unwrap();
         // No missing, extra or renamed fields; a new retained event type must be added to SnapshotPayload.
         let typed: Snapshot = serde_json::from_value(wire.clone()).unwrap();

@@ -93,6 +93,32 @@ test('away from home, a status light goes to its section of settings', async ({ 
   await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
 })
 
+test('the app bar says when OBS is streaming or recording, and says nothing while it is idle', async ({ page }) => {
+  const banner = page.getByRole('banner')
+  await openAdmin(page)
+  await expect(banner.getByText(zh.nav.streaming)).toHaveCount(0)
+  await expect(banner.getByText(zh.nav.recording)).toHaveCount(0)
+
+  const state = { scene: 'Live', scenes: [], inputs: [], streaming: true, recording: true }
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: {
+          'chat.message': [],
+          'obs.status': [],
+          'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
+        },
+      }),
+    ),
+  )
+  await page.reload()
+  await expect(banner.getByText(zh.nav.streaming)).toBeVisible()
+  await expect(banner.getByText(zh.nav.recording)).toBeVisible()
+})
+
 const problem = (page: Page) => page.getByRole('button', { name: new RegExp(`^${zh.nav.problem.split('{')[0]}`) })
 const light = (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`^${name}：`) })
 
@@ -135,7 +161,7 @@ test('when every connection is fine, a narrower bar shows one "connected" light'
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
   const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
-    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs] } })),
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [] } })),
   )
   await page.goto('/admin/')
   const all = light(page, zh.nav.connections)

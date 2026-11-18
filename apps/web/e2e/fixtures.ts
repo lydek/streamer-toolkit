@@ -138,7 +138,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     type: 'snapshot',
     version: 1,
     seq: 0,
-    payload: { 'chat.message': [], 'obs.status': [] },
+    payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [] },
   }
   await page.routeWebSocket(hostPath, (ws) => ws.send(JSON.stringify(snapshot)))
   return s
