@@ -17,7 +17,8 @@ export const router = createRouter({
   history: createWebHistory('/admin/'),
   routes: [
     { path: '/', component: HomeView },
-    { path: '/settings', component: SettingsView },
+    { path: '/settings', redirect: '/settings/general' },
+    { path: '/settings/:section(general|connections|features|profiles|hotkeys|debug|backup|about)', component: SettingsView },
     { path: '/chat', component: ChatPage },
     { path: '/alerts', component: AlertsPage },
     { path: '/redemptions', component: RedemptionsPage },

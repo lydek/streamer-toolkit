@@ -25,6 +25,18 @@
             <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
             <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.soon') }}</span>
           </span>
+          <Button
+            v-if="withSettings?.includes(f.id)"
+            :label="t('features.settings')"
+            icon="pi pi-angle-down"
+            icon-pos="right"
+            text
+            size="small"
+            :aria-expanded="openSettings === f.id"
+            :aria-controls="`fs-${f.id}`"
+            :aria-label="`${t('features.settings')}：${name(f)}`"
+            @click="openSettings = openSettings === f.id ? undefined : f.id"
+          />
           <span v-if="f.fixed" class="fixed"><i class="pi pi-lock" aria-hidden="true"></i>{{ t('features.alwaysOn') }}</span>
           <template v-else>
             <RouterLink v-if="on(f)" :to="openPage(f)" class="open">
@@ -38,6 +50,10 @@
               @update:model-value="toggle(f)"
             />
           </template>
+          <!-- Kept mounted (v-show) so what it loads stays current while it is folded. -->
+          <div v-if="withSettings?.includes(f.id)" v-show="openSettings === f.id" :id="`fs-${f.id}`" class="feat-settings">
+            <slot name="settings" :id="f.id" />
+          </div>
         </li>
       </ul>
     </section>
@@ -66,11 +82,12 @@ import type { Schemas } from './api'
 import { FEATURES, type Feature, hiddenPages, isOn, turnOffPlan, turnOnPlan } from './features'
 import { GROUPS, SOON_PAGES } from './tabs'
 
-const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string }>()
+const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string; withSettings?: string[] }>()
 const emit = defineEmits<{ toggle: [module: Schemas['ModuleState']] }>()
 const { t } = useI18n()
 
 const query = ref('')
+const openSettings = ref<string>()
 const on = (f: Feature) => isOn(f, props.modules ?? [])
 const name = (f: Feature) => t(`features.${f.id}.name`)
 const hidden = computed(() => hiddenPages(props.modules ?? []))
@@ -164,6 +181,11 @@ function toggle(f: Feature) {
   color: var(--p-text-muted-color);
   font-size: 0.8125rem;
   font-weight: 400;
+}
+
+.feat-settings {
+  flex-basis: 100%;
+  padding: 0.5rem 0 0.5rem 2rem;
 }
 
 .feat-list {

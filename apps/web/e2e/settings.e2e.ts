@@ -5,6 +5,7 @@ import { openAdmin, scrollsSideways, zh } from './fixtures'
 const gear = (page: Page) => page.getByRole('button', { name: zh.settings.title, exact: true })
 const homeButton = (page: Page) => page.getByRole('button', { name: zh.app.home })
 const host = (page: Page) => page.getByLabel(zh.settings.obs.host, { exact: true })
+const section = (page: Page, name: string) => page.getByRole('navigation', { name: zh.settings.sections }).getByRole('link', { name })
 /** vue-router's previous entry: null when home is the first entry, so Back (Alt+←) on home goes nowhere. */
 const previousEntry = (page: Page) => page.evaluate(() => (history.state as { back: string | null }).back)
 
@@ -17,7 +18,7 @@ for (const how of ['home', 'back']) {
     await page.locator('[data-drawer-tile="chat"]').click()
     await expect(page.locator('#drawer-chat')).toBeVisible()
     await gear(page).click()
-    await expect(page).toHaveURL(/\/admin\/settings$/)
+    await expect(page).toHaveURL(/\/admin\/settings\/general$/)
     await expect(homeButton(page)).toBeFocused()
 
     await leave(page, how)
@@ -36,6 +37,7 @@ for (const how of ['home', 'back']) {
       return r.fulfill({ status: 204 })
     })
     await gear(page).click()
+    await section(page, zh.settings.menu.connections).click()
     await host(page).fill('obs.local')
     await leave(page, how)
     await expect(page).toHaveURL(/\/admin\/$/)
@@ -49,10 +51,11 @@ test('a save that fails on leaving keeps the settings page with its error', asyn
     r.request().method() === 'PUT' ? r.fulfill({ status: 400, json: { code: 'obs.invalid_address' } }) : r.fallback(),
   )
   await gear(page).click()
+  await section(page, zh.settings.menu.connections).click()
   await host(page).fill('bad host')
   // No blur: the router guard's submit is the save that fails, and the router puts the settings entry back.
   await page.goBack()
-  await expect(page).toHaveURL(/\/admin\/settings$/)
+  await expect(page).toHaveURL(/\/admin\/settings\/connections$/)
   await expect(page.getByRole('alert')).toHaveText(zh.errors.obs.invalid_address)
   await expect(homeButton(page)).toBeVisible()
 })
@@ -76,6 +79,7 @@ test('turning check-ins off asks to pause or close; Esc keeps them on', async ({
     return r.fulfill({ status: 204 })
   })
   await gear(page).click()
+  await section(page, zh.settings.menu.features).click()
   const dialog = page.getByRole('dialog', { name: zh.checkin.disable.title })
   const toggle = page.locator('#module-checkin')
 
@@ -99,4 +103,55 @@ test('turning check-ins off asks to pause or close; Esc keeps them on', async ({
   await dialog.getByRole('button', { name: zh.checkin.disable.closeButton }).click()
   await expect.poll(() => puts.length).toBe(2)
   expect(puts[1]).toEqual({ enabled: false, close: true })
+})
+
+test('every settings section is in the menu and has its own URL; later ones say they are not available', async ({ page }) => {
+  await openAdmin(page)
+  await gear(page).click()
+  for (const s of Object.keys(zh.settings.menu)) {
+    await section(page, zh.settings.menu[s]).click()
+    await expect(page).toHaveURL(new RegExp(`/admin/settings/${s}$`))
+    await expect(section(page, zh.settings.menu[s])).toHaveAttribute('aria-current', 'page')
+  }
+  await page.goto('/admin/settings/hotkeys')
+  await expect(page.getByRole('heading', { level: 2, name: zh.settings.menu.hotkeys })).toBeVisible()
+  // Every later section is mounted; only the shown one is visible.
+  await expect(page.getByText(zh.pages.soon).filter({ visible: true })).toHaveCount(1)
+  await page.goto('/admin/settings/connections')
+  await expect(host(page)).toBeVisible()
+  await expect(page.getByLabel(zh.settings.askBeforeClose)).toBeHidden()
+})
+
+test('switching sections saves a field still being edited, and a failed save keeps the section', async ({ page }) => {
+  await openAdmin(page)
+  await page.route('**/api/admin/obs', (r) =>
+    r.request().method() === 'PUT' ? r.fulfill({ status: 400, json: { code: 'obs.invalid_address' } }) : r.fallback(),
+  )
+  await page.goto('/admin/settings/connections')
+  await host(page).fill('bad host')
+  await section(page, zh.settings.menu.general).click()
+  await expect(page).toHaveURL(/\/admin\/settings\/connections$/)
+  await expect(page.getByRole('alert')).toHaveText(zh.errors.obs.invalid_address)
+})
+
+test("check-in's settings fold open under its row in features", async ({ page }) => {
+  await openAdmin(page, { modules: [{ id: 'checkin', enabled: true, closed: false }] })
+  await page.goto('/admin/settings/features')
+  const toggle = page.getByRole('button', { name: `${zh.features.settings}：${zh.features.checkin.name}` })
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toBeHidden()
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toBeVisible()
+})
+
+test('the settings sections never scroll sideways at 1280px, 820px and 390px', async ({ page }) => {
+  await openAdmin(page)
+  for (const width of [1280, 820, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    for (const s of Object.keys(zh.settings.menu)) {
+      await page.goto(`/admin/settings/${s}`)
+      expect(await scrollsSideways(page), `${s} at ${width}px`).toBe(false)
+    }
+  }
 })

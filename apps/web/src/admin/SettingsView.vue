@@ -1,95 +1,112 @@
 <template>
   <FullPage :title="t('settings.title')">
-    <section aria-labelledby="general">
-      <h2 id="general" tabindex="-1">{{ t('settings.general') }}</h2>
-      <p v-if="unreadable" role="alert">{{ t('settings.unreadable') }}</p>
-      <p v-if="ask.value.value === undefined">{{ loadText }}</p>
-      <div v-else class="choice">
-        <Checkbox v-model="ask.value.value" input-id="ask-before-close" binary @update:model-value="ask.commit()" />
-        <label for="ask-before-close">{{ t('settings.askBeforeClose') }}</label>
+    <div class="settings">
+      <!-- One section at a time (route /settings/:section); every section stays mounted, so loading and saving
+           work as on one page and switching is a route change (which submits a field still being edited). -->
+      <nav class="settings-menu" :aria-label="t('settings.sections')">
+        <RouterLink v-for="s in SECTIONS" :key="s" :to="`/settings/${s}`" replace :aria-current="s === section ? 'page' : undefined">
+          {{ t(`settings.menu.${s}`) }}
+        </RouterLink>
+      </nav>
+      <div class="settings-body">
+        <section v-show="section === 'general'" aria-labelledby="general">
+          <h2 id="general" tabindex="-1">{{ t('settings.general') }}</h2>
+          <p v-if="unreadable" role="alert">{{ t('settings.unreadable') }}</p>
+          <p v-if="ask.value.value === undefined">{{ loadText }}</p>
+          <div v-else class="choice">
+            <Checkbox v-model="ask.value.value" input-id="ask-before-close" binary @update:model-value="ask.commit()" />
+            <label for="ask-before-close">{{ t('settings.askBeforeClose') }}</label>
+          </div>
+          <div v-if="checkUpdates.value.value !== undefined" class="choice">
+            <Checkbox v-model="checkUpdates.value.value" input-id="check-updates" binary @update:model-value="checkUpdates.commit()" />
+            <label for="check-updates">{{ t('update.check') }}</label>
+          </div>
+        </section>
+
+        <section v-show="section === 'connections'" aria-labelledby="twitch">
+          <h2 id="twitch" tabindex="-1">Twitch</h2>
+          <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
+        </section>
+
+        <section v-show="section === 'connections'" aria-labelledby="obs">
+          <h2 id="obs" tabindex="-1">OBS</h2>
+          <p v-if="obsHost.value.value === undefined">{{ loadText }}</p>
+          <div v-else class="stack">
+            <label for="obs-host">{{ t('settings.obs.host') }}</label>
+            <InputText
+              id="obs-host"
+              v-model="obsHost.value.value"
+              autocomplete="off"
+              @keydown.enter="obsHost.commit()"
+              @blur="obsHost.commit()"
+            />
+            <label for="obs-port">{{ t('settings.obs.port') }}</label>
+            <InputText
+              id="obs-port"
+              v-model="obsPort.value.value"
+              inputmode="numeric"
+              autocomplete="off"
+              @keydown.enter="obsPort.commit()"
+              @blur="obsPort.commit()"
+            />
+            <label for="obs-password">{{ t('settings.obs.password') }}</label>
+            <!-- Write-only: the Host never returns the password, only whether one is stored. -->
+            <InputText
+              id="obs-password"
+              v-model="obsPassword.value.value"
+              type="password"
+              autocomplete="new-password"
+              aria-describedby="obs-password-state"
+              @keydown.enter="commitPassword"
+              @blur="commitPassword"
+            />
+            <p id="obs-password-state">{{ t(passwordSet ? 'settings.obs.passwordSet' : 'settings.obs.passwordNone') }}</p>
+            <Button v-if="passwordSet" :label="t('settings.obs.removePassword')" outlined :disabled="busy" @click="removePassword" />
+          </div>
+        </section>
+
+        <section v-show="section === 'features'" aria-labelledby="features">
+          <h2 id="features" tabindex="-1">{{ t('settings.features') }}</h2>
+          <FeatureList :modules="modules" :busy="busy" :load-text="loadText" :with-settings="['checkin']" @toggle="toggleModule">
+            <!-- Check-in's own settings, behind 「設定」 on its row. -->
+            <template #settings>
+              <CheckinSettings @error="report" />
+              <SoundSlots
+                :slots="[
+                  { slot: 'checkin', label: t('sound.checkinNormal') },
+                  { slot: 'checkin.full', label: t('sound.checkinFull') },
+                ]"
+              />
+              <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
+            </template>
+          </FeatureList>
+        </section>
+
+        <section v-for="s in SOON" v-show="section === s" :key="s" :aria-labelledby="`soon-${s}`">
+          <h2 :id="`soon-${s}`" tabindex="-1">{{ t(`settings.menu.${s}`) }}</h2>
+          <p>{{ t(`settings.soon.${s}`) }}</p>
+          <p class="soon"><i class="pi pi-hourglass" aria-hidden="true"></i>{{ t('pages.soon') }}</p>
+        </section>
+
+        <section v-show="section === 'backup'" aria-labelledby="backup">
+          <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
+          <BackupRestore />
+        </section>
+
+        <section v-show="section === 'about'" aria-labelledby="about">
+          <h2 id="about" tabindex="-1">{{ t('settings.about') }}</h2>
+          <p>{{ t('app.name') }} {{ version }}</p>
+          <p>{{ t('settings.license') }}</p>
+          <details @toggle="loadLicenses">
+            <summary>{{ t('settings.thirdParty') }}</summary>
+            <p v-if="licenses === undefined">{{ licensesFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+            <!-- Plain text: interpolation escapes it. Focusable so the keyboard can scroll it. -->
+            <pre v-else class="licenses" tabindex="0" :aria-label="t('settings.thirdParty')">{{ licenses }}</pre>
+          </details>
+        </section>
       </div>
-      <div v-if="checkUpdates.value.value !== undefined" class="choice">
-        <Checkbox v-model="checkUpdates.value.value" input-id="check-updates" binary @update:model-value="checkUpdates.commit()" />
-        <label for="check-updates">{{ t('update.check') }}</label>
-      </div>
-    </section>
-
-    <section aria-labelledby="twitch">
-      <h2 id="twitch" tabindex="-1">Twitch</h2>
-      <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
-    </section>
-
-    <section aria-labelledby="obs">
-      <h2 id="obs" tabindex="-1">OBS</h2>
-      <p v-if="obsHost.value.value === undefined">{{ loadText }}</p>
-      <div v-else class="stack">
-        <label for="obs-host">{{ t('settings.obs.host') }}</label>
-        <InputText
-          id="obs-host"
-          v-model="obsHost.value.value"
-          autocomplete="off"
-          @keydown.enter="obsHost.commit()"
-          @blur="obsHost.commit()"
-        />
-        <label for="obs-port">{{ t('settings.obs.port') }}</label>
-        <InputText
-          id="obs-port"
-          v-model="obsPort.value.value"
-          inputmode="numeric"
-          autocomplete="off"
-          @keydown.enter="obsPort.commit()"
-          @blur="obsPort.commit()"
-        />
-        <label for="obs-password">{{ t('settings.obs.password') }}</label>
-        <!-- Write-only: the Host never returns the password, only whether one is stored. -->
-        <InputText
-          id="obs-password"
-          v-model="obsPassword.value.value"
-          type="password"
-          autocomplete="new-password"
-          aria-describedby="obs-password-state"
-          @keydown.enter="commitPassword"
-          @blur="commitPassword"
-        />
-        <p id="obs-password-state">{{ t(passwordSet ? 'settings.obs.passwordSet' : 'settings.obs.passwordNone') }}</p>
-        <Button v-if="passwordSet" :label="t('settings.obs.removePassword')" outlined :disabled="busy" @click="removePassword" />
-      </div>
-    </section>
-
-    <section aria-labelledby="features">
-      <h2 id="features" tabindex="-1">{{ t('settings.features') }}</h2>
-      <FeatureList :modules="modules" :busy="busy" :load-text="loadText" @toggle="toggleModule" />
-    </section>
-
-    <section aria-labelledby="checkin">
-      <h2 id="checkin" tabindex="-1">{{ t('modules.names.checkin') }}</h2>
-      <CheckinSettings @error="report" />
-      <SoundSlots
-        :slots="[
-          { slot: 'checkin', label: t('sound.checkinNormal') },
-          { slot: 'checkin.full', label: t('sound.checkinFull') },
-        ]"
-      />
-      <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
-    </section>
+    </div>
     <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" />
-
-    <section aria-labelledby="backup">
-      <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
-      <BackupRestore />
-    </section>
-
-    <section aria-labelledby="about">
-      <h2 id="about" tabindex="-1">{{ t('settings.about') }}</h2>
-      <p>{{ t('app.name') }} {{ version }}</p>
-      <p>{{ t('settings.license') }}</p>
-      <details @toggle="loadLicenses">
-        <summary>{{ t('settings.thirdParty') }}</summary>
-        <p v-if="licenses === undefined">{{ licensesFailed ? t('home.loadFailed') : t('app.loading') }}</p>
-        <!-- Plain text: interpolation escapes it. Focusable so the keyboard can scroll it. -->
-        <pre v-else class="licenses" tabindex="0" :aria-label="t('settings.thirdParty')">{{ licenses }}</pre>
-      </details>
-    </section>
   </FullPage>
 </template>
 
@@ -98,8 +115,9 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -118,6 +136,23 @@ import TwitchSignIn from './TwitchSignIn.vue'
 // Settings apply at once, like a drawer's (no Save button); leaving the page submits a field still being edited.
 const { t } = useI18n()
 const toast = useToast()
+const route = useRoute()
+
+const SECTIONS = ['general', 'connections', 'features', 'profiles', 'hotkeys', 'debug', 'backup', 'about'] as const
+/** Sections of later phases: they say so and call nothing. */
+const SOON = ['profiles', 'hotkeys', 'debug'] as const
+const section = computed(() => (route.params.section as string | undefined) ?? 'general')
+// Switching sections moves focus to the new section's heading, like entering a page; a hash naming a heading in the
+// shown section (a status light's #obs) wins, also when only the hash changes.
+const HEADINGS: Record<string, string> = { general: 'general', connections: 'twitch', features: 'features', backup: 'backup', about: 'about' }
+watch([section, () => route.hash], ([s, hash]) =>
+  nextTick(() => {
+    const named = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+    // v-show hides the other sections with an inline display: none.
+    const shown = named?.closest('section')?.style.display !== 'none' ? named : null
+    ;(shown ?? document.getElementById(HEADINGS[s] ?? `soon-${s}`))?.focus()
+  }),
+)
 
 const overview = ref<Schemas['Overview']>()
 const modules = ref<Schemas['ModuleState'][]>()
@@ -293,6 +328,67 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.settings {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+.settings-menu {
+  position: sticky;
+  top: calc(var(--appbar-h, 0px) + 1rem);
+  display: grid;
+  gap: 0.125rem;
+}
+
+.settings-menu a {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  color: var(--p-text-muted-color);
+  text-decoration: none;
+}
+
+.settings-menu a:hover {
+  color: var(--p-text-color);
+}
+
+.settings-menu a[aria-current='page'] {
+  background: var(--p-surface-800);
+  color: var(--p-text-color);
+}
+
+/* A narrow page: the menu becomes one row that scrolls sideways. */
+@container view (max-width: 40rem) {
+  .settings {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .settings-menu {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-menu a {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+.soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--p-surface-500);
+  border-radius: 6px;
+  color: var(--p-text-muted-color);
+}
+
 .licenses {
   max-height: 60vh;
   overflow: auto;
