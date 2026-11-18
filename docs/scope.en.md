@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 59534ad3d9bc849f395166db189f95fece6d058ba3faf62520345fa877b9466c -->
+<!-- source: docs/scope.md source-sha256: 3beab41bbaecc5c89915fdd2b8bee0f6013397a7e9242c29147155cc191085b5 -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -26,12 +26,12 @@ Build in order. Try each slice on a real stream when it is done, and move on onl
 | 6 | Backup and restore | One-click export/import of settings and records, with all data preserved after import |
 | 7 | Windows portable package | Usable on another PC after extracting the zip; the zip includes a list of third-party licenses and instructions for handling SmartScreen warnings and unblocking the zip. When a new version is available, the admin UI notifies the user; extracting the new zip over the existing folder updates the app without affecting existing data |
 
-**After the MVP (confirmed needs):** personal badges, shoutout clips. Technical follow-ups are listed in [decisions.en.md](decisions.en.md).
+**After the MVP (confirmed needs):** personal badges, shoutout clips, song requests (optionally linked to Leihu Singsing), switching OBS scenes and showing or hiding sources, avatar control (VTuber Plus, VSeeFace), channel point reward management, background music that plays automatically by OBS scene. Technical follow-ups are listed in [decisions.en.md](decisions.en.md).
 
 **Other ideas:** go to the backlog; not scheduled, no specs.
 
 ## Out of scope for this round
-Raffles, song requests.
+Raffles.
 
 ## Not doing
 General rules engine, Linux, native mobile apps, cloud services.
