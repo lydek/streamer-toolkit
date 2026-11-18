@@ -40,6 +40,7 @@ use crate::{
         chat_dock::set_chat_dock,
         tab_bar::tab_bar,
         tab_bar::set_tab_bar,
+        overlay::overlay_counts,
         text_size::text_size,
         text_size::set_text_size,
         obs::obs_overview,

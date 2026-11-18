@@ -981,6 +981,26 @@
         }
       }
     },
+    "/api/admin/overlays": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "How many OBS sources each overlay has open right now.",
+        "operationId": "overlay_counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayCounts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/redemptions": {
       "get": {
         "tags": [
@@ -3266,6 +3286,39 @@
         "enum": [
           "obs.status"
         ]
+      },
+      "OverlayCounts": {
+        "type": "object",
+        "description": "Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included.",
+        "required": [
+          "chat",
+          "alerts",
+          "checkin",
+          "sound",
+          "other"
+        ],
+        "properties": {
+          "alerts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "chat": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "checkin": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "other": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sound": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "Overview": {
         "type": "object",

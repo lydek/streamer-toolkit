@@ -7,7 +7,7 @@ const enqueue = soundQueue(playToEnd)
 let lastSeq = 0
 
 function connect() {
-  const ws = new WebSocket(`ws://${location.host}/ws/overlay`)
+  const ws = new WebSocket(`ws://${location.host}/ws/overlay?kind=sound`)
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data) as Incoming
     // Sounds are never in snapshots, so none replays after a reconnect.

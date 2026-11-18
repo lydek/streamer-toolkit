@@ -224,6 +224,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         outbox.clone(),
     ));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
+    let overlays = Arc::new(overlay::OverlayConnections::default());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
@@ -263,7 +264,16 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         .merge(
             Router::new()
                 .route("/ws/overlay", get(overlay::ws))
-                .with_state(bus),
+                .with_state(overlay::OverlayState {
+                    bus,
+                    connections: overlays.clone(),
+                }),
+        )
+        .merge(
+            overlay::admin_routes(overlays).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )),
         )
         .merge(obs::routes(obs).layer(middleware::from_fn_with_state(
             admin.clone(),
@@ -1152,6 +1162,29 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn overlay_counts_need_the_token() {
+        let res = app()
+            .oneshot(
+                get_req("/api/admin/overlays", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            serde_json::json!({"chat": 0, "alerts": 0, "checkin": 0, "sound": 0, "other": 0})
+        );
+        let unauthorized = get_req("/api/admin/overlays", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(status(unauthorized).await, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

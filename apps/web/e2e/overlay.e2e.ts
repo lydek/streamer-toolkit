@@ -64,7 +64,7 @@ test('the connection status takes the look of each built-in template\'s chat tex
   // Proxies the overlay's WebSocket to the Host, so the test can drop it and refuse reconnects.
   let down = false
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/overlay\?kind=chat$/, (ws) => {
     if (down) return ws.close()
     ws.connectToServer()
     sockets.push(ws)
@@ -146,4 +146,29 @@ test('a broken template falls back to the default one', { tag: '@host' }, async 
   await expect(page.locator('.broken, li.custom')).toHaveCount(0)
   const status = await request.get(`${HOST}/api/admin/templates/chat`, { headers: admin })
   expect(await status.json()).toEqual({ selected: 'custom', error: 'template.invalid' })
+})
+
+test('the Host counts each overlay kind it serves, ignores what overlays send, and counts old URLs as other', { tag: '@host' }, async ({ page, request }) => {
+  const counts = async () => (await (await request.get(`${HOST}/api/admin/overlays`, { headers: admin })).json()) as Record<string, number>
+  const before = await counts()
+
+  await page.goto(`${HOST}/overlay/chat/`)
+  await expect.poll(async () => (await counts()).chat).toBe(before.chat + 1)
+
+  // A socket that sends something stays open and changes nothing; one without a kind counts as other.
+  await page.evaluate(async () => {
+    const open = (url: string) =>
+      new Promise<WebSocket>((resolve) => {
+        const ws = new WebSocket(url)
+        ws.onopen = () => resolve(ws)
+      })
+    const w = window as unknown as { sockets: WebSocket[] }
+    w.sockets = [await open(`ws://${location.host}/ws/overlay?kind=alerts`), await open(`ws://${location.host}/ws/overlay`)]
+    w.sockets[0].send('{"type":"alert"}')
+  })
+  await expect.poll(async () => (await counts()).alerts).toBe(before.alerts + 1)
+  expect((await counts()).other).toBe(before.other + 1)
+
+  await page.goto('about:blank')
+  await expect.poll(counts).toEqual(before)
 })
