@@ -14,7 +14,13 @@ vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api'
 
 const ok = (data?: unknown, status = 200) => ({ data, response: new Response(null, { status }) })
 const fail = (code: string, status: number) => ({ error: { code }, response: new Response(null, { status }) })
-const clip = (n: number) => ({ id: `Clip${n}`, title: `<b>Clip ${n}</b>`, broadcasterName: 'Twitch', durationMs: 30_000 })
+const clip = (n: number, labels: string[] = []) => ({
+  id: `Clip${n}`,
+  title: `<b>Clip ${n}</b>`,
+  broadcasterName: 'Twitch',
+  durationMs: 30_000,
+  labels,
+})
 const queue = (over: Partial<Schemas['ClipQueue']> = {}): Schemas['ClipQueue'] => ({
   queue: [{ entry: 'e2', ...clip(2) }],
   state: 'estimated_playing',
@@ -31,7 +37,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   current = queue()
   client.GET.mockImplementation(async (path: string) =>
-    path === '/api/admin/clips/settings' ? ok({ bufferSecs: 2 }) : ok(current),
+    path === '/api/admin/clips/settings' ? ok({ bufferSecs: 2, skipLabeled: true }) : ok(current),
   )
   client.POST.mockResolvedValue(ok(undefined, 204))
   client.PUT.mockResolvedValue(ok(undefined, 204))
@@ -111,6 +117,24 @@ describe('ClipsPage', () => {
     expect(button(wrapper, t('clips.play')).attributes('disabled')).toBeUndefined()
     expect(button(wrapper, t('clips.skip')).attributes('disabled')).toBeDefined()
     expect(wrapper.text()).not.toContain(t('clips.remaining', { s: 18 }))
+  })
+
+  it('marks labeled clips and saves the skip switch with the buffer', async () => {
+    current = queue({ current: clip(1, ['Gambling']), queue: [{ entry: 'e2', ...clip(2, ['Gambling']) }] })
+    const wrapper = await page()
+    expect(wrapper.text().split(t('clips.labeledHint')).length - 1).toBe(2)
+
+    await wrapper.get('#clip-skip-labeled').setValue(false)
+    await flushPromises()
+    expect(client.PUT).toHaveBeenLastCalledWith('/api/admin/clips/settings', {
+      body: { bufferSecs: 2, skipLabeled: false },
+    })
+
+    client.POST.mockResolvedValueOnce(fail('clip.content_labels', 409))
+    await wrapper.get('#clip-input').setValue('LabeledClip')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe(t('errors.clip.content_labels'))
   })
 
   it('removes, clears and stops polling when left', async () => {

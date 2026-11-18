@@ -281,6 +281,8 @@
     "remaining": "預估剩餘 {s} 秒",
     "overlay": "OBS",
     "buffer": "切換緩衝（秒）",
+    "skipLabeled": "略過有分級標籤的頻道",
+    "labeledHint": "可能需要在 OBS 按開始觀看",
     "loadFailed": "無法載入 Clip 佇列。",
     "state": {
       "idle": "待機",
@@ -436,7 +438,8 @@
       "invalid_input": "請貼上 Twitch Clip 網址或 Clip ID。",
       "not_found": "Twitch 找不到這部 Clip。",
       "queue_full": "佇列已滿（最多 50 部）。",
-      "invalid_buffer": "切換緩衝是 0 到 30 秒。"
+      "invalid_buffer": "切換緩衝是 0 到 30 秒。",
+      "content_labels": "這個頻道有內容分級標籤，OBS 會先顯示警告頁，已略過。"
     },
     "sound": {
       "unsupported_type": "只能匯入 MP3、WAV、OGG 檔。",

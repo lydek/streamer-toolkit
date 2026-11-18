@@ -39,7 +39,7 @@ fn clip_error(e: ClipError) -> Response {
     let status = match &e {
         ClipError::InvalidInput | ClipError::InvalidBuffer => StatusCode::BAD_REQUEST,
         ClipError::NotFound => StatusCode::NOT_FOUND,
-        ClipError::QueueFull => StatusCode::CONFLICT,
+        ClipError::QueueFull | ClipError::ContentLabels => StatusCode::CONFLICT,
         ClipError::SaveFailed(io) => {
             tracing::error!(code = "settings.save_failed", error = %io, "clip settings not saved");
             StatusCode::INTERNAL_SERVER_ERROR
@@ -86,6 +86,9 @@ pub struct ClipInfo {
     pub title: String,
     pub broadcaster_name: String,
     pub duration_ms: u64,
+    /// The channel's content classification labels when the clip was queued; with any of them the embed may open
+    /// with a warning that needs a click in OBS. Only queued when `skipLabeled` is off.
+    pub labels: Vec<String>,
 }
 
 impl From<Clip> for ClipInfo {
@@ -95,6 +98,7 @@ impl From<Clip> for ClipInfo {
             title: c.title,
             broadcaster_name: c.broadcaster_name,
             duration_ms: c.duration_ms,
+            labels: c.labels,
         }
     }
 }
@@ -154,6 +158,8 @@ pub struct SessionInput {
 pub struct ClipSettings {
     /// Seconds between a clip's estimated end and the next clip, 0–30.
     pub buffer_secs: u32,
+    /// Refuse clips from channels with content classification labels (`clip.content_labels`).
+    pub skip_labeled: bool,
 }
 
 /// The `payload` of a `clip.state` event: what `/overlay/clip/` needs to show the embed and its caption.
@@ -285,7 +291,7 @@ pub(crate) async fn list_clips(State(s): State<Arc<ClipsService>>) -> Json<ClipQ
         (status = 200, body = QueueEntry),
         (status = 400, description = "`clip.invalid_input`: not a Twitch clip URL or ID; other `twitch.*` sign-in codes such as `twitch.sign_in_expired` or `twitch.invalid_response`", body = ErrorBody),
         (status = 404, description = "`clip.not_found`: Twitch has no such clip", body = ErrorBody),
-        (status = 409, description = "`clip.queue_full` (50 clips), `twitch.client_id_required` or `twitch.sign_in_required`", body = ErrorBody),
+        (status = 409, description = "`clip.queue_full` (50 clips), `clip.content_labels` (the channel has content classification labels and `skipLabeled` is on), `twitch.client_id_required` or `twitch.sign_in_required`", body = ErrorBody),
         (status = 500, description = "`twitch.storage_failed`", body = ErrorBody),
         (status = 502, description = "`twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable`", body = ErrorBody),
     )
@@ -408,6 +414,7 @@ pub(crate) async fn play_clip(State(s): State<Arc<ClipsService>>) -> StatusCode 
 pub(crate) async fn clip_settings(State(s): State<Arc<ClipsService>>) -> Json<ClipSettings> {
     Json(ClipSettings {
         buffer_secs: s.buffer_secs(),
+        skip_labeled: s.skip_labeled(),
     })
 }
 
@@ -418,7 +425,7 @@ pub(crate) async fn clip_settings(State(s): State<Arc<ClipsService>>) -> Json<Cl
     request_body = ClipSettings,
     responses(
         (status = 204),
-        (status = 400, description = "`clip.invalid_buffer`: not 0–30", body = ErrorBody),
+        (status = 400, description = "`clip.invalid_buffer`: the buffer is not 0–30, or a field is missing", body = ErrorBody),
         (status = 500, description = "`settings.save_failed`", body = ErrorBody),
     )
 )]
@@ -429,7 +436,7 @@ pub(crate) async fn set_clip_settings(
     let Ok(Json(b)) = body else {
         return clip_error(ClipError::InvalidBuffer);
     };
-    match s.set_buffer_secs(b.buffer_secs) {
+    match s.set_settings(b.buffer_secs, b.skip_labeled) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => clip_error(e),
     }
@@ -623,15 +630,25 @@ mod tests {
         let get = || empty("GET", "/api/admin/clips/settings");
         assert_eq!(
             send(&app, get()).await.1,
-            serde_json::json!({ "bufferSecs": 2 })
+            serde_json::json!({ "bufferSecs": 2, "skipLabeled": true })
         );
         let put = |body: &str| json("PUT", "/api/admin/clips/settings", body);
         assert_eq!(
-            send(&app, put(r#"{"bufferSecs":5}"#)).await.0,
+            send(&app, put(r#"{"bufferSecs":5,"skipLabeled":false}"#))
+                .await
+                .0,
             StatusCode::NO_CONTENT
         );
-        assert_eq!(send(&app, get()).await.1["bufferSecs"], 5);
-        for body in [r#"{"bufferSecs":31}"#, r#"{"bufferSecs":-1}"#, "{}"] {
+        assert_eq!(
+            send(&app, get()).await.1,
+            serde_json::json!({ "bufferSecs": 5, "skipLabeled": false })
+        );
+        for body in [
+            r#"{"bufferSecs":31,"skipLabeled":true}"#,
+            r#"{"bufferSecs":-1,"skipLabeled":true}"#,
+            r#"{"bufferSecs":2}"#,
+            "{}",
+        ] {
             let res = send(&app, put(body)).await;
             assert_eq!(
                 res,
@@ -653,6 +670,11 @@ mod tests {
                 "clip.invalid_input",
             ),
             ("not json", StatusCode::BAD_REQUEST, "clip.invalid_input"),
+            (
+                r#"{"input":"LabeledChannelClip"}"#,
+                StatusCode::CONFLICT,
+                "clip.content_labels",
+            ),
             (
                 r#"{"input":"GoneClip"}"#,
                 StatusCode::NOT_FOUND,

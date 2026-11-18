@@ -19,6 +19,7 @@
           {{ t(`clips.state.${clips.state}`) }}
           <template v-if="clips.current">：{{ clips.current.title }}（{{ clips.current.broadcasterName }}）</template>
         </p>
+        <p v-if="clips.current?.labels.length">{{ t('clips.labeledHint') }}</p>
         <p v-if="remaining !== null">{{ t('clips.remaining', { s: remaining }) }}</p>
         <div class="row">
           <Button :label="t('clips.skip')" :disabled="!active || !clips.sessionId" @click="command('skip')" />
@@ -34,7 +35,10 @@
         <template v-else>
           <ol class="queue">
             <li v-for="c in clips.queue" :key="c.entry">
-              <span>{{ c.title }}（{{ c.broadcasterName }}）{{ t('clips.seconds', { s: seconds(c.durationMs) }) }}</span>
+              <span>
+                {{ c.title }}（{{ c.broadcasterName }}）{{ t('clips.seconds', { s: seconds(c.durationMs) }) }}
+                <template v-if="c.labels.length">｜{{ t('clips.labeledHint') }}</template>
+              </span>
               <Button :label="t('clips.remove')" size="small" outlined @click="remove(c.entry)" />
             </li>
           </ol>
@@ -48,21 +52,26 @@
       <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="start" @click="copyObsUrl" />
       <label for="clip-buffer">{{ t('clips.buffer') }}</label>
       <InputNumber
-        v-if="buffer !== undefined"
-        v-model="buffer"
+        v-if="settings"
+        v-model="settings.bufferSecs"
         input-id="clip-buffer"
         :min="0"
         :max="30"
         show-buttons
         class="start"
-        @update:model-value="saveBuffer"
+        @update:model-value="saveSettings"
       />
+      <div v-if="settings" class="row">
+        <Checkbox v-model="settings.skipLabeled" input-id="clip-skip-labeled" binary @update:model-value="saveSettings" />
+        <label for="clip-skip-labeled">{{ t('clips.skipLabeled') }}</label>
+      </div>
     </section>
   </FullPage>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
@@ -80,7 +89,7 @@ const failed = ref('')
 const input = ref('')
 const addError = ref('')
 const busy = ref(false)
-const buffer = ref<number>()
+const settings = ref<Schemas['ClipSettings']>()
 let timer: number | undefined
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
@@ -155,10 +164,11 @@ async function clear() {
   }
 }
 
-async function saveBuffer(value: number | null) {
-  if (value == null) return
+async function saveSettings() {
+  const body = settings.value
+  if (!body || body.bufferSecs == null) return
   try {
-    await api(client.PUT('/api/admin/clips/settings', { body: { bufferSecs: value } }))
+    await api(client.PUT('/api/admin/clips/settings', { body: { ...body } }))
   } catch (e) {
     report(e)
   }
@@ -180,7 +190,7 @@ onMounted(async () => {
   timer = window.setInterval(() => void load(), 1000)
   await load()
   try {
-    buffer.value = (await api(client.GET('/api/admin/clips/settings'))).bufferSecs
+    settings.value = await api(client.GET('/api/admin/clips/settings'))
   } catch (e) {
     report(e)
   }

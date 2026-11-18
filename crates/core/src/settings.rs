@@ -73,11 +73,16 @@ pub struct SoundEntry {
 pub struct ClipsSettings {
     /// Seconds between a clip's estimated end and the next clip, 0–30.
     pub buffer_secs: u32,
+    /// Refuse clips from channels with content classification labels: their embed opens with a warning to click.
+    pub skip_labeled: bool,
 }
 
 impl Default for ClipsSettings {
     fn default() -> Self {
-        Self { buffer_secs: 2 }
+        Self {
+            buffer_secs: 2,
+            skip_labeled: true,
+        }
     }
 }
 

@@ -11,7 +11,11 @@ pub struct Clip {
     pub id: String,
     pub title: String,
     pub broadcaster_name: String,
+    /// The channel's Twitch user ID, for looking up its labels.
+    pub broadcaster_id: String,
     pub duration_ms: u64,
+    /// The channel's content classification labels when it was looked up; any of them may open Twitch's warning.
+    pub labels: Vec<String>,
 }
 
 /// A Twitch clip ID: letters, digits, `_` and `-` only, so it is safe in a URL query as is. Only parsing makes one.

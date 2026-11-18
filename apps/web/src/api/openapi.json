@@ -729,7 +729,7 @@
             }
           },
           "409": {
-            "description": "`clip.queue_full` (50 clips), `twitch.client_id_required` or `twitch.sign_in_required`",
+            "description": "`clip.queue_full` (50 clips), `clip.content_labels` (the channel has content classification labels and `skipLabeled` is on), `twitch.client_id_required` or `twitch.sign_in_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -851,7 +851,7 @@
         "responses": {
           "204": {},
           "400": {
-            "description": "`clip.invalid_buffer`: not 0–30",
+            "description": "`clip.invalid_buffer`: the buffer is not 0–30, or a field is missing",
             "content": {
               "application/json": {
                 "schema": {
@@ -2880,7 +2880,8 @@
           "id",
           "title",
           "broadcasterName",
-          "durationMs"
+          "durationMs",
+          "labels"
         ],
         "properties": {
           "broadcasterName": {
@@ -2894,6 +2895,13 @@
           "id": {
             "type": "string",
             "description": "The Twitch clip ID."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The channel's content classification labels when the clip was queued; with any of them the embed may open\nwith a warning that needs a click in OBS. Only queued when `skipLabeled` is off."
           },
           "title": {
             "type": "string"
@@ -2992,7 +3000,8 @@
       "ClipSettings": {
         "type": "object",
         "required": [
-          "bufferSecs"
+          "bufferSecs",
+          "skipLabeled"
         ],
         "properties": {
           "bufferSecs": {
@@ -3000,6 +3009,10 @@
             "format": "int32",
             "description": "Seconds between a clip's estimated end and the next clip, 0–30.",
             "minimum": 0
+          },
+          "skipLabeled": {
+            "type": "boolean",
+            "description": "Refuse clips from channels with content classification labels (`clip.content_labels`)."
           }
         }
       },

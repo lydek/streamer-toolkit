@@ -761,44 +761,97 @@ impl clips::ClipLookup for TwitchClips {
             let body = Helix::new(&self.helix, auth, self.http.clone())
                 .get_json(&format!("/clips?id={}", id.as_str()))
                 .await
-                .map_err(|e| {
-                    let status = match &e {
-                        HelixError::Auth(a) => auth_status(a),
-                        HelixError::RateLimited(_) | HelixError::Refused(_) => {
-                            StatusCode::BAD_GATEWAY
-                        }
-                    };
-                    clips::LookupError::Twitch {
-                        status: status.as_u16(),
-                        code: e.to_string(),
-                    }
-                })?;
+                .map_err(lookup_error)?;
             clip_from_helix(&body)
+        })
+    }
+
+    fn labels<'a>(
+        &'a self,
+        broadcaster_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<String>, clips::LookupError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            if !numeric_id(broadcaster_id) {
+                return Err(invalid_response());
+            }
+            let auth = self.twitch.read().await.clone();
+            let body = Helix::new(&self.helix, auth, self.http.clone())
+                .get_json(&format!("/channels?broadcaster_id={broadcaster_id}"))
+                .await
+                .map_err(lookup_error)?;
+            labels_from_helix(&body)
         })
     }
 }
 
-/// The first clip of a Get Clips response; an empty `data` means Twitch has no such clip.
-fn clip_from_helix(body: &serde_json::Value) -> Result<clips::Clip, clips::LookupError> {
-    let invalid = || clips::LookupError::Twitch {
+fn lookup_error(e: HelixError) -> clips::LookupError {
+    let status = match &e {
+        HelixError::Auth(a) => auth_status(a),
+        HelixError::RateLimited(_) | HelixError::Refused(_) => StatusCode::BAD_GATEWAY,
+    };
+    clips::LookupError::Twitch {
+        status: status.as_u16(),
+        code: e.to_string(),
+    }
+}
+
+/// Twitch user IDs go into Helix queries as they are, so only plain digits are taken.
+fn numeric_id(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn invalid_response() -> clips::LookupError {
+    clips::LookupError::Twitch {
         status: auth_status(&AuthError::InvalidResponse).as_u16(),
         code: AuthError::InvalidResponse.to_string(),
-    };
-    let data = body["data"].as_array().ok_or_else(invalid)?;
+    }
+}
+
+/// The first clip of a Get Clips response, without labels; an empty `data` means Twitch has no such clip.
+fn clip_from_helix(body: &serde_json::Value) -> Result<clips::Clip, clips::LookupError> {
+    let data = body["data"].as_array().ok_or_else(invalid_response)?;
     let Some(clip) = data.first() else {
         return Err(clips::LookupError::NotFound);
     };
-    let text = |key: &str| clip[key].as_str().map(str::to_owned).ok_or_else(invalid);
+    let text = |key: &str| {
+        clip[key]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(invalid_response)
+    };
     let duration = clip["duration"]
         .as_f64()
         .filter(|d| d.is_finite() && *d > 0.0)
-        .ok_or_else(invalid)?;
+        .ok_or_else(invalid_response)?;
+    let broadcaster_id = text("broadcaster_id")?;
+    if !numeric_id(&broadcaster_id) {
+        return Err(invalid_response());
+    }
     Ok(clips::Clip {
         id: text("id")?,
         title: text("title")?,
         broadcaster_name: text("broadcaster_name")?,
+        broadcaster_id,
         duration_ms: (duration * 1000.0).round() as u64,
+        labels: Vec::new(),
     })
+}
+
+/// The content classification labels of a Get Channel Information response; a channel Twitch no longer lists has
+/// none.
+fn labels_from_helix(body: &serde_json::Value) -> Result<Vec<String>, clips::LookupError> {
+    let data = body["data"].as_array().ok_or_else(invalid_response)?;
+    let Some(channel) = data.first() else {
+        return Ok(Vec::new());
+    };
+    channel["content_classification_labels"]
+        .as_array()
+        .ok_or_else(invalid_response)?
+        .iter()
+        .map(|l| l.as_str().map(str::to_owned).ok_or_else(invalid_response))
+        .collect()
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -966,31 +1019,67 @@ mod tests {
     fn get_clips_responses_become_clips_or_errors() {
         let clip = serde_json::json!({ "data": [{
             "id": "CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4", "title": "<b>F1</b>",
-            "broadcaster_name": "Twitch", "duration": 28.4, "embed_url": "https://example.com/" }] });
+            "broadcaster_id": "12826", "broadcaster_name": "Twitch", "duration": 28.4,
+            "embed_url": "https://example.com/" }] });
         assert_eq!(
             clip_from_helix(&clip),
             Ok(clips::Clip {
                 id: "CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4".into(),
                 title: "<b>F1</b>".into(),
                 broadcaster_name: "Twitch".into(),
+                broadcaster_id: "12826".into(),
                 duration_ms: 28_400,
+                labels: Vec::new(),
             })
         );
         assert_eq!(
             clip_from_helix(&serde_json::json!({ "data": [] })),
             Err(clips::LookupError::NotFound)
         );
-        let invalid = Err(clips::LookupError::Twitch {
-            status: 400,
-            code: "twitch.invalid_response".into(),
-        });
+        let base = serde_json::json!({ "id": "a", "title": "t", "broadcaster_id": "1", "broadcaster_name": "b", "duration": 5 });
+        let without = |key: &str| {
+            let mut c = base.clone();
+            c.as_object_mut().unwrap().remove(key);
+            serde_json::json!({ "data": [c] })
+        };
+        let with = |key: &str, value: serde_json::Value| {
+            let mut c = base.clone();
+            c[key] = value;
+            serde_json::json!({ "data": [c] })
+        };
         for body in [
             serde_json::json!({}),
-            serde_json::json!({ "data": [{ "id": "a", "title": "t", "broadcaster_name": "b" }] }),
-            serde_json::json!({ "data": [{ "id": "a", "title": "t", "broadcaster_name": "b", "duration": -1 }] }),
-            serde_json::json!({ "data": [{ "id": "a", "broadcaster_name": "b", "duration": 5 }] }),
+            without("duration"),
+            with("duration", serde_json::json!(-1)),
+            without("title"),
+            without("broadcaster_id"),
+            with("broadcaster_id", serde_json::json!("1&first=100")),
+            with("broadcaster_id", serde_json::json!("")),
         ] {
-            assert_eq!(clip_from_helix(&body), invalid, "{body}");
+            assert_eq!(clip_from_helix(&body), Err(invalid_response()), "{body}");
+        }
+    }
+
+    #[test]
+    fn channel_responses_give_their_labels() {
+        let channel = serde_json::json!({ "data": [{ "broadcaster_id": "1",
+            "content_classification_labels": ["Gambling", "ProfanityVulgarity"] }] });
+        assert_eq!(
+            labels_from_helix(&channel),
+            Ok(vec!["Gambling".into(), "ProfanityVulgarity".into()])
+        );
+        let none = serde_json::json!({ "data": [{ "content_classification_labels": [] }] });
+        assert_eq!(labels_from_helix(&none), Ok(Vec::new()));
+        assert_eq!(
+            labels_from_helix(&serde_json::json!({ "data": [] })),
+            Ok(Vec::new())
+        );
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({ "data": [{}] }),
+            serde_json::json!({ "data": [{ "content_classification_labels": [1] }] }),
+        ] {
+            assert_eq!(labels_from_helix(&body), Err(invalid_response()), "{body}");
         }
     }
 }

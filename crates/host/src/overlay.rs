@@ -94,6 +94,15 @@ mod tests {
         > {
             Box::pin(async { Err(clips::LookupError::NotFound) })
         }
+
+        fn labels<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = Result<Vec<String>, clips::LookupError>> + Send + 'a>,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
     }
 
     #[tokio::test]

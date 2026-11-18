@@ -41,12 +41,20 @@ pub enum LookupError {
     },
 }
 
-/// Looks a clip up by ID; the host implements it with Helix Get Clips.
+/// Looks clips and channels up on Twitch; the host implements it with Helix.
 pub trait ClipLookup: Send + Sync + 'static {
+    /// The clip, without labels (Get Clips).
     fn clip<'a>(
         &'a self,
         id: &'a ClipId,
     ) -> Pin<Box<dyn Future<Output = Result<Clip, LookupError>> + Send + 'a>>;
+
+    /// A channel's content classification labels (Get Channel Information). Only adding a clip needs them, so
+    /// the lookup when a clip starts stays one request.
+    fn labels<'a>(
+        &'a self,
+        broadcaster_id: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, LookupError>> + Send + 'a>>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +67,8 @@ pub enum ClipError {
     QueueFull,
     #[error("clip.invalid_buffer")]
     InvalidBuffer,
+    #[error("clip.content_labels")]
+    ContentLabels,
     #[error("settings.save_failed")]
     SaveFailed(#[from] io::Error),
     #[error("{code}")]
@@ -241,7 +251,11 @@ impl ClipsService {
         if self.0.shared().queue.len() >= QUEUE_MAX {
             return Err(ClipError::QueueFull);
         }
-        let clip = self.0.lookup.clip(&id).await?;
+        let mut clip = self.0.lookup.clip(&id).await?;
+        clip.labels = self.0.lookup.labels(&clip.broadcaster_id).await?;
+        if !clip.labels.is_empty() && self.skip_labeled() {
+            return Err(ClipError::ContentLabels);
+        }
         let entry = Entry {
             entry: uuid::Uuid::now_v7().to_string(),
             clip,
@@ -289,11 +303,18 @@ impl ClipsService {
         self.0.buffer()
     }
 
-    pub fn set_buffer_secs(&self, secs: u32) -> Result<(), ClipError> {
-        if secs > BUFFER_MAX {
+    pub fn skip_labeled(&self) -> bool {
+        settings::load(&self.0.data_dir).clips.skip_labeled
+    }
+
+    pub fn set_settings(&self, buffer_secs: u32, skip_labeled: bool) -> Result<(), ClipError> {
+        if buffer_secs > BUFFER_MAX {
             return Err(ClipError::InvalidBuffer);
         }
-        settings::update(&self.0.data_dir, |s| s.clips.buffer_secs = secs)?;
+        settings::update(&self.0.data_dir, |s| {
+            s.clips.buffer_secs = buffer_secs;
+            s.clips.skip_labeled = skip_labeled;
+        })?;
         Ok(())
     }
 }
@@ -476,15 +497,20 @@ pub(crate) mod tests {
     pub(crate) struct FakeLookup {
         failure: Mutex<Option<LookupError>>,
         pub(crate) calls: AtomicUsize,
+        label_calls: AtomicUsize,
     }
 
     pub(crate) const KNOWN: &str = "CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4";
+    /// From a channel with a content classification label.
+    pub(crate) const LABELED: &str = "LabeledChannelClip";
+    const LABELED_CHANNEL: &str = "999";
 
     impl FakeLookup {
         pub(crate) fn new(failure: Option<LookupError>) -> Arc<Self> {
             Arc::new(Self {
                 failure: Mutex::new(failure),
                 calls: AtomicUsize::new(0),
+                label_calls: AtomicUsize::new(0),
             })
         }
 
@@ -505,14 +531,32 @@ pub(crate) mod tests {
                 if let Some(e) = self.failure.lock().unwrap().clone() {
                     return Err(e);
                 }
-                if id.as_str() != KNOWN {
+                if id.as_str() != KNOWN && id.as_str() != LABELED {
                     return Err(LookupError::NotFound);
                 }
                 Ok(Clip {
                     id: id.as_str().into(),
                     title: "F1 2017 E3 Gameplay!".into(),
                     broadcaster_name: "Twitch".into(),
+                    broadcaster_id: match id.as_str() {
+                        LABELED => LABELED_CHANNEL.into(),
+                        _ => "12826".into(),
+                    },
                     duration_ms: 30_000,
+                    labels: Vec::new(),
+                })
+            })
+        }
+
+        fn labels<'a>(
+            &'a self,
+            broadcaster_id: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, LookupError>> + Send + 'a>> {
+            self.label_calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                Ok(match broadcaster_id {
+                    LABELED_CHANNEL => vec!["Gambling".into()],
+                    _ => Vec::new(),
                 })
             })
         }
@@ -716,8 +760,11 @@ pub(crate) mod tests {
     async fn the_buffer_setting_is_checked_and_used() {
         let (service, _) = service("buffer", FakeLookup::new(None));
         assert_eq!(service.buffer_secs(), 2);
-        assert_eq!(service.set_buffer_secs(31), Err(ClipError::InvalidBuffer));
-        service.set_buffer_secs(0).unwrap();
+        assert_eq!(
+            service.set_settings(31, true),
+            Err(ClipError::InvalidBuffer)
+        );
+        service.set_settings(0, true).unwrap();
         assert_eq!(service.buffer_secs(), 0);
         service.add(KNOWN).await.unwrap();
         after(33_001).await;
@@ -726,6 +773,33 @@ pub(crate) mod tests {
             State::Idle,
             "no buffer after the clip"
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn labeled_channels_are_refused_unless_allowed() {
+        let (service, _) = service("labels", FakeLookup::new(None));
+        service.stop(); // keep the queue still: nothing is playing yet
+        assert!(service.skip_labeled(), "on by default");
+        assert_eq!(service.add(LABELED).await, Err(ClipError::ContentLabels));
+        assert!(service.list().is_empty());
+        service.add(KNOWN).await.unwrap();
+
+        service.set_settings(2, false).unwrap();
+        assert!(!service.skip_labeled());
+        let entry = service.add(LABELED).await.unwrap();
+        assert_eq!(entry.clip.labels, ["Gambling"]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn starting_a_clip_looks_up_the_clip_only() {
+        let lookup = FakeLookup::new(None);
+        let (service, _) = service("start-lookup", lookup.clone());
+        service.add(KNOWN).await.unwrap();
+        after(3_001).await;
+        assert_eq!(service.playback().state, State::EstimatedPlaying);
+        // Adding asked for the clip and its labels; starting it asked for the clip again, not the labels.
+        assert_eq!(lookup.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(lookup.label_calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test(start_paused = true)]

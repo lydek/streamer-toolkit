@@ -1029,6 +1029,11 @@ export interface components {
             durationMs: number;
             /** @description The Twitch clip ID. */
             id: string;
+            /**
+             * @description The channel's content classification labels when the clip was queued; with any of them the embed may open
+             *     with a warning that needs a click in OBS. Only queued when `skipLabeled` is off.
+             */
+            labels: string[];
             title: string;
         };
         ClipInput: {
@@ -1067,6 +1072,8 @@ export interface components {
              * @description Seconds between a clip's estimated end and the next clip, 0–30.
              */
             bufferSecs: number;
+            /** @description Refuse clips from channels with content classification labels (`clip.content_labels`). */
+            skipLabeled: boolean;
         };
         /**
          * @description A `clip.state` event exactly as `/ws/overlay` sends it. The latest one is kept in snapshots, so a reloaded
@@ -2059,7 +2066,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description `clip.queue_full` (50 clips), `twitch.client_id_required` or `twitch.sign_in_required` */
+            /** @description `clip.queue_full` (50 clips), `clip.content_labels` (the channel has content classification labels and `skipLabeled` is on), `twitch.client_id_required` or `twitch.sign_in_required` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2190,7 +2197,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `clip.invalid_buffer`: not 0–30 */
+            /** @description `clip.invalid_buffer`: the buffer is not 0–30, or a field is missing */
             400: {
                 headers: {
                     [name: string]: unknown;
