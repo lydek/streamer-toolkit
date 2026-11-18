@@ -31,6 +31,9 @@ pub struct Settings {
     /// The admin UI's docked chat panel. `None`: never changed, the admin UI shows its defaults (closed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_dock: Option<ChatDock>,
+    /// The admin UI's tab bar. `None`: never edited, every group is in the bar on top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_bar: Option<TabBar>,
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
@@ -52,6 +55,21 @@ pub struct Settings {
 pub struct ChatDock {
     pub open: bool,
     pub width: u16,
+}
+
+/// Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
+/// where the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct TabBar {
+    pub groups: Vec<String>,
+    pub position: TabBarPosition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum TabBarPosition {
+    Top,
+    Bottom,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,6 +148,7 @@ impl Default for Settings {
             skip_close_hint: false,
             home_tiles: None,
             chat_dock: None,
+            tab_bar: None,
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),

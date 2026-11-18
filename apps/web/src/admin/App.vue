@@ -5,6 +5,8 @@
     <div class="app-main">
       <AppBar />
       <RouterView />
+      <!-- The group tabs move here when the user puts them at the bottom. -->
+      <div id="bottom-tabs"></div>
     </div>
     <ChatDock />
   </div>
@@ -30,5 +32,12 @@ import CloseHint from './CloseHint.vue'
 .app-main {
   flex: 1;
   min-width: 0;
+}
+
+/* Holds the group tabs when the user put them at the bottom. */
+#bottom-tabs {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 </style>

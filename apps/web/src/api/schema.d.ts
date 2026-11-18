@@ -472,6 +472,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/tab-bar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tab bar; `null` when never edited (every group pinned, on top). */
+        get: operations["tab_bar"];
+        /**
+         * Saves the tab bar: up to 20 group IDs of 1-32 characters `[a-z0-9-]`, duplicates keep their first position;
+         *     `null` restores the defaults.
+         */
+        put: operations["set_tab_bar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/templates/alerts": {
         parameters: {
             query?: never;
@@ -1216,6 +1237,16 @@ export interface components {
          * @enum {string}
          */
         Source: "twitch" | "obs" | "simulation" | "system";
+        /**
+         * @description Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
+         *     where the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.
+         */
+        TabBar: {
+            groups: string[];
+            position: components["schemas"]["TabBarPosition"];
+        };
+        /** @enum {string} */
+        TabBarPosition: "top" | "bottom";
         /** @description A `template.changed` event exactly as `/ws/overlay` sends it; not kept in snapshots. */
         TemplateChangedEvent: {
             id: string;
@@ -2470,6 +2501,62 @@ export interface operations {
             };
             /** @description `sound.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    tab_bar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TabBar"] | null;
+                };
+            };
+        };
+    };
+    set_tab_bar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TabBar"] | null;
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

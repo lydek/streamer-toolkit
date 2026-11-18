@@ -118,12 +118,12 @@ export function firstPage(g: TabGroup, hidden: Set<string> = new Set()): string 
 }
 
 /**
- * How many tabs fit in `available` pixels, given each tab's width, the gap between tabs and the width of the
- * "More" button that takes the place of the ones that do not fit. All of them, when they fit without "More".
+ * How many tabs fit in `available` pixels, given each tab's width and the gap between items. The last slot holds
+ * 「編輯分頁」 (`editWidth`) when every tab fits, else "More" (`moreWidth`) in place of the ones that do not.
  */
-export function fittingTabs(widths: number[], gap: number, available: number, moreWidth: number): number {
+export function fittingTabs(widths: number[], gap: number, available: number, moreWidth: number, editWidth: number): number {
   const total = (n: number) => widths.slice(0, n).reduce((sum, w) => sum + w, 0) + gap * Math.max(n - 1, 0)
-  if (total(widths.length) <= available) return widths.length
+  if (total(widths.length) + gap + editWidth <= available) return widths.length
   let n = widths.length - 1
   while (n > 0 && total(n) + gap + moreWidth > available) n--
   return n
