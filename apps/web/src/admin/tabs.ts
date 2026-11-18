@@ -2,12 +2,18 @@
  * The app bar's group tabs (docs/decisions.md 管理 UI 版面): top-level groups, each with one or more pages. A group
  * with several pages shows them as a second row of sub-tabs; never more than two levels. Settings is not a tab
  * (it sits behind the gear button), and neither is any route not listed here.
+ *
+ * Every screen of the design is listed (docs/scope.md 階段 0); a page marked `soon` is not built yet and shows the
+ * coming-soon page (`pages.<id>` holds its name and one-line description). `tile` marks the page a coming-soon
+ * feature's home tile opens.
  */
 
 export interface TabPage {
   path: string
   /** i18n key of the page name. */
   label: string
+  /** Not built yet: the route shows the coming-soon page. */
+  soon?: { id: string; icon: string; tile?: boolean }
 }
 
 export interface TabGroup {
@@ -16,24 +22,95 @@ export interface TabGroup {
   pages: TabPage[]
 }
 
+const soon = (path: string, id: string, icon: string, tile = false): TabPage => ({
+  path,
+  label: `pages.${id}.name`,
+  soon: { id, icon, tile },
+})
+
 export const GROUPS: TabGroup[] = [
-  { id: 'home', icon: 'pi pi-home', pages: [{ path: '/', label: 'nav.groups.home' }] },
-  { id: 'chat', icon: 'pi pi-comments', pages: [{ path: '/chat', label: 'modules.names.chat' }] },
+  {
+    id: 'home',
+    icon: 'pi pi-home',
+    pages: [
+      { path: '/', label: 'nav.groups.home' },
+      soon('/stream-info', 'streamInfo', 'pi pi-pencil', true),
+      soon('/rehearsal', 'rehearsal', 'pi pi-play-circle', true),
+    ],
+  },
+  {
+    id: 'song',
+    icon: 'pi pi-microphone',
+    pages: [
+      soon('/songs', 'songs', 'pi pi-microphone', true),
+      soon('/song-list', 'songList', 'pi pi-book'),
+      soon('/singing-booth', 'singingBooth', 'pi pi-headphones', true),
+    ],
+  },
+  {
+    id: 'chat',
+    icon: 'pi pi-comments',
+    pages: [
+      soon('/chat-log', 'chatLog', 'pi pi-comments'),
+      soon('/chat-filter', 'chatFilter', 'pi pi-filter', true),
+      { path: '/chat', label: 'pages.chatTemplates.name' },
+      soon('/chat-window', 'chatWindow', 'pi pi-window-maximize'),
+      soon('/commands', 'commands', 'pi pi-reply', true),
+      soon('/timers', 'timers', 'pi pi-clock'),
+      soon('/greetings', 'greetings', 'pi pi-heart'),
+    ],
+  },
   {
     id: 'interact',
     icon: 'pi pi-bolt',
     pages: [
       { path: '/alerts', label: 'modules.names.alerts' },
+      soon('/polls', 'polls', 'pi pi-chart-bar', true),
       { path: '/checkin', label: 'modules.names.checkin' },
+      soon('/card-style', 'cardStyle', 'pi pi-palette'),
+      soon('/rewards', 'rewards', 'pi pi-star', true),
       { path: '/redemptions', label: 'modules.names.redemption' },
+      soon('/counters', 'counters', 'pi pi-hashtag', true),
     ],
   },
-  { id: 'media', icon: 'pi pi-images', pages: [{ path: '/sounds', label: 'modules.names.sound' }] },
+  {
+    id: 'media',
+    icon: 'pi pi-images',
+    pages: [
+      soon('/scenes', 'scenes', 'pi pi-images', true),
+      soon('/music', 'music', 'pi pi-headphones', true),
+      { path: '/sounds', label: 'modules.names.sound' },
+      soon('/tts', 'tts', 'pi pi-comment', true),
+      soon('/screen-tools', 'screenTools', 'pi pi-desktop', true),
+      soon('/avatar', 'avatar', 'pi pi-face-smile', true),
+      soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
+      soon('/image-sizes', 'imageSizes', 'pi pi-image', true),
+    ],
+  },
+  {
+    id: 'viewers',
+    icon: 'pi pi-users',
+    pages: [
+      soon('/viewers', 'viewers', 'pi pi-users', true),
+      soon('/roles', 'roles', 'pi pi-tags'),
+      soon('/leaderboard', 'leaderboard', 'pi pi-trophy'),
+      soon('/credits', 'credits', 'pi pi-list', true),
+      soon('/raids', 'raids', 'pi pi-send', true),
+    ],
+  },
 ]
+
+/** Every coming-soon page, for the router and the home tiles. */
+export const SOON_PAGES = GROUPS.flatMap((g) => g.pages).filter((p) => p.soon)
 
 /** The group a route path belongs to, or undefined (settings, not found). */
 export function groupOf(path: string): TabGroup | undefined {
   return GROUPS.find((g) => g.pages.some((p) => p.path === path))
+}
+
+/** Where a group tab goes before any of its pages was visited: its first built page, else its first page. */
+export function firstPage(g: TabGroup): string {
+  return (g.pages.find((p) => !p.soon) ?? g.pages[0]).path
 }
 
 /**

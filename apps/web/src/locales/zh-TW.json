@@ -25,9 +25,126 @@
     "problem": "連線有問題：{names}",
     "groups": {
       "home": "首頁",
+      "song": "點歌",
       "chat": "聊天",
       "interact": "互動",
-      "media": "畫面與聲音"
+      "media": "畫面與聲音",
+      "viewers": "觀眾"
+    }
+  },
+  "pages": {
+    "soon": "尚未開放",
+    "streamInfo": {
+      "name": "直播資訊",
+      "desc": "修改直播的標題、分類與標籤。"
+    },
+    "rehearsal": {
+      "name": "演練",
+      "desc": "開播前用模擬事件確認畫面和音效。"
+    },
+    "songs": {
+      "name": "點歌",
+      "desc": "觀眾用聊天指令或頻道點數點歌，依序排隊。"
+    },
+    "songList": {
+      "name": "歌單與規則",
+      "desc": "管理可以點的歌和點歌規則。"
+    },
+    "singingBooth": {
+      "name": "練唱台",
+      "desc": "串接雷虎練唱台。"
+    },
+    "chatLog": {
+      "name": "聊天紀錄",
+      "desc": "完整的聊天紀錄，可以搜尋和篩選。"
+    },
+    "chatFilter": {
+      "name": "聊天過濾",
+      "desc": "擋下關鍵字、連結和洗版訊息。"
+    },
+    "chatTemplates": {
+      "name": "Overlay 樣板",
+      "desc": "選擇聊天室在 OBS 顯示的樣式。"
+    },
+    "chatWindow": {
+      "name": "桌面置頂視窗",
+      "desc": "把聊天室放在其他視窗上方。"
+    },
+    "commands": {
+      "name": "聊天指令",
+      "desc": "自訂聊天指令和回覆。"
+    },
+    "timers": {
+      "name": "定時訊息",
+      "desc": "每隔一段時間在聊天室發送訊息。"
+    },
+    "greetings": {
+      "name": "自動感謝與歡迎",
+      "desc": "自動感謝追隨與訂閱，並歡迎第一次聊天的觀眾。"
+    },
+    "polls": {
+      "name": "投票與預測",
+      "desc": "發起投票與預測，畫面顯示結果。"
+    },
+    "cardStyle": {
+      "name": "卡片樣式",
+      "desc": "觀眾打卡時在 OBS 顯示的集點卡樣式。"
+    },
+    "rewards": {
+      "name": "頻道點數",
+      "desc": "新增或暫停頻道點數獎勵，退還點數。"
+    },
+    "counters": {
+      "name": "計數器",
+      "desc": "死亡次數等計數，可以用聊天指令加減。"
+    },
+    "scenes": {
+      "name": "場景與模式",
+      "desc": "切換 OBS 場景、顯示或隱藏物件，切換直播模式。"
+    },
+    "music": {
+      "name": "背景音樂",
+      "desc": "依場景自動播放的背景音樂。"
+    },
+    "tts": {
+      "name": "文字轉語音",
+      "desc": "唸出小奇點和兌換的留言。"
+    },
+    "screenTools": {
+      "name": "畫面工具",
+      "desc": "休息卡片、目標條和跑馬燈。"
+    },
+    "avatar": {
+      "name": "虛擬形象",
+      "desc": "控制 VTuber Plus、VSeeFace 的表情、換裝與互動。"
+    },
+    "shoutouts": {
+      "name": "SO 與影片",
+      "desc": "SO 時播放 Clip，觀眾也能點播影片。"
+    },
+    "imageSizes": {
+      "name": "圖片尺寸",
+      "desc": "在本機把圖片轉成徽章和頻道點數圖示的尺寸。"
+    },
+    "viewers": {
+      "name": "觀眾清單",
+      "desc": "觀眾的身分、紀錄和備註。"
+    },
+    "roles": {
+      "name": "自訂身分組",
+      "desc": "自己定義的觀眾分組。"
+    },
+    "leaderboard": {
+      "name": "排行榜",
+      "desc": "打卡、小奇點和兌換的排行。"
+    },
+    "credits": {
+      "name": "感謝名單",
+      "desc": "下播前播放的片尾名單。"
+    },
+    "raids": {
+      "name": "揪團",
+      "desc": "發起揪團，出發前播放感謝名單。"
     }
   },
   "home": {
@@ -38,6 +155,7 @@
       "features": "功能"
     },
     "pending": "待處理",
+    "soon": "即將推出",
     "attention": "需要注意",
     "loadFailed": "載入失敗",
     "empty": "首頁沒有功能磚",
