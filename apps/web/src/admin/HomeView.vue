@@ -1,24 +1,13 @@
 <template>
-  <a href="#tiles" class="skip-link" @click.prevent="focusTiles">{{ t('home.skip') }}</a>
+  <Teleport to="#skip-links" :disabled="!skipLinks">
+    <a href="#tiles" class="skip-link" @click.prevent="focusTiles">{{ t('home.skip') }}</a>
+  </Teleport>
   <div class="layout">
     <main>
       <header class="top">
-        <h1>{{ t('app.name') }}</h1>
+        <!-- The app bar shows the name; the status lights and settings live there too. -->
+        <h1 class="sr-only">{{ t('app.name') }}</h1>
         <div class="lights">
-          <StatusLight
-            name="Twitch"
-            :light="twitch"
-            :aria-expanded="drawer.current.value === 'connections'"
-            :aria-controls="drawerId('connections')"
-            @click="toggle('connections', $event.currentTarget)"
-          />
-          <StatusLight
-            name="OBS"
-            :light="obs"
-            :aria-expanded="drawer.current.value === 'connections'"
-            :aria-controls="drawerId('connections')"
-            @click="toggle('connections', $event.currentTarget)"
-          />
           <Button v-if="arranging" ref="doneButton" :label="t('arrange.done')" icon="pi pi-check" @click="leaveArrange" />
           <Button
             v-else
@@ -29,14 +18,6 @@
             :aria-label="t('home.arrange')"
             :disabled="!modules"
             @click="enterArrange"
-          />
-          <Button
-            icon="pi pi-cog"
-            text
-            rounded
-            :aria-label="t('settings.title')"
-            data-page-opener="settings"
-            @click="router.push('/settings')"
           />
         </div>
       </header>
@@ -222,7 +203,6 @@ import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { ALERT_KINDS, type AlertKind, alertTitle } from '../overlay/alerts/alerts'
 import { ApiError, type Schemas, api, client } from './api'
@@ -230,7 +210,7 @@ import AppDrawer from './AppDrawer.vue'
 import ArrangeTiles from './ArrangeTiles.vue'
 import ChatNow from './ChatNow.vue'
 import { EMPTY_LOG, applyChat } from './chatLog'
-import { drawerId, useDrawer } from './drawer'
+import { useDrawer } from './drawer'
 import {
   type Line,
   arrangedTiles,
@@ -238,7 +218,6 @@ import {
   obsLight,
   successToast,
   tileGroups,
-  twitchLight,
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
@@ -246,13 +225,13 @@ import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
-import StatusLight from './StatusLight.vue'
 import TwitchSignIn from './TwitchSignIn.vue'
 import UpdateNotice from './UpdateNotice.vue'
 
 const { t, te, locale } = useI18n()
 const toast = useToast()
-const router = useRouter()
+// Set once: the app shell renders the target before any page (absent when a test mounts home alone).
+const skipLinks = !!document.getElementById('skip-links')
 
 const overview = ref<Schemas['Overview']>()
 const overviewFailed = ref(false)
@@ -329,7 +308,6 @@ const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.valu
 const broadcasterId = computed(() =>
   overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
 )
-const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
 const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(savedTiles.value)))
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
@@ -530,7 +508,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.5rem 1rem;
 }
 

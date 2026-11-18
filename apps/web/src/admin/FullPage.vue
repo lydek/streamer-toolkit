@@ -48,7 +48,7 @@ onMounted(() => {
 
 .page-error {
   position: sticky;
-  top: 0;
+  top: var(--appbar-h, 0px);
   z-index: 1;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;

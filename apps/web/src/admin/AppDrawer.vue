@@ -133,8 +133,8 @@ onUnmounted(() => {
   flex: none;
   width: 380px;
   position: sticky;
-  top: 0;
-  max-height: 100vh;
+  top: var(--appbar-h, 0px);
+  max-height: calc(100vh - var(--appbar-h, 0px));
   display: flex;
   border-left: 1px solid var(--p-surface-700);
   background: var(--p-surface-900);
