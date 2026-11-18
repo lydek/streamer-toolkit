@@ -6,11 +6,13 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
+    presentation::{Item, Presenter, Stage},
     settings::{self, SoundEntry},
 };
 use uuid::Uuid;
@@ -34,11 +36,19 @@ pub enum SoundError {
 }
 
 /// Plays a library sound (ID, volume) on `/overlay/sound/`; `infrastructure` publishes it on the bus.
-type Play = Box<dyn Fn(&str, u8, Source) + Send + Sync>;
+type Play = Arc<dyn Fn(&str, u8, Source) + Send + Sync>;
+
+/// How long a reward sound holds the presentation queue before the admin window has measured it.
+const UNMEASURED: Duration = Duration::from_secs(5);
+
+/// The longest length the admin window may report: 6 hours, more than any file within the 10 MB import limit can
+/// hold even at a low bitrate, so every importable sound can have its length.
+const DURATION_MAX_MS: u32 = 6 * 60 * 60 * 1000;
 
 pub struct SoundService {
     data_dir: PathBuf,
     modules: Arc<Modules>,
+    presenter: Arc<Presenter>,
     play: Play,
 }
 
@@ -46,27 +56,47 @@ impl SoundService {
     pub(crate) fn with_player(
         data_dir: PathBuf,
         modules: Arc<Modules>,
+        presenter: Arc<Presenter>,
         play: impl Fn(&str, u8, Source) + Send + Sync + 'static,
     ) -> Self {
         Self {
             data_dir,
             modules,
-            play: Box::new(play),
+            presenter,
+            play: Arc::new(play),
         }
     }
 
-    /// Plays the sound chosen for a new redemption's reward on `/overlay/sound/`, straight away: kept in memory
-    /// only, so redemptions from before a restart never play late.
+    /// Queues the sound chosen for a new redemption's reward on the presentation queue, for as long as it plays;
+    /// `/overlay/sound/` plays it when its turn comes. Kept in memory only, so redemptions from before a restart
+    /// never play late.
     pub fn receive_redemption(&self, r: &ChannelPointsRedemption) {
         if r.change != RedemptionChange::Added || !self.modules.is_enabled(modules::SOUND) {
             return;
         }
-        if let Cue::File { id, volume } = self.cue(&format!("reward.{}", r.reward_id)) {
-            (self.play)(&id, volume, Source::Twitch);
-        }
+        let Cue::File { id, volume } = self.cue(&format!("reward.{}", r.reward_id)) else {
+            return;
+        };
+        let show = self
+            .list()
+            .into_iter()
+            .find(|e| e.id == id)
+            .and_then(|e| e.duration_ms)
+            .map_or(UNMEASURED, |ms| Duration::from_millis(ms.into()));
+        let play = self.play.clone();
+        self.presenter.push(Item {
+            stage: Stage::Sound,
+            show,
+            simulated: false,
+            present: Box::new(move || {
+                play(&id, volume, Source::Twitch);
+                true
+            }),
+        });
     }
 
-    /// The test button: plays a library sound on `/overlay/sound/` as `source=simulation`; nothing is recorded.
+    /// The test button: plays a library sound on `/overlay/sound/` right away, as `source=simulation`, without
+    /// waiting for the presentation queue; nothing is recorded.
     pub fn play_test(&self, id: &str) -> Result<(), SoundError> {
         let entry = self
             .list()
@@ -149,6 +179,7 @@ impl SoundService {
             label: domain::label_from_file_name(file_name),
             volume: 100,
             format: format.extension().into(),
+            duration_ms: None,
         };
         fs::create_dir_all(self.folder())?;
         let path = file_path(&self.folder(), &entry.id, format);
@@ -174,6 +205,21 @@ impl SoundService {
             }
         })?;
         found.ok_or(SoundError::NotFound)
+    }
+
+    /// Records how long a sound plays, as the admin window measured it (1 ms to 6 hours).
+    pub fn set_duration(&self, id: &str, duration_ms: u32) -> Result<(), SoundError> {
+        if !(1..=DURATION_MAX_MS).contains(&duration_ms) {
+            return Err(SoundError::Invalid);
+        }
+        let mut found = false;
+        settings::update(&self.data_dir, |s| {
+            if let Some(e) = s.sound.library.iter_mut().find(|e| e.id == id) {
+                e.duration_ms = Some(duration_ms);
+                found = true;
+            }
+        })?;
+        found.then_some(()).ok_or(SoundError::NotFound)
     }
 
     /// Removes the sound from the library and the slots that play it, then its file.

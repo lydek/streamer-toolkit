@@ -111,8 +111,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("st-alerts-{name}-{}", std::process::id()));
         let bus = Arc::new(EventBus::default());
         let modules = Arc::new(Modules::load(dir.clone()));
-        let sounds = Arc::new(SoundService::new(dir.clone(), modules.clone(), bus.clone()));
         let presenter = Presenter::start(toolkit_core::presentation::DEFAULT_GAP, |_| true);
+        let sounds = Arc::new(SoundService::new(
+            dir.clone(),
+            modules.clone(),
+            bus.clone(),
+            presenter.clone(),
+        ));
         let alerts = AlertsService::new(
             bus.clone(),
             modules.clone(),
@@ -244,6 +249,7 @@ mod tests {
                 label: "Ding".into(),
                 volume: 40,
                 format: "wav".into(),
+                duration_ms: None,
             });
             s.sound.slots.insert("alert.follow".into(), SOUND_ID.into());
             s.sound.slots.insert("alert.cheer".into(), "silent".into());

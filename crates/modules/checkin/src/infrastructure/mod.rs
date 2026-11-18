@@ -301,6 +301,7 @@ pub(crate) mod tests {
             dir.to_path_buf(),
             Arc::new(Modules::load(dir.to_path_buf())),
             Arc::new(EventBus::default()),
+            presenter(),
         ))
     }
 
@@ -314,6 +315,7 @@ pub(crate) mod tests {
                 label: "Fanfare".into(),
                 volume: 40,
                 format: "ogg".into(),
+                duration_ms: None,
             });
             s.sound.slots.insert("checkin.full".into(), SOUND_ID.into());
         })

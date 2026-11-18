@@ -1464,6 +1464,68 @@
         }
       }
     },
+    "/api/admin/sounds/{id}/duration": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Records how long a sound plays; the admin window measures each sound after import, and older ones once.",
+        "operationId": "set_duration",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoundDuration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`sound.invalid`: not between 1 ms and 10 minutes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`sound.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds/{id}/play": {
       "post": {
         "tags": [
@@ -3740,9 +3802,19 @@
           "id",
           "label",
           "volume",
-          "used_by"
+          "used_by",
+          "duration_ms"
         ],
         "properties": {
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How long it plays; `null` until the admin window has measured it (`PUT /api/admin/sounds/{id}/duration`).",
+            "minimum": 0
+          },
           "id": {
             "type": "string"
           },
@@ -3760,6 +3832,20 @@
             "type": "integer",
             "format": "int32",
             "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "SoundDuration": {
+        "type": "object",
+        "required": [
+          "duration_ms"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How long the sound plays, 1 ms to 10 minutes.",
             "minimum": 0
           }
         }

@@ -95,6 +95,9 @@ pub struct SoundEntry {
     pub volume: u8,
     /// `mp3`, `wav` or `ogg`.
     pub format: String,
+    /// How long it plays, measured by the admin window; `None` until measured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

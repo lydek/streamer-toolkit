@@ -50,6 +50,7 @@ impl From<Stage> for OverlayKind {
         match stage {
             Stage::Alerts => Self::Alerts,
             Stage::Checkin => Self::Checkin,
+            Stage::Sound => Self::Sound,
         }
     }
 }
