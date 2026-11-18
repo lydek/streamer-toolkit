@@ -40,7 +40,7 @@ describe('changesRecords', () => {
       payload: { id: 'r' },
     } as const
     expect(changesRecords(changed)).toBe(true)
-    expect(changesRecords({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [] } })).toBe(true)
+    expect(changesRecords({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'clip.state': [] } })).toBe(true)
     expect(changesRecords({ ...changed, type: 'template.changed', payload: { overlay: 'chat' } })).toBe(false)
   })
 })

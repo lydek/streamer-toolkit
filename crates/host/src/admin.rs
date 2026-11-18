@@ -16,6 +16,7 @@ use axum::{
 };
 use chat::ChatService;
 use checkin::CheckinService;
+use clips::ClipsService;
 use integrations::{
     secrets::SecretStore,
     tls::{ClientConfig, HttpsClient},
@@ -54,6 +55,7 @@ pub(crate) struct AdminState {
     redemption: Arc<RedemptionService>,
     checkin: Arc<CheckinService>,
     sounds: Arc<SoundService>,
+    clips: Arc<ClipsService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
@@ -78,6 +80,7 @@ impl AdminState {
         redemption: Arc<RedemptionService>,
         checkin: Arc<CheckinService>,
         sounds: Arc<SoundService>,
+        clips: Arc<ClipsService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
@@ -94,6 +97,7 @@ impl AdminState {
             redemption,
             checkin,
             sounds,
+            clips,
             outbox,
             modules,
             twitch,
@@ -364,7 +368,13 @@ async fn set_module(
     };
     s.outbox.wake();
     match result {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            // Modules has no change signal, so the clip player is told here to stop what it is playing.
+            if !body.enabled && id == modules::CLIPS {
+                s.clips.stop();
+            }
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e @ ModuleError::Unknown) => error(StatusCode::NOT_FOUND, &e.to_string()),
         Err(e @ ModuleError::SaveFailed(_)) => {
             error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())

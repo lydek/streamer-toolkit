@@ -69,6 +69,9 @@ struct SnapshotPayload {
     /// At most one: the latest status.
     #[serde(rename = "obs.status")]
     obs_status: Vec<ObsStatusEvent>,
+    /// At most one: the clip player's latest state, published once at start.
+    #[serde(rename = "clip.state")]
+    clip_state: Vec<clips::ClipStateEvent>,
 }
 
 #[cfg(test)]
@@ -80,8 +83,21 @@ mod tests {
         modules::Modules,
     };
 
-    #[test]
-    fn snapshot_type_matches_the_bus() {
+    struct NoClips;
+
+    impl clips::ClipLookup for NoClips {
+        fn clip<'a>(
+            &'a self,
+            _: &'a clips::ClipId,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = Result<clips::Clip, clips::LookupError>> + Send + 'a>,
+        > {
+            Box::pin(async { Err(clips::LookupError::NotFound) })
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshot_type_matches_the_bus() {
         let dir = std::env::temp_dir().join(format!("st-overlay-snapshot-{}", std::process::id()));
         let bus = Arc::new(EventBus::default());
         let chat = ChatService::new(bus.clone(), Arc::new(Modules::load(dir.clone())));
@@ -100,6 +116,13 @@ mod tests {
         );
         crate::obs::retain(&bus);
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
+        // Publishes its idle state at once.
+        let _clips = clips::ClipsService::new(
+            bus.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            dir.clone(),
+            Arc::new(NoClips),
+        );
         let wire: serde_json::Value = serde_json::from_str(&bus.subscribe().0).unwrap();
         // No missing, extra or renamed fields; a new retained event type must be added to SnapshotPayload.
         let typed: Snapshot = serde_json::from_value(wire.clone()).unwrap();
@@ -114,6 +137,9 @@ mod tests {
         let obs = &wire["payload"]["obs.status"][0];
         assert_required("ObsStatusEvent", obs);
         assert_required("ObsStatusPayload", &obs["payload"]);
+        let clip = &wire["payload"]["clip.state"][0];
+        assert_required("ClipStateEvent", clip);
+        assert_required("ClipStatePayload", &clip["payload"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

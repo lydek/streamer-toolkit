@@ -37,6 +37,8 @@ pub struct Settings {
     pub checkin: CheckinSettings,
     /// Imported sound files; the sound module checks them.
     pub sound: SoundSettings,
+    /// SO clip playback; the clips module checks it.
+    pub clips: ClipsSettings,
     /// Look for a newer release on GitHub at start and every 24 h; off means no request at all.
     pub update_check: bool,
     /// The release the broadcaster chose to skip ("not this one"); only a newer one shows the notice again.
@@ -64,6 +66,19 @@ pub struct SoundEntry {
     pub volume: u8,
     /// `mp3`, `wav` or `ogg`.
     pub format: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClipsSettings {
+    /// Seconds between a clip's estimated end and the next clip, 0–30.
+    pub buffer_secs: u32,
+}
+
+impl Default for ClipsSettings {
+    fn default() -> Self {
+        Self { buffer_secs: 2 }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,6 +138,7 @@ impl Default for Settings {
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
             sound: SoundSettings::default(),
+            clips: ClipsSettings::default(),
             update_check: true,
             dismissed_version: None,
         }

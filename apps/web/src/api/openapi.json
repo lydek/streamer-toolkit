@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent` and `SoundPlayEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `ClipStateEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -668,6 +668,7 @@
         "tags": [
           "admin"
         ],
+        "summary": "The queue and the player's state.",
         "operationId": "list_clips",
         "responses": {
           "200": {
@@ -685,7 +686,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Looks the clip up on Twitch (Helix Get Clips) and queues it at the end.",
+        "summary": "Looks the clip up on Twitch (Helix Get Clips) and queues it at the end; an idle player starts it.",
         "operationId": "add_clip",
         "requestBody": {
           "content": {
@@ -763,8 +764,154 @@
         "tags": [
           "admin"
         ],
-        "summary": "Empties the queue.",
+        "summary": "Empties the queue; the current clip plays on.",
         "operationId": "clear_clips",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/admin/clips/play": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays the next queued clip when stopped or idle; otherwise does nothing.",
+        "operationId": "play_clip",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/admin/clips/replay": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays the current or last clip again in a new session. Does nothing unless `sessionId` is the current session.",
+        "operationId": "replay_clip",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`clip.invalid_input`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/clips/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "clip_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_clip_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`clip.invalid_buffer`: not 0–30",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/clips/skip": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Moves on to the next clip. Does nothing unless `sessionId` is the current, playing session, so a double click\nskips once.",
+        "operationId": "skip_clip",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`clip.invalid_input`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/clips/stop": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stops the current clip; nothing more plays until play or replay.",
+        "operationId": "stop_clip",
         "responses": {
           "204": {}
         }
@@ -775,7 +922,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Removes one queued clip; an entry that is not queued is ignored.",
+        "summary": "Removes one queued clip; an entry that is not queued is ignored. The current clip is not in the queue.",
         "operationId": "remove_clip",
         "parameters": [
           {
@@ -2726,6 +2873,33 @@
           }
         }
       },
+      "ClipInfo": {
+        "type": "object",
+        "description": "A clip with its Twitch text. `title` and `broadcasterName` are Twitch text: render them as text.",
+        "required": [
+          "id",
+          "title",
+          "broadcasterName",
+          "durationMs"
+        ],
+        "properties": {
+          "broadcasterName": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "The Twitch clip ID."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "ClipInput": {
         "type": "object",
         "required": [
@@ -2741,17 +2915,160 @@
       "ClipQueue": {
         "type": "object",
         "required": [
-          "queue"
+          "queue",
+          "state",
+          "sessionId",
+          "current",
+          "elapsedMs"
         ],
         "properties": {
+          "current": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClipInfo",
+                "description": "The current clip, or the last one when `stopped`; `null` when `idle`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "elapsedMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Estimated: counted from the start of `estimated_playing`, the clip's length in `transitioning`, else `null`.",
+            "minimum": 0
+          },
           "queue": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/QueueEntry"
             },
-            "description": "In play order; at most 50."
+            "description": "Waiting clips in play order, at most 50; the current clip is not among them."
+          },
+          "sessionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New for every play; kept in `idle` and `stopped`; `null` only before the first clip."
+          },
+          "state": {
+            "$ref": "#/components/schemas/PlaybackState"
           }
         }
+      },
+      "ClipRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "durationMs"
+        ],
+        "properties": {
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "The Twitch clip ID, for the embed URL."
+          }
+        }
+      },
+      "ClipSettings": {
+        "type": "object",
+        "required": [
+          "bufferSecs"
+        ],
+        "properties": {
+          "bufferSecs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds between a clip's estimated end and the next clip, 0–30.",
+            "minimum": 0
+          }
+        }
+      },
+      "ClipStateEvent": {
+        "type": "object",
+        "description": "A `clip.state` event exactly as `/ws/overlay` sends it. The latest one is kept in snapshots, so a reloaded\noverlay picks up the current session.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ClipStatePayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ClipStateType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ClipStatePayload": {
+        "type": "object",
+        "description": "The `payload` of a `clip.state` event: just what `/overlay/clip/` needs to show the embed.",
+        "required": [
+          "sessionId",
+          "state",
+          "clip"
+        ],
+        "properties": {
+          "clip": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClipRef",
+                "description": "`null` when `idle`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PlaybackState"
+          }
+        }
+      },
+      "ClipStateType": {
+        "type": "string",
+        "enum": [
+          "clip.state"
+        ]
       },
       "DeviceLogin": {
         "type": "object",
@@ -3092,37 +3409,37 @@
           }
         }
       },
+      "PlaybackState": {
+        "type": "string",
+        "description": "The player's state. The playing states are estimates from the clip's length: the embed reports nothing back.",
+        "enum": [
+          "idle",
+          "loading",
+          "estimated_playing",
+          "transitioning",
+          "stopped",
+          "error"
+        ]
+      },
       "QueueEntry": {
-        "type": "object",
-        "description": "A queued clip. `title` and `broadcasterName` are Twitch text: render them as text.",
-        "required": [
-          "entry",
-          "id",
-          "title",
-          "broadcasterName",
-          "durationMs"
-        ],
-        "properties": {
-          "broadcasterName": {
-            "type": "string"
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ClipInfo"
           },
-          "durationMs": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "entry": {
-            "type": "string",
-            "description": "Tells apart the same clip queued twice."
-          },
-          "id": {
-            "type": "string",
-            "description": "The Twitch clip ID."
-          },
-          "title": {
-            "type": "string"
+          {
+            "type": "object",
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "type": "string",
+                "description": "Tells apart the same clip queued twice."
+              }
+            }
           }
-        }
+        ],
+        "description": "A queued clip."
       },
       "RedemptionChangedEvent": {
         "type": "object",
@@ -3324,6 +3641,18 @@
           }
         }
       },
+      "SessionInput": {
+        "type": "object",
+        "required": [
+          "sessionId"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "The session the command is for; a session that is over makes the command do nothing."
+          }
+        }
+      },
       "SimulatedAlert": {
         "type": "object",
         "required": [
@@ -3430,7 +3759,8 @@
         "type": "object",
         "required": [
           "chat.message",
-          "obs.status"
+          "obs.status",
+          "clip.state"
         ],
         "properties": {
           "chat.message": {
@@ -3438,6 +3768,13 @@
             "items": {
               "$ref": "#/components/schemas/ChatMessageEvent"
             }
+          },
+          "clip.state": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClipStateEvent"
+            },
+            "description": "At most one: the clip player's latest state, published once at start."
           },
           "obs.status": {
             "type": "array",

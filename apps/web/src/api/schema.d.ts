@@ -239,12 +239,100 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** The queue and the player's state. */
         get: operations["list_clips"];
         put?: never;
-        /** Looks the clip up on Twitch (Helix Get Clips) and queues it at the end. */
+        /** Looks the clip up on Twitch (Helix Get Clips) and queues it at the end; an idle player starts it. */
         post: operations["add_clip"];
-        /** Empties the queue. */
+        /** Empties the queue; the current clip plays on. */
         delete: operations["clear_clips"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plays the next queued clip when stopped or idle; otherwise does nothing. */
+        post: operations["play_clip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plays the current or last clip again in a new session. Does nothing unless `sessionId` is the current session. */
+        post: operations["replay_clip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["clip_settings"];
+        put: operations["set_clip_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moves on to the next clip. Does nothing unless `sessionId` is the current, playing session, so a double click
+         *     skips once.
+         */
+        post: operations["skip_clip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stops the current clip; nothing more plays until play or replay. */
+        post: operations["stop_clip"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -260,7 +348,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Removes one queued clip; an entry that is not queued is ignored. */
+        /** Removes one queued clip; an entry that is not queued is ignored. The current clip is not in the queue. */
         delete: operations["remove_clip"];
         options?: never;
         head?: never;
@@ -934,6 +1022,15 @@ export interface components {
         ClientIdBody: {
             client_id: string;
         };
+        /** @description A clip with its Twitch text. `title` and `broadcasterName` are Twitch text: render them as text. */
+        ClipInfo: {
+            broadcasterName: string;
+            /** Format: int64 */
+            durationMs: number;
+            /** @description The Twitch clip ID. */
+            id: string;
+            title: string;
+        };
         ClipInput: {
             /**
              * @description A Twitch clip URL (`clips.twitch.tv/<id>`, `clips.twitch.tv/embed?clip=<id>` or `twitch.tv/<channel>/clip/<id>`)
@@ -942,9 +1039,54 @@ export interface components {
             input: string;
         };
         ClipQueue: {
-            /** @description In play order; at most 50. */
+            current: components["schemas"]["ClipInfo"] | null;
+            /**
+             * Format: int64
+             * @description Estimated: counted from the start of `estimated_playing`, the clip's length in `transitioning`, else `null`.
+             */
+            elapsedMs: number | null;
+            /** @description Waiting clips in play order, at most 50; the current clip is not among them. */
             queue: components["schemas"]["QueueEntry"][];
+            /** @description New for every play; kept in `idle` and `stopped`; `null` only before the first clip. */
+            sessionId: string | null;
+            state: components["schemas"]["PlaybackState"];
         };
+        ClipRef: {
+            /** Format: int64 */
+            durationMs: number;
+            /** @description The Twitch clip ID, for the embed URL. */
+            id: string;
+        };
+        ClipSettings: {
+            /**
+             * Format: int32
+             * @description Seconds between a clip's estimated end and the next clip, 0–30.
+             */
+            bufferSecs: number;
+        };
+        /**
+         * @description A `clip.state` event exactly as `/ws/overlay` sends it. The latest one is kept in snapshots, so a reloaded
+         *     overlay picks up the current session.
+         */
+        ClipStateEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ClipStatePayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ClipStateType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The `payload` of a `clip.state` event: just what `/overlay/clip/` needs to show the embed. */
+        ClipStatePayload: {
+            clip: components["schemas"]["ClipRef"] | null;
+            sessionId: string | null;
+            state: components["schemas"]["PlaybackState"];
+        };
+        /** @enum {string} */
+        ClipStateType: "clip.state";
         DeviceLogin: {
             /** Format: int64 */
             expires_in_secs: number;
@@ -1064,16 +1206,15 @@ export interface components {
             /** Format: int32 */
             volume: number;
         };
-        /** @description A queued clip. `title` and `broadcasterName` are Twitch text: render them as text. */
-        QueueEntry: {
-            broadcasterName: string;
-            /** Format: int64 */
-            durationMs: number;
+        /**
+         * @description The player's state. The playing states are estimates from the clip's length: the embed reports nothing back.
+         * @enum {string}
+         */
+        PlaybackState: "idle" | "loading" | "estimated_playing" | "transitioning" | "stopped" | "error";
+        /** @description A queued clip. */
+        QueueEntry: components["schemas"]["ClipInfo"] & {
             /** @description Tells apart the same clip queued twice. */
             entry: string;
-            /** @description The Twitch clip ID. */
-            id: string;
-            title: string;
         };
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
@@ -1151,6 +1292,10 @@ export interface components {
             id: string;
             title: string;
         };
+        SessionInput: {
+            /** @description The session the command is for; a session that is over makes the command do nothing. */
+            sessionId: string;
+        };
         SimulatedAlert: {
             /**
              * Format: int32
@@ -1191,6 +1336,8 @@ export interface components {
         };
         SnapshotPayload: {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
+            /** @description At most one: the clip player's latest state, published once at start. */
+            "clip.state": components["schemas"]["ClipStateEvent"][];
             /** @description At most one: the latest status. */
             "obs.status": components["schemas"]["ObsStatusEvent"][];
         };
@@ -1938,6 +2085,158 @@ export interface operations {
         };
     };
     clear_clips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    play_clip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    replay_clip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `clip.invalid_input` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    clip_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipSettings"];
+                };
+            };
+        };
+    };
+    set_clip_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipSettings"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `clip.invalid_buffer`: not 0–30 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    skip_clip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `clip.invalid_input` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    stop_clip: {
         parameters: {
             query?: never;
             header?: never;

@@ -147,6 +147,11 @@ apps/
 - **SO 剪輯佇列**（clips 模組）：管理 API `GET`／`POST`／`DELETE /api/admin/clips`、`DELETE /api/admin/clips/{entry}`。
   - 加入：`POST` 的 `input` 可以是 Twitch Clip 網址（`clips.twitch.tv/<id>`、`clips.twitch.tv/embed?clip=<id>` 或 `twitch.tv/<頻道>/clip/<id>`，可省略 `https://`）或 Clip ID（英數字、`_`、`-`，最多 100 字元），其他回 400 `clip.invalid_input`。Host 以實況主的登入向 Helix Get Clips 查詢（不需要 scope，也不用 Client Secret），存下標題、頻道名稱與長度；查不到回 404 `clip.not_found`，Twitch 錯誤沿用 `GET /api/admin/checkin/rewards` 的 `twitch.*` 錯誤碼與狀態碼。
   - 佇列只放記憶體，重新啟動就清空；最多 50 部，滿了回 409 `clip.queue_full`。同一部 Clip 可重複加入，每次有自己的 `entry`；刪除不在佇列裡的 `entry` 不做任何事。標題與頻道名稱是第三方文字，一律以文字顯示。
+  - 播放：官方 Clip 嵌入不回報任何播放事件，所以切換時間全靠預估。clips 模組 application 層只有一個播放 task，用 `tokio::time` 的單調時鐘計時，指令與到期時間都由它依序處理，不會有兩個計時同時生效。每部 Clip 依序是 `loading`（從開始起算 3 秒載入預留）、`estimated_playing`（Helix 長度）、`transitioning`（切換緩衝秒數，`settings.json` 的 `clips.buffer_secs`，0–30，預設 2；`GET`／`PUT /api/admin/clips/settings`，超出範圍回 400 `clip.invalid_buffer`），接著播下一部；佇列空了是 `idle`。開始播放時從佇列取出，所以目前那部不在佇列裡；佇列原本是空的時候，加入就立刻開始播放。
+  - Session：每次播放產生新的 session ID（UUID v7）。`POST /api/admin/clips/skip` 與 `/replay` 要帶目前的 `sessionId`，已結束的 session 一律不做任何事（回 204），所以連按跳過也只切換一次；舊的到期時間與查詢結果同樣依 session 丟棄。`/stop` 停在 `stopped`，到播放或重播前都不會再開始；`/play` 在 `stopped`／`idle` 時播下一部；`/replay` 用新 session 重播目前或上一部，不從佇列取。`idle` 與 `stopped` 保留上一次的 session ID。
+  - 開始播放時，再向 Helix 查一次（不擋住播放 task）：Clip 已經刪除就進入 `error`，2 秒後播下一部；其他錯誤（未登入、連不上、限流）只記錄警告，照加入時存下的資料播放，佇列不受影響。Clip 存在但不能嵌入、地區限制或自動播放被擋都看不到，一樣播完預估時間。
+  - 模組停用時，Host 在 `PUT /api/admin/modules/clips` 成功後停止播放；之後也不會開始任何一部，重新啟用也不會自動播放，佇列照常可以修改。
+  - 狀態以 `clip.state` 事件發布（`sessionId`、`state`、`clip` 只帶 `id` 與 `durationMs`；標題與頻道名稱不經過 `/ws/overlay`），快照保留最新一則；啟動時先發布一次 `idle`。`GET /api/admin/clips` 另外帶目前那部的完整資料與 `elapsedMs`（`estimated_playing` 從開始起算，`transitioning` 為 Clip 長度，其他狀態是 `null`）。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。

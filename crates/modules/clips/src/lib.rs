@@ -6,4 +6,4 @@ mod infrastructure;
 
 pub use application::{ClipError, ClipLookup, ClipsService, LookupError};
 pub use domain::{Clip, ClipId};
-pub use infrastructure::{openapi, routes};
+pub use infrastructure::{ClipStateEvent, openapi, routes};

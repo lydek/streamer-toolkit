@@ -199,11 +199,16 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         http: http.clone(),
         twitch: twitch.clone(),
     });
-    let clips = Arc::new(clips::ClipsService::new(Arc::new(admin::TwitchClips {
-        helix: config.twitch.helix.clone(),
-        http: http.clone(),
-        twitch: twitch.clone(),
-    })));
+    let clips = Arc::new(clips::ClipsService::new(
+        bus.clone(),
+        modules.clone(),
+        config.data_dir.clone(),
+        Arc::new(admin::TwitchClips {
+            helix: config.twitch.helix.clone(),
+            http: http.clone(),
+            twitch: twitch.clone(),
+        }),
+    ));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
@@ -254,6 +259,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         redemption.clone(),
         checkin.clone(),
         sounds.clone(),
+        clips.clone(),
         outbox,
         modules,
     ));
