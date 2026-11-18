@@ -731,6 +731,66 @@ impl checkin::ProfileImages for TwitchProfiles {
     }
 }
 
+/// Clips for the SO clip queue, from Helix Get Clips with the broadcaster's sign-in (no scope needed).
+pub(crate) struct TwitchClips {
+    pub(crate) helix: String,
+    pub(crate) http: HttpsClient,
+    pub(crate) twitch: Arc<RwLock<TwitchAuth>>,
+}
+
+impl clips::ClipLookup for TwitchClips {
+    fn clip<'a>(
+        &'a self,
+        id: &'a clips::ClipId,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<clips::Clip, clips::LookupError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let auth = self.twitch.read().await.clone();
+            // `ClipId` only holds letters, digits, `_` and `-`, so it needs no escaping.
+            let body = Helix::new(&self.helix, auth, self.http.clone())
+                .get_json(&format!("/clips?id={}", id.as_str()))
+                .await
+                .map_err(|e| {
+                    let status = match &e {
+                        HelixError::Auth(a) => auth_status(a),
+                        HelixError::RateLimited(_) | HelixError::Refused(_) => {
+                            StatusCode::BAD_GATEWAY
+                        }
+                    };
+                    clips::LookupError::Twitch {
+                        status: status.as_u16(),
+                        code: e.to_string(),
+                    }
+                })?;
+            clip_from_helix(&body)
+        })
+    }
+}
+
+/// The first clip of a Get Clips response; an empty `data` means Twitch has no such clip.
+fn clip_from_helix(body: &serde_json::Value) -> Result<clips::Clip, clips::LookupError> {
+    let invalid = || clips::LookupError::Twitch {
+        status: auth_status(&AuthError::InvalidResponse).as_u16(),
+        code: AuthError::InvalidResponse.to_string(),
+    };
+    let data = body["data"].as_array().ok_or_else(invalid)?;
+    let Some(clip) = data.first() else {
+        return Err(clips::LookupError::NotFound);
+    };
+    let text = |key: &str| clip[key].as_str().map(str::to_owned).ok_or_else(invalid);
+    let duration = clip["duration"]
+        .as_f64()
+        .filter(|d| d.is_finite() && *d > 0.0)
+        .ok_or_else(invalid)?;
+    Ok(clips::Clip {
+        id: text("id")?,
+        title: text("title")?,
+        broadcaster_name: text("broadcaster_name")?,
+        duration_ms: (duration * 1000.0).round() as u64,
+    })
+}
+
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SimulatedCheckin {
@@ -766,14 +826,17 @@ async fn simulate_checkin(
     }
 }
 
-fn auth_error(e: AuthError) -> Response {
-    let status = match e {
+fn auth_status(e: &AuthError) -> StatusCode {
+    match e {
         AuthError::ClientIdRequired | AuthError::SignInRequired => StatusCode::CONFLICT,
         AuthError::Unreachable => StatusCode::BAD_GATEWAY,
         AuthError::StorageFailed => StatusCode::INTERNAL_SERVER_ERROR,
         _ => StatusCode::BAD_REQUEST,
-    };
-    error(status, &e.to_string())
+    }
+}
+
+fn auth_error(e: AuthError) -> Response {
+    error(auth_status(&e), &e.to_string())
 }
 
 /// Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
@@ -887,5 +950,37 @@ mod tests {
         assert!(constant_time_eq(b"token", b"token"));
         assert!(!constant_time_eq(b"token", b"tokem"));
         assert!(!constant_time_eq(b"token", b"tok"));
+    }
+
+    #[test]
+    fn get_clips_responses_become_clips_or_errors() {
+        let clip = serde_json::json!({ "data": [{
+            "id": "CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4", "title": "<b>F1</b>",
+            "broadcaster_name": "Twitch", "duration": 28.4, "embed_url": "https://example.com/" }] });
+        assert_eq!(
+            clip_from_helix(&clip),
+            Ok(clips::Clip {
+                id: "CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4".into(),
+                title: "<b>F1</b>".into(),
+                broadcaster_name: "Twitch".into(),
+                duration_ms: 28_400,
+            })
+        );
+        assert_eq!(
+            clip_from_helix(&serde_json::json!({ "data": [] })),
+            Err(clips::LookupError::NotFound)
+        );
+        let invalid = Err(clips::LookupError::Twitch {
+            status: 400,
+            code: "twitch.invalid_response".into(),
+        });
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({ "data": [{ "id": "a", "title": "t", "broadcaster_name": "b" }] }),
+            serde_json::json!({ "data": [{ "id": "a", "title": "t", "broadcaster_name": "b", "duration": -1 }] }),
+            serde_json::json!({ "data": [{ "id": "a", "broadcaster_name": "b", "duration": 5 }] }),
+        ] {
+            assert_eq!(clip_from_helix(&body), invalid, "{body}");
+        }
     }
 }

@@ -232,6 +232,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/clips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_clips"];
+        put?: never;
+        /** Looks the clip up on Twitch (Helix Get Clips) and queues it at the end. */
+        post: operations["add_clip"];
+        /** Empties the queue. */
+        delete: operations["clear_clips"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/clips/{entry}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Removes one queued clip; an entry that is not queued is ignored. */
+        delete: operations["remove_clip"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -899,6 +934,17 @@ export interface components {
         ClientIdBody: {
             client_id: string;
         };
+        ClipInput: {
+            /**
+             * @description A Twitch clip URL (`clips.twitch.tv/<id>`, `clips.twitch.tv/embed?clip=<id>` or `twitch.tv/<channel>/clip/<id>`)
+             *     or a clip ID.
+             */
+            input: string;
+        };
+        ClipQueue: {
+            /** @description In play order; at most 50. */
+            queue: components["schemas"]["QueueEntry"][];
+        };
         DeviceLogin: {
             /** Format: int64 */
             expires_in_secs: number;
@@ -1017,6 +1063,17 @@ export interface components {
             url: string;
             /** Format: int32 */
             volume: number;
+        };
+        /** @description A queued clip. `title` and `broadcasterName` are Twitch text: render them as text. */
+        QueueEntry: {
+            broadcasterName: string;
+            /** Format: int64 */
+            durationMs: number;
+            /** @description Tells apart the same clip queued twice. */
+            entry: string;
+            /** @description The Twitch clip ID. */
+            id: string;
+            title: string;
         };
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
@@ -1790,6 +1847,129 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+        };
+    };
+    list_clips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipQueue"];
+                };
+            };
+        };
+    };
+    add_clip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueEntry"];
+                };
+            };
+            /** @description `clip.invalid_input`: not a Twitch clip URL or ID; other `twitch.*` sign-in codes such as `twitch.sign_in_expired` or `twitch.invalid_response` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `clip.not_found`: Twitch has no such clip */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `clip.queue_full` (50 clips), `twitch.client_id_required` or `twitch.sign_in_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    clear_clips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_clip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

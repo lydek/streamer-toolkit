@@ -17,6 +17,7 @@ crates/
     redemption/    # 兌換紀錄（複雜）
     checkin/       # 打卡簽到（複雜）：訂閱 RedemptionRecorded 與聊天指令事件
     sound/         # 音效管理（薄）
+    clips/         # SO 剪輯（薄）
   host/            # 組合根：組裝模組、Axum HTTP／WebSocket 路由、Overlay 靜態頁
   arch-tests/      # 只放架構測試（見 §7）
 apps/
@@ -143,6 +144,9 @@ apps/
   - 選擇各處播放的音效：`PUT /api/admin/sounds/slots/{slot}`（`{ "sound": "<id>" | "silent" | null }`；`slot` 為 `alert.<種類>`、`checkin`、`checkin.full` 或 `reward.<Twitch 獎勵 ID>`），記在 `settings.json` 的 `sound.slots`；`null` 回到預設（特效是內建音效，其他是靜音）。alerts 與 checkin 模組在發布事件時才向 sound 模組的公開 service 查詢，所以模擬器觸發的特效與打卡也照設定播放。sound 模組停用時一律用預設。
   - 刪除音效時，用到它的 slot 一併回到預設；`GET /api/admin/sounds` 的每個音效帶 `used_by`（用到它的 slot），管理 UI 刪除前先列出。
 - **兌換音效 Overlay**（`/overlay/sound/`）：音效完整頁可把頻道點數獎勵（清單同打卡設定，Helix Get Custom Reward）對應到音效庫的音效。新的兌換（`RedemptionChange::Added`）由 Host 在交給 redemption 模組的同一處，也交給 sound 模組（記憶體，不經 outbox：晚播不如不播，重啟前的兌換不補播），sound 模組發布 `sound.play`（`url`、`volume`），不放進快照。Overlay 依收到的順序一次播一個，播完（或播放失敗）才播下一個；等待超過 100 個時丟掉最舊的。「在 OBS 播放」（`POST /api/admin/sounds/{id}/play`）只送到 Overlay（`source=simulation`），不寫入兌換紀錄。OBS 加這個網址為瀏覽器來源，勾選「透過 OBS 控制音訊」。
+- **SO 剪輯佇列**（clips 模組）：管理 API `GET`／`POST`／`DELETE /api/admin/clips`、`DELETE /api/admin/clips/{entry}`。
+  - 加入：`POST` 的 `input` 可以是 Twitch Clip 網址（`clips.twitch.tv/<id>`、`clips.twitch.tv/embed?clip=<id>` 或 `twitch.tv/<頻道>/clip/<id>`，可省略 `https://`）或 Clip ID（英數字、`_`、`-`，最多 100 字元），其他回 400 `clip.invalid_input`。Host 以實況主的登入向 Helix Get Clips 查詢（不需要 scope，也不用 Client Secret），存下標題、頻道名稱與長度；查不到回 404 `clip.not_found`，Twitch 錯誤沿用 `GET /api/admin/checkin/rewards` 的 `twitch.*` 錯誤碼與狀態碼。
+  - 佇列只放記憶體，重新啟動就清空；最多 50 部，滿了回 409 `clip.queue_full`。同一部 Clip 可重複加入，每次有自己的 `entry`；刪除不在佇列裡的 `entry` 不做任何事。標題與頻道名稱是第三方文字，一律以文字顯示。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。

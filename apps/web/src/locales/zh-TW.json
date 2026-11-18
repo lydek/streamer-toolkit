@@ -164,7 +164,8 @@
       "alerts": "特效",
       "redemption": "兌換紀錄",
       "checkin": "打卡",
-      "sound": "音效"
+      "sound": "音效",
+      "clips": "SO 剪輯"
     }
   },
   "settings": {

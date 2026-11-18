@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: dfb51ce0b89a509d1f5d6e657f0bff6ca728148814ea1453a0d8906749b8db89 -->
+<!-- source: docs/architecture.md source-sha256: 2f72fa135a80294146a7446b1f3e9ccc6c91389769d36d66b1d95fb27a31e53a -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -18,6 +18,7 @@ crates/
     redemption/    # Redemption records (complex)
     checkin/       # Daily check-in (complex): subscribes to RedemptionRecorded and chat command events
     sound/         # Sound management (thin)
+    clips/         # SO clips (thin)
   host/            # Composition root: wires modules, Axum HTTP/WebSocket routes, overlay static pages
   arch-tests/      # Architecture tests only (see §7)
 apps/
@@ -144,6 +145,9 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
   - Choosing what plays where: `PUT /api/admin/sounds/slots/{slot}` (`{ "sound": "<id>" | "silent" | null }`; `slot` is `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>`), kept in `settings.json` under `sound.slots`; `null` goes back to the default (the built-in sound for alerts, silence otherwise). The alerts and checkin modules ask the sound module's public service only when they publish an event, so alerts and check-ins from the simulator play the chosen sound too. While the sound module is disabled, every slot plays its default.
   - Deleting a sound puts the slots that used it back to their defaults; each sound in `GET /api/admin/sounds` carries `used_by` (the slots that use it), which the admin UI lists before deleting.
 - **Reward sound overlay** (`/overlay/sound/`): the sounds full page can map channel point rewards (the same list as the check-in settings, Helix Get Custom Reward) to library sounds. The Host hands each new redemption (`RedemptionChange::Added`) to the sound module at the same place it hands it to the redemption module (in memory, not through the outbox: a sound played late is worse than none, so redemptions from before a restart never play); the sound module publishes `sound.play` (`url`, `volume`), not kept in snapshots. The overlay plays them one at a time in the order they arrive, starting the next when one ends (or fails); beyond 100 waiting, the oldest is dropped. "Play in OBS" (`POST /api/admin/sounds/{id}/play`) reaches only the overlay (`source=simulation`) and writes no redemption record. Add this URL in OBS as a browser source with "Control audio via OBS" checked.
+- **SO clip queue** (clips module): admin API `GET`/`POST`/`DELETE /api/admin/clips`, `DELETE /api/admin/clips/{entry}`.
+  - Adding: the `input` of a `POST` is a Twitch clip URL (`clips.twitch.tv/<id>`, `clips.twitch.tv/embed?clip=<id>` or `twitch.tv/<channel>/clip/<id>`, `https://` optional) or a clip ID (letters, digits, `_` and `-`, at most 100 characters); anything else gets 400 `clip.invalid_input`. The Host looks it up on Helix Get Clips with the broadcaster's sign-in (no scope needed, no client secret) and keeps the title, channel name and length; an unknown clip gets 404 `clip.not_found`, and Twitch errors keep the `twitch.*` codes and statuses of `GET /api/admin/checkin/rewards`.
+  - The queue lives in memory only and a restart empties it; it holds at most 50 clips, then 409 `clip.queue_full`. The same clip can be queued more than once, each time with its own `entry`; deleting an `entry` that is not queued does nothing. Titles and channel names are third-party text and are always shown as text.
 - **Host header**: accept only `127.0.0.1:<port>` and `localhost:<port>`, to block DNS rebinding.
 - **Origin**: every WebSocket connection (overlays included) and every state-changing request checks Origin, accepting only `http://127.0.0.1:<port>` and `http://localhost:<port>` (current port); dev mode also accepts the Vite dev server origin (passed in by `apps/desktop` as runtime configuration). WebSocket connections without an Origin or with `Origin: null` are always rejected.
 - **CORS**: none on `/api`, `/ws` and `/admin`. Only the build `assets/` directory (chunks shared by the admin UI and overlays) and the template paths (`/templates`, built-in templates included) send `Access-Control-Allow-Origin: *` (without credentials; the content is public code and templates), because the preview iframe's origin is `null` and Vite's module scripts, CSS and fonts must load through CORS.

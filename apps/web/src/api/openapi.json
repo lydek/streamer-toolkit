@@ -663,6 +663,135 @@
         }
       }
     },
+    "/api/admin/clips": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_clips",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipQueue"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Looks the clip up on Twitch (Helix Get Clips) and queues it at the end.",
+        "operationId": "add_clip",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`clip.invalid_input`: not a Twitch clip URL or ID; other `twitch.*` sign-in codes such as `twitch.sign_in_expired` or `twitch.invalid_response`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`clip.not_found`: Twitch has no such clip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`clip.queue_full` (50 clips), `twitch.client_id_required` or `twitch.sign_in_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`twitch.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`twitch.request_refused`, `twitch.rate_limited` or `twitch.unreachable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Empties the queue.",
+        "operationId": "clear_clips",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/admin/clips/{entry}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Removes one queued clip; an entry that is not queued is ignored.",
+        "operationId": "remove_clip",
+        "parameters": [
+          {
+            "name": "entry",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/admin/general": {
       "get": {
         "tags": [
@@ -2597,6 +2726,33 @@
           }
         }
       },
+      "ClipInput": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "A Twitch clip URL (`clips.twitch.tv/<id>`, `clips.twitch.tv/embed?clip=<id>` or `twitch.tv/<channel>/clip/<id>`)\nor a clip ID."
+          }
+        }
+      },
+      "ClipQueue": {
+        "type": "object",
+        "required": [
+          "queue"
+        ],
+        "properties": {
+          "queue": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueEntry"
+            },
+            "description": "In play order; at most 50."
+          }
+        }
+      },
       "DeviceLogin": {
         "type": "object",
         "required": [
@@ -2933,6 +3089,38 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "QueueEntry": {
+        "type": "object",
+        "description": "A queued clip. `title` and `broadcasterName` are Twitch text: render them as text.",
+        "required": [
+          "entry",
+          "id",
+          "title",
+          "broadcasterName",
+          "durationMs"
+        ],
+        "properties": {
+          "broadcasterName": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "entry": {
+            "type": "string",
+            "description": "Tells apart the same clip queued twice."
+          },
+          "id": {
+            "type": "string",
+            "description": "The Twitch clip ID."
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

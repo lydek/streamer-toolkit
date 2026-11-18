@@ -199,6 +199,11 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         http: http.clone(),
         twitch: twitch.clone(),
     });
+    let clips = Arc::new(clips::ClipsService::new(Arc::new(admin::TwitchClips {
+        helix: config.twitch.helix.clone(),
+        http: http.clone(),
+        twitch: twitch.clone(),
+    })));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
@@ -281,6 +286,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             )),
         )
         .merge(sound::file_routes(sounds))
+        .merge(clips::routes(clips).layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
         .merge(home_tiles.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
@@ -725,6 +734,28 @@ mod tests {
         let req = get_req("/api/admin/checkin/rewards", "127.0.0.1:47810")
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
             .body(Body::empty())
+            .unwrap();
+        let res = app().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["code"],
+            "twitch.sign_in_required"
+        );
+    }
+
+    #[tokio::test]
+    async fn adding_a_clip_needs_a_sign_in() {
+        let req = get_req("/api/admin/clips", "127.0.0.1:47810")
+            .method(Method::POST)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                r#"{"input":"https://clips.twitch.tv/AwkwardHelplessSalamanderSwiftRage"}"#,
+            ))
             .unwrap();
         let res = app().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::CONFLICT);

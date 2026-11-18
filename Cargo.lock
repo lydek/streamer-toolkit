@@ -669,6 +669,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "clips"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "cmov"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1844,6 +1858,7 @@ dependencies = [
  "chat",
  "checkin",
  "chrono",
+ "clips",
  "integrations",
  "mime_guess",
  "redemption",

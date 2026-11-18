@@ -13,7 +13,8 @@ pub const ALERTS: &str = "alerts";
 pub const REDEMPTION: &str = "redemption";
 pub const CHECKIN: &str = "checkin";
 pub const SOUND: &str = "sound";
-pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND];
+pub const CLIPS: &str = "clips";
+pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND, CLIPS];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {
