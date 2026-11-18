@@ -156,7 +156,7 @@ pub struct ClipSettings {
     pub buffer_secs: u32,
 }
 
-/// The `payload` of a `clip.state` event: just what `/overlay/clip/` needs to show the embed.
+/// The `payload` of a `clip.state` event: what `/overlay/clip/` needs to show the embed and its caption.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipStatePayload {
@@ -173,6 +173,10 @@ pub struct ClipStatePayload {
 pub struct ClipRef {
     /// The Twitch clip ID, for the embed URL.
     pub id: String,
+    /// Twitch text: render it as text.
+    pub title: String,
+    /// Twitch text: render it as text.
+    pub broadcaster_name: String,
     pub duration_ms: u64,
 }
 
@@ -204,6 +208,8 @@ fn state_payload(p: &Playback) -> ClipStatePayload {
         state: p.state.into(),
         clip: p.clip.as_ref().map(|c| ClipRef {
             id: c.id.clone(),
+            title: c.title.clone(),
+            broadcaster_name: c.broadcaster_name.clone(),
             duration_ms: c.duration_ms,
         }),
     }
@@ -567,9 +573,9 @@ mod tests {
         assert_eq!(payload["state"], "loading");
         assert_eq!(
             payload["clip"],
-            serde_json::json!({ "id": KNOWN, "durationMs": 30_000 })
+            serde_json::json!({ "id": KNOWN, "title": "F1 2017 E3 Gameplay!",
+                                "broadcasterName": "Twitch", "durationMs": 30_000 })
         );
-        assert!(payload.get("title").is_none() && payload["clip"].get("title").is_none());
         let session = payload["sessionId"].as_str().unwrap().to_owned();
 
         let skip = format!(r#"{{"sessionId":"{session}"}}"#);

@@ -1052,10 +1052,14 @@ export interface components {
             state: components["schemas"]["PlaybackState"];
         };
         ClipRef: {
+            /** @description Twitch text: render it as text. */
+            broadcasterName: string;
             /** Format: int64 */
             durationMs: number;
             /** @description The Twitch clip ID, for the embed URL. */
             id: string;
+            /** @description Twitch text: render it as text. */
+            title: string;
         };
         ClipSettings: {
             /**
@@ -1079,7 +1083,7 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
-        /** @description The `payload` of a `clip.state` event: just what `/overlay/clip/` needs to show the embed. */
+        /** @description The `payload` of a `clip.state` event: what `/overlay/clip/` needs to show the embed and its caption. */
         ClipStatePayload: {
             clip: components["schemas"]["ClipRef"] | null;
             sessionId: string | null;

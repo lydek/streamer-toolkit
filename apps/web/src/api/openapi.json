@@ -2965,9 +2965,15 @@
         "type": "object",
         "required": [
           "id",
+          "title",
+          "broadcasterName",
           "durationMs"
         ],
         "properties": {
+          "broadcasterName": {
+            "type": "string",
+            "description": "Twitch text: render it as text."
+          },
           "durationMs": {
             "type": "integer",
             "format": "int64",
@@ -2976,6 +2982,10 @@
           "id": {
             "type": "string",
             "description": "The Twitch clip ID, for the embed URL."
+          },
+          "title": {
+            "type": "string",
+            "description": "Twitch text: render it as text."
           }
         }
       },
@@ -3035,7 +3045,7 @@
       },
       "ClipStatePayload": {
         "type": "object",
-        "description": "The `payload` of a `clip.state` event: just what `/overlay/clip/` needs to show the embed.",
+        "description": "The `payload` of a `clip.state` event: what `/overlay/clip/` needs to show the embed and its caption.",
         "required": [
           "sessionId",
           "state",
