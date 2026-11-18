@@ -245,7 +245,7 @@ describe('SettingsView', () => {
       client.PUT.mockResolvedValue(ok())
       const wrapper = await mountSettings()
       await vi.waitFor(() => expect(wrapper.find('#module-checkin').exists()).toBe(true))
-      const dialog = wrapper.get('dialog').element as HTMLDialogElement
+      const dialog = wrapper.get('dialog[aria-labelledby="checkin-disable-title"]').element as HTMLDialogElement
 
       await wrapper.get('#module-checkin').trigger('change')
       expect(dialog.open).toBe(true)
@@ -256,7 +256,7 @@ describe('SettingsView', () => {
 
       await wrapper.get('#module-checkin').trigger('change')
       expect(wrapper.get('#checkin-close-warning').text()).toBe(i18n.global.t('checkin.disable.closeWarning'))
-      await wrapper.get('dialog').findAll('button')[1].trigger('click')
+      await wrapper.get('dialog[aria-labelledby="checkin-disable-title"]').findAll('button')[1].trigger('click')
       await vi.waitFor(() =>
         expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', {
           params: { path: { id: 'checkin' } },

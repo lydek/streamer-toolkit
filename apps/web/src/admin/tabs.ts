@@ -108,9 +108,13 @@ export function groupOf(path: string): TabGroup | undefined {
   return GROUPS.find((g) => g.pages.some((p) => p.path === path))
 }
 
-/** Where a group tab goes before any of its pages was visited: its first built page, else its first page. */
-export function firstPage(g: TabGroup): string {
-  return (g.pages.find((p) => !p.soon) ?? g.pages[0]).path
+/**
+ * Where a group tab goes before any of its pages was visited: its first built page, else its first page; pages in
+ * `hidden` (features turned off) are skipped.
+ */
+export function firstPage(g: TabGroup, hidden: Set<string> = new Set()): string {
+  const pages = g.pages.filter((p) => !hidden.has(p.path))
+  return (pages.find((p) => !p.soon) ?? pages[0] ?? g.pages[0]).path
 }
 
 /**

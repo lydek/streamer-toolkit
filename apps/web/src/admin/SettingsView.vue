@@ -58,13 +58,7 @@
 
     <section aria-labelledby="features">
       <h2 id="features" tabindex="-1">{{ t('settings.features') }}</h2>
-      <p v-if="!modules">{{ loadText }}</p>
-      <ul v-else class="plain">
-        <li v-for="m in modules" :key="m.id" class="choice">
-          <Checkbox :input-id="`module-${m.id}`" :model-value="m.enabled" binary :disabled="busy" @update:model-value="toggleModule(m)" />
-          <label :for="`module-${m.id}`">{{ moduleName(m.id) }}</label>
-        </li>
-      </ul>
+      <FeatureList :modules="modules" :busy="busy" :load-text="loadText" @toggle="toggleModule" />
     </section>
 
     <section aria-labelledby="checkin">
@@ -116,11 +110,13 @@ import CheckinSettings from './CheckinSettings.vue'
 import SoundSlots from './SoundSlots.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
+import FeatureList from './FeatureList.vue'
+import { shareModules } from './features'
 import { errorToast } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
 
 // Settings apply at once, like a drawer's (no Save button); leaving the page submits a field still being edited.
-const { t, te } = useI18n()
+const { t } = useI18n()
 const toast = useToast()
 
 const overview = ref<Schemas['Overview']>()
@@ -131,7 +127,6 @@ const passwordSet = ref(false)
 let timer: number | undefined
 
 const loadText = computed(() => t(loadFailed.value ? 'home.loadFailed' : 'app.loading'))
-const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names.${id}`) : id)
 
 // Saved values are undefined until loaded; their fields show only after that.
 const askSaved = ref<boolean>()
@@ -213,6 +208,7 @@ async function refreshTwitch() {
 
 async function refreshModules() {
   modules.value = await api(client.GET('/api/admin/modules'))
+  shareModules(modules.value)
 }
 
 async function refresh() {

@@ -51,7 +51,7 @@
     </div>
     <nav ref="tabsEl" class="tabs" :aria-label="t('nav.label')">
       <a
-        v-for="(g, i) in GROUPS"
+        v-for="(g, i) in groups"
         :key="g.id"
         :href="router.resolve(target(g)).href"
         :hidden="i >= shown"
@@ -66,7 +66,7 @@
         type="button"
         class="more"
         :class="{ current: currentInMore }"
-        :hidden="!measuring && shown >= GROUPS.length"
+        :hidden="!measuring && shown >= groups.length"
         aria-haspopup="true"
         aria-controls="tabs-more"
         :aria-expanded="moreOpen"
@@ -77,14 +77,14 @@
       <Menu id="tabs-more" ref="moreMenu" :model="moreItems" popup @show="moreOpen = true" @hide="moreOpen = false" />
     </nav>
     <nav
-      v-if="group && group.pages.length > 1"
+      v-if="group && subPages.length > 1"
       ref="subTabsEl"
       class="sub-tabs"
       :class="{ 'at-end': subAtEnd }"
       :aria-label="t('nav.sub')"
       @scroll.passive="checkSubEnd"
     >
-      <RouterLink v-for="p in group.pages" :key="p.path" :to="p.path">{{ t(p.label) }}</RouterLink>
+      <RouterLink v-for="p in subPages" :key="p.path" :to="p.path">{{ t(p.label) }}</RouterLink>
     </nav>
   </header>
 </template>
@@ -100,6 +100,7 @@ import { type Schemas, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
 import { obsLight, twitchLight, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
+import { useModules } from './features'
 import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf } from './tabs'
 
 const { t } = useI18n()
@@ -153,7 +154,14 @@ watch(
   },
   { immediate: true },
 )
-const target = (g: TabGroup) => lastPage[g.id] ?? firstPage(g)
+// Pages of features turned off in settings are hidden, and so is a group left with none.
+const { hidden } = useModules()
+const groups = computed(() => GROUPS.filter((g) => g.pages.some((p) => !hidden.value.has(p.path))))
+const subPages = computed(() => group.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
+const target = (g: TabGroup) => {
+  const last = lastPage[g.id]
+  return last && !hidden.value.has(last) ? last : firstPage(g, hidden.value)
+}
 // A one-page group is the page itself; a group with sub-tabs is only the current group, its sub-tab is the page.
 const groupCurrent = (g: TabGroup) => (g !== group.value ? undefined : g.pages.length === 1 ? 'page' : 'true')
 
@@ -164,9 +172,9 @@ const moreMenu = ref<InstanceType<typeof Menu>>()
 const moreOpen = ref(false)
 const shown = ref(GROUPS.length)
 const measuring = ref(false)
-const currentInMore = computed(() => !!group.value && GROUPS.indexOf(group.value) >= shown.value)
+const currentInMore = computed(() => !!group.value && groups.value.indexOf(group.value) >= shown.value)
 const moreItems = computed<MenuItem[]>(() =>
-  GROUPS.slice(shown.value).map((g) => ({
+  groups.value.slice(shown.value).map((g) => ({
     label: t(`nav.groups.${g.id}`),
     icon: g.icon,
     class: g === group.value ? 'current' : undefined,
@@ -180,10 +188,10 @@ const phone = window.matchMedia('(max-width: 599.98px)')
 
 async function fit() {
   measuring.value = true
-  shown.value = GROUPS.length
+  shown.value = groups.value.length
   await nextTick()
   const nav = tabsEl.value
-  if (phone.matches) shown.value = GROUPS.length > PHONE_TABS ? PHONE_TABS : GROUPS.length
+  if (phone.matches) shown.value = Math.min(groups.value.length, PHONE_TABS)
   else if (nav && moreEl.value) {
     const tabs = [...nav.querySelectorAll<HTMLElement>('[data-group-tab]')]
     const gap = parseFloat(getComputedStyle(nav).columnGap) || 0
@@ -205,6 +213,7 @@ function checkSubEnd() {
   subAtEnd.value = !el || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
 }
 watch(group, () => void nextTick(checkSubEnd), { flush: 'post' })
+watch(groups, () => void fit())
 
 const bar = ref<HTMLElement>()
 const scrolled = ref(false)
