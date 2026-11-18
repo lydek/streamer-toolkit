@@ -466,6 +466,8 @@
   },
   "settings": {
     "title": "設定",
+    "textSize": "文字大小",
+    "textSizePreview": "預覽：今天唱什麼？放開後套用到整個視窗。",
     "sections": "設定分區",
     "menu": {
       "general": "一般",
@@ -653,6 +655,9 @@
     },
     "tab_bar": {
       "invalid": "分頁列設定的格式不正確。"
+    },
+    "text_size": {
+      "invalid": "文字大小不正確。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

@@ -1661,6 +1661,71 @@
         }
       }
     },
+    "/api/admin/text-size": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The text size in percent; `null` when never changed (100).",
+        "operationId": "text_size",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the text size: 90-150 in steps of 10.",
+        "operationId": "set_text_size",
+        "requestBody": {
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/twitch": {
       "get": {
         "tags": [
