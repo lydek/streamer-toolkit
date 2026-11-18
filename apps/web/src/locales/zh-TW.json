@@ -21,6 +21,8 @@
     "label": "功能分頁",
     "sub": "子分頁",
     "more": "更多",
+    "connections": "連線",
+    "problem": "連線有問題：{names}",
     "groups": {
       "home": "首頁",
       "chat": "聊天",

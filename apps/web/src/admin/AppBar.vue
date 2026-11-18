@@ -4,13 +4,40 @@
     <div class="bar-top">
       <span class="brand"><i class="pi pi-video" aria-hidden="true"></i>{{ t('app.name') }}</span>
       <div class="bar-status">
+        <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
+             warning button instead, and only while a connection has a problem. -->
         <StatusLight
           name="Twitch"
+          :light="twitch"
+          :class="{ healthy: twitch.state === 'connected' }"
+          v-bind="lightAttrs"
+          @click="openConnections('twitch', $event.currentTarget)"
+        />
+        <StatusLight
+          name="OBS"
+          :light="obs"
+          :class="{ healthy: obs.state === 'connected' }"
+          v-bind="lightAttrs"
+          @click="openConnections('obs', $event.currentTarget)"
+        />
+        <StatusLight
+          v-if="twitch.state === 'connected' && obs.state === 'connected'"
+          class="all-healthy"
+          :name="t('nav.connections')"
           :light="twitch"
           v-bind="lightAttrs"
           @click="openConnections('twitch', $event.currentTarget)"
         />
-        <StatusLight name="OBS" :light="obs" v-bind="lightAttrs" @click="openConnections('obs', $event.currentTarget)" />
+        <Button
+          v-if="problems.length"
+          class="problem"
+          icon="pi pi-exclamation-triangle"
+          text
+          rounded
+          :aria-label="t('nav.problem', { names: problems.map((p) => p.name).join('、') })"
+          v-bind="lightAttrs"
+          @click="openConnections(problems[0].section, $event.currentTarget)"
+        />
         <Button
           icon="pi pi-cog"
           text
@@ -49,7 +76,14 @@
       </button>
       <Menu id="tabs-more" ref="moreMenu" :model="moreItems" popup @show="moreOpen = true" @hide="moreOpen = false" />
     </nav>
-    <nav v-if="group && group.pages.length > 1" class="sub-tabs" :aria-label="t('nav.sub')">
+    <nav
+      v-if="group && group.pages.length > 1"
+      ref="subTabsEl"
+      class="sub-tabs"
+      :class="{ 'at-end': subAtEnd }"
+      :aria-label="t('nav.sub')"
+      @scroll.passive="checkSubEnd"
+    >
       <RouterLink v-for="p in group.pages" :key="p.path" :to="p.path">{{ t(p.label) }}</RouterLink>
     </nav>
   </header>
@@ -80,6 +114,12 @@ const overviewFailed = ref(false)
 const live = useLiveEvents()
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
+const problems = computed(() =>
+  [
+    { name: 'Twitch', section: 'twitch' as const, light: twitch.value },
+    { name: 'OBS', section: 'obs' as const, light: obs.value },
+  ].filter((c) => c.light.state === 'error' || c.light.state === 'reconnecting'),
+)
 
 async function pollTwitch() {
   try {
@@ -134,12 +174,17 @@ const moreItems = computed<MenuItem[]>(() =>
   })),
 )
 
+// Below 600px the tabs are a bottom bar with room for the first PHONE_TABS groups; the rest go into "More".
+const PHONE_TABS = 4
+const phone = window.matchMedia('(max-width: 599.98px)')
+
 async function fit() {
   measuring.value = true
   shown.value = GROUPS.length
   await nextTick()
   const nav = tabsEl.value
-  if (nav && moreEl.value) {
+  if (phone.matches) shown.value = GROUPS.length > PHONE_TABS ? PHONE_TABS : GROUPS.length
+  else if (nav && moreEl.value) {
     const tabs = [...nav.querySelectorAll<HTMLElement>('[data-group-tab]')]
     const gap = parseFloat(getComputedStyle(nav).columnGap) || 0
     shown.value = fittingTabs(
@@ -151,6 +196,15 @@ async function fit() {
   }
   measuring.value = false
 }
+
+// Sub-tabs scroll sideways in one row; a fade at the right edge says there is more until the end is reached.
+const subTabsEl = ref<HTMLElement>()
+const subAtEnd = ref(true)
+function checkSubEnd() {
+  const el = subTabsEl.value
+  subAtEnd.value = !el || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+}
+watch(group, () => void nextTick(checkSubEnd), { flush: 'post' })
 
 const bar = ref<HTMLElement>()
 const scrolled = ref(false)
@@ -171,6 +225,7 @@ onMounted(() => {
   tabsObserver = new ResizeObserver(() => {
     moreMenu.value?.hide()
     void fit()
+    checkSubEnd()
   })
   if (tabsEl.value) tabsObserver.observe(tabsEl.value)
 })
@@ -185,6 +240,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-bar {
+  /* The bar's own width picks what it shows, so anything that narrows it (a docked panel later) works the same. */
+  container: top / inline-size;
   position: sticky;
   top: 0;
   z-index: 5;
@@ -217,11 +274,31 @@ onBeforeUnmount(() => {
   color: var(--p-primary-color);
 }
 
+/* One unit: when the row is too narrow the whole group wraps, so settings never ends up alone on a line. */
 .bar-status {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.all-healthy,
+.problem {
+  display: none;
+}
+
+.problem {
+  color: var(--p-yellow-400);
+}
+
+@container top (max-width: 70rem) {
+  .healthy {
+    display: none;
+  }
+
+  .all-healthy {
+    display: inline-flex;
+  }
 }
 
 .tabs {
@@ -270,6 +347,12 @@ onBeforeUnmount(() => {
   gap: 0.375rem;
   padding: 0.625rem 0;
   overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+}
+
+.sub-tabs.at-end {
+  mask-image: none;
 }
 
 .sub-tabs a {
@@ -289,5 +372,50 @@ onBeforeUnmount(() => {
 .sub-tabs a[aria-current='page'] {
   border-color: var(--p-primary-color);
   color: var(--p-primary-color);
+}
+
+/* Below 600px: the status lights give way to the warning button, and the group tabs become a bottom bar. */
+@media (max-width: 599.98px) {
+  .bar-status > .light {
+    display: none;
+  }
+
+  .problem {
+    display: inline-flex;
+  }
+
+  .tabs {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    gap: 0;
+    margin: 0;
+    padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--p-surface-800);
+    background: var(--p-surface-900);
+  }
+
+  .tabs > a,
+  .tabs > .more {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.375rem 0.25rem;
+    border-bottom: 0;
+    font-size: 0.75rem;
+  }
+
+  .tabs > a i,
+  .tabs > .more i {
+    font-size: 1.125rem;
+  }
+
+  .tabs > a[aria-current],
+  .tabs > .more.current {
+    color: var(--p-primary-color);
+  }
 }
 </style>
