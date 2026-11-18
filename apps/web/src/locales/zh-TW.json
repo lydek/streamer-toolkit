@@ -264,6 +264,33 @@
       "skip": "略過"
     }
   },
+  "clips": {
+    "input": "Clip 網址",
+    "add": "加入",
+    "added": "已加入「{title}」。",
+    "now": "目前",
+    "queue": "佇列（{n}）",
+    "empty": "佇列是空的",
+    "seconds": "{s} 秒",
+    "remove": "移除",
+    "clear": "清空佇列",
+    "skip": "跳過",
+    "stop": "停止",
+    "play": "播放",
+    "replay": "重播",
+    "remaining": "預估剩餘 {s} 秒",
+    "overlay": "OBS",
+    "buffer": "切換緩衝（秒）",
+    "loadFailed": "無法載入 Clip 佇列。",
+    "state": {
+      "idle": "待機",
+      "loading": "載入中",
+      "estimated_playing": "預估播放中",
+      "transitioning": "切換中",
+      "stopped": "已停止",
+      "error": "這部 Clip 已無法播放"
+    }
+  },
   "sound": {
     "count": "{n} 個音效",
     "empty": "還沒有音效",
@@ -404,6 +431,12 @@
       "in_use": "這個連接埠也被佔用了，請換一個。",
       "bind_failed": "無法使用這個連接埠，請檢視記錄檔。",
       "start_failed": "無法啟動 Host，請檢視記錄檔。"
+    },
+    "clip": {
+      "invalid_input": "請貼上 Twitch Clip 網址或 Clip ID。",
+      "not_found": "Twitch 找不到這部 Clip。",
+      "queue_full": "佇列已滿（最多 50 部）。",
+      "invalid_buffer": "切換緩衝是 0 到 30 秒。"
     },
     "sound": {
       "unsupported_type": "只能匯入 MP3、WAV、OGG 檔。",

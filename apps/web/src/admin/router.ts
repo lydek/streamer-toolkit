@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AlertsPage from './AlertsPage.vue'
 import ChatPage from './ChatPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
+import ClipsPage from './ClipsPage.vue'
 import { useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
 import NotFoundView from './NotFoundView.vue'
@@ -21,6 +22,7 @@ export const router = createRouter({
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
     { path: '/sounds', component: SoundsPage },
+    { path: '/clips', component: ClipsPage },
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

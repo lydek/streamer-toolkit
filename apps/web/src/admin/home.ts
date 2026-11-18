@@ -49,6 +49,8 @@ export interface LiveState {
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
+  /** The clip player's latest state. */
+  clip?: Schemas['ClipStatePayload']
 }
 
 export function applyLive(state: LiveState, msg: Incoming): LiveState {
@@ -58,6 +60,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       lastSeq: msg.seq,
       obs: msg.payload['obs.status'].at(-1)?.payload,
       lastChat: msg.payload['chat.message'].at(-1),
+      clip: msg.payload['clip.state'].at(-1)?.payload,
     }
   }
   // Events before the snapshot, or replays, are already covered by it.
@@ -66,6 +69,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'obs.status') next.obs = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'alert') next.lastAlert = msg
+  if (msg.type === 'clip.state') next.clip = msg.payload
   return next
 }
 
@@ -135,6 +139,7 @@ export const TILES: Tile[] = [
   { id: 'redemption', group: 'features', icon: 'pi pi-gift' },
   { id: 'checkin', group: 'features', icon: 'pi pi-check-square' },
   { id: 'sound', group: 'features', icon: 'pi pi-volume-up' },
+  { id: 'clips', group: 'features', icon: 'pi pi-video' },
 ]
 
 /** Non-empty groups in display order. */

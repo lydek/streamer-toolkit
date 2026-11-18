@@ -211,6 +211,16 @@
         </template>
       </template>
     </AppDrawer>
+
+    <AppDrawer id="clips" :title="moduleName('clips')" full-page="/clips">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('clip')" />
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <p v-if="lines.clips.state === 'ready'">{{ lines.clips.text }}</p>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
@@ -335,7 +345,7 @@ const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(save
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
 
 const lines = computed<Record<string, Line>>(() => {
-  const { status, lastChat, lastAlert } = live.value
+  const { status, lastChat, lastAlert, clip } = live.value
   return {
     chat:
       status === 'open'
@@ -357,6 +367,10 @@ const lines = computed<Record<string, Line>>(() => {
             text: sounds.value.items.length ? t('sound.count', { n: sounds.value.items.length }) : t('sound.empty'),
           }
         : { state: sounds.value.state },
+    clips:
+      status === 'open' && clip
+        ? { state: 'ready', text: t(`clips.state.${clip.state}`) }
+        : { state: status === 'failed' ? 'failed' : 'loading' },
   }
 })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
@@ -435,7 +449,7 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'clip') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.
