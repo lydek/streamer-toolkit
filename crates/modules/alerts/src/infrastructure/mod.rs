@@ -70,6 +70,12 @@ impl AlertKindName {
 #[serde(rename_all = "camelCase")]
 pub struct AlertPayload {
     pub kind: AlertKindName,
+    /// The viewer, or for a raid the raiding channel; `null` for an anonymous gift or cheer.
+    #[schema(required)]
+    pub user_id: Option<String>,
+    /// `null` for an anonymous gift or cheer.
+    #[schema(required)]
+    pub user_login: Option<String>,
     /// Raw viewer text; `null` for an anonymous gift or cheer. Overlays escape it when rendering.
     #[schema(required)]
     pub user_name: Option<String>,
@@ -123,6 +129,8 @@ fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
         duration_ms: show.as_millis() as u64,
         sound: AlertSound::BuiltIn,
         kind: AlertKindName::Follow,
+        user_id: alert.user_id,
+        user_login: alert.user_login,
         user_name: alert.user_name,
         tier: None,
         months: None,

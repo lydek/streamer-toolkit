@@ -34,6 +34,8 @@ const start = (): Incoming[] => [
     source: 'simulation',
     payload: {
       kind: 'resubscribe',
+      userId: 'sample',
+      userLogin: 'viewer',
       userName: 'Viewer',
       tier: 1,
       months: 12,

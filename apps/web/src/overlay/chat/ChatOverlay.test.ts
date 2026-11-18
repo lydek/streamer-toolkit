@@ -20,7 +20,7 @@ const chat = (n: number): ChatEvent => ({
   seq: n,
   occurredAt: '',
   source: 'simulation',
-  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [] },
+  payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [], badges: [], highlighted: false },
 })
 const snapshot = (...ns: number[]): Incoming => ({
   type: 'snapshot',

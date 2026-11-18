@@ -12,7 +12,7 @@ const chat = (id: string, text = `msg ${id}`, color: string | null = null): Chat
   seq: 1,
   occurredAt: '2026-11-13T10:00:00.000Z',
   source: 'twitch',
-  payload: { userId: id, userLogin: `user${id}`, userName: `User ${id}`, color, text, fragments: [] },
+  payload: { userId: id, userLogin: `user${id}`, userName: `User ${id}`, color, text, fragments: [], badges: [], highlighted: false },
 })
 
 const TEMPLATE = `

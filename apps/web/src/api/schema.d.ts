@@ -709,6 +709,10 @@ export interface components {
              * @description Subscription tier, 1 to 3: `subscribe`, `resubscribe`, `gift`.
              */
             tier?: number | null;
+            /** @description The viewer, or for a raid the raiding channel; `null` for an anonymous gift or cheer. */
+            userId: string | null;
+            /** @description `null` for an anonymous gift or cheer. */
+            userLogin: string | null;
             /** @description Raw viewer text; `null` for an anonymous gift or cheer. Overlays escape it when rendering. */
             userName: string | null;
             /**
@@ -761,6 +765,11 @@ export interface components {
             /** @enum {string} */
             state: "failed";
         };
+        /**
+         * @description A role shown by a chat badge (a founder counts as a subscriber).
+         * @enum {string}
+         */
+        ChatBadgeName: "broadcaster" | "moderator" | "vip" | "subscriber";
         /** @description Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range). */
         ChatDock: {
             open: boolean;
@@ -791,9 +800,19 @@ export interface components {
         };
         /** @description The `payload` of a `chat.message` event. */
         ChatMessagePayload: {
+            /** @description The roles the sender's badges show. */
+            badges: components["schemas"]["ChatBadgeName"][];
+            /**
+             * Format: int32
+             * @description Bits cheered with this message, when there are any.
+             */
+            bits?: number | null;
             /** @description `#RRGGBB`, or `null` when the user never picked a color. */
             color: string | null;
             fragments: components["schemas"]["ChatFragment"][];
+            /** @description Highlighted with channel points. */
+            highlighted: boolean;
+            reply?: components["schemas"]["ChatReplyPayload"] | null;
             /** @description Raw viewer text; overlays escape it when rendering. */
             text: string;
             userId: string;
@@ -802,6 +821,14 @@ export interface components {
         };
         /** @enum {string} */
         ChatMessageType: "chat.message";
+        /** @description The message a reply answers. */
+        ChatReplyPayload: {
+            messageId: string;
+            userId: string;
+            userLogin: string;
+            /** @description Raw viewer text; overlays escape it when rendering. */
+            userName: string;
+        };
         /**
          * @description Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
          * @enum {string}

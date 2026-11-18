@@ -123,6 +123,8 @@ mod tests {
     fn alert(id: &str, user_name: Option<&str>, kind: AlertKind) -> Alert {
         Alert {
             id: id.into(),
+            user_id: user_name.map(|_| "7".into()),
+            user_login: user_name.map(str::to_lowercase),
             user_name: user_name.map(Into::into),
             kind,
             occurred_at: "2026-11-16T10:00:00Z".into(),
@@ -294,22 +296,26 @@ mod tests {
         let payloads: Vec<&Value> = sent.iter().map(|e| &e["payload"]).collect();
         assert_eq!(
             payloads[0],
-            &serde_json::json!({"kind":"follow","userName":"Viewer","durationMs":6000,
+            &serde_json::json!({"kind":"follow","userId":"7","userLogin":"viewer","userName":"Viewer","durationMs":6000,
                                 "sound":{"kind":"file","url":format!("/sounds/{SOUND_ID}"),"volume":40}})
         );
         assert_eq!(
             payloads[2],
-            &serde_json::json!({"kind":"resubscribe","userName":"Viewer","tier":1,"months":12,
+            &serde_json::json!({"kind":"resubscribe","userId":"7","userLogin":"viewer","userName":"Viewer","tier":1,"months":12,
                                 "message":"<b>hi</b>","durationMs":9000,"sound":{"kind":"built_in"}}),
             "viewer text stays raw"
         );
         assert_eq!(
             payloads[4],
-            &serde_json::json!({"kind":"cheer","userName":"Viewer","bits":100,"durationMs":6000,
+            &serde_json::json!({"kind":"cheer","userId":"7","userLogin":"viewer","userName":"Viewer","bits":100,"durationMs":6000,
                                 "sound":{"kind":"silent"}}),
             "an empty message is left out"
         );
         assert_eq!(payloads[6]["userName"], Value::Null);
+        assert_eq!(
+            (&payloads[6]["userId"], &payloads[6]["userLogin"]),
+            (&Value::Null, &Value::Null)
+        );
         assert_eq!(sent[6]["source"], "simulation");
         assert!(sent.iter().all(|e| e["type"] == "alert"));
         // The OpenAPI type must describe the wire format exactly: no missing, extra or renamed fields.

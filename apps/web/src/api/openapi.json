@@ -2000,6 +2000,8 @@
         "description": "The `payload` of an `alert` event. Fields the kind does not have are left out.",
         "required": [
           "kind",
+          "userId",
+          "userLogin",
           "userName",
           "durationMs",
           "sound"
@@ -2059,6 +2061,20 @@
             "format": "int32",
             "description": "Subscription tier, 1 to 3: `subscribe`, `resubscribe`, `gift`.",
             "minimum": 0
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The viewer, or for a raid the raiding channel; `null` for an anonymous gift or cheer."
+          },
+          "userLogin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for an anonymous gift or cheer."
           },
           "userName": {
             "type": [
@@ -2243,6 +2259,16 @@
         ],
         "description": "What the admin UI may see; never contains tokens."
       },
+      "ChatBadgeName": {
+        "type": "string",
+        "description": "A role shown by a chat badge (a founder counts as a subscriber).",
+        "enum": [
+          "broadcaster",
+          "moderator",
+          "vip",
+          "subscriber"
+        ]
+      },
       "ChatDock": {
         "type": "object",
         "description": "Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range).",
@@ -2354,9 +2380,27 @@
           "userName",
           "color",
           "text",
-          "fragments"
+          "fragments",
+          "badges",
+          "highlighted"
         ],
         "properties": {
+          "badges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatBadgeName"
+            },
+            "description": "The roles the sender's badges show."
+          },
+          "bits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Bits cheered with this message, when there are any.",
+            "minimum": 0
+          },
           "color": {
             "type": [
               "string",
@@ -2369,6 +2413,21 @@
             "items": {
               "$ref": "#/components/schemas/ChatFragment"
             }
+          },
+          "highlighted": {
+            "type": "boolean",
+            "description": "Highlighted with channel points."
+          },
+          "reply": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ChatReplyPayload",
+                "description": "The message this one replies to."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "text": {
             "type": "string",
@@ -2390,6 +2449,31 @@
         "enum": [
           "chat.message"
         ]
+      },
+      "ChatReplyPayload": {
+        "type": "object",
+        "description": "The message a reply answers.",
+        "required": [
+          "messageId",
+          "userId",
+          "userLogin",
+          "userName"
+        ],
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userLogin": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string",
+            "description": "Raw viewer text; overlays escape it when rendering."
+          }
+        }
       },
       "ChatTemplate": {
         "type": "string",
