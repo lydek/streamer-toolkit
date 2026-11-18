@@ -2,6 +2,7 @@
 
 mod admin;
 mod backup;
+mod chat_dock;
 pub mod db;
 mod home_tiles;
 mod obs;
@@ -223,6 +224,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
+    let chat_dock = chat_dock::routes(config.data_dir.clone());
     let updates = update::start(
         config.data_dir.clone(),
         config.app_version.clone(),
@@ -282,6 +284,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         )
         .merge(sound::file_routes(sounds))
         .merge(home_tiles.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(chat_dock.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1127,6 +1133,76 @@ mod tests {
             "bad bodies change nothing"
         );
         let unauthorized = get_req("/api/admin/home-tiles", "127.0.0.1:47810")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.oneshot(unauthorized).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn chat_dock_persists_and_rejects_bad_bodies() {
+        let dir = std::env::temp_dir().join(format!("st-host-dock-{}", std::process::id()));
+        let app_for = |dir: &PathBuf| {
+            let mut config = test_config();
+            config.data_dir = dir.clone();
+            router(config).unwrap()
+        };
+        let put = |body: &str| {
+            get_req("/api/admin/chat-dock", "127.0.0.1:47810")
+                .method(Method::PUT)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_owned()))
+                .unwrap()
+        };
+        let get = |app: Router| async move {
+            let res = app
+                .oneshot(
+                    get_req("/api/admin/chat-dock", "127.0.0.1:47810")
+                        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+        };
+
+        let app = app_for(&dir);
+        assert_eq!(get(app.clone()).await, serde_json::Value::Null);
+        let res = app
+            .clone()
+            .oneshot(put(r#"{"open":true,"width":360}"#))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        // A new router on the same data folder stands in for a restart.
+        assert_eq!(
+            get(app_for(&dir)).await,
+            serde_json::json!({ "open": true, "width": 360 })
+        );
+
+        for bad in [
+            r#"{"open":true,"width":279}"#,
+            r#"{"open":true,"width":561}"#,
+            r#"{"open":true}"#,
+            "not json",
+        ] {
+            let res = app.clone().oneshot(put(bad)).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+        }
+        assert_eq!(
+            get(app.clone()).await,
+            serde_json::json!({ "open": true, "width": 360 }),
+            "bad bodies change nothing"
+        );
+        let unauthorized = get_req("/api/admin/chat-dock", "127.0.0.1:47810")
             .body(Body::empty())
             .unwrap();
         assert_eq!(

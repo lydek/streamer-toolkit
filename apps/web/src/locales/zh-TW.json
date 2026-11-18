@@ -32,6 +32,22 @@
       "viewers": "觀眾"
     }
   },
+  "dock": {
+    "title": "聊天室",
+    "close": "收合聊天室",
+    "resize": "調整聊天室寬度",
+    "filters": "篩選訊息",
+    "search": "搜尋訊息",
+    "filter": {
+      "all": "全部",
+      "mentions": "提到我",
+      "events": "事件",
+      "mods": "管理員和 VIP"
+    },
+    "modsLater": "需要觀眾身分資料，之後開放",
+    "send": "發言",
+    "sendLater": "發言（之後開放）"
+  },
   "features": {
     "search": "搜尋功能",
     "count": "已開啟 {on} / {all}",
@@ -602,6 +618,9 @@
     },
     "home": {
       "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "chat_dock": {
+      "invalid": "聊天室的寬度不正確。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

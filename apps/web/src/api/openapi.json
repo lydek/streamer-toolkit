@@ -146,6 +146,71 @@
         }
       }
     },
+    "/api/admin/chat-dock": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The panel's state; `null` when never changed (the admin UI shows its defaults).",
+        "operationId": "chat_dock",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatDock"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the panel's state; `width` is 280-560.",
+        "operationId": "set_chat_dock",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatDock"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/import": {
       "post": {
         "tags": [
@@ -2041,6 +2106,24 @@
           }
         ],
         "description": "What the admin UI may see; never contains tokens."
+      },
+      "ChatDock": {
+        "type": "object",
+        "description": "Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range).",
+        "required": [
+          "open",
+          "width"
+        ],
+        "properties": {
+          "open": {
+            "type": "boolean"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
       },
       "ChatFragment": {
         "oneOf": [

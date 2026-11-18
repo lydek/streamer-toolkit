@@ -64,6 +64,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat-dock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The panel's state; `null` when never changed (the admin UI shows its defaults). */
+        get: operations["chat_dock"];
+        /** Saves the panel's state; `width` is 280-560. */
+        put: operations["set_chat_dock"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/import": {
         parameters: {
             query?: never;
@@ -703,6 +721,12 @@ export interface components {
             code: string;
             /** @enum {string} */
             state: "failed";
+        };
+        /** @description Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range). */
+        ChatDock: {
+            open: boolean;
+            /** Format: int32 */
+            width: number;
         };
         ChatFragment: {
             text: string;
@@ -1355,6 +1379,62 @@ export interface operations {
                 };
             };
             /** @description `backup.restore_failed`: could not be staged */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    chat_dock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatDock"] | null;
+                };
+            };
+        };
+    };
+    set_chat_dock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatDock"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             500: {
                 headers: {
                     [name: string]: unknown;

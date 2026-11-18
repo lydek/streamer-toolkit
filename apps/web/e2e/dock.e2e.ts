@@ -1,0 +1,115 @@
+// The docked chat panel: docked and saved on wide windows, a slide-in panel below 900px (API and `/ws/overlay` mocked).
+import { type Page, expect, test } from '@playwright/test'
+import { mockAdmin, scrollsSideways, zh } from './fixtures'
+
+const chat = (seq: number, userName: string, text: string) => ({
+  id: `c${seq}`,
+  type: 'chat.message',
+  version: 1,
+  seq,
+  occurredAt: '2026-11-18T10:00:00.000Z',
+  source: 'twitch',
+  payload: { color: null, fragments: [{ type: 'text', text }], text, userId: `u${seq}`, userLogin: userName.toLowerCase(), userName },
+})
+
+/** Opens home with the panel's saved state `saved`; returns the bodies of every save. */
+async function open(page: Page, saved: { open: boolean; width: number } | null = null) {
+  await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  const puts: unknown[] = []
+  await page.route('**/api/admin/chat-dock', (r) => {
+    if (r.request().method() === 'GET') return r.fulfill({ json: saved })
+    saved = r.request().postDataJSON()
+    puts.push(saved)
+    return r.fulfill({ status: 204 })
+  })
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 2,
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [] },
+      }),
+    ),
+  )
+  await page.goto('/admin/')
+  await page.locator('[data-drawer-tile], [data-drawer-arrange]').first().waitFor()
+  return puts
+}
+
+const chatButton = (page: Page) => page.getByRole('banner').getByRole('button', { name: zh.dock.title, exact: true })
+const panel = (page: Page) => page.getByRole('complementary', { name: zh.dock.title })
+
+test('closed until opened; opening docks it and saves, and the pages still fit', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const puts = await open(page)
+  await expect(panel(page)).toHaveCount(0)
+  await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'false')
+
+  await chatButton(page).click()
+  await expect(panel(page)).toBeVisible()
+  await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'true')
+  await expect.poll(() => puts).toEqual([{ open: true, width: 340 }])
+  await expect(panel(page).getByText('hello everyone')).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  await panel(page).getByRole('button', { name: zh.dock.close }).click()
+  await expect(panel(page)).toHaveCount(0)
+  await expect(chatButton(page)).toBeFocused()
+  await expect.poll(() => puts.at(-1)).toEqual({ open: false, width: 340 })
+})
+
+test('the saved state comes back after a restart, and the edge resizes from the keyboard', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const puts = await open(page, { open: true, width: 400 })
+  await expect(panel(page)).toBeVisible()
+  expect(Math.round((await panel(page).boundingBox())!.width)).toBe(400)
+
+  const edge = panel(page).getByRole('separator', { name: zh.dock.resize })
+  await edge.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(edge).toHaveAttribute('aria-valuenow', '416')
+  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 416 })
+})
+
+test('filters and search narrow the messages; sending waits for a later phase', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await open(page, { open: true, width: 340 })
+  await panel(page).getByRole('button', { name: zh.dock.filter.mentions }).click()
+  await expect(panel(page).getByText('@me can you sing')).toBeVisible()
+  await expect(panel(page).getByText('hello everyone')).toHaveCount(0)
+
+  await panel(page).getByRole('button', { name: zh.dock.filter.all }).click()
+  await panel(page).getByRole('searchbox', { name: zh.dock.search }).fill('hello')
+  await expect(panel(page).getByText('hello everyone')).toBeVisible()
+  await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)
+
+  await expect(panel(page).getByRole('button', { name: zh.dock.filter.mods })).toBeDisabled()
+  await expect(panel(page).getByRole('textbox', { name: zh.dock.send })).toBeDisabled()
+})
+
+test('"mentions me" follows signing in to another account without a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await open(page, { open: true, width: 340 })
+  await panel(page).getByRole('button', { name: zh.dock.filter.mentions }).click()
+  await expect(panel(page).getByText('@me can you sing')).toBeVisible()
+
+  // Routes added later win: the next status poll answers with another account.
+  await page.route('**/api/admin/twitch', (r) =>
+    r.fulfill({ json: { client_id: 'cid', status: { state: 'signed_in', user_id: '7', login: 'other' } } }),
+  )
+  await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)
+})
+
+test('below 900px it slides in from the chat button, takes focus, and Esc closes it without saving', async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1000 })
+  const puts = await open(page, { open: true, width: 340 })
+  await expect(panel(page)).toHaveCount(0)
+  await chatButton(page).click()
+  await expect(panel(page)).toBeVisible()
+  await expect(panel(page)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(panel(page)).toHaveCount(0)
+  await expect(chatButton(page)).toBeFocused()
+  expect(puts).toEqual([])
+})
