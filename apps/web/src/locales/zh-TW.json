@@ -32,6 +32,140 @@
       "viewers": "觀眾"
     }
   },
+  "features": {
+    "search": "搜尋功能",
+    "count": "已開啟 {on} / {all}",
+    "groupCount": "{on} / {all} 開啟",
+    "empty": "找不到符合的功能。",
+    "alwaysOn": "一定開著",
+    "open": "頁面",
+    "cancel": "取消",
+    "needs": {
+      "obs": "需要 OBS",
+      "program": "需要外部程式",
+      "speech": "需要 Windows 語音",
+      "scopes": "需要 Twitch 權限"
+    },
+    "confirm": {
+      "onTitle": "{name}需要先開啟其他功能",
+      "onText": "要一起開啟這些功能嗎？",
+      "onOk": "一起開啟",
+      "offTitle": "關閉{name}？",
+      "offDependents": "這些功能需要它，會一起關閉：",
+      "offAffected": "關閉後：",
+      "offOk": "關閉"
+    },
+    "home": {
+      "name": "首頁",
+      "desc": "功能磚與待處理"
+    },
+    "streamInfo": {
+      "name": "直播資訊",
+      "desc": "改標題、分類與標籤"
+    },
+    "rehearsal": {
+      "name": "演練",
+      "desc": "開播前用模擬事件確認畫面"
+    },
+    "songs": {
+      "name": "點歌",
+      "desc": "!點歌、歌單與點歌規則"
+    },
+    "singingBooth": {
+      "name": "練唱台",
+      "desc": "串接雷虎練唱台"
+    },
+    "chat": {
+      "name": "聊天室",
+      "desc": "聊天紀錄、Overlay 樣板、桌面置頂視窗"
+    },
+    "chatFilter": {
+      "name": "聊天過濾",
+      "desc": "擋關鍵字與連結、防洗版"
+    },
+    "bot": {
+      "name": "聊天機器人",
+      "desc": "聊天指令、定時訊息、自動感謝與歡迎"
+    },
+    "alerts": {
+      "name": "特效",
+      "desc": "追隨、訂閱、小奇點、揪團的動畫與音效"
+    },
+    "polls": {
+      "name": "投票與預測",
+      "desc": "發起投票與預測，畫面顯示結果"
+    },
+    "checkin": {
+      "name": "打卡",
+      "desc": "打卡、集點卡與卡片樣式"
+    },
+    "rewards": {
+      "name": "頻道點數獎勵管理",
+      "desc": "新增、暫停獎勵，退還點數",
+      "affects": "點歌不唱的歌不會自動退還點數"
+    },
+    "redemption": {
+      "name": "兌換紀錄",
+      "desc": "查詢頻道點數兌換"
+    },
+    "counters": {
+      "name": "計數器",
+      "desc": "死亡次數等計數，聊天指令可加減"
+    },
+    "scenes": {
+      "name": "場景與模式",
+      "desc": "切換場景、顯示／隱藏物件、直播模式",
+      "affects": "背景音樂不會再依場景自動切換"
+    },
+    "music": {
+      "name": "背景音樂",
+      "desc": "依場景自動播放的歌單"
+    },
+    "sound": {
+      "name": "音效",
+      "desc": "音效庫與各功能的音效"
+    },
+    "tts": {
+      "name": "文字轉語音",
+      "desc": "唸出小奇點與兌換的留言"
+    },
+    "screenTools": {
+      "name": "畫面工具",
+      "desc": "休息卡片、目標條、跑馬燈"
+    },
+    "avatar": {
+      "name": "虛擬形象",
+      "desc": "表情、換裝與互動"
+    },
+    "shoutouts": {
+      "name": "SO 與影片",
+      "desc": "SO 時播放 Clip、觀眾點播影片"
+    },
+    "imageSizes": {
+      "name": "圖片尺寸",
+      "desc": "在本機轉成徽章與點數圖示的尺寸"
+    },
+    "viewers": {
+      "name": "觀眾清單",
+      "desc": "觀眾的身分、紀錄與備註"
+    },
+    "roles": {
+      "name": "自訂身分組",
+      "desc": "自己定義的觀眾分組"
+    },
+    "leaderboard": {
+      "name": "排行榜",
+      "desc": "打卡、小奇點、兌換排行"
+    },
+    "credits": {
+      "name": "感謝名單",
+      "desc": "下播前的片尾名單"
+    },
+    "raids": {
+      "name": "揪團",
+      "desc": "發起揪團，出發前播放名單"
+    }
+  },
   "pages": {
     "soon": "尚未開放",
     "streamInfo": {
