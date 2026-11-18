@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 3beab41bbaecc5c89915fdd2b8bee0f6013397a7e9242c29147155cc191085b5 -->
+<!-- source: docs/scope.md source-sha256: 0ba3795119e73c47833bcd664da94ad6728507e1d810998e49eab41884b8b05f -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -12,8 +12,11 @@ A local-first Twitch streaming toolkit that builds only what real streams need. 
 - Twitch and OBS remain required external services. "Local-first" does not mean fully offline.
 - Videos played in shoutouts still come from Twitch; if the source is gone, they cannot play.
 
-## MVP feature slices
-Build in order. Try each slice on a real stream when it is done, and move on only when it works. The order may change to fit streaming needs.
+## Goal
+The target is the prototype's full feature set, in six groups: home, song requests, chat, interaction, screen and sound, and viewers. Work goes through the phases below; after each phase, try it on a real stream and publish a release.
+
+## Base already built
+All of these are done; the phases below build on them.
 
 | # | Slice | What you can see when it is done |
 |---|---|---|
@@ -26,17 +29,28 @@ Build in order. Try each slice on a real stream when it is done, and move on onl
 | 6 | Backup and restore | One-click export/import of settings and records, with all data preserved after import |
 | 7 | Windows portable package | Usable on another PC after extracting the zip; the zip includes a list of third-party licenses and instructions for handling SmartScreen warnings and unblocking the zip. When a new version is available, the admin UI notifies the user; extracting the new zip over the existing folder updates the app without affecting existing data |
 
-**After the MVP (confirmed needs):** personal badges, shoutout clips, song requests (optionally linked to Leihu Singsing), switching OBS scenes and showing or hiding sources, avatar control (VTuber Plus, VSeeFace), channel point reward management, background music that plays automatically by OBS scene. Technical follow-ups are listed in [decisions.en.md](decisions.en.md).
+## Phases
+Each phase depends only on earlier phases; the order within a phase follows streaming needs. Details are in GitHub Issues (labels `phase-0` to `phase-9`); technical follow-ups are listed in [decisions.en.md](decisions.en.md).
+
+| # | Contents |
+|---|---|
+| 0 | Every screen in place: group tabs across the top, every page (unbuilt ones show "not available yet"), the feature on/off page, the persistent chat panel, customizable tabs, text size |
+| 1 | Shared foundations: extended Twitch event fields, OBS control and events, the presentation queue, stream status and sessions, the activity log, viewer identity, overlay connection tracking |
+| 2 | Features that only need the shared foundations: scenes and background music, home statistics, the event feed, chat history and display, counters, screen tools, the card editor, rehearsal and more |
+| 3 | Requesting permissions per feature, and features that write to Twitch: chat bot, channel point reward management, stream info, polls and predictions and more |
+| 4 | Song requests (optionally linked to Leihu Singsing) |
+| 5 | Shoutouts and videos, credits, raids |
+| 6 | Modes |
+| 7 | Advanced viewer features, personal badges, chat moderation, chat filtering |
+| 8 | Avatars (VTuber Plus, VSeeFace), live captions, text-to-speech |
+| 9 | Hotkeys, always-on-top chat window, profiles, bot account, themes and languages |
 
 **Other ideas:** go to the backlog; not scheduled, no specs.
 
-## Out of scope for this round
-Raffles.
-
 ## Not doing
-General rules engine, Linux, native mobile apps, cloud services.
+General rules engine, Linux, native mobile apps, cloud services, raffles, OneComme integration.
 
 ## Three questions before adding a feature
 1. Does it solve a problem I have already hit while streaming?
 2. What is the smallest version I can use on a stream?
-3. Will it slow down the slice in progress?
+3. Will it slow down the phase in progress?

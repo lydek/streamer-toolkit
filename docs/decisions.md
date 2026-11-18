@@ -25,13 +25,13 @@
 | CI | GitHub Actions，skeleton 就建，只跑 Windows，只在 PR 上跑；另跑 `cargo clippy --features tauri/custom-protocol` 檢查正式版才編譯的程式碼；UI E2E 是另一個 workflow，手動觸發與發佈前跑 |
 | 正式發佈 | 一律用 `tauri build`；不得散布沒有開啟 `tauri/custom-protocol` 的建置產物 |
 | Overlay 自訂 | 初版只開放 HTML／CSS 樣板；聊天室與特效樣板在管理 UI 從內建款式選擇（特效沒有資料夾樣板），不做線上編輯、上傳，也不做字型與顏色調整；聊天室的資料夾自訂樣板（`custom`）管理 UI 不提供入口，要手動在 `settings.json` 指定，重新啟動後生效 |
-| 平台 | Windows 優先；macOS 列入 MVP 後；Linux 不支援 |
+| 平台 | Windows 優先；macOS 之後再評估；Linux 不支援 |
 | 決策紀錄 | 本檔＋architecture.md，不寫 ADR |
 | 文件結構 | README＋`docs/` 四份（scope／architecture／decisions／dev）；複雜模組另寫 `docs/modules/<模組>.md` |
 | 文件語言 | README 與 `docs/` 皆雙語：繁中為權威版本，英文版為同名 `.en.md`；平時只寫中文，commit 文件前才產生英文；以 hash 檢查同步（規則見 dev.md）。封存文件不翻譯 |
 | 程式語言慣例 | 識別碼、註解、API／DB 欄位、錯誤碼一律英文 |
 | Commit | 英文 Conventional Commits，例：`feat(checkin): add daily check-in rule` |
-| Backlog | GitHub Issues（label 區分 MVP／之後／bug），不寫在文件裡 |
+| Backlog | GitHub Issues（label 依階段分 `phase-0`～`phase-9`，另有 `later`、`bug`），不寫在文件裡 |
 | AI 指引 | `AGENTS.md`（英文）；`CLAUDE.md` 只引用 `AGENTS.md` |
 | 遠端 repo | GitHub public |
 | 授權 | MIT（`LICENSE`） |
@@ -44,7 +44,7 @@
 | Commit 身分 | GitHub noreply email，只對本 repo 設定 |
 | Twitch OAuth | Device Code Flow（public client，不需要 client secret） |
 | Twitch app | 每位使用者自己在 Twitch Console 註冊 app（Public client；表單要求的 Redirect URL 填 `http://localhost`），首次設定時引導並填入 Client ID，存在設定；不內建共用 Client ID |
-| Twitch scope | 第一次登入就申請 MVP 全部：`user:read:chat`、`moderator:read:followers`、`channel:read:subscriptions`、`channel:read:redemptions`、`bits:read`；已存的登入缺少其中任何一項時，管理 UI 提示重新登入一次，重新登入前聊天室照常運作，缺少權限的事件不訂閱 |
+| Twitch scope | 第一次登入申請基礎權限：`user:read:chat`、`moderator:read:followers`、`channel:read:subscriptions`、`channel:read:redemptions`、`bits:read`；其他功能需要的權限，在使用者第一次開啟該功能時才申請（先說明要同意哪些權限，再重新登入授權）；已存的登入缺少任何一項基礎權限時，管理 UI 提示重新登入一次，重新登入前聊天室照常運作，缺少權限的事件不訂閱 |
 | Token 刷新 | 同時只允許一個 refresh；新 refresh token 先寫進 keyring 再使用新 access token，寫入失敗時新 token 留在記憶體並重試寫入（若程式在重試成功前關閉，下次需重新登入）；refresh 失敗（400／401）就重新走 Device Code Flow，UI 顯示「需重新登入」。Public client 的 refresh token 30 天後過期，長時間沒使用需重新登入 |
 | 管理視窗 | 載入 Host 網址 `http://127.0.0.1:<port>/admin`（與 API 同源，不開 CORS）；只能導向 `/admin` 路徑，開新視窗一律拒絕；`/admin` 送嚴格 CSP；Twitch 驗證頁由 Rust 指令用系統瀏覽器開啟；開啟縮放快速鍵（`zoom_hotkeys_enabled(true)`：`Ctrl` 加 `+`／`-`、`Ctrl` 加滾輪）；視窗內容區最小 360×480（寬×高） |
 | Tauri IPC 權限 | app 指令以 `AppManifest` 宣告；三組 capability：port 修改小頁面（限 `port` 視窗）、管理視窗 dev 版（本機，限 `admin` 視窗）、管理視窗正式版（遠端，啟動時依實際 port 建立，URL 限 Host origin，路徑由 `on_navigation` 限制）；「dev」＝沒有開啟 `tauri/custom-protocol` feature（`cfg(dev)`）：`tauri build` 會開啟，是唯一可散布的建置；`tauri dev` 與一般 cargo 指令都是 dev；由 `apps/desktop` 判斷後以執行期設定告知 Host |
@@ -55,7 +55,7 @@
 | 開發模式 | Vite dev server＋proxy（`/api`、`/ws`、`/templates`、`/sounds`，目標 `http://127.0.0.1:<port>`，port 每個請求都從 dev 資料夾的 `settings.json` 讀取，`changeOrigin: true`、`ws: true`）到 Host；Tauri `build.devUrl` 設為 Vite 網址，Vite `server.strictPort: true`；Vite 送出與 Host 相同的 CSP（`/admin` 或 Overlay 的）；dev 模式下 Vite 除了 `/api`、`/ws`、`/templates`、`/sounds` 以外都允許 `null` origin（`server.cors: false`＋middleware），`server.fs.deny` 另加 Cargo 的 `target` 資料夾（dev 資料夾在裡面，`null` origin 不得讀到）；dev 模式的 Origin 白名單加入 Vite origin |
 | 管理 UI 版面 | 固定頂部＋上方群組分頁，不用側欄。頂部有程式名稱、Twitch 與 OBS 狀態（在首頁打開連線抽屜，其他頁前往設定的對應區段）與設定按鈕，往下捲也看得到。群組最多兩層：一個群組有多個頁面時，第二排是子分頁；放不下的群組收進「更多」，放得下就沒有「更多」；設定不是分頁。首頁仍是功能磚＋抽屜，各功能的完整頁在 `/admin/<功能>`。抽屜依序分「動作」「現在」「常改的設定」「開啟完整頁」四段，功能用不到的段省略。功能磚分「直播中」「功能」兩組，使用者可整理（組內排序、移除、加入），清單與順序存在 `settings.json`（「沒存過」與「已清空」要能區分），會一併備份還原 |
 | 抽屜元件 | 自製：Vue `Teleport` 在並排的 `<aside>`（視窗 > 1000px）與 modal 的原生 `<dialog>`（≤ 1000px）之間移動同一份內容，不重新掛載；不用 PrimeVue Drawer（只有覆蓋模式）；抽屜內的 PrimeVue 浮層元件設 `appendTo="self"`；換位置前記下焦點與各捲動容器的 `scrollTop`，換完還原 |
-| 視覺風格 | 藍紫灰基底（OKLCH 色相 278°、彩度 0.028）＋薰衣草強調色 `#d8b7ff`（以色相 300°、彩度 0.13 為目標，裁切進 sRGB）；平面：不用光暈、漸層、半透明面板，圓角 6px；字型用系統字（Segoe UI＋微軟正黑體），不打包文字字型（PrimeIcons 的圖示字型除外）；MVP 只有深色 |
+| 視覺風格 | 藍紫灰基底（OKLCH 色相 278°、彩度 0.028）＋薰衣草強調色 `#d8b7ff`（以色相 300°、彩度 0.13 為目標，裁切進 sRGB）；平面：不用光暈、漸層、半透明面板，圓角 6px；字型用系統字（Segoe UI＋微軟正黑體），不打包文字字型（PrimeIcons 的圖示字型除外）；目前只有深色 |
 
 ## 套件
 | 用途 | 套件 |
@@ -67,7 +67,7 @@
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
 | Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message`，特效的追隨、訂閱、小奇點、揪團也走 EventSub（訂閱清單見 architecture.md） |
 | 對外 HTTPS | `hyper-util`＋`hyper-rustls`＋`rustls`（`ring`）＋`rustls-platform-verifier`：憑證走 Windows 憑證庫；EventSub 的 `wss://` 共用同一組 TLS 設定 |
-| OBS | `obws`；MVP 就接，先顯示 OBS 連線狀態 |
+| OBS | `obws`；已接上，目前只顯示 OBS 連線狀態 |
 | 憑證 | `keyring-core`＋`windows-native-keyring-store`（keyring 4 建議 app 直接連結的組合），只在 Windows 編譯；不會落到 mock 儲存 |
 | 機密值 | `secrecy`：Token 用 `SecretString` 包起來，永不寫進記錄檔 |
 | 記錄檔 | `tracing`＋`tracing-subscriber`（JSON）＋`tracing-appender`（按日輪替，保留 14 天）；寫在資料夾的 `logs/`，`RUST_LOG` 可調整等級；輸出層遮蔽只當備援 |
@@ -96,7 +96,7 @@
 |---|---|
 | **Skeleton 就建立** | 模組啟用／停用開關（停用保留資料；停用期間記憶體事件直接丟棄）、port 被佔用時的修改小頁面、結構化記錄＋錯誤碼、事件模擬器（`source=simulation`）、資料夾規劃（程式與資料分開，見上方「資料夾」）、UI 字串資源鍵（vue-i18n，先只有 `zh-TW`）、a11y 基準（定義見 dev.md）、Token 存 Windows Credential Manager、CI、架構測試、`cargo-deny` 授權與安全公告檢查、本機 API 安全（管理 token、Host 與 Origin 檢查、API 不開 CORS）、Twitch app 註冊引導與 Device Code Flow 登入、Token 自動刷新 |
 | **用到的切片再做** | SQLite 與 migration 前自動備份（兌換紀錄切片，第一張資料表；切片 3 已建立）、outbox 與停用時的「暫停／關閉」（打卡簽到切片；切片 4 已建立）、可攜備份格式 `.stbackup`（備份還原切片；切片 6 已建立）、release workflow 與 `THIRD_PARTY_LICENSES`（可攜版切片；切片 7 已建立） |
-| **MVP 之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
+| **之後** | OBS Dock、macOS 安裝檔、PostgreSQL／NAS 儲存（Storage Port）、外掛 SDK、Mutation Testing、第二語系 `en`、遠端／手機控制、可攜版自動更新（下載後驗證 ed25519 簽章，使用者按下才替換）、Overlay 自訂 JS 沙箱、診斷報告匯出、深淺主題／DPI 驗證 |
 | **不做** | 輕量 Harness（只保留「不得放寬驗收」規則，寫在 dev.md）、微服務、GraphQL／gRPC、WebSocket RPC、通用規則引擎、Linux、原生手機 App |
 
 ## 變更紀錄
@@ -133,3 +133,4 @@
 | 2026-11-17 | release workflow 在切片 7 建立：推 `v*` tag 後先跑 UI E2E 與版本檢查，再建置 zip，只建立草稿 release；拿掉用不到的 `bundle.targets` | 發佈前由人下載草稿檢查；三處版本一致，程式顯示的版本才會和 tag 相同；`--no-bundle` 不產生安裝檔 |
 | 2026-11-17 | 新版提示在切片 7 建立：Host 查 GitHub 的 `releases/latest`，共用現有的 HTTPS client；dev 版不查 | dev 版的版本號不代表發佈的版本，下載頁的指令也只授權給正式版的管理視窗 |
 | 2026-11-18 | 管理 UI 版面改成固定頂部＋上方群組分頁（最多兩層），首頁維持功能磚＋抽屜 | 功能變多後只靠首頁磚找不到功能；分頁讓每個頁面一鍵可達，固定頂部讓連線狀態一直看得到 |
+| 2026-11-18 | 放棄 MVP，改以原型的完整功能為目標分階段做；issue label 改依階段；Twitch 權限改成在功能第一次開啟時才申請 | MVP 的功能和原型設計落差太大，單獨發佈沒有意義；一次申請全部權限，會讓只用少數功能的人同意用不到的權限 |
