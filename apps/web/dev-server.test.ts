@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, resolveConfig, type ViteDevServer } from 'vite'
-import { ADMIN_CSP, OVERLAY_CSP, PREVIEW_PATHS, devCsp, hostPort } from './dev-server.ts'
+import { ADMIN_CSP, CLIP_OVERLAY_CSP, OVERLAY_CSP, PREVIEW_PATHS, devCsp, hostPort } from './dev-server.ts'
 
 const portOf = (s: { address(): unknown }) => (s.address() as AddressInfo).port
 
@@ -28,8 +28,9 @@ const hostSource = () => readFileSync(resolve(import.meta.dirname, '../../crates
 it.each([
   ['ADMIN_CSP', ADMIN_CSP],
   ['OVERLAY_CSP', OVERLAY_CSP],
+  ['CLIP_OVERLAY_CSP', CLIP_OVERLAY_CSP],
 ])('%s matches the Host', (name, csp) => {
-  const literal = new RegExp(`const ${name}: &str = "((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(hostSource())?.[1]
+  const literal = new RegExp(`const ${name}: &str =\\s*"((?:[^"\\\\]|\\\\[\\s\\S])*)";`).exec(hostSource())?.[1]
   // A trailing backslash continues a Rust string literal and drops the newline and leading spaces.
   expect(literal?.replace(/\\\r?\n\s*/g, '')).toBe(csp)
 })
@@ -44,6 +45,7 @@ it('picks the CSP the Host sends for each page', () => {
   expect(devCsp('/admin/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/port/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/overlay/chat/', 'localhost:5173')).toBe(OVERLAY_CSP)
+  expect(devCsp('/overlay/clip/', 'localhost:5173')).toBe(CLIP_OVERLAY_CSP)
   // Nothing from a Host header gets into the policy except a plain host name and port.
   expect(devCsp('/admin/', "x; script-src 'unsafe-inline'")).toBe(`${ADMIN_CSP}; frame-src 'none'`)
   expect(devCsp('/admin/')).toBe(`${ADMIN_CSP}; frame-src 'none'`)

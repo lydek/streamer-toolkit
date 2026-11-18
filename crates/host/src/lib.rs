@@ -42,6 +42,9 @@ use tokio::net::TcpListener;
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
 style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:";
 const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
+/// The clip overlay may frame Twitch's official clip embed and nothing else.
+const CLIP_OVERLAY_CSP: &str =
+    "script-src 'self'; object-src 'none'; frame-src https://clips.twitch.tv";
 /// The only pages the admin window may frame: the chat and alert overlays as template previews, which the admin UI
 /// puts in `sandbox="allow-scripts"` iframes. The release IPC capability covers the whole Host origin, so no other
 /// same-origin page may be framed.
@@ -388,6 +391,11 @@ fn static_file(uri: &Uri, admin_csp: &HeaderValue) -> Response {
     );
     if file_path.starts_with("admin/") {
         headers.insert(header::CONTENT_SECURITY_POLICY, admin_csp.clone());
+    } else if file_path.starts_with("overlay/clip/") {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static(CLIP_OVERLAY_CSP),
+        );
     } else if file_path.starts_with("overlay/") {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
@@ -1276,6 +1284,19 @@ mod tests {
             assert_eq!(res.status(), StatusCode::OK, "{page}");
             assert_eq!(res.headers()[header::CONTENT_SECURITY_POLICY], OVERLAY_CSP);
         }
+        let res = app()
+            .oneshot(
+                get_req("/overlay/clip", "127.0.0.1:47810")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(
+            res.headers()[header::CONTENT_SECURITY_POLICY],
+            CLIP_OVERLAY_CSP
+        );
 
         let asset = Web::iter()
             .find(|p| p.starts_with("assets/"))

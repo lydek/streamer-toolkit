@@ -315,6 +315,9 @@
     "retry": "儲存並重試"
   },
   "overlay": {
+    "clip": {
+      "tooSmall": "OBS 來源至少要 400×300 才能播放 Clip"
+    },
     "checkin": {
       "total": "累計 {n} 次",
       "full": "集滿了！"

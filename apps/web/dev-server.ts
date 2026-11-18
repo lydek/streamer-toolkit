@@ -3,11 +3,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Plugin, ProxyOptions } from 'vite'
 
-// All three must match crates/host/src/lib.rs (dev-server.test.ts checks them).
+// All four must match crates/host/src/lib.rs (dev-server.test.ts checks them).
 export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
 export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
+export const CLIP_OVERLAY_CSP = "script-src 'self'; object-src 'none'; frame-src https://clips.twitch.tv"
 export const PREVIEW_PATHS = ['/overlay/chat/', '/overlay/alerts/']
 
 /** The admin CSP for a page served as `host`: only the template preview pages may be framed, as the Host does. */
@@ -17,7 +18,8 @@ export const adminCsp = (host = '') =>
   }`
 
 /** The CSP the Host sends for the page at `url`, so violations show up while developing. */
-export const devCsp = (url = '', host = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : adminCsp(host))
+export const devCsp = (url = '', host = '') =>
+  url.startsWith('/overlay/clip/') ? CLIP_OVERLAY_CSP : url.startsWith('/overlay/') ? OVERLAY_CSP : adminCsp(host)
 
 const DEFAULT_PORT = 47810
 // Vite's proxy matches these as plain prefixes, so the null-origin rule uses the same test.
