@@ -2,6 +2,9 @@ import { onScopeDispose, shallowRef, watch } from 'vue'
 import type { Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 
+/** The Twitch status the app bar polls every 2 s (undefined until its first answer); read it instead of polling again. */
+export const twitchOverview = shallowRef<Schemas['Overview']>()
+
 /** A status light in the status bar. `key` is the i18n key of its state text. */
 export interface Light {
   state: 'connected' | 'reconnecting' | 'error' | 'loading'

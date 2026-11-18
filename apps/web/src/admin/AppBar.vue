@@ -39,6 +39,16 @@
           @click="openConnections(problems[0].section, $event.currentTarget)"
         />
         <Button
+          v-if="!hidden.has('/chat')"
+          icon="pi pi-comments"
+          text
+          rounded
+          :aria-label="t('dock.title')"
+          aria-controls="chat-dock"
+          :aria-expanded="chatOpen"
+          @click="toggleChat"
+        />
+        <Button
           icon="pi pi-cog"
           text
           rounded
@@ -96,10 +106,13 @@ import type { MenuItem } from 'primevue/menuitem'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { type Schemas, api, client } from './api'
+import { useToast } from 'primevue/usetoast'
+import { errorMessage } from '../i18n'
+import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
-import { obsLight, twitchLight, useLiveEvents } from './home'
+import { errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
+import { saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf } from './tabs'
 
@@ -107,10 +120,11 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const drawer = useDrawer()
+const toast = useToast()
 
 // shortcut: home polls the same Twitch status and opens its own /ws/overlay for its tiles and drawers; share one
 // source when more pages need these values.
-const overview = ref<Schemas['Overview']>()
+const overview = twitchOverview
 const overviewFailed = ref(false)
 const live = useLiveEvents()
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
@@ -156,6 +170,21 @@ watch(
 )
 // Pages of features turned off in settings are hidden, and so is a group left with none.
 const { hidden } = useModules()
+
+// The chat button: docks or undocks the panel on wide windows (saved), slides it in below 900px.
+const dock = useDock()
+const wideQuery = window.matchMedia('(min-width: 900px)')
+const wide = ref(wideQuery.matches)
+wideQuery.addEventListener('change', () => (wide.value = wideQuery.matches))
+const chatOpen = computed(() => (wide.value ? dock.open : dock.sheet))
+function toggleChat() {
+  if (!wide.value) {
+    dock.sheet = !dock.sheet
+    return
+  }
+  dock.open = !dock.open
+  saveDock().catch((e) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e))))
+}
 const groups = computed(() => GROUPS.filter((g) => g.pages.some((p) => !hidden.value.has(p.path))))
 const subPages = computed(() => group.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
 const target = (g: TabGroup) => {
@@ -283,10 +312,13 @@ onBeforeUnmount(() => {
   color: var(--p-primary-color);
 }
 
-/* One unit: when the row is too narrow the whole group wraps, so settings never ends up alone on a line. */
+/* One unit: when the row is too narrow the whole group moves to the next line, so settings does not end up alone
+   on a line; only when the group is wider than the bar itself (very large text) do its buttons wrap. */
 .bar-status {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
   align-items: center;
   gap: 0.5rem;
 }

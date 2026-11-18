@@ -28,6 +28,9 @@ pub struct Settings {
     /// is written); `Some([])`: the broadcaster removed every tile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_tiles: Option<Vec<String>>,
+    /// The admin UI's docked chat panel. `None`: never changed, the admin UI shows its defaults (closed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_dock: Option<ChatDock>,
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
@@ -42,6 +45,13 @@ pub struct Settings {
     /// The release the broadcaster chose to skip ("not this one"); only a newer one shows the notice again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dismissed_version: Option<String>,
+}
+
+/// Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ChatDock {
+    pub open: bool,
+    pub width: u16,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +129,7 @@ impl Default for Settings {
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,
+            chat_dock: None,
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
