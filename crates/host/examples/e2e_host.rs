@@ -58,12 +58,11 @@ async fn main() {
         alert_timing: AlertTiming {
             show: Duration::from_millis(1500),
             show_with_message: Duration::from_millis(2000),
-            gap: Duration::from_millis(200),
         },
         checkin_timing: CheckinTiming {
             show: Duration::from_millis(1500),
-            gap: Duration::from_millis(200),
         },
+        presentation_gap: Duration::from_millis(200),
         db,
         app_version: "0.0.0-e2e".into(),
         latest_release_url: None,

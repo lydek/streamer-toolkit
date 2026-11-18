@@ -1,29 +1,20 @@
-//! Receives alerts from Twitch or the simulator and plays them one at a time: each is handed on to the overlays,
-//! and the next waits until it has shown.
+//! Receives alerts from Twitch or the simulator and queues them on the shared presentation queue, which hands
+//! each on to the overlays once the one before has shown.
 
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
-use tokio::sync::Notify;
 use toolkit_core::{
     events::{Alert, AlertKind, Source},
     modules::{self, Modules},
+    presentation::{Item, Presenter, Stage},
 };
 
-/// shortcut: beyond this many waiting alerts the oldest is dropped (a follow bot could otherwise queue hours of
-/// alerts); raise it if real streams ever reach it.
-const WAITING_MAX: usize = 100;
-
-/// How long an alert shows and the pause before the next one.
+/// How long an alert shows; the pause before the next item belongs to the presentation queue.
 #[derive(Debug, Clone, Copy)]
 pub struct Timing {
     pub show: Duration,
     /// For a resub or cheer that carries a message to read.
     pub show_with_message: Duration,
-    pub gap: Duration,
 }
 
 impl Default for Timing {
@@ -31,84 +22,62 @@ impl Default for Timing {
         Self {
             show: Duration::from_secs(6),
             show_with_message: Duration::from_secs(9),
-            gap: Duration::from_secs(1),
         }
     }
 }
 
-pub struct AlertsService(Arc<Queue>);
-
 /// Shows an alert on the overlays for the given time; `infrastructure` publishes it on the bus.
-type Publish = Box<dyn Fn(Alert, Source, Duration) + Send + Sync>;
+type Publish = Arc<dyn Fn(Alert, Source, Duration) + Send + Sync>;
 
-struct Queue {
+pub struct AlertsService {
     modules: Arc<Modules>,
     timing: Timing,
+    presenter: Arc<Presenter>,
     publish: Publish,
-    waiting: Mutex<VecDeque<(Alert, Source)>>,
-    ready: Notify,
 }
 
 impl AlertsService {
-    /// Starts the player task; needs a Tokio runtime.
     pub(crate) fn with_publisher(
         modules: Arc<Modules>,
         timing: Timing,
+        presenter: Arc<Presenter>,
         publish: impl Fn(Alert, Source, Duration) + Send + Sync + 'static,
     ) -> Self {
-        let queue = Arc::new(Queue {
+        Self {
             modules,
             timing,
-            publish: Box::new(publish),
-            waiting: Mutex::default(),
-            ready: Notify::new(),
-        });
-        tokio::spawn(play(queue.clone()));
-        Self(queue)
+            presenter,
+            publish: Arc::new(publish),
+        }
     }
 
-    /// Queues `alert`. A gifted sub is covered by its gift's alert, so one gift of N plays once.
+    /// Queues `alert`. A gifted sub is covered by its gift's alert, so one gift of N plays once. An alert reaching
+    /// the front while the module is disabled is dropped.
     pub fn receive(&self, alert: Alert, source: Source) {
         if matches!(alert.kind, AlertKind::Subscribe { gifted: true, .. }) {
             return;
-        }
-        let mut waiting = self.0.waiting.lock().unwrap();
-        if waiting.len() == WAITING_MAX {
-            waiting.pop_front();
-            tracing::warn!(
-                code = "alerts.queue_full",
-                "dropped the oldest waiting alert"
-            );
-        }
-        waiting.push_back((alert, source));
-        drop(waiting);
-        self.0.ready.notify_one();
-    }
-}
-
-/// Publishes the waiting alerts in order, each after the previous one has shown. Alerts reaching the front
-/// while the module is disabled are dropped.
-async fn play(queue: Arc<Queue>) {
-    loop {
-        let next = queue.waiting.lock().unwrap().pop_front();
-        let Some((alert, source)) = next else {
-            // A notify sent since the queue was found empty is kept, so nothing waits forever.
-            queue.ready.notified().await;
-            continue;
-        };
-        if !queue.modules.is_enabled(modules::ALERTS) {
-            continue;
         }
         let has_message = matches!(
             &alert.kind,
             AlertKind::Resubscribe { message, .. } | AlertKind::Cheer { message, .. } if !message.is_empty()
         );
         let show = match has_message {
-            true => queue.timing.show_with_message,
-            false => queue.timing.show,
+            true => self.timing.show_with_message,
+            false => self.timing.show,
         };
-        (queue.publish)(alert, source, show);
-        tokio::time::sleep(show + queue.timing.gap).await;
+        let (modules, publish) = (self.modules.clone(), self.publish.clone());
+        self.presenter.push(Item {
+            stage: Stage::Alerts,
+            show,
+            simulated: source == Source::Simulation,
+            present: Box::new(move || {
+                if !modules.is_enabled(modules::ALERTS) {
+                    return false;
+                }
+                publish(alert, source, show);
+                true
+            }),
+        });
     }
 }
 
@@ -143,7 +112,14 @@ mod tests {
         let bus = Arc::new(EventBus::default());
         let modules = Arc::new(Modules::load(dir.clone()));
         let sounds = Arc::new(SoundService::new(dir.clone(), modules.clone(), bus.clone()));
-        let alerts = AlertsService::new(bus.clone(), modules.clone(), Timing::default(), sounds);
+        let presenter = Presenter::start(toolkit_core::presentation::DEFAULT_GAP, |_| true);
+        let alerts = AlertsService::new(
+            bus.clone(),
+            modules.clone(),
+            Timing::default(),
+            presenter,
+            sounds,
+        );
         let (_, rx) = bus.subscribe();
         (dir, modules, alerts, rx)
     }

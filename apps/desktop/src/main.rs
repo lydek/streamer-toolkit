@@ -11,7 +11,8 @@ use std::{
 };
 
 use host::{
-    AlertTiming, BoundHost, CheckinTiming, HostConfig, HostError, TwitchEndpoints, settings,
+    AlertTiming, BoundHost, CheckinTiming, HostConfig, HostError, PRESENTATION_GAP,
+    TwitchEndpoints, settings,
 };
 use integrations::secrets::{CredentialManager, SecretStore};
 use secrecy::{ExposeSecret, SecretString};
@@ -373,6 +374,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         obs_secrets: state.obs_secrets.clone(),
         alert_timing: AlertTiming::default(),
         checkin_timing: CheckinTiming::default(),
+        presentation_gap: PRESENTATION_GAP,
         db: state.db.clone(),
         app_version: app.package_info().version.to_string(),
         // A dev build's version says nothing about releases, and its admin window may not open the download page.

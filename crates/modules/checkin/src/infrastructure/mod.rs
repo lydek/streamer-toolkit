@@ -15,6 +15,7 @@ use toolkit_core::{
     events::Source,
     modules::{self, Modules},
     outbox::{Handled, OutboxEvent, Subscriber, Subscription},
+    presentation::Presenter,
 };
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
@@ -141,8 +142,10 @@ fn publish_changed(bus: &EventBus, c: &CheckedIn) {
 }
 
 /// Starts check-ins into `pool`, which must already have [`db::MIGRATOR`] applied, with the settings in
-/// `data_dir`. Each recorded check-in is announced on `bus` and gets a stamp card on the overlay, with the viewer's
-/// profile image from `profiles` and the sound chosen in `sounds`; needs a Tokio runtime.
+/// `data_dir`. Each recorded check-in is announced on `bus` and gets a stamp card on the overlay when `presenter`
+/// reaches it, with the viewer's profile image from `profiles` and the sound chosen in `sounds`; needs a Tokio
+/// runtime.
+#[allow(clippy::too_many_arguments)]
 pub fn start(
     pool: SqlitePool,
     bus: Arc<EventBus>,
@@ -151,6 +154,7 @@ pub fn start(
     profiles: Arc<dyn ProfileImages>,
     sounds: Arc<SoundService>,
     timing: Timing,
+    presenter: Arc<Presenter>,
 ) -> CheckinService {
     let changed_bus = bus.clone();
     let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
@@ -164,6 +168,7 @@ pub fn start(
             show_card,
             profiles,
             timing,
+            presenter,
         },
     )
 }
@@ -259,7 +264,16 @@ pub(crate) mod tests {
             show_card: Arc::new(|_, _| {}),
             profiles: Arc::new(NoProfiles),
             timing: Timing::default(),
+            presenter: presenter(),
         }
+    }
+
+    /// The pause between items in tests.
+    const GAP: std::time::Duration = std::time::Duration::from_millis(20);
+
+    /// A presentation queue whose overlays are always open.
+    fn presenter() -> Arc<Presenter> {
+        Presenter::start(GAP, |_| true)
     }
 
     /// `start` with a bus of its own, no profile images and default timing.
@@ -277,6 +291,7 @@ pub(crate) mod tests {
             Arc::new(NoProfiles),
             sounds(&dir),
             Timing::default(),
+            presenter(),
         )
     }
 
@@ -907,7 +922,6 @@ pub(crate) mod tests {
     fn quick() -> Timing {
         Timing {
             show: std::time::Duration::from_millis(80),
-            gap: std::time::Duration::from_millis(20),
         }
     }
 
@@ -929,6 +943,7 @@ pub(crate) mod tests {
             profiles.clone(),
             sounds(&dir),
             quick(),
+            presenter(),
         );
         full_card_sound(&dir);
         service
@@ -966,7 +981,7 @@ pub(crate) mod tests {
             serde_json::json!({ "url": format!("/sounds/{SOUND_ID}"), "volume": 40 })
         );
         assert!(
-            t2 - t1 >= quick().show + quick().gap && t3 - t2 >= quick().show + quick().gap,
+            t2 - t1 >= quick().show + GAP && t3 - t2 >= quick().show + GAP,
             "one at a time"
         );
         assert_eq!(
@@ -1009,6 +1024,7 @@ pub(crate) mod tests {
             profiles,
             sounds(&dir),
             quick(),
+            presenter(),
         );
         service.receive_chat(&chat("1", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
         let (card, _) = next_card(&mut rx).await;

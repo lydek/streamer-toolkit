@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 use toolkit_core::{
     events::{ChatMessage, Source},
     modules::{self, Modules},
+    presentation::{Item, Presenter, Stage},
     settings::{self, CheckinSettings},
 };
 
@@ -198,18 +199,16 @@ pub(crate) struct CheckedIn {
 /// Called after every recorded check-in, whatever triggered it.
 pub(crate) type OnCheckedIn = Arc<dyn Fn(&CheckedIn) + Send + Sync>;
 
-/// How long a stamp card shows on the overlay, and the pause before the next one.
+/// How long a stamp card shows on the overlay; the pause before the next item belongs to the presentation queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Timing {
     pub show: Duration,
-    pub gap: Duration,
 }
 
 impl Default for Timing {
     fn default() -> Self {
         Self {
             show: Duration::from_secs(5),
-            gap: Duration::from_secs(1),
         }
     }
 }
@@ -260,6 +259,7 @@ pub(crate) struct Screen {
     pub(crate) show_card: ShowCard,
     pub(crate) profiles: Arc<dyn ProfileImages>,
     pub(crate) timing: Timing,
+    pub(crate) presenter: Arc<Presenter>,
 }
 
 enum CardJob {
@@ -349,8 +349,8 @@ pub struct CheckinService {
 }
 
 impl CheckinService {
-    /// Spawns the worker that records check-ins in order, and the one that shows their stamp cards one at a time;
-    /// needs a Tokio runtime.
+    /// Spawns the worker that records check-ins in order, and the one that builds their stamp cards in order and
+    /// queues them on the presentation queue; needs a Tokio runtime.
     pub(crate) fn start<R: CheckinRepository>(
         repo: R,
         modules: Arc<Modules>,
@@ -365,16 +365,24 @@ impl CheckinService {
             show_card,
             profiles,
             timing,
+            presenter,
         } = screen;
-        // shortcut: the card queue is unbounded; check-ins come at chat speed, cap it if a raid ever floods it.
         tokio::spawn(async move {
             while let Some(job) = card_rx.recv().await {
                 let card = match job {
                     CardJob::Real(c) => card_for(&*card_repo, &*profiles, &c).await,
                     CardJob::Simulated(card) => card,
                 };
-                show_card(&card, timing.show);
-                tokio::time::sleep(timing.show + timing.gap).await;
+                let show_card = show_card.clone();
+                presenter.push(Item {
+                    stage: Stage::Checkin,
+                    show: timing.show,
+                    simulated: card.source == Source::Simulation,
+                    present: Box::new(move || {
+                        show_card(&card, timing.show);
+                        true
+                    }),
+                });
             }
         });
         let card_tx = cards.clone();
