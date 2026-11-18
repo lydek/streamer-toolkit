@@ -6,7 +6,9 @@ const chatTile = (page: Page) => page.locator('[data-drawer-tile="chat"]')
 
 test('never scrolls sideways at 1280px, 640px and 320px, nor do the drawers', async ({ page }) => {
   await openAdmin(page)
-  const openers = { chat: chatTile(page), connections: page.getByRole('button', { name: /^OBS：/ }) }
+  // Below 600px the status lights give way to the warning button (Twitch is not set up in the mocks).
+  const problem = page.getByRole('button', { name: new RegExp(`^${zh.nav.problem.split('{')[0]}`) })
+  const openers = { chat: chatTile(page), connections: page.getByRole('button', { name: /^OBS：/ }).or(problem) }
   for (const width of [1280, 640, 320]) {
     await page.setViewportSize({ width, height: 800 })
     expect(await scrollsSideways(page), `${width}px, page`).toBe(false)

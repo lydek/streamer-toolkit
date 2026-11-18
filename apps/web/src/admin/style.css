@@ -28,6 +28,13 @@ main {
   padding: 1rem;
 }
 
+/* Below 600px the group tabs are a fixed bottom bar (AppBar.vue); keep the page end clear of it. */
+@media (max-width: 599.98px) {
+  body {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
+
 form,
 .stack {
   display: flex;

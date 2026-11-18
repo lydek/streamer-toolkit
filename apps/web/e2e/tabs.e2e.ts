@@ -1,6 +1,6 @@
 // The app bar: sticky top, group tabs, sub-tabs and "More" (docs/decisions.md 管理 UI 版面), with the API mocked.
 import { type Page, expect, test } from '@playwright/test'
-import { openAdmin, zh } from './fixtures'
+import { mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
 
 const tabs = (page: Page) => page.getByRole('navigation', { name: zh.nav.label })
 const tab = (page: Page, group: string) => tabs(page).getByRole('link', { name: zh.nav.groups[group] })
@@ -55,11 +55,14 @@ test('the app bar stays in view while the page scrolls', async ({ page }) => {
 })
 
 test('"More" shows only when the groups do not fit, and holds the ones that do not', async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 640 })
   await openAdmin(page)
   await expect(more(page)).toBeHidden()
 
-  await page.setViewportSize({ width: 320, height: 640 })
+  // Large text: the four groups no longer fit in one row at 640px.
+  await page.evaluate(() => (document.documentElement.style.fontSize = '32px'))
   await expect(more(page)).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
   const visible = await tabs(page).getByRole('link').count()
   await more(page).click()
   const items = page.locator('#tabs-more').getByRole('menuitem')
@@ -75,4 +78,67 @@ test('away from home, a status light goes to its section of settings', async ({ 
   await page.getByRole('button', { name: /^OBS：/ }).click()
   await expect(page).toHaveURL(/\/admin\/settings#obs$/)
   await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
+})
+
+const problem = (page: Page) => page.getByRole('button', { name: new RegExp(`^${zh.nav.problem.split('{')[0]}`) })
+const light = (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`^${name}：`) })
+
+test('below 600px the tabs are a bottom bar, and a warning replaces the status lights', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 700 })
+  await openAdmin(page)
+  const box = await tabs(page).boundingBox()
+  expect(Math.round(box!.y + box!.height)).toBe(700)
+  await expect(light(page, 'Twitch')).toBeHidden()
+  await expect(light(page, 'OBS')).toBeHidden()
+  // Twitch is not set up in the mocks: a problem.
+  await expect(problem(page)).toBeVisible()
+  await expect(problem(page)).toHaveAccessibleName(zh.nav.problem.replace('{names}', 'Twitch'))
+
+  for (const [group, url] of [['chat', /\/admin\/chat$/], ['interact', /\/admin\/alerts$/], ['media', /\/admin\/sounds$/], ['home', /\/admin\/$/]] as const) {
+    await tab(page, group).click()
+    await expect(page).toHaveURL(url)
+    expect(await scrollsSideways(page), group).toBe(false)
+  }
+})
+
+test('a narrower bar keeps the lights that have a problem', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await openAdmin(page)
+  // Twitch has a problem, OBS is still loading: both stay.
+  await expect(light(page, 'Twitch')).toBeVisible()
+  await expect(light(page, 'OBS')).toBeVisible()
+  await expect(problem(page)).toBeHidden()
+})
+
+test('when every connection is fine, a narrower bar shows one "connected" light', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs] } })),
+  )
+  await page.goto('/admin/')
+  const all = light(page, zh.nav.connections)
+  await expect(all).toBeVisible()
+  await expect(light(page, 'Twitch')).toBeHidden()
+  await expect(light(page, 'OBS')).toBeHidden()
+  await all.click()
+  await expect(page.locator('#drawer-connections')).toBeVisible()
+
+  // A wide bar shows each light.
+  await page.setViewportSize({ width: 1440, height: 700 })
+  await expect(light(page, 'Twitch')).toBeVisible()
+  await expect(all).toBeHidden()
+})
+
+test('sub-tabs stay one row, faded at the edge while more are off to the right', async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 700 })
+  await openAdmin(page)
+  await tab(page, 'interact').click()
+  const sub = page.getByRole('navigation', { name: zh.nav.sub })
+  await expect(sub).toHaveClass(/at-end/)
+  await page.evaluate(() => (document.documentElement.style.fontSize = '64px'))
+  await expect(sub).not.toHaveClass(/at-end/)
+  const rows = await sub.getByRole('link').evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().top))).size)
+  expect(rows).toBe(1)
 })
