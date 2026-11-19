@@ -9,6 +9,8 @@ import {
   type Line,
   type LiveState,
   applyLive,
+  sessionRange,
+  streamStage,
   arrangedTiles,
   availableTiles,
   dropTile,
@@ -336,5 +338,34 @@ describe('HomeTile', () => {
     expect(failed.find('.dot').exists()).toBe(true)
     expect(failed.get('.sr-only').text()).toBe('需要注意')
     expect(tile({ state: 'ready', text: 'x' }, true).find('.dot').exists()).toBe(true)
+  })
+})
+
+describe('stream stage', () => {
+  const summary = (endedAt: string | null, endedSinceLaunch = true): Schemas['StreamSummary'] => ({
+    startedAt: '2026-11-18T11:58:00.000Z',
+    endedAt,
+    endedSinceLaunch,
+    peakViewers: 58,
+    follows: 3,
+    subs: 5,
+    bits: 1200,
+    raids: 1,
+    redemptions: 42,
+  })
+
+  it('is live while Twitch says so, after a stream that ended this run, and before otherwise', () => {
+    expect(streamStage({ state: 'live', startedAt: '2026-11-18T11:58:00.000Z' }, summary(null))).toBe('live')
+    expect(streamStage({ state: 'offline' }, summary('2026-11-18T14:39:00.000Z'))).toBe('after')
+    expect(streamStage({ state: 'offline' }, summary('2026-11-18T14:39:00.000Z', false))).toBe('before')
+    expect(streamStage({ state: 'offline' }, null)).toBe('before')
+    expect(streamStage({ state: 'unknown' }, summary('2026-11-18T14:39:00.000Z'))).toBe('before')
+    expect(streamStage(undefined, undefined)).toBe('before')
+  })
+
+  it('writes a session as day, start–end and length, with the end day when it differs', () => {
+    const local = (y: number, mo: number, d: number, h: number, mi: number) => new Date(y, mo - 1, d, h, mi).toISOString()
+    expect(sessionRange(local(2026, 11, 18, 19, 58), local(2026, 11, 18, 22, 39))).toBe('11/18 19:58–22:39 · 2:41')
+    expect(sessionRange(local(2026, 11, 18, 23, 30), local(2026, 11, 19, 1, 5))).toBe('11/18 23:30–11/19 01:05 · 1:35')
   })
 })

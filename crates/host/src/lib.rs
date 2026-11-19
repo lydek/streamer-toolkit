@@ -9,6 +9,7 @@ mod obs;
 mod openapi;
 mod overlay;
 mod queue;
+mod stream_summary;
 mod tab_bar;
 mod templates;
 mod text_size;
@@ -247,6 +248,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         move || sessions.session_after_pending(),
     ));
     let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone());
+    let stream_summary = stream_summary::routes(config.db.clone(), chrono::Utc::now());
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -344,6 +346,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(activity_routes.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(stream_summary.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1256,6 +1262,63 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(status(unauthorized).await, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn the_stream_summary_adds_up_the_latest_session_and_needs_the_token() {
+        let mut config = test_config();
+        config.db = db::memory_migrated().await;
+        let pool = config.db.clone();
+        let app = router(config).unwrap();
+        let req = |token: bool| {
+            let mut b = get_req("/api/admin/stream/summary", "127.0.0.1:47810");
+            if token {
+                b = b.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+            }
+            b.body(Body::empty()).unwrap()
+        };
+        let body = |res: axum::response::Response| async move {
+            assert_eq!(res.status(), StatusCode::OK);
+            let bytes = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        };
+        assert_eq!(
+            body(app.clone().oneshot(req(true)).await.unwrap()).await,
+            serde_json::Value::Null,
+            "before the first stream"
+        );
+
+        // A stream that ended after this Host started, one follow and one redemption in it; an older stream's
+        // follow and a redemption before the start do not count.
+        let started = "2026-11-19T10:00:00.000000Z";
+        let ended = (chrono::Utc::now() + chrono::TimeDelta::hours(1))
+            .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+        sqlx::query(
+            "INSERT INTO stream_sessions (id, twitch_stream_id, started_at, ended_at, peak_viewers) VALUES              ('old', 'a', '2026-11-18T10:00:00.000000Z', '2026-11-18T12:00:00.000000Z', 9), ('s1', 'b', ?, ?, 58)",
+        )
+        .bind(started)
+        .bind(ended)
+        .execute(&pool)
+        .await
+        .unwrap();
+        for sql in [
+            "INSERT INTO activity_events (id, twitch_message_id, kind, session_id, occurred_at) VALUES              ('1', 'm1', 'follow', 's1', '2026-11-19T10:05:00.000000Z'),              ('2', 'm2', 'follow', 'old', '2026-11-18T10:05:00.000000Z')",
+            "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id,              reward_title, reward_cost, user_input, status, redeemed_at, updated_at) VALUES              ('1', 't1', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T10:30:00.000000Z', 'x'),              ('2', 't2', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T09:30:00.000000Z', 'x')",
+        ] {
+            sqlx::query(sql).execute(&pool).await.unwrap();
+        }
+        let summary = body(app.clone().oneshot(req(true)).await.unwrap()).await;
+        assert_eq!(summary["startedAt"], "2026-11-19T10:00:00.000Z");
+        assert_eq!(summary["endedSinceLaunch"], true);
+        assert_eq!(summary["peakViewers"], 58);
+        assert_eq!(summary["follows"], 1);
+        assert_eq!(summary["subs"], 0);
+        assert_eq!(summary["redemptions"], 1);
+        assert_eq!(
+            status(req(false)).await,
+            StatusCode::UNAUTHORIZED,
+            "the token is required"
+        );
     }
 
     #[tokio::test]

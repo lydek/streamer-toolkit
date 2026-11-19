@@ -4,8 +4,8 @@
 use utoipa::OpenApi;
 
 use crate::{
-    admin, backup, chat_dock, home_tiles, obs, overlay, queue, tab_bar, templates, text_size,
-    update,
+    admin, backup, chat_dock, home_tiles, obs, overlay, queue, stream_summary, tab_bar, templates,
+    text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -44,6 +44,7 @@ use crate::{
         overlay::overlay_counts,
         queue::clear_queue,
         queue::stop_queue,
+        stream_summary::stream_summary,
         text_size::text_size,
         text_size::set_text_size,
         obs::obs_overview,
@@ -65,6 +66,7 @@ use crate::{
         obs::ObsStateEvent,
         queue::PresentationQueueEvent,
         queue::PresentationStoppedEvent,
+        stream_summary::StreamSummary,
         templates::TemplateChangedEvent,
         checkin::CheckinChangedEvent,
         checkin::CheckinStampedEvent

@@ -581,6 +581,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/stream/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest stream session and what happened during it; `null` before the first stream. */
+        get: operations["stream_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/tab-bar": {
         parameters: {
             query?: never;
@@ -1580,6 +1597,32 @@ export interface components {
         };
         /** @enum {string} */
         StreamStatusType: "stream.status";
+        StreamSummary: {
+            /** Format: int32 */
+            bits: number;
+            /** @description `null` while live (or until the end is seen). */
+            endedAt?: string | null;
+            /** @description The stream ended while this Host was running. */
+            endedSinceLaunch: boolean;
+            /** Format: int32 */
+            follows: number;
+            /**
+             * Format: int32
+             * @description The most viewers a check counted; `null` until one has.
+             */
+            peakViewers?: number | null;
+            /** Format: int32 */
+            raids: number;
+            /** Format: int32 */
+            redemptions: number;
+            /** @description Twitch's start time (RFC 3339). */
+            startedAt: string;
+            /**
+             * Format: int32
+             * @description New subs and resubs, each gifted sub included.
+             */
+            subs: number;
+        };
         /** @description What the streaming software shows right now; [`StreamingState::default`] while it is not connected. */
         StreamingState: {
             inputs: components["schemas"]["Input"][];
@@ -3077,6 +3120,33 @@ export interface operations {
             };
             /** @description `sound.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    stream_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamSummary"] | null;
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

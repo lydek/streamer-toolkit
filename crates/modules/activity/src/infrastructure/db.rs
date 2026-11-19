@@ -29,6 +29,39 @@ fn time_text(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
+/// What happened in one stream session, as the host's stream summary shows it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SessionCounts {
+    pub follows: u32,
+    /// New subs and resubs, each sub a gift hands out included (the gift itself is not counted again).
+    pub subs: u32,
+    pub bits: u32,
+    pub raids: u32,
+}
+
+/// Counts what is stored for `session_id` (simulated events never are).
+pub async fn session_counts(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<SessionCounts, sqlx::Error> {
+    let (follows, subs, bits, raids): (u32, u32, u32, u32) = sqlx::query_as(
+        "SELECT COALESCE(SUM(kind = 'follow'), 0), \
+         COALESCE(SUM(kind IN ('subscribe', 'resubscribe')), 0), \
+         COALESCE(SUM(CASE WHEN kind = 'cheer' THEN bits END), 0), \
+         COALESCE(SUM(kind = 'raid'), 0) \
+         FROM activity_events WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(SessionCounts {
+        follows,
+        subs,
+        bits,
+        raids,
+    })
+}
+
 impl ActivityRepository for SqliteActivity {
     async fn insert(&self, r: &Record) -> Result<bool, RepositoryError> {
         let result = sqlx::query(
@@ -113,5 +146,49 @@ pub(crate) mod tests {
             .unwrap();
         MIGRATOR.run(&pool).await.unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn session_counts_add_up_one_session_only() {
+        let pool = pool().await;
+        assert_eq!(
+            session_counts(&pool, "s1").await.unwrap(),
+            SessionCounts::default()
+        );
+        let rows: [(&str, Option<u32>, i64, &str); 8] = [
+            ("follow", None, 0, "s1"),
+            ("follow", None, 0, "s1"),
+            ("subscribe", None, 0, "s1"),
+            ("resubscribe", None, 0, "s1"),
+            ("gift", None, 0, "s1"),
+            ("subscribe", None, 1, "s1"),
+            ("cheer", Some(150), 0, "s1"),
+            ("raid", None, 0, "s2"),
+        ];
+        for (i, (kind, bits, gifted, session)) in rows.into_iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO activity_events (id, twitch_message_id, kind, bits, gifted, session_id, occurred_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, '2026-11-19T10:00:00.000000Z')",
+            )
+            .bind(i.to_string())
+            .bind(format!("m{i}"))
+            .bind(kind)
+            .bind(bits)
+            .bind(gifted)
+            .bind(session)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        assert_eq!(
+            session_counts(&pool, "s1").await.unwrap(),
+            SessionCounts {
+                follows: 2,
+                subs: 3,
+                bits: 150,
+                raids: 0,
+            }
+        );
+        assert_eq!(session_counts(&pool, "s2").await.unwrap().raids, 1);
     }
 }

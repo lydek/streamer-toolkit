@@ -23,6 +23,22 @@ pub async fn record_count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
         .await
 }
 
+/// How many redemptions were made from `from` until `until` (still going when `None`); the host's stream summary
+/// shows it.
+pub async fn count_between(
+    pool: &SqlitePool,
+    from: DateTime<Utc>,
+    until: Option<DateTime<Utc>>,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM redemption_records WHERE redeemed_at >= ?1 AND (?2 IS NULL OR redeemed_at < ?2)",
+    )
+    .bind(time_text(from))
+    .bind(until.map(time_text))
+    .fetch_one(pool)
+    .await
+}
+
 /// Records redemptions and publishes `redemption.recorded` in the same transaction as a new record.
 pub(crate) struct SqliteRedemptions {
     pool: SqlitePool,
@@ -315,6 +331,34 @@ pub(crate) mod tests {
                 (serde_json::from_str(&payload).unwrap(), at)
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn count_between_counts_only_the_range() {
+        let pool = pool().await;
+        for (i, at) in ["09:59", "10:00", "11:30", "12:00"].into_iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id, \
+                 reward_title, reward_cost, user_input, status, redeemed_at, updated_at) \
+                 VALUES (?, ?, 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', ?, ?)",
+            )
+            .bind(i.to_string())
+            .bind(format!("t{i}"))
+            .bind(format!("2026-11-19T{at}:00.000000Z"))
+            .bind(format!("2026-11-19T{at}:00.000000Z"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+        let from = at("2026-11-19T10:00:00Z");
+        assert_eq!(count_between(&pool, from, None).await.unwrap(), 3);
+        assert_eq!(
+            count_between(&pool, from, Some(at("2026-11-19T12:00:00Z")))
+                .await
+                .unwrap(),
+            2
+        );
     }
 
     #[tokio::test]
