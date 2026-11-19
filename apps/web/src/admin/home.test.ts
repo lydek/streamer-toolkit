@@ -47,7 +47,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], ...payload },
+  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], ...payload },
 })
 
 afterEach(() => {
@@ -155,6 +155,22 @@ describe('applyLive', () => {
     expect(s.queue?.waiting).toHaveLength(3)
     s = applyLive(s, queueEvent(3, 0))
     expect(s.queue).toEqual(status(0))
+  })
+
+  it('takes the live state from the snapshot, then from newer events', () => {
+    const streamEvent = (seq: number, payload: Schemas['StreamStatusPayload']): Schemas['StreamStatusEvent'] => ({
+      id: `l${seq}`,
+      type: 'stream.status',
+      version: 1,
+      seq,
+      occurredAt: '',
+      source: 'twitch',
+      payload,
+    })
+    let s = applyLive(start, snapshot(2, { 'stream.status': [streamEvent(1, { state: 'unknown' })] }))
+    expect(s.stream).toEqual({ state: 'unknown' })
+    s = applyLive(s, streamEvent(3, { state: 'live', startedAt: '2026-11-19T10:00:00.000Z', viewers: 42 }))
+    expect(s.stream).toEqual({ state: 'live', startedAt: '2026-11-19T10:00:00.000Z', viewers: 42 })
   })
 
   it('keeps the latest alert until a new snapshot, which never holds alerts', () => {

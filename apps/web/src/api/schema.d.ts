@@ -1398,6 +1398,8 @@ export interface components {
             "obs.status": components["schemas"]["ObsStatusEvent"][];
             /** @description At most one: the latest presentation queue status. */
             "presentation.queue": components["schemas"]["PresentationQueueEvent"][];
+            /** @description At most one: the latest live state. */
+            "stream.status": components["schemas"]["StreamStatusEvent"][];
         };
         /** @enum {string} */
         SnapshotType: "snapshot";
@@ -1477,6 +1479,33 @@ export interface components {
             /** @description Whether an item was playing. */
             stopped: boolean;
         };
+        /** @enum {string} */
+        StreamStateName: "unknown" | "offline" | "live";
+        /** @description A `stream.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
+        StreamStatusEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["StreamStatusPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["StreamStatusType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The `payload` of a `stream.status` event. */
+        StreamStatusPayload: {
+            /** @description While live: Twitch's start time (RFC 3339). */
+            startedAt?: string | null;
+            state: components["schemas"]["StreamStateName"];
+            /**
+             * Format: int32
+             * @description While live, once a check has counted them (every minute).
+             */
+            viewers?: number | null;
+        };
+        /** @enum {string} */
+        StreamStatusType: "stream.status";
         /** @description What the streaming software shows right now; [`StreamingState::default`] while it is not connected. */
         StreamingState: {
             inputs: components["schemas"]["Input"][];

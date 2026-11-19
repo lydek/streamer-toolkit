@@ -24,12 +24,14 @@ use integrations::{
         auth::{AuthError, AuthStatus, DeviceLogin, TwitchAuth},
         eventsub::EventSub,
         helix::{Helix, HelixError},
+        streams::StreamCheck,
     },
 };
 use redemption::RedemptionService;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sound::SoundService;
+use stream::StreamService;
 use tokio::{sync::RwLock, task::AbortHandle};
 use toolkit_core::{
     events::{Alert, AlertKind, ChatMessage, Fragment, Source},
@@ -54,6 +56,7 @@ pub(crate) struct AdminState {
     redemption: Arc<RedemptionService>,
     checkin: Arc<CheckinService>,
     sounds: Arc<SoundService>,
+    stream: Arc<StreamService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
@@ -78,6 +81,7 @@ impl AdminState {
         redemption: Arc<RedemptionService>,
         checkin: Arc<CheckinService>,
         sounds: Arc<SoundService>,
+        stream: Arc<StreamService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
@@ -94,6 +98,7 @@ impl AdminState {
             redemption,
             checkin,
             sounds,
+            stream,
             outbox,
             modules,
             twitch,
@@ -103,31 +108,39 @@ impl AdminState {
         state
     }
 
-    /// Connects chat (and its check-in command), alerts and redemptions (and their reward sounds) for `auth` (it waits until signed in) and stops the task of the previous auth.
+    /// Connects chat (and its check-in command), alerts, redemptions (and their reward sounds) and the stream's
+    /// start and end for `auth`, and checks once a minute whether the stream is live (both wait until signed in);
+    /// stops the tasks of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
         let alerts = self.alerts.clone();
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
         let sounds = self.sounds.clone();
-        let task = tokio::spawn(
-            EventSub {
-                url: self.endpoints.eventsub.clone(),
-                helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
-                tls: self.tls.clone(),
-                deliver: Arc::new(move |m| {
-                    checkin.receive_chat(&m, Source::Twitch);
-                    chat.receive(m, Source::Twitch)
-                }),
-                deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
-                // Reward sounds take the in-memory path, not the outbox: a sound played late is worse than none.
-                deliver_redemption: Arc::new(move |r| {
-                    sounds.receive_redemption(&r);
-                    redemption.receive(r, Source::Twitch)
-                }),
-            }
-            .run(),
-        );
+        let (stream, checked) = (self.stream.clone(), self.stream.clone());
+        let check = StreamCheck {
+            helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
+            deliver: Arc::new(move |c| checked.receive(c)),
+        };
+        let eventsub = EventSub {
+            url: self.endpoints.eventsub.clone(),
+            helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
+            tls: self.tls.clone(),
+            deliver: Arc::new(move |m| {
+                checkin.receive_chat(&m, Source::Twitch);
+                chat.receive(m, Source::Twitch)
+            }),
+            deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
+            // Reward sounds take the in-memory path, not the outbox: a sound played late is worse than none.
+            deliver_redemption: Arc::new(move |r| {
+                sounds.receive_redemption(&r);
+                redemption.receive(r, Source::Twitch)
+            }),
+            deliver_stream: Arc::new(move |c| stream.receive(c)),
+        };
+        let task = tokio::spawn(async move {
+            tokio::join!(eventsub.run(), check.run());
+        });
         if let Some(old) = self.eventsub.lock().unwrap().replace(task.abort_handle()) {
             old.abort();
         }

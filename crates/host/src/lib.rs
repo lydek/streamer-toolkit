@@ -238,6 +238,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         outbox.clone(),
     ));
+    let stream = Arc::new(stream::start(config.db.clone(), bus.clone()));
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -270,6 +271,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         redemption.clone(),
         checkin.clone(),
         sounds.clone(),
+        stream,
         outbox,
         modules,
     ));

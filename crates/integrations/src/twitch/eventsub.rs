@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
 use toolkit_core::events::{
     Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatReply, Fragment,
-    RedemptionChange, RedemptionStatus,
+    RedemptionChange, RedemptionStatus, StreamChange,
 };
 
 use super::{
@@ -27,9 +27,11 @@ const SEEN_CAPACITY: usize = 256;
 
 const REDEMPTION_ADD: &str = "channel.channel_points_custom_reward_redemption.add";
 const REDEMPTION_UPDATE: &str = "channel.channel_points_custom_reward_redemption.update";
+const STREAM_ONLINE: &str = "stream.online";
+const STREAM_OFFLINE: &str = "stream.offline";
 
-/// Subscriptions besides chat: type, version and the scope it needs. Raids need none, so they cost 1 of the
-/// `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
+/// Subscriptions besides chat: type, version and the scope it needs. Raids and the stream's start and end need
+/// none, so they cost 1 each of the `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
 const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     ("channel.follow", "2", Some("moderator:read:followers")),
     ("channel.subscribe", "1", Some("channel:read:subscriptions")),
@@ -47,6 +49,8 @@ const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     ("channel.raid", "1", None),
     (REDEMPTION_ADD, "1", Some("channel:read:redemptions")),
     (REDEMPTION_UPDATE, "1", Some("channel:read:redemptions")),
+    (STREAM_ONLINE, "1", None),
+    (STREAM_OFFLINE, "1", None),
 ];
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -77,6 +81,7 @@ pub struct EventSub {
     pub deliver: Arc<dyn Fn(ChatMessage) + Send + Sync>,
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
     pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
+    pub deliver_stream: Arc<dyn Fn(StreamChange) + Send + Sync>,
 }
 
 impl EventSub {
@@ -205,6 +210,13 @@ impl EventSub {
             match serde_json::from_value::<ChatEvent>(event) {
                 Ok(chat) => (self.deliver)(chat.into_message(sent_at)),
                 Err(e) => tracing::warn!(error = %e, "unreadable chat notification"),
+            }
+            return;
+        }
+        if kind == STREAM_ONLINE || kind == STREAM_OFFLINE {
+            match stream_change(&kind, event) {
+                Some(change) => (self.deliver_stream)(change),
+                None => tracing::debug!(subscription = %kind, "stream notification skipped"),
             }
             return;
         }
@@ -587,6 +599,28 @@ impl AlertEvent {
     }
 }
 
+#[derive(Deserialize)]
+struct StreamOnline {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    started_at: String,
+}
+
+/// `None` for an unreadable event, or a start that is not a live stream (a rerun, a premiere, a watch party).
+fn stream_change(subscription: &str, event: serde_json::Value) -> Option<StreamChange> {
+    match subscription {
+        STREAM_OFFLINE => Some(StreamChange::Offline),
+        _ => {
+            let online: StreamOnline = serde_json::from_value(event).ok()?;
+            (online.kind == "live").then_some(StreamChange::Online {
+                id: online.id,
+                started_at: online.started_at,
+            })
+        }
+    }
+}
+
 /// A custom reward redemption; `.add` and `.update` carry the same fields.
 #[derive(Deserialize)]
 struct RedemptionEvent {
@@ -881,6 +915,7 @@ mod tests {
                 deliver: Arc::new(move |m| tx.send(m).unwrap()),
                 deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
                 deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
+                deliver_stream: Arc::new(|_| {}),
             }
             .run(),
         );
@@ -1033,9 +1068,14 @@ mod tests {
                 "channel.subscription.gift",
                 "channel.raid",
                 REDEMPTION_ADD,
-                REDEMPTION_UPDATE
+                REDEMPTION_UPDATE,
+                STREAM_ONLINE,
+                STREAM_OFFLINE
             ]
         );
+        for sub in &subs[8..] {
+            assert_eq!(sub.1["condition"], json!({"broadcaster_user_id":"42"}));
+        }
         assert_eq!(
             subs[1].1["condition"],
             json!({"broadcaster_user_id":"42","moderator_user_id":"42"})
@@ -1148,6 +1188,7 @@ mod tests {
                 deliver: Arc::new(|_| {}),
                 deliver_alert: Arc::new(|_| {}),
                 deliver_redemption: Arc::new(|_| {}),
+                deliver_stream: Arc::new(|_| {}),
             }
             .run(),
         );
@@ -1300,6 +1341,31 @@ mod tests {
         assert_eq!(
             (alert.user_id, alert.user_login, alert.user_name),
             (None, None, None)
+        );
+    }
+
+    #[test]
+    fn a_live_start_and_an_end_reach_the_stream_module() {
+        let online = |kind: &str| {
+            json!({"id": "9001", "broadcaster_user_id": "42", "broadcaster_user_login": "me",
+                   "broadcaster_user_name": "Me", "type": kind, "started_at": "2026-11-19T10:00:00.123Z"})
+        };
+        assert_eq!(
+            stream_change(STREAM_ONLINE, online("live")),
+            Some(StreamChange::Online {
+                id: "9001".into(),
+                started_at: "2026-11-19T10:00:00.123Z".into()
+            })
+        );
+        assert_eq!(
+            stream_change(STREAM_ONLINE, online("rerun")),
+            None,
+            "only live streams count"
+        );
+        assert_eq!(stream_change(STREAM_ONLINE, json!({"id": "9001"})), None);
+        assert_eq!(
+            stream_change(STREAM_OFFLINE, json!({"broadcaster_user_id": "42"})),
+            Some(StreamChange::Offline)
         );
     }
 

@@ -17,6 +17,7 @@ crates/
     redemption/    # 兌換紀錄（複雜）
     checkin/       # 打卡簽到（複雜）：訂閱 RedemptionRecorded 與聊天指令事件
     sound/         # 音效管理（薄）
+    stream/        # 直播狀態與場次（薄）
   host/            # 組合根：組裝模組、Axum HTTP／WebSocket 路由、Overlay 靜態頁
   arch-tests/      # 只放架構測試（見 §7）
 apps/
@@ -153,6 +154,7 @@ apps/
 數字以 Twitch 官方文件為準；Twitch 調整時更新這裡。
 - **Helix API**：token bucket，每個 Client ID＋使用者一桶，每分鐘補滿（例如 800 點，多數端點每次 1 點）。所有 Helix 請求都經過 `integrations` 裡同一個 Helix client：401 只 refresh 並重試一次；429 依 `Ratelimit-Reset` 等到重置（最多 1 分鐘）再試，不立即重送。有些 429 與點數桶無關（例如 EventSub 上限），沒有 `Ratelimit-Reset` 時改用一般退避。Helix 與 OAuth 請求 15 秒沒有回應就當作連不上（`twitch.unreachable`），不會一直卡住。
 - **EventSub WebSocket**：每個使用者 token（Client ID＋使用者）最多 3 條有訂閱的連線、每條最多 300 個訂閱、`max_total_cost` 為 10。本工具每個帳號只開 1 條連線，換 Client ID 或登出時先關掉舊連線；收到 `session_reconnect` 時改連 Twitch 給的 reconnect URL（不算新連線，訂閱沿用，不重新訂閱）；連線失敗以指數退避重連（1 秒起，最多 60 秒）。
+- **直播狀態與場次**（stream 模組）：訂閱 `stream.online`、`stream.offline`（不需要權限，各佔 `max_total_cost` 的 1），只有 `type` 為 `live` 的開播才算；登入期間另外每 60 秒以 Helix Get Streams 檢查一次（登入時先查一次），接上程式啟動前或 EventSub 斷線時已經開始的直播，並更新觀眾數。每次 Twitch 直播是一場，存在 `stream_sessions`（以 Twitch 的直播 ID 為唯一鍵，同一場收到兩次只算一場；開播時間用 Twitch 的時間）；下播後這一場仍是目前的場次，直到下次開播。Get Streams 會落後事件約一分鐘，所以：檢查結果仍列出已由 `stream.offline` 結束的那場時不重新開場；檢查說沒有直播時，只有開播超過 3 分鐘的場次才當作下播（補上漏掉的 `stream.offline`）。狀態以事件 `stream.status` 發布（`state` 為 `unknown`／`offline`／`live`，直播中另帶 `startedAt` 與 `viewers`），快照只保留最新一則；管理 UI 頁首依它顯示「直播中」、時長與觀眾數，或「已下播」。
   - 每條連線訂閱 9 個事件：`channel.chat.message`；特效用的 `channel.follow`（v2）、`channel.subscribe`、`channel.subscription.message`、`channel.subscription.gift`、`channel.cheer`、`channel.raid`（條件為 `to_broadcaster_user_id`）；兌換紀錄用的 `channel.channel_points_custom_reward_redemption.add` 與 `.update`。揪團不需要實況主授權，cost 為 1；其他由實況主授權，cost 為 0，合計遠低於 10。
   - 更新前的登入缺少某個事件所需 scope 時，不訂閱那個事件；Twitch 對聊天以外的訂閱回錯誤狀態碼（含 429，或頻道沒有頻道點數）時只記錄警告，聊天與其他事件照常。聊天訂閱失敗，或任何訂閱遇到登入失效、連不上 Twitch，才算連線失敗並重連。
 - **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止，不自行加快；間隔最少 1 秒。

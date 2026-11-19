@@ -9,6 +9,7 @@ export type Incoming =
   | components['schemas']['ObsStateEvent']
   | components['schemas']['PresentationQueueEvent']
   | components['schemas']['PresentationStoppedEvent']
+  | components['schemas']['StreamStatusEvent']
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']

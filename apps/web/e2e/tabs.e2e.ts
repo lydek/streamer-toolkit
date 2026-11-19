@@ -110,7 +110,7 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
           'chat.message': [],
           'obs.status': [],
           'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
-          'presentation.queue': [],
+          'presentation.queue': [], 'stream.status': [],
         },
       }),
     ),
@@ -118,6 +118,40 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
   await page.reload()
   await expect(banner.getByText(zh.nav.streaming)).toBeVisible()
   await expect(banner.getByText(zh.nav.recording)).toBeVisible()
+})
+
+/** Opens home with the live state `stream` in the snapshot. */
+async function openWithStream(page: Page, stream: unknown) {
+  await mockAdmin(page)
+  const status = { id: 'l', type: 'stream.status', version: 1, seq: 1, occurredAt: '', source: 'twitch', payload: stream }
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [status] },
+      }),
+    ),
+  )
+  await page.goto('/admin/')
+}
+
+test('the app bar says how long the stream has run and for how many viewers', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const startedAt = new Date(Date.now() - (3600 + 2 * 60 + 5) * 1000).toISOString()
+  await openWithStream(page, { state: 'live', startedAt, viewers: 42 })
+  const pill = page.getByRole('banner').getByText(zh.nav.live)
+  await expect(pill).toBeVisible()
+  await expect(pill).toContainText(/1:02:0\d · 42 位觀眾/)
+})
+
+test('after the stream the app bar says it ended, and before Twitch answers it says nothing', async ({ page }) => {
+  await openWithStream(page, { state: 'offline' })
+  await expect(page.getByRole('banner').getByText(zh.nav.offline)).toBeVisible()
+  await openWithStream(page, { state: 'unknown' })
+  await expect(page.getByRole('banner').getByText(zh.nav.live)).toHaveCount(0)
+  await expect(page.getByRole('banner').getByText(zh.nav.offline)).toHaveCount(0)
 })
 
 const problem = (page: Page) => page.getByRole('button', { name: new RegExp(`^${zh.nav.problem.split('{')[0]}`) })
@@ -162,7 +196,7 @@ test('when every connection is fine, a narrower bar shows one "connected" light'
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
   const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
-    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [] } })),
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } })),
   )
   await page.goto('/admin/')
   const all = light(page, zh.nav.connections)
