@@ -19,6 +19,7 @@ crates/
     sound/         # 音效管理（薄）
     stream/        # 直播狀態與場次（薄）
     activity/      # 活動紀錄：追隨、訂閱、小奇點、揪團（薄）
+    viewers/       # 觀眾名冊（薄）
   host/            # 組合根：組裝模組、Axum HTTP／WebSocket 路由、Overlay 靜態頁
   arch-tests/      # 只放架構測試（見 §7）
 apps/
@@ -90,7 +91,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -144,7 +145,7 @@ apps/
   - `GET /sounds/{id}` 唯讀、不需要 token（給 Overlay 與管理 UI 試聽），只提供音效庫裡有的 ID，檔案路徑只由 ID 與格式組成。`Content-Type` 依格式固定（`audio/mpeg`／`audio/wav`／`audio/ogg`），另加 `X-Content-Type-Options: nosniff` 與 `Cache-Control: no-store`。
   - 選擇各處播放的音效：`PUT /api/admin/sounds/slots/{slot}`（`{ "sound": "<id>" | "silent" | null }`；`slot` 為 `alert.<種類>`、`checkin`、`checkin.full` 或 `reward.<Twitch 獎勵 ID>`），記在 `settings.json` 的 `sound.slots`；`null` 回到預設（特效是內建音效，其他是靜音）。alerts 與 checkin 模組在發布事件時才向 sound 模組的公開 service 查詢，所以模擬器觸發的特效與打卡也照設定播放。sound 模組停用時一律用預設。
   - 刪除音效時，用到它的 slot 一併回到預設；`GET /api/admin/sounds` 的每個音效帶 `used_by`（用到它的 slot），管理 UI 刪除前先列出。
-- **兌換音效 Overlay**（`/overlay/sound/`）：音效完整頁可把頻道點數獎勵（清單同打卡設定，Helix Get Custom Reward）對應到音效庫的音效。新的兌換（`RedemptionChange::Added`）由 Host 在交給 redemption 模組的同一處，也交給 sound 模組（記憶體，不經 outbox：晚播不如不播，重啟前的兌換不補播），sound 模組把它排進共用的呈現佇列（與特效、集點卡同一條），佔用的時間是音效的長度；輪到時發布 `sound.play`（`url`、`volume`），不放進快照。音效長度存在音效庫的項目（`duration_ms`）：管理視窗匯入後用 `<audio>` 讀取長度，以 `PUT /api/admin/sounds/{id}/duration` 存起來（1 毫秒到 10 分鐘）；管理視窗開啟時也會補量還沒有長度的音效。還沒量到長度時以 5 秒計。Overlay 依收到的順序一次播一個，播完（或播放失敗）才播下一個；等待超過 100 個時丟掉最舊的。「在 OBS 播放」（`POST /api/admin/sounds/{id}/play`）不經過佇列，立刻送到 Overlay（`source=simulation`），不寫入兌換紀錄。OBS 加這個網址為瀏覽器來源，勾選「透過 OBS 控制音訊」。
+- **兌換音效 Overlay**（`/overlay/sound/`）：音效完整頁可把頻道點數獎勵（清單同打卡設定，Helix Get Custom Reward）對應到音效庫的音效。新的兌換（`RedemptionChange::Added`）由 Host 在交給 redemption 模組的同一處，也交給 sound 模組（記憶體，不經 outbox：晚播不如不播，重啟前的兌換不補播），sound 模組把它排進共用的呈現佇列（與特效、集點卡同一條），佔用的時間是音效的長度；輪到時發布 `sound.play`（`url`、`volume`），不放進快照。音效長度存在音效庫的項目（`duration_ms`）：管理視窗匯入後用 `<audio>` 讀取長度，以 `PUT /api/admin/sounds/{id}/duration` 存起來（1 毫秒到 6 小時）；管理視窗開啟時也會補量還沒有長度的音效。還沒量到長度時以 5 秒計。Overlay 依收到的順序一次播一個，播完（或播放失敗）才播下一個；等待超過 100 個時丟掉最舊的。「在 OBS 播放」（`POST /api/admin/sounds/{id}/play`）不經過佇列，立刻送到 Overlay（`source=simulation`），不寫入兌換紀錄。OBS 加這個網址為瀏覽器來源，勾選「透過 OBS 控制音訊」。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。
@@ -155,8 +156,9 @@ apps/
 數字以 Twitch 官方文件為準；Twitch 調整時更新這裡。
 - **Helix API**：token bucket，每個 Client ID＋使用者一桶，每分鐘補滿（例如 800 點，多數端點每次 1 點）。所有 Helix 請求都經過 `integrations` 裡同一個 Helix client：401 只 refresh 並重試一次；429 依 `Ratelimit-Reset` 等到重置（最多 1 分鐘）再試，不立即重送。有些 429 與點數桶無關（例如 EventSub 上限），沒有 `Ratelimit-Reset` 時改用一般退避。Helix 與 OAuth 請求 15 秒沒有回應就當作連不上（`twitch.unreachable`），不會一直卡住。
 - **EventSub WebSocket**：每個使用者 token（Client ID＋使用者）最多 3 條有訂閱的連線、每條最多 300 個訂閱、`max_total_cost` 為 10。本工具每個帳號只開 1 條連線，換 Client ID 或登出時先關掉舊連線；收到 `session_reconnect` 時改連 Twitch 給的 reconnect URL（不算新連線，訂閱沿用，不重新訂閱）；連線失敗以指數退避重連（1 秒起，最多 60 秒）。
-- **直播狀態與場次**（stream 模組）：訂閱 `stream.online`、`stream.offline`（不需要權限，各佔 `max_total_cost` 的 1），只有 `type` 為 `live` 的開播才算；登入期間另外每 60 秒以 Helix Get Streams 檢查一次（登入時先查一次），接上程式啟動前或 EventSub 斷線時已經開始的直播，並更新觀眾數。每次 Twitch 直播是一場，存在 `stream_sessions`（以 Twitch 的直播 ID 為唯一鍵，同一場收到兩次只算一場；開播時間用 Twitch 的時間）；下播後這一場仍是目前的場次，直到下次開播。Get Streams 會落後事件約一分鐘，所以：檢查結果仍列出已由 `stream.offline` 結束的那場時不重新開場；檢查說沒有直播時，只有開播超過 3 分鐘的場次才當作下播（補上漏掉的 `stream.offline`）。狀態以事件 `stream.status` 發布（`state` 為 `unknown`／`offline`／`live`，直播中另帶 `startedAt` 與 `viewers`），快照只保留最新一則；管理 UI 頁首依它顯示「直播中」、時長與觀眾數，或「已下播」。
-- **活動紀錄**（activity 模組）：來自 Twitch 的追隨、訂閱、續訂、送禮（含送出的每份訂閱）、小奇點與揪團各存一筆在 `activity_events`，帶當時的場次 ID（stream 模組提供，不跨模組 join）；以 EventSub 訊息 ID 為唯一鍵，同一則重送只存一筆；模擬的事件不存。紀錄保存期限存在 `settings.json` 的 `record_retention`（`{"days": N}`，N 為 1 到 3650，或 `"forever"`；沒設定時為 30 天，之後聊天紀錄共用），啟動時與每天刪掉超過期限的紀錄。管理 API：`GET`／`PUT /api/admin/records/retention`（`PUT` 存好後立刻刪掉新期限不再保留的紀錄，回傳刪了幾筆）、`GET /api/admin/records/expired?days=N`（改成 N 天會刪幾筆）；設定「資料與備份」改短期限前先顯示會刪幾筆並確認。紀錄在資料庫裡，會隨備份匯出與還原。
+- **直播狀態與場次**（stream 模組）：訂閱 `stream.online`、`stream.offline`（不需要權限，各佔 `max_total_cost` 的 1），只有 `type` 為 `live` 的開播才算；登入期間另外每 60 秒以 Helix Get Streams 檢查一次（登入時先查一次），接上程式啟動前或 EventSub 斷線時已經開始的直播，並更新觀眾數。每次 Twitch 直播是一場，存在 `stream_sessions`（以 Twitch 的直播 ID 為唯一鍵，同一場收到兩次只算一場；開播時間用 Twitch 的時間）；下播後這一場仍是目前的場次，直到下次開播；開新的一場時，其他還沒結束的場次（漏接下播，例如程式在直播中關掉、下一場才重開）以新一場的開播時間結束。登出 Twitch 時狀態改為 `unknown`，場次不變（登出無法證明已下播）。Get Streams 會落後事件約一分鐘，所以：檢查結果仍列出已由 `stream.offline` 結束的那場時不重新開場；比目前場次更早開播的直播（落後的檢查或事件）一律忽略，舊的一場也不會結束較晚開播的場次；檢查說沒有直播時，只有開播超過 3 分鐘的場次才當作下播（補上漏掉的 `stream.offline`）。狀態以事件 `stream.status` 發布（`state` 為 `unknown`／`offline`／`live`，直播中另帶 `startedAt` 與 `viewers`），快照只保留最新一則；管理 UI 頁首依它顯示「直播中」、時長與觀眾數，或「已下播」。
+- **活動紀錄**（activity 模組）：來自 Twitch 的追隨、訂閱、續訂、送禮（含送出的每份訂閱）、小奇點與揪團各存一筆在 `activity_events`，帶事件到達當下的場次 ID（stream 模組依收到順序回答，開播後緊接的事件一定算新的一場；不跨模組 join）；以 EventSub 訊息 ID 為唯一鍵，同一則重送只存一筆；模擬的事件不存。紀錄保存期限存在 `settings.json` 的 `record_retention`（`{"days": N}`，N 為 1 到 3650，或 `"forever"`；沒設定時為 30 天，之後聊天紀錄共用），啟動時與每天刪掉超過期限的紀錄；讀不到 `settings.json` 或內容不合法時這次不刪，不會照預設值猜。管理 API：`GET`／`PUT /api/admin/records/retention`（`PUT` 在同一個資料庫交易裡刪掉新期限不再保留的紀錄，存好 `settings.json` 才提交，回傳刪了幾筆；存檔失敗時刪除一併取消；管理 UI 出錯後重新讀取實際生效的期限）、`GET /api/admin/records/expired?days=N`（改成 N 天會刪幾筆）；設定「資料與備份」改短期限前先顯示會刪幾筆並確認。紀錄在資料庫裡，會隨備份匯出與還原。
+- **觀眾名冊**（viewers 模組）：在聊天、特效、兌換出現過的 Twitch 使用者各一筆，存在 `viewers`（以 Twitch 使用者 ID 為主鍵，改名後更新同一筆）：登入名稱、顯示名稱、頭像、最近一次聊天徽章顯示的身分（實況主、管理員、VIP、訂閱者；只有聊天帶徽章，其他事件不改身分）、第一次與最後出現時間。沒有頭像的觀眾向 Twitch（Helix Get Users）查一次，只存 `https://static-cdn.jtvnw.net/` 的網址（與打卡共用 `core` 的檢查與查詢介面）。模擬的事件不建立也不更改觀眾；打卡自己的觀眾資料不搬過來。
   - 每條連線訂閱 9 個事件：`channel.chat.message`；特效用的 `channel.follow`（v2）、`channel.subscribe`、`channel.subscription.message`、`channel.subscription.gift`、`channel.cheer`、`channel.raid`（條件為 `to_broadcaster_user_id`）；兌換紀錄用的 `channel.channel_points_custom_reward_redemption.add` 與 `.update`。揪團不需要實況主授權，cost 為 1；其他由實況主授權，cost 為 0，合計遠低於 10。
   - 更新前的登入缺少某個事件所需 scope 時，不訂閱那個事件；Twitch 對聊天以外的訂閱回錯誤狀態碼（含 429，或頻道沒有頻道點數）時只記錄警告，聊天與其他事件照常。聊天訂閱失敗，或任何訂閱遇到登入失效、連不上 Twitch，才算連線失敗並重連。
 - **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止，不自行加快；間隔最少 1 秒。
@@ -174,7 +176,7 @@ apps/
 - log 只記狀態變化，OBS 長時間沒開也不會一直寫 log。
 - 管理 API `/api/admin/obs`：
   - `GET` 回傳位址、是否已設密碼（`password_set`，不回傳密碼本身）與目前狀態；讀不到 Credential Manager 時回 500 `obs.secret_store_failed`。
-  - `PUT` 修改位址與密碼（`password` 省略表示不變，空字串表示刪除），修改後立即用新設定重連。host 只接受主機名稱與 IPv4、port 不得為 0，否則回 400 `obs.invalid_address`。
+  - `PUT` 修改位址與密碼（`password` 省略表示不變，空字串表示刪除），修改後立即用新設定重連，並清掉舊連線的場景與輸出狀態；被取代的舊連線不再寫入狀態。host 只接受主機名稱與 IPv4、port 不得為 0，否則回 400 `obs.invalid_address`。
   - `PUT` 先存 `settings.json` 再寫密碼：密碼寫入失敗時新位址仍會生效，回 500 `obs.secret_store_failed`；存不了 `settings.json` 時回 500 `settings.save_failed`，位址、密碼與連線都維持原樣。
 
 ## 6. Host 生命週期
