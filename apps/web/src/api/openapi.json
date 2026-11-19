@@ -10,6 +10,61 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/alerts/recent": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest alerts this launch, newest first (at most 50), with what became of each.",
+        "operationId": "recent",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecentAlertBody"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/recent/{id}/replay": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Queues an alert from 最近事件 again with the current template and sounds; nothing is recorded again.",
+        "operationId": "replay",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The alert's ID from 最近事件",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/backup": {
       "get": {
         "tags": [
@@ -3649,6 +3704,19 @@
           "obs.status"
         ]
       },
+      "Outcome": {
+        "type": "string",
+        "description": "What finally became of an item, as far as the Host can tell (overlays do not report back).",
+        "enum": [
+          "played",
+          "sound_missing",
+          "off_air",
+          "declined",
+          "skipped",
+          "cleared",
+          "stopped"
+        ]
+      },
       "OverlayCounts": {
         "type": "object",
         "description": "Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included.",
@@ -3949,6 +4017,43 @@
               "$ref": "#/components/schemas/Waiting"
             },
             "description": "In the order they will play."
+          }
+        }
+      },
+      "RecentAlertBody": {
+        "type": "object",
+        "description": "One alert in 最近事件.",
+        "required": [
+          "id",
+          "occurredAt",
+          "source",
+          "outcome",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Outcome",
+                "description": "What became of it; `null` while it waits or plays."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AlertPayload",
+            "description": "As the overlay gets it now (the sound follows the current settings)."
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
           }
         }
       },

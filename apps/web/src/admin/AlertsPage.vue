@@ -5,6 +5,7 @@
       <h2 id="alert-sounds">{{ t('modules.names.sound') }}</h2>
       <SoundSlots built-in :slots="ALERT_KINDS.map((k) => ({ slot: `alert.${k}`, label: t(`alerts.kinds.${k}`) }))" />
     </section>
+    <RecentAlerts />
   </FullPage>
 </template>
 
@@ -14,6 +15,7 @@ import { ALERT_KINDS } from '../overlay/alerts/alerts'
 import type { Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 import FullPage from './FullPage.vue'
+import RecentAlerts from './RecentAlerts.vue'
 import SoundSlots from './SoundSlots.vue'
 import TemplatePicker from './TemplatePicker.vue'
 

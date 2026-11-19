@@ -273,3 +273,42 @@ test('跳過 takes the alert playing off the overlay and the next one follows', 
   // The second one plays after the gap.
   await expect(title).toBeVisible({ timeout: 5_000 })
 })
+
+test('最近事件 says what became of each alert and 重播 queues it again', async ({ page }) => {
+  await mockAdmin(page)
+  const payload = (kind: string, userName: string, extra: object = {}) => ({
+    kind,
+    userId: '7',
+    userLogin: userName.toLowerCase(),
+    userName,
+    durationMs: 6000,
+    sound: { kind: 'built_in' },
+    ...extra,
+  })
+  const replays: string[] = []
+  await page.route('**/api/admin/alerts/recent', (r) =>
+    r.fulfill({
+      json: [
+        { id: 'a3', occurredAt: '2026-11-19T13:40:00.000Z', source: 'twitch', outcome: null, payload: payload('follow', 'Kai') },
+        { id: 'a2', occurredAt: '2026-11-19T13:31:00.000Z', source: 'twitch', outcome: 'sound_missing', payload: payload('cheer', 'Berry', { bits: 100 }) },
+        { id: 'a1', occurredAt: '2026-11-19T12:58:00.000Z', source: 'simulation', outcome: 'cleared', payload: payload('raid', 'Rain', { viewers: 12 }) },
+      ],
+    }),
+  )
+  await page.route('**/api/admin/alerts/recent/*/replay', (r) => {
+    replays.push(new URL(r.request().url()).pathname)
+    return r.fulfill({ status: 204 })
+  })
+  await page.goto('/admin/alerts')
+  const recent = page.getByRole('region', { name: zh.alerts.recent.title })
+  const rows = recent.getByRole('listitem')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(0)).toContainText(zh.alerts.recent.outcome.pending)
+  await expect(rows.nth(1)).toContainText(zh.alerts.recent.outcome.sound_missing)
+  await expect(rows.nth(2)).toContainText(zh.alerts.recent.outcome.cleared)
+  await expect(rows.nth(2)).toContainText(zh.alerts.recent.simulated)
+
+  await rows.nth(1).getByRole('button', { name: zh.alerts.recent.replay }).click()
+  await expect(page.getByText(zh.alerts.recent.replayed)).toBeVisible()
+  expect(replays).toEqual(['/api/admin/alerts/recent/a2/replay'])
+})

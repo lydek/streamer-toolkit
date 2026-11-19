@@ -451,6 +451,23 @@
   },
   "alerts": {
     "empty": "還沒有特效",
+    "recent": {
+      "title": "最近事件",
+      "empty": "這次啟動後還沒有特效。",
+      "simulated": "模擬",
+      "replay": "重播",
+      "replayed": "已加入呈現佇列（重播）。",
+      "outcome": {
+        "pending": "排隊中",
+        "played": "已播",
+        "sound_missing": "已播，音效檔不見了",
+        "off_air": "特效 Overlay 沒開，沒有播",
+        "declined": "特效已關閉，沒有播",
+        "skipped": "已跳過",
+        "cleared": "已清空，沒有播",
+        "stopped": "已緊急停止"
+      }
+    },
     "anonymous": "匿名觀眾",
     "sample": "這是預覽用的範例留言",
     "templates": {
@@ -748,6 +765,9 @@
     },
     "stream": {
       "storage_failed": "讀不到本場直播的資料。"
+    },
+    "alerts": {
+      "not_found": "最近事件裡已經沒有這則特效。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

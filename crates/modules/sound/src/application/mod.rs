@@ -108,6 +108,7 @@ impl SoundService {
                 play(&id, volume, Source::Twitch);
                 Shown::Yes
             }),
+            done: None,
         });
     }
 
