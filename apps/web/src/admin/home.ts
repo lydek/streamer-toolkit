@@ -75,6 +75,45 @@ export function sessionRange(startedAt: string, endedAt: string): string {
   return `${dayTime(start)}–${endText} · ${Math.floor(minutes / 60)}:${twoDigits(minutes % 60)}`
 }
 
+/** One pre-stream check: whether it is fine, and where to fix it (a page or a settings section). */
+export interface Check {
+  id: 'twitch' | 'eventsub' | 'obs' | `overlay.${OverlayKind}`
+  ok: boolean
+  fix: string
+}
+
+type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound'
+
+/** Each overlay kind, the module that needs it in OBS, and the page with its OBS address. */
+const OVERLAYS: { kind: OverlayKind; module: string; page: string }[] = [
+  { kind: 'chat', module: 'chat', page: '/chat' },
+  { kind: 'alerts', module: 'alerts', page: '/alerts' },
+  { kind: 'checkin', module: 'checkin', page: '/checkin' },
+  { kind: 'sound', module: 'sound', page: '/sounds' },
+]
+
+/**
+ * The pre-stream checklist: Twitch signed in, EventSub connected, OBS connected, and an OBS source open for each
+ * enabled feature's overlay. Later features add their own checks here.
+ */
+export function preStreamChecks(
+  overview: Schemas['Overview'] | undefined,
+  live: LiveState,
+  modules: Schemas['ModuleState'][] | undefined,
+  overlays: Schemas['OverlayCounts'] | undefined,
+): Check[] {
+  const twitch = '/settings/connections#twitch'
+  const enabled = new Set((modules ?? []).filter((m) => m.enabled).map((m) => m.id))
+  return [
+    { id: 'twitch', ok: overview?.status.state === 'signed_in', fix: twitch },
+    { id: 'eventsub', ok: overview?.eventsub_connected === true, fix: twitch },
+    { id: 'obs', ok: live.obs?.state === 'connected', fix: '/settings/connections#obs' },
+    ...OVERLAYS.filter((o) => enabled.has(o.module)).map(
+      (o): Check => ({ id: `overlay.${o.kind}`, ok: (overlays?.[o.kind] ?? 0) > 0, fix: o.page }),
+    ),
+  ]
+}
+
 /** What the home page keeps from `/ws/overlay`. `loading` until the first snapshot, `failed` while disconnected. */
 export interface LiveState {
   status: 'loading' | 'open' | 'failed'

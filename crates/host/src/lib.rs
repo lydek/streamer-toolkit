@@ -605,7 +605,14 @@ mod tests {
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
             .body(Body::empty())
             .unwrap();
-        assert_eq!(status(ok).await, StatusCode::OK);
+        let res = app().oneshot(ok).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        let overview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            overview["eventsub_connected"], false,
+            "signed out: no EventSub session"
+        );
     }
 
     #[tokio::test]

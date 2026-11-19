@@ -340,6 +340,19 @@
     "waiting": "正在讀取本場直播…",
     "noStream": "還沒有直播紀錄。",
     "peak": "最高 {n} 位觀眾",
+    "checks": {
+      "ready": "{ok} / {all} 好了",
+      "fix": "修正",
+      "twitch": { "ok": "Twitch 已登入", "bad": "Twitch 還沒登入" },
+      "eventsub": { "ok": "EventSub 已連線", "bad": "EventSub 還沒連上，收不到聊天、特效與兌換" },
+      "obs": { "ok": "OBS 已連線", "bad": "OBS 還沒連上" },
+      "overlay": {
+        "chat": { "ok": "聊天室已放進 OBS", "bad": "聊天室還沒放進 OBS" },
+        "alerts": { "ok": "特效已放進 OBS", "bad": "特效還沒放進 OBS" },
+        "checkin": { "ok": "打卡卡片已放進 OBS", "bad": "打卡卡片還沒放進 OBS" },
+        "sound": { "ok": "兌換音效已放進 OBS", "bad": "兌換音效還沒放進 OBS" }
+      }
+    },
     "stats": {
       "follows": "追隨",
       "subs": "訂閱",

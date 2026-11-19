@@ -1280,6 +1280,8 @@ export interface components {
         };
         Overview: {
             client_id: string;
+            /** @description The EventSub session is connected and subscribed (chat, alerts, redemptions arrive). */
+            eventsub_connected: boolean;
             status: components["schemas"]["AuthStatus"];
         };
         /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */

@@ -12,10 +12,15 @@ vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api'
 
 const ok = () => ({ data: undefined, response: new Response(null, { status: 204 }) })
 const t = i18n.global.t
-const signedIn: Schemas['Overview'] = { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'streamer' } }
-const signedOut: Schemas['Overview'] = { client_id: 'cid', status: { state: 'signed_out' } }
+const signedIn: Schemas['Overview'] = {
+  client_id: 'cid',
+  status: { state: 'signed_in', user_id: '42', login: 'streamer' },
+  eventsub_connected: true,
+}
+const signedOut: Schemas['Overview'] = { client_id: 'cid', status: { state: 'signed_out' }, eventsub_connected: false }
 const pending: Schemas['Overview'] = {
   client_id: 'cid',
+  eventsub_connected: false,
   status: { state: 'pending', user_code: 'ABCD', verification_uri: 'https://www.twitch.tv/activate' },
 }
 

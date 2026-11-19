@@ -67,6 +67,8 @@ pub(crate) struct AdminState {
     twitch: Arc<RwLock<TwitchAuth>>,
     /// The EventSub task belongs to the current TwitchAuth and is replaced with it.
     eventsub: Mutex<Option<AbortHandle>>,
+    /// Which EventSub task may report (bumped when one is replaced), and whether its session is subscribed.
+    eventsub_connected: Arc<Mutex<(u64, bool)>>,
 }
 
 impl AdminState {
@@ -111,6 +113,7 @@ impl AdminState {
             modules,
             twitch,
             eventsub: Mutex::new(None),
+            eventsub_connected: Arc::new(Mutex::new((0, false))),
         };
         state.start_eventsub(current);
         state
@@ -133,6 +136,13 @@ impl AdminState {
             self.viewers.clone(),
         );
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
+        // A replaced task may still report before it is aborted; only the newest one counts.
+        let connected = self.eventsub_connected.clone();
+        let generation = {
+            let mut c = connected.lock().unwrap();
+            *c = (c.0 + 1, false);
+            c.0
+        };
         let check = StreamCheck {
             helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
             deliver: Arc::new(move |c| checked.receive(c)),
@@ -158,6 +168,12 @@ impl AdminState {
                 redemption.receive(r, Source::Twitch)
             }),
             deliver_stream: Arc::new(move |c| stream.receive(c)),
+            connected: Arc::new(move |up| {
+                let mut c = connected.lock().unwrap();
+                if c.0 == generation {
+                    c.1 = up;
+                }
+            }),
         };
         let task = tokio::spawn(async move {
             tokio::join!(eventsub.run(), check.run());
@@ -221,6 +237,8 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 pub(crate) struct Overview {
     client_id: String,
     status: AuthStatus,
+    /// The EventSub session is connected and subscribed (chat, alerts, redemptions arrive).
+    eventsub_connected: bool,
 }
 
 #[utoipa::path(get, path = "/api/admin/twitch", tag = "admin", responses((status = 200, body = Overview)))]
@@ -228,6 +246,7 @@ async fn twitch_overview(State(s): State<Arc<AdminState>>) -> Json<Overview> {
     Json(Overview {
         client_id: settings::load(&s.data_dir).twitch_client_id,
         status: s.twitch.read().await.status(),
+        eventsub_connected: s.eventsub_connected.lock().unwrap().1,
     })
 }
 
