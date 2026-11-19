@@ -95,6 +95,23 @@ impl EventBus {
         state.seq
     }
 
+    /// Publishes `event` and, in the same step, drops the retained `retained_type` events `gone` matches, so no
+    /// snapshot taken after it still has them (e.g. chat messages a moderator deleted).
+    pub fn publish_dropping(
+        &self,
+        event: Event,
+        retained_type: &'static str,
+        gone: impl Fn(&Envelope) -> bool,
+    ) -> u64 {
+        let mut state = self.state.lock().unwrap();
+        if let Some((_, recent)) = state.retained.get_mut(retained_type) {
+            recent.retain(|e| !gone(e));
+        }
+        drop(state);
+        // Not atomic with the drop above, but a snapshot in between only lacks messages that are gone anyway.
+        self.publish(event)
+    }
+
     /// Subscribes and takes the snapshot atomically: `{"type":"snapshot","seq":N,"payload":{<type>:[...]}}`.
     pub fn subscribe(&self) -> (String, broadcast::Receiver<Arc<str>>) {
         let state = self.state.lock().unwrap();
@@ -156,5 +173,24 @@ mod tests {
         assert_eq!(next["occurredAt"], "2026-11-13T10:00:00Z");
         // Viewer text stays raw data; overlays escape it when rendering.
         assert_eq!(next["payload"]["text"], "<b>hi</b>");
+    }
+
+    #[test]
+    fn publish_dropping_takes_matching_events_out_of_later_snapshots() {
+        let bus = EventBus::default();
+        bus.retain("chat.message", 5);
+        bus.publish(event("a", "chat.message"));
+        bus.publish(event("b", "chat.message"));
+        bus.publish_dropping(event("r", "chat.removed"), "chat.message", |e| e.id == "a");
+        let (snapshot, _) = bus.subscribe();
+        let snapshot: Value = serde_json::from_str(&snapshot).unwrap();
+        let ids: Vec<&str> = snapshot["payload"]["chat.message"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["b"]);
+        assert_eq!(snapshot["seq"], 3, "the removal itself was published");
     }
 }

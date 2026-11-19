@@ -124,6 +124,7 @@ impl AdminState {
     /// stops the tasks of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
+        let removals = self.chat.clone();
         let alerts = self.alerts.clone();
         let activity = self.activity.clone();
         let redemption = self.redemption.clone();
@@ -168,6 +169,7 @@ impl AdminState {
                 redemption.receive(r, Source::Twitch)
             }),
             deliver_stream: Arc::new(move |c| stream.receive(c)),
+            deliver_removal: Arc::new(move |r| removals.remove(r)),
             connected: Arc::new(move |up| {
                 let mut c = connected.lock().unwrap();
                 if c.0 == generation {

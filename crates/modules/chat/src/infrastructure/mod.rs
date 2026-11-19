@@ -1,26 +1,32 @@
-//! Publishes chat messages on the overlay bus, mapped to the external `chat.message` payload.
+//! Publishes chat messages on the overlay bus, mapped to the external `chat.message` payload, and what moderators
+//! take down as `chat.removed`; stores messages in SQLite.
 
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use sqlx::SqlitePool;
 use toolkit_core::{
     bus::{Event, EventBus},
-    events::{ChatBadge, ChatMessage, Fragment, Source},
+    events::{ChatBadge, ChatMessage, ChatRemoval, Fragment, Source},
     modules::Modules,
 };
 use utoipa::ToSchema;
 
 use crate::application::ChatService;
 
+pub mod db;
+pub mod http;
+
 /// Recent chat kept in memory only, so a reloaded OBS source is not empty.
 const RECENT: usize = 50;
 
 const CHAT_MESSAGE: &str = "chat.message";
 const CHAT_MESSAGE_VERSION: u32 = 1;
+const CHAT_REMOVED: &str = "chat.removed";
+const CHAT_REMOVED_VERSION: u32 = 1;
 
 /// The `payload` of a `chat.message` event.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessagePayload {
     pub user_id: String,
@@ -55,7 +61,7 @@ pub enum ChatBadgeName {
 }
 
 /// The message a reply answers.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatReplyPayload {
     pub message_id: String,
@@ -65,7 +71,7 @@ pub struct ChatReplyPayload {
     pub user_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatFragment {
     Text {
@@ -99,24 +105,121 @@ pub enum ChatMessageType {
     ChatMessage,
 }
 
+/// The `payload` of a `chat.removed` event: a moderator took down one message (`messageId`), every recent message
+/// of one viewer (`userId`), or the whole chat (neither).
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatRemovedPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+}
+
+/// A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not
+/// kept in snapshots; the messages it names leave the snapshot instead.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatRemovedEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: ChatRemovedType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: ChatRemovedPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum ChatRemovedType {
+    #[serde(rename = "chat.removed")]
+    ChatRemoved,
+}
+
 impl ChatService {
-    /// Publishes accepted messages on `bus`.
+    /// Publishes accepted messages and removals on `bus`; nothing is stored.
     pub fn new(bus: Arc<EventBus>, modules: Arc<Modules>) -> Self {
         bus.retain(CHAT_MESSAGE, RECENT);
-        Self::with_publisher(modules, move |message, source| {
-            bus.publish(Event {
-                id: message.id.clone(),
-                event_type: CHAT_MESSAGE,
-                version: CHAT_MESSAGE_VERSION,
-                occurred_at: message.sent_at.clone(),
-                source,
-                payload: payload(message),
-            });
-        })
+        let removals = bus.clone();
+        Self::with_publisher(
+            modules,
+            move |message, source| {
+                bus.publish(Event {
+                    id: message.id.clone(),
+                    event_type: CHAT_MESSAGE,
+                    version: CHAT_MESSAGE_VERSION,
+                    occurred_at: message.sent_at.clone(),
+                    source,
+                    payload: serde_json::to_value(chat_payload(message))
+                        .expect("chat payload serializes"),
+                });
+            },
+            move |removal| publish_removal(&removals, removal),
+        )
     }
 }
 
-fn payload(m: ChatMessage) -> Value {
+/// Publishes and stores chat in `pool`, which must already have [`db::MIGRATOR`] applied; `session` asks for the
+/// stream session a message arriving now belongs to. Needs a Tokio runtime.
+pub fn start<F>(
+    bus: Arc<EventBus>,
+    modules: Arc<Modules>,
+    pool: SqlitePool,
+    session: impl Fn() -> F + Send + Sync + 'static,
+) -> ChatService
+where
+    F: Future<Output = Option<String>> + Send + 'static,
+{
+    ChatService::new(bus, modules).storing(
+        db::SqliteChat::new(pool),
+        Arc::new(move || Box::pin(session())),
+    )
+}
+
+fn publish_removal(bus: &EventBus, removal: &ChatRemoval) {
+    let (message_id, user_id) = match removal {
+        ChatRemoval::Message { id } => (Some(id.clone()), None),
+        ChatRemoval::User { user_id } => (None, Some(user_id.clone())),
+        ChatRemoval::All => (None, None),
+    };
+    let gone = |e: &toolkit_core::bus::Envelope| match removal {
+        ChatRemoval::Message { id } => e.id == *id,
+        ChatRemoval::User { user_id } => e.payload["userId"] == *user_id.as_str(),
+        ChatRemoval::All => true,
+    };
+    bus.publish_dropping(
+        Event {
+            id: uuid::Uuid::now_v7().to_string(),
+            event_type: CHAT_REMOVED,
+            version: CHAT_REMOVED_VERSION,
+            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            source: Source::Twitch,
+            payload: serde_json::to_value(ChatRemovedPayload {
+                message_id,
+                user_id,
+            })
+            .expect("removal serializes"),
+        },
+        CHAT_MESSAGE,
+        gone,
+    );
+}
+
+/// Every chat type for the Host's OpenAPI document.
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    paths(http::messages),
+    components(schemas(ChatMessageEvent, ChatRemovedEvent, http::StoredChatMessage))
+)]
+struct ChatApi;
+
+/// This module's part of the Host's OpenAPI document.
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    <ChatApi as utoipa::OpenApi>::openapi()
+}
+
+pub(crate) fn chat_payload(m: ChatMessage) -> ChatMessagePayload {
     let fragments = m
         .fragments
         .into_iter()
@@ -125,7 +228,7 @@ fn payload(m: ChatMessage) -> Value {
             Fragment::Emote { id, text } => ChatFragment::Emote { text, emote_id: id },
         })
         .collect();
-    serde_json::to_value(ChatMessagePayload {
+    ChatMessagePayload {
         user_id: m.user_id,
         user_login: m.user_login,
         user_name: m.user_name,
@@ -150,8 +253,7 @@ fn payload(m: ChatMessage) -> Value {
             user_login: r.user_login,
             user_name: r.user_name,
         }),
-    })
-    .expect("chat payload serializes")
+    }
 }
 
 #[cfg(test)]
@@ -236,6 +338,69 @@ mod tests {
             let typed: crate::ChatMessageEvent = serde_json::from_value(event.clone()).unwrap();
             assert_eq!(&serde_json::to_value(typed).unwrap(), event);
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn twitch_chat_is_stored_with_its_session_and_removals_reach_overlays_and_storage() {
+        let dir = std::env::temp_dir().join(format!("st-chat-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(EventBus::default());
+        let pool = db::tests::pool().await;
+        let chat = start(
+            bus.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            pool.clone(),
+            || async { Some("s1".to_owned()) },
+        );
+        let now = chrono::Utc::now().to_rfc3339();
+        chat.receive(db::tests::message("m1", "7", "hi", &now), Source::Twitch);
+        chat.receive(db::tests::message("m2", "8", "bye", &now), Source::Twitch);
+        chat.receive(
+            db::tests::message("sim", "9", "test", &now),
+            Source::Simulation,
+        );
+        let (_, mut rx) = bus.subscribe();
+        chat.remove(ChatRemoval::Message { id: "m2".into() });
+
+        let removed: serde_json::Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
+        assert_eq!(removed["type"], "chat.removed");
+        assert_eq!(removed["payload"], serde_json::json!({"messageId": "m2"}));
+        let typed: crate::ChatRemovedEvent = serde_json::from_value(removed.clone()).unwrap();
+        assert_eq!(serde_json::to_value(typed).unwrap(), removed);
+        let (snapshot, _) = bus.subscribe();
+        let snapshot: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+        let ids: Vec<&str> = snapshot["payload"]["chat.message"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            ids,
+            ["m1", "sim"],
+            "a reconnecting overlay no longer gets it"
+        );
+
+        // The worker stores in order: the removal comes after both messages.
+        let stored = loop {
+            let stored = db::recent_messages(&pool, 10).await.unwrap();
+            if stored.iter().any(|m| m.deleted) {
+                break stored;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        };
+        let mut rows: Vec<(&str, &str, bool)> = stored
+            .iter()
+            .map(|m| (m.id.as_str(), m.payload.text.as_str(), m.deleted))
+            .collect();
+        rows.sort();
+        assert_eq!(
+            rows,
+            [("m1", "hi", false), ("m2", "", true)],
+            "simulated chat is never stored"
+        );
+        assert_eq!(db::session_message_count(&pool, "s1").await.unwrap(), 2);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

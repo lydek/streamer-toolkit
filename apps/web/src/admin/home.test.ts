@@ -362,6 +362,7 @@ describe('stream stage', () => {
     bits: 1200,
     raids: 1,
     redemptions: 42,
+    chatMessages: 1204,
   })
 
   it('is live while Twitch says so, after a stream that ended this run, and before otherwise', () => {

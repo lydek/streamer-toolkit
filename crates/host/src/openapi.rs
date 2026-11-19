@@ -86,5 +86,6 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(stream::openapi());
     doc.merge(activity::openapi());
     doc.merge(alerts::openapi());
+    doc.merge(chat::openapi());
     doc
 }

@@ -1,5 +1,5 @@
 //! This stream's numbers for the home page's stage card: the latest stream session (live, or the last one until the
-//! next starts) with what the activity and redemption modules recorded during it. Each module answers for its own
+//! next starts) with what the activity, redemption and chat modules recorded during it. Each module answers for its own
 //! table; nothing joins across them. Admin routes; the caller adds the token check.
 
 use axum::{
@@ -46,6 +46,8 @@ pub(crate) struct StreamSummary {
     bits: u32,
     raids: u32,
     redemptions: u32,
+    /// Chat messages from Twitch stored for the session.
+    chat_messages: u32,
 }
 
 fn time_text(t: DateTime<Utc>) -> String {
@@ -81,6 +83,7 @@ async fn summary(
     };
     let counts = activity::session_counts(pool, &session.id).await?;
     let redemptions = redemption::count_between(pool, session.started_at, session.ended_at).await?;
+    let chat_messages = chat::session_message_count(pool, &session.id).await?;
     Ok(Some(StreamSummary {
         started_at: time_text(session.started_at),
         ended_at: session.ended_at.map(time_text),
@@ -91,5 +94,6 @@ async fn summary(
         bits: counts.bits,
         raids: counts.raids,
         redemptions: u32::try_from(redemptions).unwrap_or(u32::MAX),
+        chat_messages,
     }))
 }

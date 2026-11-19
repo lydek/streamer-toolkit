@@ -321,7 +321,7 @@
     "days": "保存天數",
     "daysUnit": "天",
     "forever": "永久",
-    "hint": "活動紀錄（追隨、訂閱、小奇點、揪團等）超過期限會自動刪除，並且會進備份。",
+    "hint": "聊天訊息與活動紀錄（追隨、訂閱、小奇點、揪團等）超過期限會自動刪除，並且會進備份。",
     "foreverNote": "選永久時，資料和備份檔會一直變大。",
     "outOfRange": "天數要在 1 到 {max} 之間。",
     "confirmTitle": "改成保存 {days} 天？",
@@ -358,7 +358,8 @@
       "subs": "訂閱",
       "bits": "小奇點",
       "raids": "揪團",
-      "redemptions": "兌換"
+      "redemptions": "兌換",
+      "chatMessages": "聊天訊息"
     }
   },
   "queue": {
@@ -445,6 +446,7 @@
     "paused": "已暫停 · {n} 則新訊息",
     "disconnected": "已斷線，正在重新連線……",
     "broadcaster": "實況主",
+    "deleted": "這則訊息已被管理員刪除",
     "copyObsUrl": "複製 OBS 網址",
     "copied": "已複製 OBS 網址。",
     "copyFailed": "無法複製到剪貼簿。"

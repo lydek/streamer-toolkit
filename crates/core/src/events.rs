@@ -115,6 +115,17 @@ impl AlertKind {
     }
 }
 
+/// A moderator (or bot) taking chat down; Twitch's field names stop at the integration layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatRemoval {
+    /// One message.
+    Message { id: String },
+    /// Every message of one viewer (a timeout or ban clears them).
+    User { user_id: String },
+    /// The whole chat room.
+    All,
+}
+
 /// The broadcaster's stream starting or ending; Twitch's field names stop at the integration layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamChange {

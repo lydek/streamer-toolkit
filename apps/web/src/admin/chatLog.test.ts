@@ -15,6 +15,7 @@ import {
   readable,
   receive,
   resume,
+  withHistory,
 } from './chatLog'
 
 // The drawer background (theme surface.900) and the page background (surface.950).
@@ -138,5 +139,32 @@ describe('chat log', () => {
   it('ignores other events', () => {
     const log = applyChat(EMPTY_LOG, snapshot(1))
     expect(applyChat(log, { type: 'template.changed', id: 't', version: 1, seq: 9, occurredAt: '', source: 'system', payload: { overlay: 'chat' } })).toBe(log)
+  })
+})
+
+describe('stored chat and removals', () => {
+  const stored = (n: number, deleted = false) => ({
+    id: `c${n}`,
+    sentAt: `2026-11-15T09:0${n}:00.000Z`,
+    deleted,
+    payload: { ...chat(n).payload, text: deleted ? '' : `m${n}` },
+  })
+  const at = (n: number, minute: number): ChatEvent => ({ ...chat(n), occurredAt: `2026-11-15T09:0${minute}:00.000Z` })
+
+  it('puts stored chat ahead of the live log, in time order, without repeats', () => {
+    let log = applyChat(EMPTY_LOG, { ...snapshot(), payload: { ...(snapshot() as { payload: object }).payload, 'chat.message': [at(3, 3), at(4, 4)] } } as Incoming)
+    log = withHistory(log, [stored(1, true), stored(2), stored(3)])
+    expect(log.messages.map((m) => m.id)).toEqual(['c1', 'c2', 'c3', 'c4'])
+    expect(log.messages[0].deleted).toBe(true)
+    expect(withHistory(log, [stored(2)])).toBe(log)
+  })
+
+  it('a removal keeps the message in place with its text gone', () => {
+    const log = receive(EMPTY_LOG, [chat(1), { ...chat(2), payload: { ...chat(2).payload, userId: '8' } }])
+    const removed = applyChat(log, { id: 'r', type: 'chat.removed', version: 1, seq: 9, occurredAt: '', source: 'twitch', payload: { userId: '7' } })
+    expect(removed.messages.map((m) => [m.id, m.deleted ?? false, m.payload.text])).toEqual([
+      ['c1', true, ''],
+      ['c2', false, 'm2'],
+    ])
   })
 })

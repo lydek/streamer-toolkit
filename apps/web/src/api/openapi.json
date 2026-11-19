@@ -266,6 +266,38 @@
         }
       }
     },
+    "/api/admin/chat/messages": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest 200 stored chat messages from Twitch, oldest first.",
+        "operationId": "messages",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoredChatMessage"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/import": {
       "post": {
         "tags": [
@@ -2860,6 +2892,70 @@
           "chat.message"
         ]
       },
+      "ChatRemovedEvent": {
+        "type": "object",
+        "description": "A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not\nkept in snapshots; the messages it names leave the snapshot instead.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatRemovedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChatRemovedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatRemovedPayload": {
+        "type": "object",
+        "description": "The `payload` of a `chat.removed` event: a moderator took down one message (`messageId`), every recent message\nof one viewer (`userId`), or the whole chat (neither).",
+        "properties": {
+          "messageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ChatRemovedType": {
+        "type": "string",
+        "enum": [
+          "chat.removed"
+        ]
+      },
       "ChatReplyPayload": {
         "type": "object",
         "description": "The message a reply answers.",
@@ -4683,6 +4779,33 @@
           }
         }
       },
+      "StoredChatMessage": {
+        "type": "object",
+        "description": "A stored chat message.",
+        "required": [
+          "id",
+          "sentAt",
+          "deleted",
+          "payload"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "description": "A moderator took it down; its text and fragments are empty."
+          },
+          "id": {
+            "type": "string",
+            "description": "Twitch's message ID, the same as the live `chat.message` event's `id`."
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatMessagePayload"
+          },
+          "sentAt": {
+            "type": "string",
+            "description": "RFC 3339."
+          }
+        }
+      },
       "StreamStateName": {
         "type": "string",
         "enum": [
@@ -4774,12 +4897,19 @@
           "subs",
           "bits",
           "raids",
-          "redemptions"
+          "redemptions",
+          "chatMessages"
         ],
         "properties": {
           "bits": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          },
+          "chatMessages": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Chat messages from Twitch stored for the session.",
             "minimum": 0
           },
           "endedAt": {

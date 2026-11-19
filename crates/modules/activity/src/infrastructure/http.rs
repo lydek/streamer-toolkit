@@ -24,7 +24,8 @@ pub(crate) struct Http {
     data_dir: PathBuf,
 }
 
-pub fn routes(pool: SqlitePool, data_dir: PathBuf) -> Router {
+/// `others` are the other modules' record tables the retention also covers.
+pub fn routes(pool: SqlitePool, data_dir: PathBuf, others: super::db::OtherRecords) -> Router {
     Router::new()
         .route(
             "/api/admin/records/retention",
@@ -32,7 +33,7 @@ pub fn routes(pool: SqlitePool, data_dir: PathBuf) -> Router {
         )
         .route("/api/admin/records/expired", get(expired))
         .with_state(Http {
-            repo: std::sync::Arc::new(SqliteActivity::new(pool)),
+            repo: std::sync::Arc::new(SqliteActivity::new(pool, others)),
             data_dir,
         })
 }
@@ -196,9 +197,12 @@ mod tests {
     async fn twitch_activity_is_stored_once_with_its_session_and_simulations_never() {
         let pool = db::tests::pool().await;
         let dir = data_dir("store");
-        let service = start(pool.clone(), dir.clone(), || async {
-            Some("session-1".into())
-        });
+        let service = start(
+            pool.clone(),
+            dir.clone(),
+            || async { Some("session-1".into()) },
+            Vec::new(),
+        );
         let now = chrono::Utc::now().to_rfc3339();
         service.receive(follow("m1", &now), Source::Twitch);
         service.receive(follow("m1", &now), Source::Twitch);
@@ -226,13 +230,13 @@ mod tests {
             s.record_retention = Some(RecordRetention::Forever)
         })
         .unwrap();
-        let service = start(pool.clone(), dir.clone(), || async { None });
+        let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
         let days_ago = |d: i64| (chrono::Utc::now() - chrono::TimeDelta::days(d)).to_rfc3339();
         service.receive(follow("old", &days_ago(40)), Source::Twitch);
         service.receive(follow("week", &days_ago(8)), Source::Twitch);
         service.receive(follow("new", &days_ago(0)), Source::Twitch);
         until(&pool, 3).await;
-        let app = routes(pool.clone(), dir.clone());
+        let app = routes(pool.clone(), dir.clone(), Vec::new());
         let send = |req: Request<Body>| {
             let app = app.clone();
             async move {
@@ -294,7 +298,7 @@ mod tests {
             s.record_retention = Some(RecordRetention::Days(7))
         })
         .unwrap();
-        let _restarted = start(pool.clone(), dir.clone(), || async { None });
+        let _restarted = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
         until(&pool, 1).await;
         for bad in [r#"{"days": 0}"#, r#"{"days": 3651}"#, r#""never""#] {
             assert_eq!(send(put(bad)).await.0, StatusCode::BAD_REQUEST, "{bad}");
@@ -323,16 +327,16 @@ mod tests {
             s.record_retention = Some(RecordRetention::Forever)
         })
         .unwrap();
-        let service = start(pool.clone(), dir.clone(), || async { None });
+        let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
         let old = (chrono::Utc::now() - chrono::TimeDelta::days(400)).to_rfc3339();
         service.receive(follow("old", &old), Source::Twitch);
         until(&pool, 1).await;
         // Broken now: a start must not fall back to 30 days and delete the year-old record.
         std::fs::write(dir.join("settings.json"), "{ not json").unwrap();
-        let _restarted = start(pool.clone(), dir.clone(), || async { None });
+        let _restarted = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(rows(&pool).await.len(), 1);
-        let res = routes(pool.clone(), dir.clone())
+        let res = routes(pool.clone(), dir.clone(), Vec::new())
             .oneshot(
                 Request::get("/api/admin/records/retention")
                     .body(Body::empty())
@@ -352,14 +356,14 @@ mod tests {
             s.record_retention = Some(RecordRetention::Forever)
         })
         .unwrap();
-        let service = start(pool.clone(), dir.clone(), || async { None });
+        let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
         let old = (chrono::Utc::now() - chrono::TimeDelta::days(40)).to_rfc3339();
         service.receive(follow("old", &old), Source::Twitch);
         until(&pool, 1).await;
         // settings.json can no longer be written (a folder in its place).
         std::fs::remove_file(dir.join("settings.json")).unwrap();
         std::fs::create_dir(dir.join("settings.json")).unwrap();
-        let res = routes(pool.clone(), dir.clone())
+        let res = routes(pool.clone(), dir.clone(), Vec::new())
             .oneshot(
                 Request::put("/api/admin/records/retention")
                     .header("content-type", "application/json")
@@ -404,7 +408,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let res = routes(readonly.clone(), dir.clone())
+        let res = routes(readonly.clone(), dir.clone(), Vec::new())
             .oneshot(
                 Request::put("/api/admin/records/retention")
                     .header("content-type", "application/json")

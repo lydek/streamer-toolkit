@@ -9,8 +9,8 @@ use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
 use toolkit_core::events::{
-    Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatReply, Fragment,
-    RedemptionChange, RedemptionStatus, StreamChange,
+    Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatRemoval, ChatReply,
+    Fragment, RedemptionChange, RedemptionStatus, StreamChange,
 };
 
 use super::{
@@ -28,6 +28,9 @@ const SEEN_CAPACITY: usize = 256;
 const REDEMPTION_ADD: &str = "channel.channel_points_custom_reward_redemption.add";
 const REDEMPTION_UPDATE: &str = "channel.channel_points_custom_reward_redemption.update";
 const STREAM_ONLINE: &str = "stream.online";
+const CHAT_DELETE: &str = "channel.chat.message_delete";
+const CHAT_CLEAR_USER: &str = "channel.chat.clear_user_messages";
+const CHAT_CLEAR: &str = "channel.chat.clear";
 const STREAM_OFFLINE: &str = "stream.offline";
 
 /// Subscriptions besides chat: type, version and the scope it needs. Raids and the stream's start and end need
@@ -51,6 +54,10 @@ const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     (REDEMPTION_UPDATE, "1", Some("channel:read:redemptions")),
     (STREAM_ONLINE, "1", None),
     (STREAM_OFFLINE, "1", None),
+    // The same scope as chat itself.
+    (CHAT_DELETE, "1", Some("user:read:chat")),
+    (CHAT_CLEAR_USER, "1", Some("user:read:chat")),
+    (CHAT_CLEAR, "1", Some("user:read:chat")),
 ];
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -82,6 +89,8 @@ pub struct EventSub {
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
     pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
     pub deliver_stream: Arc<dyn Fn(StreamChange) + Send + Sync>,
+    /// A message, a viewer's messages or the whole chat taken down by a moderator.
+    pub deliver_removal: Arc<dyn Fn(ChatRemoval) + Send + Sync>,
     /// `true` once a session is subscribed, `false` when it ends or the account signs out.
     pub connected: Arc<dyn Fn(bool) + Send + Sync>,
 }
@@ -219,6 +228,13 @@ impl EventSub {
             }
             return;
         }
+        if matches!(kind.as_str(), CHAT_DELETE | CHAT_CLEAR_USER | CHAT_CLEAR) {
+            match chat_removal(&kind, event) {
+                Some(removal) => (self.deliver_removal)(removal),
+                None => tracing::warn!(subscription = %kind, "unreadable chat removal"),
+            }
+            return;
+        }
         if kind == STREAM_ONLINE || kind == STREAM_OFFLINE {
             match stream_change(&kind, event) {
                 Some(change) => (self.deliver_stream)(change),
@@ -250,7 +266,7 @@ impl EventSub {
     /// One session subscribes once; a reconnect URL keeps its subscriptions and does not count as a new connection.
     async fn subscribe(&self, user_id: &str, session_id: &str) -> Result<(), EventSubError> {
         let chat = serde_json::json!({ "broadcaster_user_id": user_id, "user_id": user_id });
-        self.create("channel.chat.message", "1", chat, session_id)
+        self.create("channel.chat.message", "1", chat.clone(), session_id)
             .await?;
         let granted = self
             .helix
@@ -268,6 +284,7 @@ impl EventSub {
                     serde_json::json!({ "broadcaster_user_id": user_id, "moderator_user_id": user_id })
                 }
                 "channel.raid" => serde_json::json!({ "to_broadcaster_user_id": user_id }),
+                CHAT_DELETE | CHAT_CLEAR_USER | CHAT_CLEAR => chat.clone(),
                 _ => serde_json::json!({ "broadcaster_user_id": user_id }),
             };
             match self.create(kind, version, condition, session_id).await {
@@ -301,6 +318,21 @@ impl EventSub {
             .helix
             .post_json("/eventsub/subscriptions", &body)
             .await?)
+    }
+}
+
+/// A chat removal notification; `None` when a field it needs is missing.
+fn chat_removal(kind: &str, event: serde_json::Value) -> Option<ChatRemoval> {
+    let field = |name: &str| event.get(name)?.as_str().map(str::to_owned);
+    match kind {
+        CHAT_DELETE => Some(ChatRemoval::Message {
+            id: field("message_id")?,
+        }),
+        CHAT_CLEAR_USER => Some(ChatRemoval::User {
+            user_id: field("target_user_id")?,
+        }),
+        CHAT_CLEAR => Some(ChatRemoval::All),
+        _ => None,
     }
 }
 
@@ -905,6 +937,31 @@ mod tests {
             .unwrap()
     }
 
+    #[test]
+    fn chat_removals_name_the_message_the_viewer_or_everything() {
+        assert_eq!(
+            chat_removal(
+                CHAT_DELETE,
+                json!({"broadcaster_user_id":"42","target_user_id":"7","message_id":"m1"})
+            ),
+            Some(ChatRemoval::Message { id: "m1".into() })
+        );
+        assert_eq!(
+            chat_removal(CHAT_CLEAR_USER, json!({"target_user_id":"7"})),
+            Some(ChatRemoval::User {
+                user_id: "7".into()
+            })
+        );
+        assert_eq!(
+            chat_removal(CHAT_CLEAR, json!({"broadcaster_user_id":"42"})),
+            Some(ChatRemoval::All)
+        );
+        assert_eq!(
+            chat_removal(CHAT_DELETE, json!({"target_user_id":"7"})),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
         let (base, fake) = fake_twitch().await;
@@ -922,6 +979,7 @@ mod tests {
                 deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
                 deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
                 deliver_stream: Arc::new(|_| {}),
+                deliver_removal: Arc::new(|_| {}),
                 connected: Arc::new(|_| {}),
             }
             .run(),
@@ -1077,11 +1135,20 @@ mod tests {
                 REDEMPTION_ADD,
                 REDEMPTION_UPDATE,
                 STREAM_ONLINE,
-                STREAM_OFFLINE
+                STREAM_OFFLINE,
+                CHAT_DELETE,
+                CHAT_CLEAR_USER,
+                CHAT_CLEAR
             ]
         );
-        for sub in &subs[8..] {
+        for sub in &subs[8..10] {
             assert_eq!(sub.1["condition"], json!({"broadcaster_user_id":"42"}));
+        }
+        for sub in &subs[10..] {
+            assert_eq!(
+                sub.1["condition"],
+                json!({"broadcaster_user_id":"42","user_id":"42"})
+            );
         }
         assert_eq!(
             subs[1].1["condition"],
@@ -1205,6 +1272,7 @@ mod tests {
                 deliver_alert: Arc::new(|_| {}),
                 deliver_redemption: Arc::new(|_| {}),
                 deliver_stream: Arc::new(|_| {}),
+                deliver_removal: Arc::new(|_| {}),
                 connected: Arc::new(move |c| log.lock().unwrap().push(c)),
             }
             .run(),

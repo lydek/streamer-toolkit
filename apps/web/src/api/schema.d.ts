@@ -116,6 +116,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest 200 stored chat messages from Twitch, oldest first. */
+        get: operations["messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/import": {
         parameters: {
             query?: never;
@@ -1018,6 +1035,31 @@ export interface components {
         };
         /** @enum {string} */
         ChatMessageType: "chat.message";
+        /**
+         * @description A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not
+         *     kept in snapshots; the messages it names leave the snapshot instead.
+         */
+        ChatRemovedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ChatRemovedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ChatRemovedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description The `payload` of a `chat.removed` event: a moderator took down one message (`messageId`), every recent message
+         *     of one viewer (`userId`), or the whole chat (neither).
+         */
+        ChatRemovedPayload: {
+            messageId?: string | null;
+            userId?: string | null;
+        };
+        /** @enum {string} */
+        ChatRemovedType: "chat.removed";
         /** @description The message a reply answers. */
         ChatReplyPayload: {
             messageId: string;
@@ -1670,6 +1712,16 @@ export interface components {
             /** @description Whether an item was playing. */
             stopped: boolean;
         };
+        /** @description A stored chat message. */
+        StoredChatMessage: {
+            /** @description A moderator took it down; its text and fragments are empty. */
+            deleted: boolean;
+            /** @description Twitch's message ID, the same as the live `chat.message` event's `id`. */
+            id: string;
+            payload: components["schemas"]["ChatMessagePayload"];
+            /** @description RFC 3339. */
+            sentAt: string;
+        };
         /** @enum {string} */
         StreamStateName: "unknown" | "offline" | "live";
         /** @description A `stream.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
@@ -1700,6 +1752,11 @@ export interface components {
         StreamSummary: {
             /** Format: int32 */
             bits: number;
+            /**
+             * Format: int32
+             * @description Chat messages from Twitch stored for the session.
+             */
+            chatMessages: number;
             /** @description `null` while live (or until the end is seen). */
             endedAt?: string | null;
             /** @description The stream ended while this Host was running. */
@@ -2035,6 +2092,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    messages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredChatMessage"][];
                 };
             };
             500: {

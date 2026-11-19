@@ -46,3 +46,17 @@ describe('apply', () => {
     expect(state.messages[0].seq).toBe(6)
   })
 })
+
+describe('chat.removed', () => {
+  const removed = (seq: number, payload: { messageId?: string; userId?: string }) =>
+    ({ id: `r${seq}`, type: 'chat.removed', version: 1, seq, occurredAt: '', source: 'twitch', payload }) as const
+  const other = (seq: number): ChatEvent => ({ ...chat(seq), payload: { ...chat(seq).payload, userId: '8' } })
+
+  it("drops one message, one viewer's messages, or everything", () => {
+    const state = { messages: [chat(1), other(2), chat(3)], lastSeq: 3 }
+    expect(apply(state, removed(4, { messageId: 'c3' })).messages.map((m) => m.seq)).toEqual([1, 2])
+    expect(apply(state, removed(4, { userId: '7' })).messages.map((m) => m.seq)).toEqual([2])
+    expect(apply(state, removed(4, {})).messages).toEqual([])
+    expect(apply(state, removed(3, {})).messages, 'already covered by what came before').toHaveLength(3)
+  })
+})
