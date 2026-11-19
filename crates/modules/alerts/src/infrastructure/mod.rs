@@ -17,9 +17,11 @@ use crate::application::{AlertsService, Timing};
 
 const ALERT: &str = "alert";
 const ALERT_VERSION: u32 = 1;
+const RECEIVED: &str = "alert.received";
 
 impl AlertsService {
-    /// Publishes alerts on `bus` as `presenter` paces them, with the sound each kind plays.
+    /// Announces each alert on `bus` as `alert.received` when it arrives, and publishes it as `alert` as `presenter`
+    /// paces it, with the sound each kind plays.
     pub fn new(
         bus: Arc<EventBus>,
         modules: Arc<Modules>,
@@ -27,16 +29,32 @@ impl AlertsService {
         presenter: Arc<Presenter>,
         sounds: Arc<SoundService>,
     ) -> Self {
-        Self::with_publisher(modules, timing, presenter, move |alert, source, show| {
-            bus.publish(Event {
-                id: alert.id.clone(),
-                event_type: ALERT,
-                version: ALERT_VERSION,
-                occurred_at: alert.occurred_at.clone(),
-                source,
-                payload: payload(alert, show, &sounds),
-            });
-        })
+        let (announce_bus, announce_sounds) = (bus.clone(), sounds.clone());
+        Self::with_publisher(
+            modules,
+            timing,
+            presenter,
+            move |alert, source, show| {
+                announce_bus.publish(Event {
+                    id: alert.id.clone(),
+                    event_type: RECEIVED,
+                    version: ALERT_VERSION,
+                    occurred_at: alert.occurred_at.clone(),
+                    source,
+                    payload: payload(alert.clone(), show, &announce_sounds),
+                });
+            },
+            move |alert, source, show| {
+                bus.publish(Event {
+                    id: alert.id.clone(),
+                    event_type: ALERT,
+                    version: ALERT_VERSION,
+                    occurred_at: alert.occurred_at.clone(),
+                    source,
+                    payload: payload(alert, show, &sounds),
+                });
+            },
+        )
     }
 }
 
@@ -123,6 +141,27 @@ pub struct AlertEvent {
 pub enum AlertType {
     #[serde(rename = "alert")]
     Alert,
+}
+
+/// An `alert.received` event exactly as `/ws/overlay` sends it: an alert arrived, sent at once whether or not an
+/// overlay will play it (the admin window lists it). Not kept in snapshots.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertReceivedEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: AlertReceivedType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: AlertPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum AlertReceivedType {
+    #[serde(rename = "alert.received")]
+    AlertReceived,
 }
 
 fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {

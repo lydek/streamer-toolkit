@@ -60,6 +60,7 @@ use crate::{
         overlay::Snapshot,
         chat::ChatMessageEvent,
         alerts::AlertEvent,
+        alerts::AlertReceivedEvent,
         obs::ObsStatusEvent,
         obs::ObsStateEvent,
         queue::PresentationQueueEvent,
@@ -79,5 +80,6 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(checkin::openapi());
     doc.merge(sound::openapi());
     doc.merge(stream::openapi());
+    doc.merge(activity::openapi());
     doc
 }

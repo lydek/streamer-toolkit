@@ -113,3 +113,32 @@ test('below 900px it slides in from the chat button, takes focus, and Esc closes
   await expect(chatButton(page)).toBeFocused()
   expect(puts).toEqual([])
 })
+
+test('events lists every alert that arrived, even one no OBS overlay plays', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  await page.route('**/api/admin/chat-dock', (r) => r.fulfill({ json: { open: true, width: 340 } }))
+  const received = {
+    id: 'a1',
+    type: 'alert.received',
+    version: 1,
+    seq: 2,
+    occurredAt: '2026-11-19T10:00:00.000Z',
+    source: 'twitch',
+    payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
+  }
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+      }),
+    )
+    ws.send(JSON.stringify(received))
+  })
+  await page.goto('/admin/')
+  await panel(page).getByRole('button', { name: zh.dock.filter.events }).click()
+  await expect(panel(page).getByText(/Fan/)).toBeVisible()
+})

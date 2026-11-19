@@ -239,6 +239,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         outbox.clone(),
     ));
     let stream = Arc::new(stream::start(config.db.clone(), bus.clone()));
+    let sessions = stream.clone();
+    let activity = Arc::new(activity::start(
+        config.db.clone(),
+        config.data_dir.clone(),
+        move || sessions.session_after_pending(),
+    ));
+    let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone());
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
@@ -272,6 +279,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         checkin.clone(),
         sounds.clone(),
         stream,
+        activity,
         outbox,
         modules,
     ));
@@ -330,6 +338,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(queue_routes.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(activity_routes.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))

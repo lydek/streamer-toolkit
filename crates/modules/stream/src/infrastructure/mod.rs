@@ -201,6 +201,14 @@ mod tests {
             id: "9002".into(),
             started_at: "2026-11-20T10:00:00Z".into(),
         });
+        // Asked right after the start, before the worker has stored it: the answer is that stream's session.
+        let answered = restarted.session_after_pending().await;
+        let id: String =
+            sqlx::query_scalar("SELECT id FROM stream_sessions WHERE twitch_stream_id = '9002'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(answered, Some(id));
         assert_eq!(next_status(&mut rx).await["payload"]["state"], "live");
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM stream_sessions")
             .fetch_one(&pool)

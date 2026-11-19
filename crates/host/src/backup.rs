@@ -802,6 +802,12 @@ mod tests {
             .await
             .unwrap();
         }
+        sqlx::query(
+            "INSERT INTO activity_events (id, twitch_message_id, kind, user_name, occurred_at)              VALUES ('a1', 'm1', 'follow', '觀眾一', '2026-11-17T00:00:00.000000Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         (dir, pool)
     }
 
@@ -923,6 +929,7 @@ mod tests {
         settings: Vec<u8>,
         files: Vec<(String, Vec<u8>)>,
         rows: Vec<(String, String)>,
+        activity: Vec<String>,
     }
 
     async fn state_of(dir: &Path) -> FolderState {
@@ -940,11 +947,17 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
+        let activity =
+            sqlx::query_scalar("SELECT twitch_message_id FROM activity_events ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
         pool.close().await;
         FolderState {
             settings: fs::read(dir.join(SETTINGS)).unwrap_or_default(),
             files,
             rows,
+            activity,
         }
     }
 
@@ -1008,6 +1021,10 @@ mod tests {
         // Everything changes after the export.
         toolkit_core::settings::update(&dir, |s| s.twitch_client_id = "changed".into()).unwrap();
         sqlx::query("DELETE FROM redemption_records WHERE id = 'r1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM activity_events")
             .execute(&pool)
             .await
             .unwrap();

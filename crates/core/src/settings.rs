@@ -37,6 +37,9 @@ pub struct Settings {
     /// The admin UI's text size in percent (the Host checks the range). `None`: never changed, 100.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_size: Option<u16>,
+    /// How long chat and activity records are kept. `None`: never changed, [`RecordRetention::DEFAULT`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record_retention: Option<RecordRetention>,
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
@@ -82,6 +85,26 @@ pub struct SoundSettings {
     /// What plays where, e.g. `alert.follow` → a library sound's ID or `silent`. A missing slot plays its
     /// default: the built-in sound for alerts, nothing for check-ins.
     pub slots: BTreeMap<String, String>,
+}
+
+/// Keep records for this many days (1–3650), or forever; older ones are deleted on their own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordRetention {
+    Days(u16),
+    Forever,
+}
+
+impl RecordRetention {
+    pub const DEFAULT: Self = Self::Days(30);
+    pub const MAX_DAYS: u16 = 3650;
+
+    pub fn valid(self) -> bool {
+        match self {
+            Self::Days(days) => (1..=Self::MAX_DAYS).contains(&days),
+            Self::Forever => true,
+        }
+    }
 }
 
 /// One imported sound; its file is `sounds/<id>.<format>` in the data folder.
@@ -156,6 +179,7 @@ impl Default for Settings {
             chat_dock: None,
             tab_bar: None,
             text_size: None,
+            record_retention: None,
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),

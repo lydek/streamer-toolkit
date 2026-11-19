@@ -315,6 +315,22 @@
       "desc": "發起揪團，出發前播放感謝名單。"
     }
   },
+  "retention": {
+    "title": "紀錄保存",
+    "keep": "保存",
+    "days": "保存天數",
+    "daysUnit": "天",
+    "forever": "永久",
+    "hint": "活動紀錄（追隨、訂閱、小奇點、揪團等）超過期限會自動刪除，並且會進備份。",
+    "foreverNote": "選永久時，資料和備份檔會一直變大。",
+    "outOfRange": "天數要在 1 到 {max} 之間。",
+    "confirmTitle": "改成保存 {days} 天？",
+    "confirmText": "超過 {days} 天的紀錄（{count} 筆）會立刻刪除，不能復原。要留一份的話，先匯出備份。",
+    "confirmOk": "刪除並改成 {days} 天",
+    "saved": "紀錄保存 {days} 天。",
+    "savedForever": "紀錄改成永久保存。",
+    "deleted": "已刪除超過 {days} 天的紀錄，之後保存 {days} 天。"
+  },
   "queue": {
     "title": "呈現佇列",
     "summary": "排隊 {waiting} 個 · 約 {seconds} 秒",
@@ -680,6 +696,11 @@
     },
     "text_size": {
       "invalid": "文字大小不正確。"
+    },
+    "activity": {
+      "invalid_retention": "保存天數要在 1 到 3650 之間。",
+      "storage_failed": "活動紀錄存取失敗。",
+      "retention_unreadable": "讀不到 settings.json，保存期限暫時無法顯示，也不會刪除任何紀錄。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"
