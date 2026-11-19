@@ -135,26 +135,33 @@ pub struct LatestSession {
 
 /// The session that started last; `None` before the first stream.
 pub async fn latest_session(pool: &SqlitePool) -> Result<Option<LatestSession>, sqlx::Error> {
-    let row: Option<(String, String, Option<String>, Option<u32>)> = sqlx::query_as(
+    Ok(sessions(pool, 1).await?.into_iter().next())
+}
+
+/// The latest `limit` sessions, newest first.
+pub async fn sessions(pool: &SqlitePool, limit: u32) -> Result<Vec<LatestSession>, sqlx::Error> {
+    let rows: Vec<(String, String, Option<String>, Option<u32>)> = sqlx::query_as(
         "SELECT id, started_at, ended_at, peak_viewers FROM stream_sessions \
-         ORDER BY started_at DESC LIMIT 1",
+         ORDER BY started_at DESC LIMIT ?",
     )
-    .fetch_optional(pool)
+    .bind(limit)
+    .fetch_all(pool)
     .await?;
     let parse = |s: &str| {
         DateTime::parse_from_rfc3339(s)
             .map(|t| t.to_utc())
             .map_err(|e| sqlx::Error::Decode(e.into()))
     };
-    row.map(|(id, started_at, ended_at, peak_viewers)| {
-        Ok(LatestSession {
-            id,
-            started_at: parse(&started_at)?,
-            ended_at: ended_at.as_deref().map(parse).transpose()?,
-            peak_viewers,
+    rows.into_iter()
+        .map(|(id, started_at, ended_at, peak_viewers)| {
+            Ok(LatestSession {
+                id,
+                started_at: parse(&started_at)?,
+                ended_at: ended_at.as_deref().map(parse).transpose()?,
+                peak_viewers,
+            })
         })
-    })
-    .transpose()
+        .collect()
 }
 
 #[cfg(test)]

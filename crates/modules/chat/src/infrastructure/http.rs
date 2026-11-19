@@ -37,6 +37,17 @@ pub struct StoredChatMessage {
     pub payload: ChatMessagePayload,
 }
 
+impl From<db::StoredMessage> for StoredChatMessage {
+    fn from(m: db::StoredMessage) -> Self {
+        Self {
+            id: m.id,
+            sent_at: m.sent_at.to_rfc3339_opts(SecondsFormat::Millis, true),
+            deleted: m.deleted,
+            payload: m.payload,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, ToSchema)]
 pub(crate) struct ErrorBody {
     code: String,
@@ -54,12 +65,7 @@ pub(crate) async fn messages(State(pool): State<SqlitePool>) -> Response {
         Ok(messages) => Json(
             messages
                 .into_iter()
-                .map(|m| StoredChatMessage {
-                    id: m.id,
-                    sent_at: m.sent_at.to_rfc3339_opts(SecondsFormat::Millis, true),
-                    deleted: m.deleted,
-                    payload: m.payload,
-                })
+                .map(StoredChatMessage::from)
                 .collect::<Vec<_>>(),
         )
         .into_response(),

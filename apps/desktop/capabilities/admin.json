@@ -6,6 +6,7 @@
   "permissions": [
     "allow-get-admin-token",
     "allow-open-twitch-activate",
+    "allow-open-twitch-chat",
     "allow-close-hint",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

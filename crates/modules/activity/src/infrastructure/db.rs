@@ -63,6 +63,43 @@ pub struct SessionCounts {
     pub raids: u32,
 }
 
+/// One stored follow, sub, resub, gift, cheer or raid, as the chat log merges it in.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct ActivityEntry {
+    /// `follow`, `subscribe`, `resubscribe`, `gift`, `cheer` or `raid`.
+    pub kind: String,
+    /// `None` for an anonymous gift or cheer.
+    pub user_name: Option<String>,
+    pub tier: Option<u8>,
+    pub months: Option<u32>,
+    pub count: Option<u32>,
+    pub bits: Option<u32>,
+    pub viewers: Option<u32>,
+    /// A sub handed out by a gift (the gift itself is its own entry).
+    pub gifted: bool,
+    pub message: Option<String>,
+    pub occurred_at: String,
+}
+
+/// What happened from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
+pub async fn activity_between(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    limit: u32,
+) -> Result<Vec<ActivityEntry>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT kind, user_name, tier, months, count, bits, viewers, gifted, message, occurred_at FROM \
+         (SELECT * FROM activity_events WHERE (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2) \
+          ORDER BY occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
+    )
+    .bind(from.map(time_text))
+    .bind(until.map(time_text))
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
 /// Counts what is stored for `session_id` (simulated events never are).
 pub async fn session_counts(
     pool: &SqlitePool,

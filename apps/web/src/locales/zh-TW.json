@@ -49,6 +49,38 @@
       "viewers": "觀眾"
     }
   },
+  "chatLog": {
+    "period": "看哪一段",
+    "live": "即時",
+    "stream": "{day} 的直播",
+    "offline": "{day}（沒有直播）",
+    "search": "搜尋訊息",
+    "hideBots": "隱藏機器人",
+    "openTwitch": "在 Twitch 開啟",
+    "filters": "篩選",
+    "filter": {
+      "all": "全部",
+      "mentions": "提到我",
+      "commands": "!指令",
+      "mods": "管理員和 VIP",
+      "subscribers": "訂閱者",
+      "highlights": "醒目訊息和小奇點",
+      "redemptions": "兌換",
+      "alerts": "訂閱、揪團和追隨"
+    },
+    "lines": "訊息與事件",
+    "empty": "沒有符合的訊息。",
+    "truncated": "這段的紀錄太多，只顯示最新的一部分。",
+    "event": {
+      "follow": "{name} 追隨了",
+      "subscribe": "{name} 訂閱了",
+      "resubscribe": "{name} 續訂了 {months} 個月",
+      "gift": "{name} 送出 {count} 份訂閱",
+      "cheer": "{name} 送出 {bits} 小奇點",
+      "raid": "{name} 帶著 {viewers} 人揪團來了",
+      "redemption": "{name} 兌換了「{reward}」"
+    }
+  },
   "dock": {
     "title": "聊天室",
     "close": "收合聊天室",
@@ -743,7 +775,8 @@
     "unknown": "發生錯誤（{code}）",
     "admin": {
       "invalid_client_id": "Client ID 格式不正確（只能是英文字母與數字）。",
-      "open_failed": "無法開啟瀏覽器。"
+      "open_failed": "無法開啟瀏覽器。",
+      "invalid_login": "Twitch 帳號名稱不正確。"
     },
     "settings": {
       "save_failed": "設定儲存失敗。"
@@ -770,6 +803,12 @@
     },
     "alerts": {
       "not_found": "最近事件裡已經沒有這則特效。"
+    },
+    "chat": {
+      "storage_failed": "讀不到聊天紀錄。"
+    },
+    "chat_log": {
+      "invalid_time": "時間格式不正確。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

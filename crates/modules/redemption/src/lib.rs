@@ -8,7 +8,7 @@ mod infrastructure;
 pub use application::RedemptionService;
 pub use infrastructure::{
     REDEMPTION_RECORDED, RedemptionChangedEvent, RedemptionChangedPayload, RedemptionRecorded,
-    db::{MIGRATOR, count_between, record_count},
+    db::{MIGRATOR, RedeemedEntry, count_between, record_count, redeemed_between},
     http::{RedemptionPage, RedemptionQuery, RedemptionRecord, RedemptionStatusName, routes},
     openapi, start,
 };

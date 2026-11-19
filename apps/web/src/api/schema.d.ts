@@ -116,6 +116,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The stored messages, follows, subs, cheers, raids and redemptions from `from` until `to`. */
+        get: operations["log"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chat/messages": {
         parameters: {
             query?: never;
@@ -125,6 +142,26 @@ export interface paths {
         };
         /** The latest 200 stored chat messages from Twitch, oldest first. */
         get: operations["messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/chat/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The latest streams, newest first, with the chat between them; stretches between streams with no chat are left
+         *     out.
+         */
+        get: operations["periods"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1000,6 +1037,14 @@ export interface components {
             /** @enum {string} */
             type: "emote";
         };
+        ChatLogBody: {
+            /** @description Oldest first. */
+            events: components["schemas"]["LogEvent"][];
+            /** @description Oldest first. */
+            messages: components["schemas"]["StoredChatMessage"][];
+            /** @description More messages or events than one page holds happened then; these are the latest. */
+            truncated: boolean;
+        };
         /** @description A `chat.message` event exactly as `/ws/overlay` sends it: the event envelope around its payload. */
         ChatMessageEvent: {
             id: string;
@@ -1035,6 +1080,24 @@ export interface components {
         };
         /** @enum {string} */
         ChatMessageType: "chat.message";
+        /** @description A stretch of time the chat log can show. */
+        ChatPeriod: {
+            /** @description When its first stored message was sent; `null` when it has none. */
+            firstAt: string | null;
+            /**
+             * @description RFC 3339 with microseconds, as stored, so a later query keeps the same boundary; `null` before the first
+             *     stream.
+             */
+            from: string | null;
+            kind: components["schemas"]["PeriodKind"];
+            /**
+             * Format: int32
+             * @description Stored chat messages in it.
+             */
+            messages: number;
+            /** @description RFC 3339; `null` while it is still going. */
+            to: string | null;
+        };
         /**
          * @description A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not
          *     kept in snapshots; the messages it names leave the snapshot instead.
@@ -1285,6 +1348,30 @@ export interface components {
             muted: boolean;
             name: string;
         };
+        /**
+         * @description A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind
+         *     does not have are left out; names and texts are raw viewer text.
+         */
+        LogEvent: {
+            /** @description RFC 3339. */
+            at: string;
+            /** Format: int32 */
+            bits?: number | null;
+            /** Format: int32 */
+            count?: number | null;
+            kind: components["schemas"]["LogEventKind"];
+            message?: string | null;
+            /** Format: int32 */
+            months?: number | null;
+            /** @description A redemption's reward. */
+            reward?: string | null;
+            /** @description `null` for an anonymous gift or cheer. */
+            userName: string | null;
+            /** Format: int32 */
+            viewers?: number | null;
+        };
+        /** @enum {string} */
+        LogEventKind: "follow" | "subscribe" | "resubscribe" | "gift" | "cheer" | "raid" | "redemption";
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
         };
@@ -1385,6 +1472,8 @@ export interface components {
             eventsub_connected: boolean;
             status: components["schemas"]["AuthStatus"];
         };
+        /** @enum {string} */
+        PeriodKind: "stream" | "offline";
         /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */
         PlaySound: {
             url: string;
@@ -2104,6 +2193,46 @@ export interface operations {
             };
         };
     };
+    log: {
+        parameters: {
+            query?: {
+                /** @description RFC 3339; open when left out. */
+                from?: string;
+                /** @description RFC 3339, not included; open when left out. */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatLogBody"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     messages: {
         parameters: {
             query?: never;
@@ -2119,6 +2248,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoredChatMessage"][];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    periods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPeriod"][];
                 };
             };
             500: {

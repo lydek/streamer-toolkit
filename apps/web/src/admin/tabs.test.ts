@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { GROUPS, fittingTabs, groupOf } from './tabs'
+import { GROUPS, firstPage, fittingTabs, groupOf } from './tabs'
 import { router } from './router'
 
 describe('groupOf', () => {
@@ -34,5 +34,14 @@ describe('fittingTabs', () => {
 
   it('can put every tab into "More"', () => {
     expect(fittingTabs([100, 100], 10, 90, 80, 90)).toBe(0)
+  })
+})
+
+describe('firstPage', () => {
+  const media = GROUPS.find((g) => g.id === 'media')!
+
+  it('skips coming-soon pages for the first built one, and hidden ones too', () => {
+    expect(firstPage(media)).toBe('/sounds')
+    expect(firstPage(media, new Set(['/sounds']))).toBe('/scenes')
   })
 })

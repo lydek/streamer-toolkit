@@ -155,12 +155,22 @@ export function applyChat(log: ChatLog, msg: Incoming): ChatLog {
   return log
 }
 
+/** A stored message as a live `chat.message` event, so both render the same. */
+export const fromStored = (s: Schemas['StoredChatMessage']): LoggedChat => ({
+  id: s.id,
+  type: 'chat.message',
+  version: 1,
+  seq: 0,
+  occurredAt: s.sentAt,
+  source: 'twitch',
+  payload: s.payload,
+  deleted: s.deleted,
+})
+
 /** Puts stored chat from before this page opened (oldest first) ahead of what the live log already has. */
 export function withHistory(log: ChatLog, stored: Schemas['StoredChatMessage'][]): ChatLog {
   const known = new Set(log.messages.map((m) => m.id))
-  const older: LoggedChat[] = stored
-    .filter((s) => !known.has(s.id))
-    .map((s) => ({ id: s.id, type: 'chat.message', version: 1, seq: 0, occurredAt: s.sentAt, source: 'twitch', payload: s.payload, deleted: s.deleted }))
+  const older = stored.filter((s) => !known.has(s.id)).map(fromStored)
   if (!older.length) return log
   const messages = [...older, ...log.messages]
     .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt))

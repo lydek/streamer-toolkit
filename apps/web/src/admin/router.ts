@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AlertsPage from './AlertsPage.vue'
+import ChatLogPage from './ChatLogPage.vue'
 import ChatPage from './ChatPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: '/', component: HomeView },
     { path: '/settings', redirect: '/settings/general' },
     { path: '/settings/:section(general|connections|features|profiles|hotkeys|debug|backup|about)', component: SettingsView },
+    { path: '/chat-log', component: ChatLogPage },
     { path: '/chat', component: ChatPage },
     { path: '/alerts', component: AlertsPage },
     { path: '/redemptions', component: RedemptionsPage },
