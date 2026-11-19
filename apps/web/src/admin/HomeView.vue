@@ -34,7 +34,7 @@
         </ul>
       </section>
 
-      <StageCard v-if="!arranging" :stream="live.stream" />
+      <StageCard v-if="!arranging" :live="live" :modules="modules" />
       <QueueArea v-if="!arranging" :status="live.queue" />
 
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">

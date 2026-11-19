@@ -82,6 +82,8 @@ pub struct EventSub {
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
     pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
     pub deliver_stream: Arc<dyn Fn(StreamChange) + Send + Sync>,
+    /// `true` once a session is subscribed, `false` when it ends or the account signs out.
+    pub connected: Arc<dyn Fn(bool) + Send + Sync>,
 }
 
 impl EventSub {
@@ -92,6 +94,7 @@ impl EventSub {
         loop {
             let user_id = account.borrow_and_update().clone();
             let Some(user_id) = user_id else {
+                (self.connected)(false);
                 if account.changed().await.is_err() {
                     return;
                 }
@@ -102,12 +105,14 @@ impl EventSub {
                     Err(e) => e,
                 },
                 changed = account.changed() => {
+                    (self.connected)(false);
                     if changed.is_err() {
                         return;
                     }
                     continue;
                 }
             };
+            (self.connected)(false);
             failures += 1;
             let backoff = crate::backoff(failures);
             // A 429 with a reset time waits at least that long (Helix points bucket).
@@ -142,6 +147,7 @@ impl EventSub {
                         .ok_or(EventSubError::InvalidMessage)?;
                     keepalive = session.keepalive()?;
                     self.subscribe(user_id, &session.id).await?;
+                    (self.connected)(true);
                     *failures = 0;
                 }
                 "session_reconnect" => {
@@ -916,6 +922,7 @@ mod tests {
                 deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
                 deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
                 deliver_stream: Arc::new(|_| {}),
+                connected: Arc::new(|_| {}),
             }
             .run(),
         );
@@ -1169,7 +1176,14 @@ mod tests {
     }
 
     /// Runs EventSub against `script`; returns the task and the sign-in it uses.
-    async fn run_scripted(script: &Scripted) -> (tokio::task::JoinHandle<()>, TwitchAuth) {
+    /// The task, its sign-in, and every `connected` report in order.
+    async fn run_scripted(
+        script: &Scripted,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        TwitchAuth,
+        Arc<std::sync::Mutex<Vec<bool>>>,
+    ) {
         let app = Router::new()
             .route("/ws", any(scripted_ws))
             .route("/helix/eventsub/subscriptions", post(scripted_subscribe))
@@ -1180,6 +1194,8 @@ mod tests {
         let config = tls::client_config().unwrap();
         let http = tls::https_client(config.clone());
         let auth = signed_in_auth(http.clone());
+        let reports = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = reports.clone();
         let task = tokio::spawn(
             EventSub {
                 url: format!("{}/ws", base.replace("http://", "ws://")),
@@ -1189,10 +1205,11 @@ mod tests {
                 deliver_alert: Arc::new(|_| {}),
                 deliver_redemption: Arc::new(|_| {}),
                 deliver_stream: Arc::new(|_| {}),
+                connected: Arc::new(move |c| log.lock().unwrap().push(c)),
             }
             .run(),
         );
-        (task, auth)
+        (task, auth, reports)
     }
 
     async fn until(what: &str, done: impl Fn() -> bool) {
@@ -1208,9 +1225,11 @@ mod tests {
     #[tokio::test]
     async fn silence_past_the_keepalive_reconnects_and_subscribes_again() {
         let script = Scripted::new(None, StatusCode::ACCEPTED);
-        let (task, _auth) = run_scripted(&script).await;
+        let (task, _auth, reports) = run_scripted(&script).await;
         until("a second session", || script.chat_sessions().len() >= 2).await;
         assert_eq!(script.chat_sessions()[..2], ["s1", "s2"]);
+        until("connected again", || reports.lock().unwrap().len() >= 3).await;
+        assert_eq!(reports.lock().unwrap()[..3], [true, false, true]);
         let c = script.connections();
         // 1 s keepalive + 1 s grace, then a 1 s backoff.
         assert!(c[1] - c[0] >= Duration::from_secs(3), "{:?}", c[1] - c[0]);
@@ -1223,7 +1242,7 @@ mod tests {
             "payload":{"subscription":{"type":"channel.chat.message","status":"authorization_revoked"}}})
         .to_string();
         let script = Scripted::new(Some(revocation), StatusCode::ACCEPTED);
-        let (task, _auth) = run_scripted(&script).await;
+        let (task, _auth, _) = run_scripted(&script).await;
         until("a second session", || script.chat_sessions().len() >= 2).await;
         assert_eq!(script.chat_sessions()[..2], ["s1", "s2"]);
         until("the revoked session closed", || script.closed() >= 1).await;
@@ -1236,10 +1255,15 @@ mod tests {
     #[tokio::test]
     async fn logout_closes_the_session_and_stays_away() {
         let script = Scripted::new(None, StatusCode::ACCEPTED);
-        let (task, auth) = run_scripted(&script).await;
+        let (task, auth, reports) = run_scripted(&script).await;
         until("the first session", || script.chat_sessions().len() == 1).await;
+        until("connected", || {
+            reports.lock().unwrap().first() == Some(&true)
+        })
+        .await;
         auth.logout().unwrap();
         until("the session closed", || script.closed() == 1).await;
+        assert_eq!(reports.lock().unwrap().last(), Some(&false));
         // Longer than a keepalive timeout plus a backoff: no new session while signed out.
         tokio::time::sleep(Duration::from_secs(4)).await;
         assert_eq!(script.connections().len(), 1);
@@ -1250,8 +1274,12 @@ mod tests {
     #[tokio::test]
     async fn a_refused_chat_subscription_backs_off_longer_each_time() {
         let script = Scripted::new(None, StatusCode::FORBIDDEN);
-        let (task, _auth) = run_scripted(&script).await;
+        let (task, _auth, reports) = run_scripted(&script).await;
         until("three sessions", || script.connections().len() >= 3).await;
+        assert!(
+            !reports.lock().unwrap().contains(&true),
+            "a session whose chat subscription is refused is not connected"
+        );
         let c = script.connections();
         assert!(c[1] - c[0] >= Duration::from_secs(1), "{:?}", c[1] - c[0]);
         assert!(c[2] - c[1] >= Duration::from_secs(2), "{:?}", c[2] - c[1]);
@@ -1266,7 +1294,7 @@ mod tests {
             .unwrap()
             .as_secs();
         script.rate_limit_reset = Some(now + 4);
-        let (task, _auth) = run_scripted(&script).await;
+        let (task, _auth, _) = run_scripted(&script).await;
         until("a second session", || script.connections().len() >= 2).await;
         let c = script.connections();
         // Longer than the 1 s backoff: at least until the reset, 3 to 4 s away when the 429 came.

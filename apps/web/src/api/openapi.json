@@ -3666,11 +3666,16 @@
         "type": "object",
         "required": [
           "client_id",
-          "status"
+          "status",
+          "eventsub_connected"
         ],
         "properties": {
           "client_id": {
             "type": "string"
+          },
+          "eventsub_connected": {
+            "type": "boolean",
+            "description": "The EventSub session is connected and subscribed (chat, alerts, redemptions arrive)."
           },
           "status": {
             "$ref": "#/components/schemas/AuthStatus"

@@ -9,6 +9,7 @@ import {
   type Line,
   type LiveState,
   applyLive,
+  preStreamChecks,
   sessionRange,
   streamStage,
   arrangedTiles,
@@ -58,7 +59,11 @@ afterEach(() => {
 })
 
 describe('twitchLight', () => {
-  const overview = (status: Schemas['AuthStatus'], client_id = 'abc'): Schemas['Overview'] => ({ client_id, status })
+  const overview = (status: Schemas['AuthStatus'], client_id = 'abc'): Schemas['Overview'] => ({
+    client_id,
+    status,
+    eventsub_connected: false,
+  })
 
   it('maps loading, failure and each sign-in state', () => {
     expect(twitchLight(undefined, false)).toEqual({ state: 'loading', key: 'app.loading' })
@@ -367,5 +372,45 @@ describe('stream stage', () => {
     const local = (y: number, mo: number, d: number, h: number, mi: number) => new Date(y, mo - 1, d, h, mi).toISOString()
     expect(sessionRange(local(2026, 11, 18, 19, 58), local(2026, 11, 18, 22, 39))).toBe('11/18 19:58–22:39 · 2:41')
     expect(sessionRange(local(2026, 11, 18, 23, 30), local(2026, 11, 19, 1, 5))).toBe('11/18 23:30–11/19 01:05 · 1:35')
+  })
+})
+
+describe('pre-stream checks', () => {
+  const signedIn = (eventsub: boolean): Schemas['Overview'] => ({
+    client_id: 'cid',
+    status: { state: 'signed_in', user_id: '42', login: 'me' },
+    eventsub_connected: eventsub,
+  })
+  const live = (obs: 'connected' | 'reconnecting'): LiveState => ({ status: 'open', lastSeq: 1, obs: { state: obs, reason: null } })
+  const modules: Schemas['ModuleState'][] = [
+    { id: 'chat', enabled: true, closed: false },
+    { id: 'alerts', enabled: true, closed: false },
+    { id: 'checkin', enabled: false, closed: false },
+    { id: 'redemption', enabled: true, closed: false },
+  ]
+  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, other: 1 }
+
+  it('lists Twitch, EventSub, OBS and the overlay of each enabled feature, with where to fix them', () => {
+    expect(preStreamChecks(signedIn(true), live('connected'), modules, overlays)).toEqual([
+      { id: 'twitch', ok: true, fix: '/settings/connections#twitch' },
+      { id: 'eventsub', ok: true, fix: '/settings/connections#twitch' },
+      { id: 'obs', ok: true, fix: '/settings/connections#obs' },
+      { id: 'overlay.chat', ok: true, fix: '/chat' },
+      { id: 'overlay.alerts', ok: false, fix: '/alerts' },
+    ])
+  })
+
+  it('counts nothing as fine before it is known', () => {
+    const checks = preStreamChecks(undefined, { status: 'loading', lastSeq: 0 }, undefined, undefined)
+    expect(checks.map((c) => [c.id, c.ok])).toEqual([
+      ['twitch', false],
+      ['eventsub', false],
+      ['obs', false],
+    ])
+    expect(preStreamChecks(signedIn(false), live('reconnecting'), modules, overlays).filter((c) => !c.ok).map((c) => c.id)).toEqual([
+      'eventsub',
+      'obs',
+      'overlay.alerts',
+    ])
   })
 })
