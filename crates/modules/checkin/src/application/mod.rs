@@ -377,6 +377,7 @@ impl CheckinService {
                     }
                     None => Shown::No,
                 }),
+                done: None,
             });
         });
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
@@ -460,6 +461,7 @@ impl CheckinService {
                 show_card(&card, show);
                 Shown::Yes
             }),
+            done: None,
         });
         true
     }

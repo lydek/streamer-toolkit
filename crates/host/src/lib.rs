@@ -210,6 +210,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         presenter.clone(),
         sounds.clone(),
     ));
+    let alert_routes = alerts::routes(alerts.clone(), sounds.clone());
     let http = integrations::tls::https_client(tls.clone());
     let twitch = Arc::new(tokio::sync::RwLock::new(
         integrations::twitch::auth::TwitchAuth::new(
@@ -357,6 +358,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(stream_summary.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(alert_routes.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1092,6 +1097,73 @@ mod tests {
             status(send(r#"{"text":"hi","userName":"Tester"}"#)).await,
             StatusCode::NO_CONTENT
         );
+    }
+
+    #[tokio::test]
+    async fn recent_alerts_list_a_simulated_one_and_replay_it_with_the_token() {
+        let app = router(test_config()).unwrap();
+        let req = |method: Method, path: &str, body: Option<&'static str>, token: bool| {
+            let mut b = get_req(path, "127.0.0.1:47810")
+                .method(method)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::CONTENT_TYPE, "application/json");
+            if token {
+                b = b.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+            }
+            b.body(body.map_or_else(Body::empty, Body::from)).unwrap()
+        };
+        let sim = req(
+            Method::POST,
+            "/api/admin/simulate/alert",
+            Some(r#"{"kind":"follow","userName":"Fan"}"#),
+            true,
+        );
+        assert_eq!(
+            app.clone().oneshot(sim).await.unwrap().status(),
+            StatusCode::NO_CONTENT
+        );
+        let res = app
+            .clone()
+            .oneshot(req(Method::GET, "/api/admin/alerts/recent", None, true))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(res.into_body(), 65536).await.unwrap();
+        let recent: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recent[0]["payload"]["userName"], "Fan");
+        assert_eq!(recent[0]["source"], "simulation");
+        let id = recent[0]["id"].as_str().unwrap().to_owned();
+
+        let replay = format!("/api/admin/alerts/recent/{id}/replay");
+        let res = app
+            .clone()
+            .oneshot(req(Method::POST, &replay, None, true))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        let gone = req(
+            Method::POST,
+            "/api/admin/alerts/recent/nope/replay",
+            None,
+            true,
+        );
+        assert_eq!(
+            app.clone().oneshot(gone).await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+        for (method, path) in [
+            (Method::GET, "/api/admin/alerts/recent"),
+            (Method::POST, replay.as_str()),
+        ] {
+            assert_eq!(
+                app.clone()
+                    .oneshot(req(method, path, None, false))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::UNAUTHORIZED
+            );
+        }
     }
 
     #[tokio::test]

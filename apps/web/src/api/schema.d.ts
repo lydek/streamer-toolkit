@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/admin/alerts/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest alerts this launch, newest first (at most 50), with what became of each. */
+        get: operations["recent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/alerts/recent/{id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queues an alert from 最近事件 again with the current template and sounds; nothing is recorded again. */
+        post: operations["replay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/backup": {
         parameters: {
             query?: never;
@@ -1290,6 +1324,11 @@ export interface components {
         };
         /** @enum {string} */
         ObsStatusType: "obs.status";
+        /**
+         * @description What finally became of an item, as far as the Host can tell (overlays do not report back).
+         * @enum {string}
+         */
+        Outcome: "played" | "sound_missing" | "off_air" | "declined" | "skipped" | "cleared" | "stopped";
         /** @description Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included. */
         OverlayCounts: {
             alerts: number;
@@ -1389,6 +1428,15 @@ export interface components {
             gapMs: number;
             /** @description In the order they will play. */
             waiting: components["schemas"]["Waiting"][];
+        };
+        /** @description One alert in 最近事件. */
+        RecentAlertBody: {
+            id: string;
+            occurredAt: string;
+            outcome: components["schemas"]["Outcome"] | null;
+            /** @description As the overlay gets it now (the sound follows the current settings). */
+            payload: components["schemas"]["AlertPayload"];
+            source: components["schemas"]["Source"];
         };
         /** @description Keep records for this many days (1–3650), or forever; older ones are deleted on their own. */
         RecordRetention: {
@@ -1771,6 +1819,53 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    recent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentAlertBody"][];
+                };
+            };
+        };
+    };
+    replay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The alert's ID from 最近事件 */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     export_backup: {
         parameters: {
             query?: never;

@@ -6,4 +6,8 @@ mod domain;
 mod infrastructure;
 
 pub use application::{AlertsService, Timing};
-pub use infrastructure::{AlertEvent, AlertKindName, AlertReceivedEvent};
+pub use infrastructure::{
+    AlertEvent, AlertKindName, AlertReceivedEvent,
+    http::{RecentAlertBody, routes},
+    openapi,
+};

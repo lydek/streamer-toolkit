@@ -39,11 +39,13 @@ dependencies = [
 name = "alerts"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "serde",
  "serde_json",
  "sound",
  "tokio",
  "toolkit-core",
+ "tower",
  "tracing",
  "utoipa",
 ]

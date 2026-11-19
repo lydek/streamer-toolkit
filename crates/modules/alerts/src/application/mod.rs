@@ -1,13 +1,33 @@
 //! Receives alerts from Twitch or the simulator and queues them on the shared presentation queue, which hands
-//! each on to the overlays once the one before has shown.
+//! each on to the overlays once the one before has shown. Keeps the latest alerts and what became of each, for
+//! 最近事件, and replays one with the current settings.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use toolkit_core::{
     events::{Alert, AlertKind, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Shown, Stage, Subject},
+    presentation::{Item, Outcome, Presenter, Shown, Stage, Subject},
 };
+
+/// How many alerts 最近事件 keeps (in memory, this launch only).
+const RECENT: usize = 50;
+
+/// One alert in 最近事件.
+#[derive(Debug, Clone)]
+pub struct RecentAlert {
+    pub alert: Alert,
+    pub source: Source,
+    pub show: Duration,
+    /// `None` while it waits or plays.
+    pub outcome: Option<Outcome>,
+    /// Counts replays; only the latest play reports its outcome.
+    plays: u32,
+}
 
 /// How long an alert shows; the pause before the next item belongs to the presentation queue.
 #[derive(Debug, Clone, Copy)]
@@ -39,6 +59,8 @@ pub struct AlertsService {
     presenter: Arc<Presenter>,
     announce: Announce,
     publish: Publish,
+    /// Newest first.
+    recent: Arc<Mutex<VecDeque<RecentAlert>>>,
 }
 
 impl AlertsService {
@@ -57,6 +79,7 @@ impl AlertsService {
             presenter,
             announce: Box::new(announce),
             publish: Arc::new(publish),
+            recent: Arc::default(),
         }
     }
 
@@ -75,7 +98,51 @@ impl AlertsService {
             false => self.timing.show,
         };
         (self.announce)(&alert, source, show);
-        let (modules, publish) = (self.modules.clone(), self.publish.clone());
+        {
+            let mut recent = self.recent.lock().unwrap();
+            recent.push_front(RecentAlert {
+                alert: alert.clone(),
+                source,
+                show,
+                outcome: None,
+                plays: 0,
+            });
+            recent.truncate(RECENT);
+        }
+        self.queue(alert, source, show, 0);
+    }
+
+    /// The latest alerts, newest first, with what became of each.
+    pub fn recent(&self) -> Vec<RecentAlert> {
+        self.recent.lock().unwrap().iter().cloned().collect()
+    }
+
+    /// Queues the alert with ID `id` from 最近事件 again, with the current template and sounds; nothing is announced
+    /// or recorded again. `false` when 最近事件 no longer has it.
+    pub fn replay(&self, id: &str) -> bool {
+        let found = {
+            let mut recent = self.recent.lock().unwrap();
+            recent.iter_mut().find(|r| r.alert.id == id).map(|r| {
+                r.outcome = None;
+                r.plays += 1;
+                (r.alert.clone(), r.source, r.show, r.plays)
+            })
+        };
+        let Some((alert, source, show, play)) = found else {
+            return false;
+        };
+        self.queue(alert, source, show, play);
+        true
+    }
+
+    /// `play` is the alert's play count when queued: a play replaced by a later replay reports nothing.
+    fn queue(&self, alert: Alert, source: Source, show: Duration, play: u32) {
+        let (modules, publish, recent) = (
+            self.modules.clone(),
+            self.publish.clone(),
+            self.recent.clone(),
+        );
+        let id = alert.id.clone();
         self.presenter.push(Item {
             stage: Stage::Alerts,
             subject: Subject::Alert {
@@ -91,6 +158,16 @@ impl AlertsService {
                 }
                 publish(alert, source, show)
             }),
+            done: Some(Box::new(move |outcome| {
+                if let Some(r) = recent
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|r| r.alert.id == id && r.plays == play)
+                {
+                    r.outcome = Some(outcome);
+                }
+            })),
         });
     }
 }
@@ -153,6 +230,89 @@ mod tests {
                 return event;
             }
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn recent_alerts_keep_what_became_of_each_and_a_replay_plays_again_unannounced() {
+        let dir = std::env::temp_dir().join(format!("st-alerts-recent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let modules = Arc::new(Modules::load(dir.clone()));
+        let presenter = Presenter::start(Duration::from_millis(100), |_| true);
+        let (announced, published) = (
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(Mutex::new(Vec::new())),
+        );
+        let (a, p) = (announced.clone(), published.clone());
+        let alerts = AlertsService::with_publisher(
+            modules,
+            Timing::default(),
+            presenter.clone(),
+            move |alert, _, _| a.lock().unwrap().push(alert.id.clone()),
+            move |alert, _, _| {
+                p.lock().unwrap().push(alert.id);
+                Shown::Yes
+            },
+        );
+        alerts.receive(alert("a1", Some("Fan"), AlertKind::Follow), Source::Twitch);
+        alerts.receive(alert("a2", Some("Kai"), AlertKind::Follow), Source::Twitch);
+        let outcomes = |alerts: &AlertsService| -> Vec<(String, Option<Outcome>)> {
+            alerts
+                .recent()
+                .into_iter()
+                .map(|r| (r.alert.id, r.outcome))
+                .collect()
+        };
+        assert_eq!(
+            outcomes(&alerts),
+            [("a2".into(), None), ("a1".into(), None)],
+            "newest first, waiting"
+        );
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        presenter.clear();
+        tokio::time::sleep(Duration::from_secs(7)).await;
+        assert_eq!(
+            outcomes(&alerts),
+            [
+                ("a2".into(), Some(Outcome::Cleared)),
+                ("a1".into(), Some(Outcome::Played))
+            ]
+        );
+
+        assert!(alerts.replay("a2"));
+        assert_eq!(outcomes(&alerts)[0], ("a2".into(), None));
+        tokio::time::sleep(Duration::from_secs(7)).await;
+        assert_eq!(outcomes(&alerts)[0], ("a2".into(), Some(Outcome::Played)));
+        assert_eq!(*published.lock().unwrap(), ["a1", "a2"]);
+        assert_eq!(
+            *announced.lock().unwrap(),
+            ["a1", "a2"],
+            "a replay is not announced"
+        );
+        assert!(!alerts.replay("gone"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_replay_queued_while_the_alert_plays_is_not_reported_by_the_earlier_play() {
+        let dir = std::env::temp_dir().join(format!("st-alerts-replay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let presenter = Presenter::start(Duration::from_millis(100), |_| true);
+        let alerts = AlertsService::with_publisher(
+            Arc::new(Modules::load(dir.clone())),
+            Timing::default(),
+            presenter,
+            |_, _, _| {},
+            |_, _, _| Shown::Yes,
+        );
+        alerts.receive(alert("a1", Some("Fan"), AlertKind::Follow), Source::Twitch);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(alerts.replay("a1"));
+        // The first play ends at 6.1 s; the replay is still to finish.
+        tokio::time::sleep(Duration::from_secs(6)).await;
+        assert_eq!(alerts.recent()[0].outcome, None);
+        tokio::time::sleep(Duration::from_secs(7)).await;
+        assert_eq!(alerts.recent()[0].outcome, Some(Outcome::Played));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

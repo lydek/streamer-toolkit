@@ -1,5 +1,7 @@
 //! Maps the internal alert to the external `alert` payload.
 
+pub mod http;
+
 use std::{sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
@@ -174,6 +176,10 @@ pub enum AlertReceivedType {
 }
 
 fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
+    serde_json::to_value(alert_payload(alert, show, sounds)).expect("alert payload serializes")
+}
+
+fn alert_payload(alert: Alert, show: Duration, sounds: &SoundService) -> AlertPayload {
     let base = AlertPayload {
         duration_ms: show.as_millis() as u64,
         sound: AlertSound::BuiltIn,
@@ -226,5 +232,17 @@ fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
         },
     };
     payload.sound = sounds.alert(payload.kind.name()).into();
-    serde_json::to_value(payload).expect("alert payload serializes")
+    payload
+}
+
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    paths(http::recent, http::replay),
+    components(schemas(http::RecentAlertBody, toolkit_core::presentation::Outcome))
+)]
+struct AlertsApi;
+
+/// This module's part of the Host's OpenAPI document.
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    <AlertsApi as utoipa::OpenApi>::openapi()
 }
