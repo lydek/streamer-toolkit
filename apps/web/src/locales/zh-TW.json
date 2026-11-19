@@ -312,6 +312,23 @@
       "desc": "發起揪團，出發前播放感謝名單。"
     }
   },
+  "queue": {
+    "title": "呈現佇列",
+    "summary": "排隊 {waiting} 個 · 約 {seconds} 秒",
+    "summaryIdle": "排隊 {waiting} 個",
+    "clear": "清空排隊",
+    "playing": "播放中",
+    "anonymous": "匿名觀眾",
+    "item": {
+      "alerts": "特效「{label}」",
+      "checkin": "打卡卡片「{label}」",
+      "sound": "音效「{label}」"
+    },
+    "cleared": "已清空 {cancelled} 個排隊中的效果，正在播的會播完。",
+    "nothingWaiting": "沒有排隊中的效果。",
+    "stop": "緊急停止：停掉正在播的並取消排隊中的呈現",
+    "stopped": "已停止正在播的 {stopped} 個、取消排隊中的 {cancelled} 個；已記錄的資料不受影響。"
+  },
   "home": {
     "skip": "跳到功能磚",
     "tiles": "功能磚",

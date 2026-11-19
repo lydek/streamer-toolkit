@@ -353,6 +353,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/queue/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancels every waiting item; the one playing finishes. Records (redemptions, check-ins) are not touched. */
+        post: operations["clear_queue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/queue/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emergency stop: ends the item playing and cancels the waiting ones; overlays stop picture and sound at once.
+         *     Records (redemptions, check-ins) are not touched.
+         */
+        post: operations["stop_queue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/redemptions": {
         parameters: {
             query?: never;
@@ -1020,6 +1057,10 @@ export interface components {
              */
             total: number;
         };
+        Cleared: {
+            /** @description Waiting items that will not play. */
+            cancelled: number;
+        };
         ClientIdBody: {
             client_id: string;
         };
@@ -1168,6 +1209,57 @@ export interface components {
             /** Format: int32 */
             volume: number;
         };
+        Playing: {
+            /** @description Raw text. */
+            label: string;
+            /** Format: int64 */
+            showMs: number;
+            stage: components["schemas"]["Stage"];
+            /** @description RFC 3339 time it started. */
+            startedAt: string;
+        };
+        /** @description A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
+        PresentationQueueEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["QueueStatus"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["PresentationQueueType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        PresentationQueueType: "presentation.queue";
+        /**
+         * @description A `presentation.stopped` event exactly as `/ws/overlay` sends it: every overlay stops its picture and sound at
+         *     once. Not kept in snapshots.
+         */
+        PresentationStoppedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["Stopped"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["PresentationStoppedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        PresentationStoppedType: "presentation.stopped";
+        /** @description What the queue holds right now. */
+        QueueStatus: {
+            current: components["schemas"]["Playing"] | null;
+            /**
+             * Format: int64
+             * @description The pause after each item, in ms.
+             */
+            gapMs: number;
+            /** @description In the order they will play. */
+            waiting: components["schemas"]["Waiting"][];
+        };
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
          *     carries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.
@@ -1304,6 +1396,8 @@ export interface components {
             "obs.state": components["schemas"]["ObsStateEvent"][];
             /** @description At most one: the latest status. */
             "obs.status": components["schemas"]["ObsStatusEvent"][];
+            /** @description At most one: the latest presentation queue status. */
+            "presentation.queue": components["schemas"]["PresentationQueueEvent"][];
         };
         /** @enum {string} */
         SnapshotType: "snapshot";
@@ -1372,6 +1466,17 @@ export interface components {
          * @enum {string}
          */
         Source: "twitch" | "obs" | "simulation" | "system";
+        /**
+         * @description The overlay that presents an item.
+         * @enum {string}
+         */
+        Stage: "alerts" | "checkin" | "sound";
+        Stopped: {
+            /** @description Waiting items that will not play. */
+            cancelled: number;
+            /** @description Whether an item was playing. */
+            stopped: boolean;
+        };
         /** @description What the streaming software shows right now; [`StreamingState::default`] while it is not connected. */
         StreamingState: {
             inputs: components["schemas"]["Input"][];
@@ -1430,6 +1535,13 @@ export interface components {
             check: boolean;
             /** @description The running version. */
             current: string;
+        };
+        Waiting: {
+            /** @description Raw text. */
+            label: string;
+            /** Format: int64 */
+            showMs: number;
+            stage: components["schemas"]["Stage"];
         };
     };
     responses: never;
@@ -2290,6 +2402,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverlayCounts"];
+                };
+            };
+        };
+    };
+    clear_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cleared"];
+                };
+            };
+        };
+    };
+    stop_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stopped"];
                 };
             };
         };

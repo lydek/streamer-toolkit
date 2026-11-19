@@ -8,7 +8,7 @@ import AlertsOverlay from './AlertsOverlay.vue'
 import chimeUrl from './chime.wav'
 
 const played = vi.hoisted(() => [] as [string, number][])
-vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]) }))
+vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]), stopSounds: () => {} }))
 
 // Each load waits until the test releases it with the stage class it should get.
 const loads = vi.hoisted(() => [] as { base: string; release: (stage: string) => void }[])
@@ -70,6 +70,16 @@ afterEach(() => {
 })
 
 describe('AlertsOverlay', () => {
+  it('an emergency stop also drops an alert still waiting for its template', async () => {
+    const wrapper = preview()
+    post(alert(1))
+    post({ type: 'presentation.stopped', id: 's', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { stopped: true, cancelled: 0 } })
+    for (const l of loads) l.release('a')
+    await flushPromises()
+    expect(titles()).toEqual([])
+    wrapper.unmount()
+  })
+
   it('previews the built-in template named in the URL, and only a well-formed name', async () => {
     for (const [query, base] of [
       ['?preview&template=banner', '/templates/built-in/alerts/banner/'],

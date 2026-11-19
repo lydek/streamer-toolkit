@@ -52,6 +52,15 @@
           @click="toggleChat"
         />
         <Button
+          class="estop"
+          icon="pi pi-stop-circle"
+          text
+          rounded
+          :aria-label="t('queue.stop')"
+          :disabled="stopping"
+          @click="stop"
+        />
+        <Button
           icon="pi pi-cog"
           text
           rounded
@@ -182,6 +191,20 @@ watch(
 )
 // Pages of features turned off in settings are hidden, and so is a group left with none.
 const { hidden } = useModules()
+
+// Emergency stop: ends what plays and cancels what waits on the presentation queue; records are not touched.
+const stopping = ref(false)
+async function stop() {
+  stopping.value = true
+  try {
+    const { stopped, cancelled } = await api(client.POST('/api/admin/queue/stop'))
+    toast.add({ severity: 'warn', summary: t('queue.stopped', { stopped: Number(stopped), cancelled }), life: 5000 })
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  } finally {
+    stopping.value = false
+  }
+}
 
 // The chat button: docks or undocks the panel on wide windows (saved), slides it in below 900px.
 const dock = useDock()
@@ -348,6 +371,10 @@ onBeforeUnmount(() => {
   min-width: 0;
   align-items: center;
   gap: 0.5rem;
+}
+
+.estop {
+  color: var(--p-red-400, #f87171);
 }
 
 .on-air {

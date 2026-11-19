@@ -68,8 +68,10 @@ impl AlertsService {
         let (modules, publish) = (self.modules.clone(), self.publish.clone());
         self.presenter.push(Item {
             stage: Stage::Alerts,
+            label: alert.user_name.clone().unwrap_or_default(),
             show,
             simulated: source == Source::Simulation,
+            ready: None,
             present: Box::new(move || {
                 if !modules.is_enabled(modules::ALERTS) {
                     return false;
