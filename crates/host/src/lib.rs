@@ -21,6 +21,7 @@ pub use backup::{BackupError, apply_pending};
 pub use openapi::openapi;
 
 pub use alerts::Timing as AlertTiming;
+pub use chat::ChatService;
 pub use checkin::Timing as CheckinTiming;
 pub use toolkit_core::presentation::DEFAULT_GAP as PRESENTATION_GAP;
 pub use toolkit_core::{DEFAULT_PORT, settings};
@@ -103,15 +104,18 @@ pub struct TwitchEndpoints {
     pub oauth: String,
     pub helix: String,
     pub eventsub: String,
+    /// Anonymous chat over IRC, read only for Twitch's first-chat mark.
+    pub irc: String,
 }
 
 impl Default for TwitchEndpoints {
     fn default() -> Self {
-        use integrations::twitch::{auth, eventsub, helix};
+        use integrations::twitch::{auth, eventsub, helix, irc};
         Self {
             oauth: auth::OAUTH_BASE.into(),
             helix: helix::HELIX_BASE.into(),
             eventsub: eventsub::EVENTSUB_URL.into(),
+            irc: irc::IRC_URL.into(),
         }
     }
 }
@@ -128,6 +132,7 @@ pub struct BoundHost {
     listener: TcpListener,
     router: Router,
     port: u16,
+    chat: Arc<ChatService>,
 }
 
 /// Binds before serving so the caller can open the port-change page when the port is taken.
@@ -140,16 +145,22 @@ pub async fn bind(mut config: HostConfig) -> Result<BoundHost, HostError> {
     })?;
     config.port = listener.local_addr()?.port();
     let port = config.port;
+    let (router, chat) = router_with_chat(config)?;
     Ok(BoundHost {
         listener,
-        router: router(config)?,
+        router,
         port,
+        chat,
     })
 }
 
 impl BoundHost {
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn chat(&self) -> Arc<ChatService> {
+        self.chat.clone()
     }
 
     pub async fn serve(self) -> std::io::Result<()> {
@@ -176,6 +187,10 @@ impl Guard {
 }
 
 pub fn router(config: HostConfig) -> Result<Router, HostError> {
+    router_with_chat(config).map(|(router, _)| router)
+}
+
+fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), HostError> {
     let guard_state = Guard::new(&config);
     let csp = admin_csp(&guard_state.hosts);
     let tls = integrations::tls::client_config().map_err(std::io::Error::other)?;
@@ -303,7 +318,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         tls,
         http,
         twitch,
-        chat,
+        chat.clone(),
         alerts,
         redemption.clone(),
         checkin.clone(),
@@ -314,118 +329,114 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         outbox,
         modules,
     ));
-    Ok(Router::new()
-        .route("/api/health", get(|| async { "ok" }))
-        .merge(
-            Router::new()
-                .route("/ws/overlay", get(overlay::ws))
-                .with_state(overlay::OverlayState {
-                    bus,
-                    connections: overlays.clone(),
-                }),
-        )
-        .merge(
-            overlay::admin_routes(overlays).layer(middleware::from_fn_with_state(
+    let router =
+        Router::new()
+            .route("/api/health", get(|| async { "ok" }))
+            .merge(
+                Router::new()
+                    .route("/ws/overlay", get(overlay::ws))
+                    .with_state(overlay::OverlayState {
+                        bus,
+                        connections: overlays.clone(),
+                    }),
+            )
+            .merge(
+                overlay::admin_routes(overlays).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(obs::routes(obs).layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
-            )),
-        )
-        .merge(obs::routes(obs).layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(
-            redemption::routes(config.db.clone(), redemption.clone()).layer(
+            )))
+            .merge(
+                redemption::routes(config.db.clone(), redemption.clone()).layer(
+                    middleware::from_fn_with_state(admin.clone(), admin::require_token),
+                ),
+            )
+            .merge(checkin::routes(config.db.clone(), checkin).layer(
                 middleware::from_fn_with_state(admin.clone(), admin::require_token),
-            ),
-        )
-        .merge(
-            checkin::routes(config.db.clone(), checkin).layer(middleware::from_fn_with_state(
+            ))
+            .merge(
+                sound::routes(sounds.clone()).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(sound::file_routes(sounds))
+            .merge(home_tiles.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
-            )),
-        )
-        .merge(
-            sound::routes(sounds.clone()).layer(middleware::from_fn_with_state(
+            )))
+            .merge(chat_dock.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
-            )),
-        )
-        .merge(sound::file_routes(sounds))
-        .merge(home_tiles.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(chat_dock.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(tab_bar.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(text_size.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(queue_routes.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(activity_routes.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(stream_summary.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(alert_routes.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(chat_routes.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(chat_display.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(backup.layer(middleware::from_fn_with_state(
-            admin.clone(),
-            admin::require_token,
-        )))
-        .merge(
-            update::routes(updates).layer(middleware::from_fn_with_state(
+            )))
+            .merge(tab_bar.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
-            )),
-        )
-        .merge(
-            templates::admin_routes(templates.clone()).layer(middleware::from_fn_with_state(
+            )))
+            .merge(text_size.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
-            )),
-        )
-        .merge(
-            Router::new()
-                .route("/templates/chat/{*path}", get(templates::serve))
-                .route(
-                    "/templates/built-in/chat/{id}/{*path}",
-                    get(templates::serve_built_in),
-                )
-                .route("/templates/alerts/{*path}", get(templates::serve_alerts))
-                .route(
-                    "/templates/built-in/alerts/{id}/{*path}",
-                    get(templates::serve_built_in_alerts),
-                )
-                .with_state(templates),
-        )
-        .merge(admin::routes(admin))
-        .fallback(move |uri: Uri| std::future::ready(static_file(&uri, &csp)))
-        .layer(middleware::from_fn_with_state(guard_state, guard))
-        .layer(middleware::from_fn(templates::headers)))
+            )))
+            .merge(queue_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(activity_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(stream_summary.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(alert_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(chat_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(chat_display.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(backup.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(
+                update::routes(updates).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(templates::admin_routes(templates.clone()).layer(
+                middleware::from_fn_with_state(admin.clone(), admin::require_token),
+            ))
+            .merge(
+                Router::new()
+                    .route("/templates/chat/{*path}", get(templates::serve))
+                    .route(
+                        "/templates/built-in/chat/{id}/{*path}",
+                        get(templates::serve_built_in),
+                    )
+                    .route("/templates/alerts/{*path}", get(templates::serve_alerts))
+                    .route(
+                        "/templates/built-in/alerts/{id}/{*path}",
+                        get(templates::serve_built_in_alerts),
+                    )
+                    .with_state(templates),
+            )
+            .merge(admin::routes(admin))
+            .fallback(move |uri: Uri| std::future::ready(static_file(&uri, &csp)))
+            .layer(middleware::from_fn_with_state(guard_state, guard))
+            .layer(middleware::from_fn(templates::headers));
+    Ok((router, chat))
 }
 
 /// Blocks DNS rebinding (Host header) and cross-site WebSocket / state-changing requests (Origin).
@@ -531,6 +542,7 @@ mod tests {
                 oauth: "http://127.0.0.1:1".into(),
                 helix: "http://127.0.0.1:1".into(),
                 eventsub: "ws://127.0.0.1:1".into(),
+                irc: "ws://127.0.0.1:1".into(),
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
@@ -651,6 +663,10 @@ mod tests {
         assert_eq!(
             overview["eventsub_connected"], false,
             "signed out: no EventSub session"
+        );
+        assert_eq!(
+            overview["irc_connected"], false,
+            "signed out: first chats fall back to the toolkit's first sighting"
         );
     }
 
@@ -909,6 +925,7 @@ mod tests {
                 oauth: "http://127.0.0.1:1".into(),
                 helix: "http://127.0.0.1:1".into(),
                 eventsub: "ws://127.0.0.1:1".into(),
+                irc: "ws://127.0.0.1:1".into(),
             },
             obs_secrets: Arc::new(NoSecrets),
             alert_timing: AlertTiming::default(),
@@ -1427,7 +1444,7 @@ mod tests {
         for sql in [
             "INSERT INTO activity_events (id, twitch_message_id, kind, session_id, occurred_at) VALUES              ('1', 'm1', 'follow', 's1', '2026-11-19T10:05:00.000000Z'),              ('2', 'm2', 'follow', 'old', '2026-11-18T10:05:00.000000Z')",
             "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id,              reward_title, reward_cost, user_input, status, redeemed_at, updated_at) VALUES              ('1', 't1', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T10:30:00.000000Z', 'x'),              ('2', 't2', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T09:30:00.000000Z', 'x')",
-            "INSERT INTO chat_messages (id, twitch_message_id, session_id, user_id, payload, sent_at) VALUES              ('1', 'c1', 's1', 'u', '{}', '2026-11-19T10:06:00.000000Z'),              ('2', 'c2', 'old', 'u', '{}', '2026-11-18T10:06:00.000000Z')",
+            "INSERT INTO chat_messages (id, twitch_message_id, session_id, user_id, payload, first_chat, sent_at) VALUES              ('1', 'c1', 's1', 'u', '{}', 1, '2026-11-19T10:06:00.000000Z'),              ('2', 'c2', 'old', 'u', '{}', 1, '2026-11-18T10:06:00.000000Z')",
         ] {
             sqlx::query(sql).execute(&pool).await.unwrap();
         }
@@ -1439,6 +1456,7 @@ mod tests {
         assert_eq!(summary["subs"], 0);
         assert_eq!(summary["redemptions"], 1);
         assert_eq!(summary["chatMessages"], 1);
+        assert_eq!(summary["firstChats"], 1);
         assert_eq!(
             status(req(false)).await,
             StatusCode::UNAUTHORIZED,

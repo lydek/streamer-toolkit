@@ -48,6 +48,8 @@ pub(crate) struct StreamSummary {
     redemptions: u32,
     /// Chat messages from Twitch stored for the session.
     chat_messages: u32,
+    /// Viewers' first messages in the channel (第一次聊天) during the session.
+    first_chats: u32,
 }
 
 fn time_text(t: DateTime<Utc>) -> String {
@@ -83,7 +85,7 @@ async fn summary(
     };
     let counts = activity::session_counts(pool, &session.id).await?;
     let redemptions = redemption::count_between(pool, session.started_at, session.ended_at).await?;
-    let chat_messages = chat::session_message_count(pool, &session.id).await?;
+    let (chat_messages, first_chats) = chat::session_chat_counts(pool, &session.id).await?;
     Ok(Some(StreamSummary {
         started_at: time_text(session.started_at),
         ended_at: session.ended_at.map(time_text),
@@ -95,5 +97,6 @@ async fn summary(
         raids: counts.raids,
         redemptions: u32::try_from(redemptions).unwrap_or(u32::MAX),
         chat_messages,
+        first_chats,
     }))
 }

@@ -17,6 +17,8 @@ pub enum Source {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
     pub id: String,
+    /// The channel whose chat it is (the broadcaster's user ID); empty when not from Twitch.
+    pub broadcaster_id: String,
     pub user_id: String,
     pub user_login: String,
     pub user_name: String,
@@ -136,7 +138,7 @@ impl AlertKind {
     }
 }
 
-/// A moderator (or bot) taking chat down; Twitch's field names stop at the integration layer.
+/// A moderator (or bot) taking chat down in one channel; Twitch's field names stop at the integration layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatRemoval {
     /// One message.

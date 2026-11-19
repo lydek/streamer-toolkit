@@ -27,6 +27,9 @@
       <h2>{{ t('dock.title') }}</h2>
       <Button icon="pi pi-angle-double-right" text rounded :aria-label="t('dock.close')" @click="close" />
     </div>
+    <p v-if="twitchOverview?.chat_missed_writes" role="alert">{{ t('chat.missedWrites', { n: twitchOverview.chat_missed_writes }) }}</p>
+    <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
+    <p v-if="historyFailed" role="alert">{{ t('chat.historyRetry') }}</p>
     <div class="tools">
       <div class="filters" role="group" :aria-label="t('dock.filters')">
         <button
@@ -73,9 +76,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
-import { ApiError, api, client } from './api'
+import { ApiError } from './api'
 import ChatNow from './ChatNow.vue'
-import { EMPTY_LOG, applyChat, pause, resume, withHistory } from './chatLog'
+import { pause, resume, useChatHistory } from './chatLog'
 import { DOCK_MAX, DOCK_MIN, clampWidth, saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
@@ -99,15 +102,10 @@ const shown = computed(() => !hidden.value.has('/chat') && (wide.value ? dock.op
 
 const filter = ref<(typeof FILTERS)[number]>('all')
 const query = ref('')
-const log = shallowRef(EMPTY_LOG)
-// Chat from before this page opened (or the Host restarted) goes ahead of the live log; without it the log just
-// starts empty.
-void api(client.GET('/api/admin/chat/messages'))
-  .then((stored) => (log.value = withHistory(log.value, stored)))
-  .catch(() => {})
+const { log, accept, historyFailed } = useChatHistory()
 const events = shallowRef<{ id: string; title: string }[]>([])
 const live = useLiveEvents(2000, (msg) => {
-  log.value = applyChat(log.value, msg)
+  accept(msg)
   // Every alert that arrived, whether or not an overlay in OBS plays it.
   if (msg.type === 'alert.received') events.value = [...events.value, { id: msg.id, title: alertTitle(msg.payload) }].slice(-EVENT_LIMIT)
 })

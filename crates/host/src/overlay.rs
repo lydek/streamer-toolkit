@@ -16,7 +16,7 @@ use axum::{
     response::Response,
     routing::get,
 };
-use chat::ChatMessageEvent;
+use chat::{ChatMessageEvent, ChatRemovedEvent};
 use tokio::sync::watch;
 
 use crate::{
@@ -239,6 +239,9 @@ enum SnapshotType {
 struct SnapshotPayload {
     #[serde(rename = "chat.message")]
     chat_message: Vec<ChatMessageEvent>,
+    /// The latest removals, oldest first: what was taken down before this snapshot.
+    #[serde(rename = "chat.removed")]
+    chat_removed: Vec<ChatRemovedEvent>,
     /// At most one: the latest status.
     #[serde(rename = "obs.status")]
     obs_status: Vec<ObsStatusEvent>,
@@ -305,6 +308,7 @@ mod tests {
         chat.receive(
             ChatMessage {
                 id: "a".into(),
+                broadcaster_id: String::new(),
                 user_id: "7".into(),
                 user_login: "viewer".into(),
                 user_name: "Viewer".into(),

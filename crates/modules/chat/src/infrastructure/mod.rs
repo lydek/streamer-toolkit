@@ -12,23 +12,30 @@ use toolkit_core::{
 };
 use utoipa::ToSchema;
 
-use crate::application::ChatService;
+use crate::application::{ChatService, Removal};
 
 pub mod db;
 pub mod http;
 
 /// Recent chat kept in memory only, so a reloaded OBS source is not empty.
 const RECENT: usize = 50;
+/// Recent removals kept for snapshots, so a window that reconnects drops what was taken down while it was away.
+/// shortcut: a fixed count; a disconnect that misses more keeps the older ones until the page reloads.
+const RECENT_REMOVALS: usize = 50;
 
 const CHAT_MESSAGE: &str = "chat.message";
 const CHAT_MESSAGE_VERSION: u32 = 1;
 const CHAT_REMOVED: &str = "chat.removed";
 const CHAT_REMOVED_VERSION: u32 = 1;
+const CHAT_FIRST: &str = "chat.first";
+const CHAT_FIRST_VERSION: u32 = 1;
 
 /// The `payload` of a `chat.message` event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessagePayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub broadcaster_id: Option<String>,
     pub user_id: String,
     pub user_login: String,
     pub user_name: String,
@@ -54,6 +61,10 @@ pub struct ChatMessagePayload {
     /// During a shared chat, the other channel the message was sent in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shared_from: Option<SharedChannelPayload>,
+    /// The sender's first message in the channel, when known as it is published; a later `chat.first` says so for
+    /// a message already shown.
+    #[serde(default)]
+    pub first_chat: bool,
 }
 
 /// A chat badge as Twitch names it.
@@ -139,13 +150,19 @@ pub enum ChatMessageType {
 #[serde(rename_all = "camelCase")]
 pub struct ChatRemovedPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub broadcaster_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
+    /// For a viewer or the whole chat: RFC 3339, the oldest message sent time it reaches (older ones stay).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
 }
 
-/// A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not
-/// kept in snapshots; the messages it names leave the snapshot instead.
+/// A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages
+/// (the ones before it in `seq` order). The messages it names leave the snapshot, and the latest removals are kept
+/// in it so a window that was away can drop what it still shows.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatRemovedEvent {
@@ -165,27 +182,82 @@ pub enum ChatRemovedType {
     ChatRemoved,
 }
 
+/// The `payload` of a `chat.first` event: the message already shown that is its sender's first in the channel.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatFirstPayload {
+    pub message_id: String,
+}
+
+/// A `chat.first` event exactly as `/ws/overlay` sends it: the admin window marks that message 第一次聊天. Not kept
+/// in snapshots; the message in the snapshot carries `firstChat` instead.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatFirstEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: ChatFirstType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: ChatFirstPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum ChatFirstType {
+    #[serde(rename = "chat.first")]
+    ChatFirst,
+}
+
 impl ChatService {
-    /// Publishes accepted messages and removals on `bus`; nothing is stored.
+    /// Publishes accepted messages, removals and first-chat marks on `bus`; nothing is stored.
     pub fn new(bus: Arc<EventBus>, modules: Arc<Modules>) -> Self {
         bus.retain(CHAT_MESSAGE, RECENT);
-        let removals = bus.clone();
+        bus.retain(CHAT_REMOVED, RECENT_REMOVALS);
+        let (removals, firsts) = (bus.clone(), bus.clone());
         Self::with_publisher(
             modules,
-            move |message, source| {
+            move |message, source, first| {
                 bus.publish(Event {
                     id: message.id.clone(),
                     event_type: CHAT_MESSAGE,
                     version: CHAT_MESSAGE_VERSION,
                     occurred_at: message.sent_at.clone(),
                     source,
-                    payload: serde_json::to_value(chat_payload(message))
-                        .expect("chat payload serializes"),
+                    payload: serde_json::to_value(ChatMessagePayload {
+                        first_chat: first,
+                        ..chat_payload(message)
+                    })
+                    .expect("chat payload serializes"),
                 });
             },
             move |removal| publish_removal(&removals, removal),
+            move |id| publish_first(&firsts, id),
         )
     }
+}
+
+fn publish_first(bus: &EventBus, id: &str) {
+    bus.publish_changing(
+        Event {
+            id: uuid::Uuid::now_v7().to_string(),
+            event_type: CHAT_FIRST,
+            version: CHAT_FIRST_VERSION,
+            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            source: Source::Twitch,
+            payload: serde_json::to_value(ChatFirstPayload {
+                message_id: id.to_owned(),
+            })
+            .expect("first chat serializes"),
+        },
+        CHAT_MESSAGE,
+        |recent| {
+            for e in recent.iter_mut().filter(|e| e.id == id) {
+                e.payload["firstChat"] = serde_json::Value::Bool(true);
+            }
+        },
+    );
 }
 
 /// Publishes and stores chat in `pool`, which must already have [`db::MIGRATOR`] applied; `session` asks for the
@@ -205,16 +277,30 @@ where
     )
 }
 
-fn publish_removal(bus: &EventBus, removal: &ChatRemoval) {
+fn publish_removal(
+    bus: &EventBus,
+    Removal {
+        removal,
+        since,
+        channel,
+    }: &Removal,
+) {
     let (message_id, user_id) = match removal {
         ChatRemoval::Message { id } => (Some(id.clone()), None),
         ChatRemoval::User { user_id } => (None, Some(user_id.clone())),
         ChatRemoval::All => (None, None),
     };
+    // Same boundary as storage; a message without a readable time counts as recent, as storage counts it.
+    let reached = |e: &toolkit_core::bus::Envelope| {
+        e.payload["broadcasterId"].as_str() == Some(channel.as_str())
+            && since.is_none_or(|since| {
+                chrono::DateTime::parse_from_rfc3339(&e.occurred_at).map_or(true, |t| t >= since)
+            })
+    };
     let gone = |e: &toolkit_core::bus::Envelope| match removal {
         ChatRemoval::Message { id } => e.id == *id,
-        ChatRemoval::User { user_id } => e.payload["userId"] == *user_id.as_str(),
-        ChatRemoval::All => true,
+        ChatRemoval::User { user_id } => e.payload["userId"] == *user_id.as_str() && reached(e),
+        ChatRemoval::All => reached(e),
     };
     bus.publish_dropping(
         Event {
@@ -224,8 +310,10 @@ fn publish_removal(bus: &EventBus, removal: &ChatRemoval) {
             occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             source: Source::Twitch,
             payload: serde_json::to_value(ChatRemovedPayload {
+                broadcaster_id: since.map(|_| channel.clone()),
                 message_id,
                 user_id,
+                since: since.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Micros, true)),
             })
             .expect("removal serializes"),
         },
@@ -238,7 +326,12 @@ fn publish_removal(bus: &EventBus, removal: &ChatRemoval) {
 #[derive(utoipa::OpenApi)]
 #[openapi(
     paths(http::messages),
-    components(schemas(ChatMessageEvent, ChatRemovedEvent, http::StoredChatMessage))
+    components(schemas(
+        ChatMessageEvent,
+        ChatRemovedEvent,
+        ChatFirstEvent,
+        http::StoredChatMessage
+    ))
 )]
 struct ChatApi;
 
@@ -257,6 +350,7 @@ pub(crate) fn chat_payload(m: ChatMessage) -> ChatMessagePayload {
         })
         .collect();
     ChatMessagePayload {
+        broadcaster_id: Some(m.broadcaster_id),
         user_id: m.user_id,
         user_login: m.user_login,
         user_name: m.user_name,
@@ -284,6 +378,7 @@ pub(crate) fn chat_payload(m: ChatMessage) -> ChatMessagePayload {
                 info: b.info,
             })
             .collect(),
+        first_chat: false,
         shared_from: m.shared_from.map(|c| SharedChannelPayload {
             user_id: c.user_id,
             user_login: c.login,
@@ -311,6 +406,7 @@ mod tests {
         let chat = ChatService::new(bus.clone(), modules.clone());
         let message = |id: &str| ChatMessage {
             id: id.into(),
+            broadcaster_id: "42".into(),
             user_id: "7".into(),
             user_login: "viewer".into(),
             user_name: "Viewer".into(),
@@ -405,7 +501,8 @@ mod tests {
             Source::Simulation,
         );
         let (_, mut rx) = bus.subscribe();
-        chat.remove(ChatRemoval::Message { id: "m2".into() });
+        chat.remove("42".into(), ChatRemoval::Message { id: "m2".into() })
+            .await;
 
         let removed: serde_json::Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
         assert_eq!(removed["type"], "chat.removed");
@@ -424,6 +521,10 @@ mod tests {
             ids,
             ["m1", "sim"],
             "a reconnecting overlay no longer gets it"
+        );
+        assert_eq!(
+            snapshot["payload"]["chat.removed"][0], removed,
+            "a window that was away learns of it"
         );
 
         // The worker stores in order: the removal comes after both messages.
@@ -444,7 +545,71 @@ mod tests {
             [("m1", "hi", false), ("m2", "", true)],
             "simulated chat is never stored"
         );
-        assert_eq!(db::session_message_count(&pool, "s1").await.unwrap(), 2);
+        assert_eq!(db::session_chat_counts(&pool, "s1").await.unwrap().0, 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_first_chat_mark_before_or_after_its_message_marks_it_shown_and_stored() {
+        let dir = std::env::temp_dir().join(format!("st-chat-first-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(EventBus::default());
+        let pool = db::tests::pool().await;
+        let chat = start(
+            bus.clone(),
+            Arc::new(Modules::load(dir.clone())),
+            pool.clone(),
+            || async { Some("s1".to_owned()) },
+        );
+        let now = chrono::Utc::now().to_rfc3339();
+        let (_, mut rx) = bus.subscribe();
+        let next = |rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>| {
+            serde_json::from_str::<serde_json::Value>(&rx.try_recv().unwrap()).unwrap()
+        };
+
+        // The mark comes first: the message is published already marked.
+        chat.first_chat("early".into());
+        chat.receive(db::tests::message("early", "7", "hi", &now), Source::Twitch);
+        assert_eq!(next(&mut rx)["payload"]["firstChat"], true);
+
+        // The message comes first: shown unmarked, then chat.first, and the snapshot has the mark.
+        chat.receive(db::tests::message("late", "8", "yo", &now), Source::Twitch);
+        assert_eq!(next(&mut rx)["payload"]["firstChat"], false);
+        chat.first_chat("late".into());
+        let first = next(&mut rx);
+        assert_eq!(first["type"], "chat.first");
+        assert_eq!(first["payload"], serde_json::json!({"messageId": "late"}));
+        let typed: crate::ChatFirstEvent = serde_json::from_value(first.clone()).unwrap();
+        assert_eq!(serde_json::to_value(typed).unwrap(), first);
+        let (snapshot, _) = bus.subscribe();
+        let snapshot: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+        assert!(
+            snapshot["payload"]["chat.message"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|e| e["payload"]["firstChat"] == true)
+        );
+
+        // A mark for a message never seen changes nothing.
+        chat.first_chat("never".into());
+        assert!(rx.try_recv().is_err());
+
+        let count = loop {
+            let n = db::session_chat_counts(&pool, "s1").await.unwrap().1;
+            if n == 2 {
+                break n;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        };
+        assert_eq!(count, 2);
+        assert!(
+            db::recent_messages(&pool, 10)
+                .await
+                .unwrap()
+                .iter()
+                .all(|m| m.payload.first_chat)
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

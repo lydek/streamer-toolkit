@@ -103,12 +103,24 @@ impl EventBus {
         retained_type: &'static str,
         gone: impl Fn(&Envelope) -> bool,
     ) -> u64 {
+        self.publish_changing(event, retained_type, |recent| recent.retain(|e| !gone(e)))
+    }
+
+    /// Publishes `event` after `change` has updated the retained `retained_type` events, so a snapshot taken after
+    /// it shows the change (e.g. a chat message marked as a viewer's first).
+    pub fn publish_changing(
+        &self,
+        event: Event,
+        retained_type: &'static str,
+        change: impl FnOnce(&mut VecDeque<Envelope>),
+    ) -> u64 {
         let mut state = self.state.lock().unwrap();
         if let Some((_, recent)) = state.retained.get_mut(retained_type) {
-            recent.retain(|e| !gone(e));
+            change(recent);
         }
         drop(state);
-        // Not atomic with the drop above, but a snapshot in between only lacks messages that are gone anyway.
+        // Not atomic with the change above, but a snapshot in between already has the change, and the event says
+        // the same again.
         self.publish(event)
     }
 

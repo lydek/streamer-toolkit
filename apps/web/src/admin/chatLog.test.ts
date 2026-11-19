@@ -99,11 +99,11 @@ const chat = (n: number): ChatEvent => ({
   source: 'twitch',
   payload: { userId: '7', userLogin: 'v', userName: 'V', color: null, text: `m${n}`, fragments: [], badges: [], highlighted: false },
 })
-const snapshot = (...ns: number[]): Incoming => ({
+const snapshot = (...ns: number[]): Extract<Incoming, { type: 'snapshot' }> => ({
   type: 'snapshot',
   version: 1,
   seq: 0,
-  payload: { 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
 })
 const ids = (log: { messages: ChatEvent[] }) => log.messages.map((m) => m.seq)
 
@@ -159,6 +159,13 @@ describe('stored chat and removals', () => {
     expect(withHistory(log, [stored(2)])).toBe(log)
   })
 
+  it('keeps persisted deletions and first-chat updates when merging an existing ID', () => {
+    const live = receive(EMPTY_LOG, [at(1, 1)])
+    expect(withHistory(live, [stored(1, true)]).messages[0].payload.text).toBe('')
+    const first = { ...at(1, 1), payload: { ...at(1, 1).payload, firstChat: true } }
+    expect(applyChat(live, { ...snapshot(), payload: { ...snapshot().payload, 'chat.message': [first] } }).messages[0].payload.firstChat).toBe(true)
+  })
+
   it('a removal keeps the message in place with its text gone', () => {
     const log = receive(EMPTY_LOG, [chat(1), { ...chat(2), payload: { ...chat(2).payload, userId: '8' } }])
     const removed = applyChat(log, { id: 'r', type: 'chat.removed', version: 1, seq: 9, occurredAt: '', source: 'twitch', payload: { userId: '7' } })
@@ -166,5 +173,13 @@ describe('stored chat and removals', () => {
       ['c1', true, ''],
       ['c2', false, 'm2'],
     ])
+  })
+})
+
+describe('first chats', () => {
+  it('chat.first marks a message already in the log', () => {
+    const log = receive(EMPTY_LOG, [chat(1), chat(2)])
+    const marked = applyChat(log, { id: 'f', type: 'chat.first', version: 1, seq: 9, occurredAt: '', source: 'twitch', payload: { messageId: 'c2' } })
+    expect(marked.messages.map((m) => m.payload.firstChat ?? false)).toEqual([false, true])
   })
 })

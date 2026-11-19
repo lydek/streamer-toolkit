@@ -52,6 +52,7 @@ async fn main() {
             oauth: format!("http://{unreachable}"),
             helix: format!("http://{unreachable}"),
             eventsub: format!("ws://{unreachable}"),
+            irc: format!("ws://{unreachable}"),
         },
         obs_secrets: Arc::new(MemorySecret::default()),
         // Short enough for a queue of alerts to play within a test, long enough to see each one.

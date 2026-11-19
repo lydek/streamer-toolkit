@@ -25,6 +25,7 @@ use integrations::{
         auth::{AuthError, AuthStatus, DeviceLogin, TwitchAuth},
         eventsub::EventSub,
         helix::{Helix, HelixError},
+        irc::FirstChats,
         streams::StreamCheck,
     },
 };
@@ -69,6 +70,8 @@ pub(crate) struct AdminState {
     eventsub: Mutex<Option<AbortHandle>>,
     /// Which EventSub task may report (bumped when one is replaced), and whether its session is subscribed.
     eventsub_connected: Arc<Mutex<(u64, bool)>>,
+    /// The same for the anonymous IRC connection that reads Twitch's first-chat mark.
+    irc_connected: Arc<Mutex<(u64, bool)>>,
 }
 
 impl AdminState {
@@ -114,6 +117,7 @@ impl AdminState {
             twitch,
             eventsub: Mutex::new(None),
             eventsub_connected: Arc::new(Mutex::new((0, false))),
+            irc_connected: Arc::new(Mutex::new((0, false))),
         };
         state.start_eventsub(current);
         state
@@ -138,22 +142,43 @@ impl AdminState {
         );
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
         // A replaced task may still report before it is aborted; only the newest one counts.
-        let connected = self.eventsub_connected.clone();
-        let generation = {
-            let mut c = connected.lock().unwrap();
-            *c = (c.0 + 1, false);
-            c.0
+        let reporter = |state: &Arc<Mutex<(u64, bool)>>| -> Arc<dyn Fn(bool) + Send + Sync> {
+            let state = state.clone();
+            let generation = {
+                let mut c = state.lock().unwrap();
+                *c = (c.0 + 1, false);
+                c.0
+            };
+            Arc::new(move |up| {
+                let mut c = state.lock().unwrap();
+                if c.0 == generation {
+                    c.1 = up;
+                }
+            })
         };
+        let eventsub_connected = reporter(&self.eventsub_connected);
+        let irc_connected = reporter(&self.irc_connected);
+        // While Twitch's first-chat mark cannot be read, a viewer the toolkit never saw before counts instead.
+        let irc_up = self.irc_connected.clone();
+        let (first_chats, fallback_chat) = (self.chat.clone(), self.chat.clone());
         let check = StreamCheck {
             helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
             deliver: Arc::new(move |c| checked.receive(c)),
         };
         let eventsub = EventSub {
             url: self.endpoints.eventsub.clone(),
-            helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
+            helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
             tls: self.tls.clone(),
             deliver: Arc::new(move |m| {
-                chat_viewers.receive_chat(&m, Source::Twitch);
+                let new = chat_viewers.receive_chat_first_time(&m, Source::Twitch);
+                if !irc_up.lock().unwrap().1 {
+                    let (chat, id) = (fallback_chat.clone(), m.id.clone());
+                    tokio::spawn(async move {
+                        if new.await {
+                            chat.first_chat(id);
+                        }
+                    });
+                }
                 checkin.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),
@@ -169,16 +194,27 @@ impl AdminState {
                 redemption.receive(r, Source::Twitch)
             }),
             deliver_stream: Arc::new(move |c| stream.receive(c)),
-            deliver_removal: Arc::new(move |r| removals.remove(r)),
-            connected: Arc::new(move |up| {
-                let mut c = connected.lock().unwrap();
-                if c.0 == generation {
-                    c.1 = up;
-                }
+            deliver_removal: Arc::new(move |channel, r| {
+                let chat = removals.clone();
+                // Let a removal already received finish even if this EventSub session gets replaced.
+                let write = tokio::spawn(async move { chat.remove(channel, r).await });
+                Box::pin(async move {
+                    if let Err(e) = write.await {
+                        tracing::error!(error = %e, "chat removal task failed");
+                    }
+                })
             }),
+            connected: eventsub_connected,
+        };
+        let irc = FirstChats {
+            url: self.endpoints.irc.clone(),
+            auth: auth.clone(),
+            tls: self.tls.clone(),
+            deliver: Arc::new(move |id| first_chats.first_chat(id)),
+            connected: irc_connected,
         };
         let task = tokio::spawn(async move {
-            tokio::join!(eventsub.run(), check.run());
+            tokio::join!(eventsub.run(), check.run(), irc.run());
         });
         if let Some(old) = self.eventsub.lock().unwrap().replace(task.abort_handle()) {
             old.abort();
@@ -241,14 +277,27 @@ pub(crate) struct Overview {
     status: AuthStatus,
     /// The EventSub session is connected and subscribed (chat, alerts, redemptions arrive).
     eventsub_connected: bool,
+    /// Twitch's first-chat mark can be read (anonymous IRC joined); otherwise 第一次聊天 is the toolkit's first
+    /// sighting of the viewer.
+    irc_connected: bool,
+    /// Present while a chat record or moderation update is waiting for storage to recover.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chat_write_delayed: Option<bool>,
+    /// Storage operations refused since launch after the bounded chat queue filled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chat_missed_writes: Option<u64>,
 }
 
 #[utoipa::path(get, path = "/api/admin/twitch", tag = "admin", responses((status = 200, body = Overview)))]
 async fn twitch_overview(State(s): State<Arc<AdminState>>) -> Json<Overview> {
+    let twitch = s.twitch.read().await;
     Json(Overview {
-        client_id: settings::load(&s.data_dir).twitch_client_id,
-        status: s.twitch.read().await.status(),
+        client_id: twitch.client_id().to_owned(),
+        status: twitch.status(),
         eventsub_connected: s.eventsub_connected.lock().unwrap().1,
+        irc_connected: s.irc_connected.lock().unwrap().1,
+        chat_write_delayed: s.chat.write_delayed().then_some(true),
+        chat_missed_writes: Some(s.chat.missed_writes()).filter(|n| *n > 0),
     })
 }
 
@@ -630,6 +679,7 @@ async fn simulate_chat(
     s.chat.receive(
         ChatMessage {
             id: uuid::Uuid::now_v7().to_string(),
+            broadcaster_id: String::new(),
             user_id: "simulator".into(),
             user_login: "simulator".into(),
             user_name: user_name.chars().take(25).collect(),

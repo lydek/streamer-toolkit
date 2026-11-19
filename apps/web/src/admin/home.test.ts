@@ -50,7 +50,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], ...payload },
+  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], ...payload },
 })
 
 afterEach(() => {
@@ -63,6 +63,7 @@ describe('twitchLight', () => {
     client_id,
     status,
     eventsub_connected: false,
+    irc_connected: false,
   })
 
   it('maps loading, failure and each sign-in state', () => {
@@ -363,6 +364,7 @@ describe('stream stage', () => {
     raids: 1,
     redemptions: 42,
     chatMessages: 1204,
+    firstChats: 8,
   })
 
   it('is live while Twitch says so, after a stream that ended this run, and before otherwise', () => {
@@ -386,6 +388,7 @@ describe('pre-stream checks', () => {
     client_id: 'cid',
     status: { state: 'signed_in', user_id: '42', login: 'me' },
     eventsub_connected: eventsub,
+    irc_connected: false,
   })
   const live = (obs: 'connected' | 'reconnecting'): LiveState => ({ status: 'open', lastSeq: 1, obs: { state: obs, reason: null } })
   const modules: Schemas['ModuleState'][] = [
