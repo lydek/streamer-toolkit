@@ -39,6 +39,36 @@ pub async fn count_between(
     .await
 }
 
+/// One redemption as the chat log merges it in.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct RedeemedEntry {
+    pub user_name: String,
+    pub reward_title: String,
+    pub reward_cost: u32,
+    /// Raw viewer text; empty when the reward takes none.
+    pub user_input: String,
+    pub redeemed_at: String,
+}
+
+/// Redemptions from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
+pub async fn redeemed_between(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    limit: u32,
+) -> Result<Vec<RedeemedEntry>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT user_name, reward_title, reward_cost, user_input, redeemed_at FROM \
+         (SELECT * FROM redemption_records WHERE (?1 IS NULL OR redeemed_at >= ?1) AND (?2 IS NULL OR redeemed_at < ?2) \
+          ORDER BY redeemed_at DESC LIMIT ?3) ORDER BY redeemed_at",
+    )
+    .bind(from.map(time_text))
+    .bind(until.map(time_text))
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
 /// Records redemptions and publishes `redemption.recorded` in the same transaction as a new record.
 pub(crate) struct SqliteRedemptions {
     pool: SqlitePool,

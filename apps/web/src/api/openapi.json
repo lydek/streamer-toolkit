@@ -266,6 +266,64 @@
         }
       }
     },
+    "/api/admin/chat/log": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The stored messages, follows, subs, cheers, raids and redemptions from `from` until `to`.",
+        "operationId": "log",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; open when left out.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "RFC 3339, not included; open when left out.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatLogBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/chat/messages": {
       "get": {
         "tags": [
@@ -281,6 +339,38 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/StoredChatMessage"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/chat/periods": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest streams, newest first, with the chat between them; stretches between streams with no chat are left\nout.",
+        "operationId": "periods",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatPeriod"
                   }
                 }
               }
@@ -2773,6 +2863,34 @@
           }
         ]
       },
+      "ChatLogBody": {
+        "type": "object",
+        "required": [
+          "messages",
+          "events",
+          "truncated"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogEvent"
+            },
+            "description": "Oldest first."
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredChatMessage"
+            },
+            "description": "Oldest first."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "More messages or events than one page holds happened then; these are the latest."
+          }
+        }
+      },
       "ChatMessageEvent": {
         "type": "object",
         "description": "A `chat.message` event exactly as `/ws/overlay` sends it: the event envelope around its payload.",
@@ -2891,6 +3009,49 @@
         "enum": [
           "chat.message"
         ]
+      },
+      "ChatPeriod": {
+        "type": "object",
+        "description": "A stretch of time the chat log can show.",
+        "required": [
+          "kind",
+          "from",
+          "to",
+          "firstAt",
+          "messages"
+        ],
+        "properties": {
+          "firstAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When its first stored message was sent; `null` when it has none."
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 with microseconds, as stored, so a later query keeps the same boundary; `null` before the first\nstream."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PeriodKind"
+          },
+          "messages": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stored chat messages in it.",
+            "minimum": 0
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339; `null` while it is still going."
+          }
+        }
       },
       "ChatRemovedEvent": {
         "type": "object",
@@ -3563,6 +3724,88 @@
           }
         }
       },
+      "LogEvent": {
+        "type": "object",
+        "description": "A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind\ndoes not have are left out; names and texts are raw viewer text.",
+        "required": [
+          "at",
+          "kind",
+          "userName"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "bits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LogEventKind"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "months": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "reward": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A redemption's reward."
+          },
+          "userName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for an anonymous gift or cheer."
+          },
+          "viewers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "LogEventKind": {
+        "type": "string",
+        "enum": [
+          "follow",
+          "subscribe",
+          "resubscribe",
+          "gift",
+          "cheer",
+          "raid",
+          "redemption"
+        ]
+      },
       "ManualCheckIn": {
         "type": "object",
         "required": [
@@ -3865,6 +4108,13 @@
             "$ref": "#/components/schemas/AuthStatus"
           }
         }
+      },
+      "PeriodKind": {
+        "type": "string",
+        "enum": [
+          "stream",
+          "offline"
+        ]
       },
       "PlaySound": {
         "type": "object",

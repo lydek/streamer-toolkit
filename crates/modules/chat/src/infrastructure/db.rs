@@ -1,7 +1,7 @@
 //! Chat messages in SQLite (`chat_messages`).
 
 use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
-use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
+use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool, migrate::Migrator};
 use toolkit_core::{
     events::{ChatMessage, ChatRemoval},
     records::{RecordFuture, RecordTable},
@@ -150,19 +150,72 @@ pub async fn recent_messages(
     .bind(limit)
     .fetch_all(pool)
     .await?;
-    rows.into_iter()
-        .map(|(id, sent_at, deleted, payload)| {
-            Ok(StoredMessage {
-                id,
-                sent_at: DateTime::parse_from_rfc3339(&sent_at)
-                    .map_err(|e| sqlx::Error::Decode(e.into()))?
-                    .to_utc(),
-                deleted,
-                payload: serde_json::from_str(&payload)
-                    .map_err(|e| sqlx::Error::Decode(e.into()))?,
-            })
-        })
-        .collect()
+    rows.into_iter().map(stored).collect()
+}
+
+/// Stored messages from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
+pub async fn messages_between(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    limit: u32,
+) -> Result<Vec<StoredMessage>, sqlx::Error> {
+    let mut query = QueryBuilder::<Sqlite>::new(
+        "SELECT twitch_message_id, sent_at, deleted, payload FROM \
+         (SELECT * FROM chat_messages",
+    );
+    push_time_range(&mut query, from, until);
+    query
+        .push(" ORDER BY sent_at DESC LIMIT ")
+        .push_bind(limit)
+        .push(") ORDER BY sent_at");
+    let rows: Vec<(String, String, bool, String)> = query.build_query_as().fetch_all(pool).await?;
+    rows.into_iter().map(stored).collect()
+}
+
+fn push_time_range(
+    query: &mut QueryBuilder<Sqlite>,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+) {
+    if let Some(from) = from {
+        query.push(" WHERE sent_at >= ").push_bind(time_text(from));
+    }
+    if let Some(until) = until {
+        query
+            .push(if from.is_some() { " AND " } else { " WHERE " })
+            .push("sent_at < ")
+            .push_bind(time_text(until));
+    }
+}
+
+/// How many messages were sent from `from` until `until` (open ends when `None`), and when the first was.
+pub async fn count_between(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+) -> Result<(u32, Option<DateTime<Utc>>), sqlx::Error> {
+    let mut query = QueryBuilder::<Sqlite>::new("SELECT COUNT(*), MIN(sent_at) FROM chat_messages");
+    push_time_range(&mut query, from, until);
+    let (n, first): (i64, Option<String>) = query.build_query_as().fetch_one(pool).await?;
+    let first = first
+        .map(|s| DateTime::parse_from_rfc3339(&s).map(|t| t.to_utc()))
+        .transpose()
+        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+    Ok((n.try_into().unwrap_or(u32::MAX), first))
+}
+
+fn stored(
+    (id, sent_at, deleted, payload): (String, String, bool, String),
+) -> Result<StoredMessage, sqlx::Error> {
+    Ok(StoredMessage {
+        id,
+        sent_at: DateTime::parse_from_rfc3339(&sent_at)
+            .map_err(|e| sqlx::Error::Decode(e.into()))?
+            .to_utc(),
+        deleted,
+        payload: serde_json::from_str(&payload).map_err(|e| sqlx::Error::Decode(e.into()))?,
+    })
 }
 
 /// How many messages are stored for `session_id`.
@@ -292,6 +345,61 @@ pub(crate) mod tests {
             0,
             "already cleared"
         );
+    }
+
+    #[tokio::test]
+    async fn messages_and_counts_between_two_times() {
+        let pool = pool().await;
+        let repo = SqliteChat::new(pool.clone());
+        repo.store(&[
+            (message("m1", "7", "a", "2026-11-19T09:00:00Z"), None),
+            (message("m2", "7", "b", "2026-11-19T10:00:00Z"), None),
+            (message("m3", "7", "c", "2026-11-19T11:00:00Z"), None),
+        ])
+        .await
+        .unwrap();
+        let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+        let ids = |v: Vec<StoredMessage>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(
+                messages_between(&pool, Some(at("2026-11-19T10:00:00Z")), None, 10)
+                    .await
+                    .unwrap()
+            ),
+            ["m2", "m3"]
+        );
+        assert_eq!(
+            ids(
+                messages_between(&pool, None, Some(at("2026-11-19T10:00:00Z")), 10)
+                    .await
+                    .unwrap()
+            ),
+            ["m1"]
+        );
+        assert_eq!(
+            ids(messages_between(&pool, None, None, 2).await.unwrap()),
+            ["m2", "m3"],
+            "the latest, oldest first"
+        );
+        assert_eq!(
+            count_between(&pool, Some(at("2026-11-19T09:30:00Z")), None)
+                .await
+                .unwrap(),
+            (2, Some(at("2026-11-19T10:00:00Z")))
+        );
+        assert_eq!(
+            count_between(&pool, Some(at("2026-11-20T00:00:00Z")), None)
+                .await
+                .unwrap(),
+            (0, None)
+        );
+        let from = Some(at("2026-11-19T09:00:00Z"));
+        let until = Some(at("2026-11-19T11:00:00Z"));
+        assert_eq!(
+            ids(messages_between(&pool, from, until, 10).await.unwrap()),
+            ["m1", "m2"]
+        );
+        assert_eq!(count_between(&pool, from, until).await.unwrap(), (2, from));
     }
 
     #[tokio::test]

@@ -51,7 +51,7 @@ export const GROUPS: TabGroup[] = [
     id: 'chat',
     icon: 'pi pi-comments',
     pages: [
-      soon('/chat-log', 'chatLog', 'pi pi-comments'),
+      { path: '/chat-log', label: 'pages.chatLog.name' },
       soon('/chat-filter', 'chatFilter', 'pi pi-filter', true),
       { path: '/chat', label: 'pages.chatTemplates.name' },
       soon('/chat-window', 'chatWindow', 'pi pi-window-maximize'),

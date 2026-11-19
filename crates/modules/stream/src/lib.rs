@@ -8,6 +8,6 @@ mod infrastructure;
 pub use application::StreamService;
 pub use infrastructure::{
     StreamStateName, StreamStatusEvent, StreamStatusPayload,
-    db::{LatestSession, MIGRATOR, latest_session},
+    db::{LatestSession, MIGRATOR, latest_session, sessions},
     openapi, start,
 };

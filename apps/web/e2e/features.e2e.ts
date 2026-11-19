@@ -46,11 +46,10 @@ test('turning a built feature off hides its tabs, also after a reload, and on br
   await expect(subTab(page, zh.modules.names.sound)).toBeVisible()
 })
 
-test("a feature's page link opens its first built page, not a coming-soon one", async ({ page }) => {
+test("a feature's page link opens its first built page", async ({ page }) => {
   await openFeatures(page)
-  // Chat's first page (/chat-log) is not built yet; /chat is.
   await page.getByRole('link', { name: `：${zh.features.chat.name}` }).click()
-  await expect(page).toHaveURL(/\/admin\/chat$/)
+  await expect(page).toHaveURL(/\/admin\/chat-log$/)
 })
 
 test('features not built yet say so and cannot be switched; home is always on', async ({ page }) => {

@@ -13,11 +13,11 @@ test('every group and sub-page is one click away, and the current one is marked'
   await expect(tab(page, 'home')).toHaveAttribute('aria-current', 'true')
   await expect(subTab(page, zh.nav.groups.home)).toHaveAttribute('aria-current', 'page')
 
-  // A group goes to its first built page: the chat log is not built yet, the overlay templates are.
+  // A group goes to its first built page (tabs.test.ts covers skipping coming-soon ones).
   await tab(page, 'chat').click()
-  await expect(page).toHaveURL(/\/admin\/chat$/)
+  await expect(page).toHaveURL(/\/admin\/chat-log$/)
   await expect(tab(page, 'chat')).toHaveAttribute('aria-current', 'true')
-  await expect(subTab(page, zh.pages.chatTemplates.name)).toHaveAttribute('aria-current', 'page')
+  await expect(subTab(page, zh.pages.chatLog.name)).toHaveAttribute('aria-current', 'page')
 
   await tab(page, 'interact').click()
   await expect(page).toHaveURL(/\/admin\/alerts$/)
@@ -43,7 +43,7 @@ test('tabs work from the keyboard', async ({ page }) => {
   await openAdmin(page)
   await tab(page, 'chat').focus()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/\/admin\/chat$/)
+  await expect(page).toHaveURL(/\/admin\/chat-log$/)
 })
 
 test('the app bar stays in view while the page scrolls', async ({ page }) => {
@@ -169,7 +169,7 @@ test('below 600px the tabs are a bottom bar, and a warning replaces the status l
   await expect(problem(page)).toHaveAccessibleName(zh.nav.problem.replace('{names}', 'Twitch'))
 
   // The first four groups are in the bar; the rest are in "More".
-  for (const [group, url] of [['song', /\/admin\/songs$/], ['chat', /\/admin\/chat$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
+  for (const [group, url] of [['song', /\/admin\/songs$/], ['chat', /\/admin\/chat-log$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
     await tab(page, group).click()
     await expect(page).toHaveURL(url)
     expect(await scrollsSideways(page), group).toBe(false)
@@ -311,7 +311,7 @@ test('the tab bar can sit at the bottom, also after a restart, and restoring the
   const box = (await tabs(page).boundingBox())!
   expect(Math.round(box.y + box.height)).toBe(800)
   await tab(page, 'chat').click()
-  await expect(page).toHaveURL(/\/admin\/chat$/)
+  await expect(page).toHaveURL(/\/admin\/chat-log$/)
 
   await tabs(page).getByRole('button', { name: zh.nav.edit }).click()
   await page.getByRole('dialog', { name: zh.nav.editor.title }).getByRole('button', { name: zh.nav.editor.restore }).click()

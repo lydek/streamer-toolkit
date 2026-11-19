@@ -146,6 +146,7 @@ fn main() {
             get_admin_token,
             open_twitch_activate,
             open_download_page,
+            open_twitch_chat,
             close_hint
         ])
         .build(context)
@@ -294,6 +295,26 @@ fn open_download_page(app: AppHandle) -> Result<(), &'static str> {
         .map_err(|_| "admin.open_failed")
 }
 
+/// Twitch's pop-out chat of `login`; `None` unless `login` is a Twitch login (letters, digits, `_`, up to 25), so
+/// the URL never leaves this fixed form.
+fn twitch_chat_url(login: &str) -> Option<String> {
+    let valid = (1..=25).contains(&login.len())
+        && login
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    valid.then(|| format!("https://www.twitch.tv/popout/{login}/chat"))
+}
+
+/// Opens the broadcaster's Twitch chat in the system browser (the chat log page's 在 Twitch 開啟); takes only a
+/// login, never a URL.
+#[tauri::command]
+fn open_twitch_chat(app: AppHandle, login: String) -> Result<(), &'static str> {
+    let url = twitch_chat_url(&login).ok_or("admin.invalid_login")?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "admin.open_failed")
+}
+
 /// The admin window reports what happened to the close hint.
 #[tauri::command]
 fn close_hint(app: AppHandle, state: State<'_, AppState>, action: close_hint::Action) {
@@ -421,6 +442,7 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
                 .permission("allow-get-admin-token")
                 .permission("allow-open-twitch-activate")
                 .permission("allow-open-download-page")
+                .permission("allow-open-twitch-chat")
                 .permission("allow-close-hint")
                 // Receives the close hint event; no core:default or core:window:*, the capability covers the whole Host origin.
                 .permission("core:event:allow-listen")
@@ -523,6 +545,25 @@ fn show_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_twitch_chat_url_takes_only_a_login() {
+        assert_eq!(
+            super::twitch_chat_url("streamer_tw01").as_deref(),
+            Some("https://www.twitch.tv/popout/streamer_tw01/chat")
+        );
+        for bad in [
+            "",
+            "Streamer",
+            "a/b",
+            "a?b=c",
+            "evil.com",
+            "x".repeat(26).as_str(),
+            "../admin",
+        ] {
+            assert_eq!(super::twitch_chat_url(bad), None, "{bad}");
+        }
+    }
+
     use super::admin_navigation_allowed;
 
     #[test]

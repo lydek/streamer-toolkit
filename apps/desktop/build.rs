@@ -6,6 +6,7 @@ fn main() {
             "get_admin_token",
             "open_twitch_activate",
             "open_download_page",
+            "open_twitch_chat",
             "close_hint",
         ]),
     ))

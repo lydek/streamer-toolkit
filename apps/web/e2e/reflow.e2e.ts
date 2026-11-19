@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test'
 import { emit, invokes, mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
 
-const ROUTES = ['/', '/chat', '/alerts', '/checkin', '/redemptions', '/sounds', '/settings', '/songs', '/scenes']
+const ROUTES = ['/', '/chat-log', '/chat', '/alerts', '/checkin', '/redemptions', '/sounds', '/settings', '/songs', '/scenes']
 const SIZES = [
   [1600, 900],
   [1280, 800],
