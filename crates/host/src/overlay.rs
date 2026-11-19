@@ -17,6 +17,7 @@ use axum::{
     routing::get,
 };
 use chat::ChatMessageEvent;
+use tokio::sync::watch;
 
 use crate::{
     obs::{ObsStateEvent, ObsStatusEvent},
@@ -59,13 +60,27 @@ impl From<Stage> for OverlayKind {
 }
 
 /// Open `/ws/overlay` sockets per overlay kind.
-#[derive(Default)]
 pub(crate) struct OverlayConnections {
     chat: AtomicUsize,
     alerts: AtomicUsize,
     checkin: AtomicUsize,
     sound: AtomicUsize,
     other: AtomicUsize,
+    /// Ticks whenever a socket opens or closes.
+    changes: watch::Sender<()>,
+}
+
+impl Default for OverlayConnections {
+    fn default() -> Self {
+        Self {
+            chat: AtomicUsize::default(),
+            alerts: AtomicUsize::default(),
+            checkin: AtomicUsize::default(),
+            sound: AtomicUsize::default(),
+            other: AtomicUsize::default(),
+            changes: watch::channel(()).0,
+        }
+    }
 }
 
 impl OverlayConnections {
@@ -84,9 +99,15 @@ impl OverlayConnections {
         self.counter(Some(kind)).load(Ordering::Relaxed)
     }
 
+    /// Follows sockets opening and closing (the presentation queue shows which overlays are open).
+    pub(crate) fn changes(&self) -> watch::Receiver<()> {
+        self.changes.subscribe()
+    }
+
     /// Counts a socket until the returned guard drops.
     fn open(self: &Arc<Self>, kind: Option<OverlayKind>) -> Open {
         self.counter(kind).fetch_add(1, Ordering::Relaxed);
+        self.changes.send_replace(());
         Open {
             connections: self.clone(),
             kind,
@@ -115,6 +136,7 @@ impl Drop for Open {
         self.connections
             .counter(self.kind)
             .fetch_sub(1, Ordering::Relaxed);
+        self.connections.changes.send_replace(());
     }
 }
 
@@ -314,14 +336,22 @@ mod tests {
             &toolkit_core::presentation::QueueStatus {
                 current: Some(toolkit_core::presentation::Playing {
                     stage: toolkit_core::presentation::Stage::Alerts,
-                    label: "Fan".into(),
+                    subject: toolkit_core::presentation::Subject::Alert {
+                        alert: "follow".into(),
+                        viewer: Some("Fan".into()),
+                    },
                     show_ms: 6000,
                     started_at: "2026-11-19T10:00:00.000Z".into(),
+                    problem: Some(toolkit_core::presentation::Problem::SoundMissing),
                 }),
                 waiting: vec![toolkit_core::presentation::Waiting {
                     stage: toolkit_core::presentation::Stage::Sound,
-                    label: "Bell".into(),
+                    subject: toolkit_core::presentation::Subject::Sound {
+                        sound: "Bell".into(),
+                        viewer: "Kai".into(),
+                    },
                     show_ms: 1500,
+                    on_air: false,
                 }],
                 gap_ms: 1000,
             },

@@ -369,10 +369,24 @@
     "playing": "播放中",
     "anonymous": "匿名觀眾",
     "item": {
-      "alerts": "特效「{label}」",
-      "checkin": "打卡卡片「{label}」",
-      "sound": "音效「{label}」"
+      "alert": "特效：{viewer} {action}",
+      "card": "打卡卡片：{viewer} {stamps}/{slots}",
+      "sound": "音效：{sound}（{viewer}兌換）"
     },
+    "action": {
+      "follow": "追隨了",
+      "subscribe": "訂閱了",
+      "resubscribe": "續訂了",
+      "gift": "送出訂閱",
+      "cheer": "送出小奇點",
+      "raid": "揪團來了"
+    },
+    "problem": {
+      "sound_missing": "音效：檔案不見了"
+    },
+    "offAir": "Overlay 沒開，不會播",
+    "skip": "跳過",
+    "nothingPlaying": "沒有正在播的效果。",
     "cleared": "已清空 {cancelled} 個排隊中的效果，正在播的會播完。",
     "nothingWaiting": "沒有排隊中的效果。",
     "stop": "緊急停止：停掉正在播的並取消排隊中的呈現",

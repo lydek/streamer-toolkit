@@ -1,5 +1,6 @@
 //! The presentation queue for the admin UI: its status as the `presentation.queue` event (kept in the WebSocket
-//! snapshot), and clearing it or stopping everything. Admin routes; the caller adds the token check.
+//! snapshot), and skipping the item playing, clearing it or stopping everything. Admin routes; the caller adds the
+//! token check.
 
 use std::sync::Arc;
 
@@ -8,12 +9,13 @@ use serde::{Deserialize, Serialize};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
-    presentation::{Presenter, QueueStatus},
+    presentation::{Presenter, QueueStatus, Stage},
 };
 use utoipa::ToSchema;
 
 const QUEUE_EVENT: &str = "presentation.queue";
 const STOPPED_EVENT: &str = "presentation.stopped";
+const SKIPPED_EVENT: &str = "presentation.skipped";
 const VERSION: u32 = 1;
 
 /// A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.
@@ -55,6 +57,33 @@ pub(crate) struct PresentationStoppedEvent {
 enum PresentationStoppedType {
     #[serde(rename = "presentation.stopped")]
     PresentationStopped,
+}
+
+/// A `presentation.skipped` event exactly as `/ws/overlay` sends it: the overlay of `stage` stops its picture and
+/// sound at once. Not kept in snapshots.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationSkippedEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: PresentationSkippedType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: SkippedPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum PresentationSkippedType {
+    #[serde(rename = "presentation.skipped")]
+    PresentationSkipped,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub(crate) struct SkippedPayload {
+    /// The overlay whose item was skipped.
+    stage: Stage,
 }
 
 fn publish(bus: &EventBus, event_type: &'static str, payload: serde_json::Value) {
@@ -104,9 +133,16 @@ pub(crate) struct QueueState {
 
 pub(crate) fn routes(presenter: Arc<Presenter>, bus: Arc<EventBus>) -> Router {
     Router::new()
+        .route("/api/admin/queue/skip", post(skip_queue))
         .route("/api/admin/queue/clear", post(clear_queue))
         .route("/api/admin/queue/stop", post(stop_queue))
         .with_state(QueueState { presenter, bus })
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+pub(crate) struct Skipped {
+    /// Whether an item was playing.
+    skipped: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
@@ -121,6 +157,27 @@ pub(crate) struct Stopped {
     stopped: bool,
     /// Waiting items that will not play.
     cancelled: usize,
+}
+
+/// Ends the item playing; its overlay stops picture and sound at once, and the waiting items follow after the gap.
+/// Records (redemptions, check-ins) are not touched.
+#[utoipa::path(
+    post,
+    path = "/api/admin/queue/skip",
+    tag = "admin",
+    responses((status = 200, body = Skipped))
+)]
+pub(crate) async fn skip_queue(State(s): State<QueueState>) -> Json<Skipped> {
+    // Published by skip() itself, under the queue's lock, like the emergency stop.
+    let bus = s.bus.clone();
+    let skipped = s.presenter.skip(move |stage| {
+        publish(
+            &bus,
+            SKIPPED_EVENT,
+            serde_json::to_value(SkippedPayload { stage }).expect("serializes"),
+        )
+    });
+    Json(Skipped { skipped })
 }
 
 /// Cancels every waiting item; the one playing finishes. Records (redemptions, check-ins) are not touched.

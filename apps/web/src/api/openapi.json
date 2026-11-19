@@ -1021,6 +1021,26 @@
         }
       }
     },
+    "/api/admin/queue/skip": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Ends the item playing; its overlay stops picture and sound at once, and the waiting items follow after the gap.\nRecords (redemptions, check-ins) are not touched.",
+        "operationId": "skip_queue",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skipped"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/queue/stop": {
       "post": {
         "tags": [
@@ -3704,14 +3724,22 @@
         "type": "object",
         "required": [
           "stage",
-          "label",
+          "subject",
           "showMs",
-          "startedAt"
+          "startedAt",
+          "problem"
         ],
         "properties": {
-          "label": {
-            "type": "string",
-            "description": "Raw text."
+          "problem": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Problem",
+                "description": "What went wrong that the Host can see; `null` when nothing did."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "showMs": {
             "type": "integer",
@@ -3724,6 +3752,9 @@
           "startedAt": {
             "type": "string",
             "description": "RFC 3339 time it started."
+          },
+          "subject": {
+            "$ref": "#/components/schemas/Subject"
           }
         }
       },
@@ -3773,6 +3804,52 @@
           "presentation.queue"
         ]
       },
+      "PresentationSkippedEvent": {
+        "type": "object",
+        "description": "A `presentation.skipped` event exactly as `/ws/overlay` sends it: the overlay of `stage` stops its picture and\nsound at once. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SkippedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PresentationSkippedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PresentationSkippedType": {
+        "type": "string",
+        "enum": [
+          "presentation.skipped"
+        ]
+      },
       "PresentationStoppedEvent": {
         "type": "object",
         "description": "A `presentation.stopped` event exactly as `/ws/overlay` sends it: every overlay stops its picture and sound at\nonce. Not kept in snapshots.",
@@ -3817,6 +3894,13 @@
         "type": "string",
         "enum": [
           "presentation.stopped"
+        ]
+      },
+      "Problem": {
+        "type": "string",
+        "description": "Something the Host itself can see went wrong with an item (overlays do not report back).",
+        "enum": [
+          "sound_missing"
         ]
       },
       "Purged": {
@@ -4190,6 +4274,30 @@
           },
           "userName": {
             "type": "string"
+          }
+        }
+      },
+      "Skipped": {
+        "type": "object",
+        "required": [
+          "skipped"
+        ],
+        "properties": {
+          "skipped": {
+            "type": "boolean",
+            "description": "Whether an item was playing."
+          }
+        }
+      },
+      "SkippedPayload": {
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/Stage",
+            "description": "The overlay whose item was skipped."
           }
         }
       },
@@ -4655,6 +4763,90 @@
           }
         }
       },
+      "Subject": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "An alert; `alert` is its kind as in the `alert` payload (`follow`, `subscribe`, ...). No viewer for an\nanonymous gift or cheer.",
+            "required": [
+              "alert",
+              "kind"
+            ],
+            "properties": {
+              "alert": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "alert"
+                ]
+              },
+              "viewer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A stamp card with `stamps` of its `slots` filled.",
+            "required": [
+              "viewer",
+              "stamps",
+              "slots",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "card"
+                ]
+              },
+              "slots": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "stamps": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "viewer": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A reward sound and the viewer who redeemed it.",
+            "required": [
+              "sound",
+              "viewer",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "sound"
+                ]
+              },
+              "sound": {
+                "type": "string"
+              },
+              "viewer": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "What an item is, as the queue area names it; names are raw text."
+      },
       "TabBar": {
         "type": "object",
         "description": "Which tab groups the admin UI pins in its tab bar, in order (the rest go into \"More\"; `[]` pins none), and\nwhere the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.",
@@ -4799,13 +4991,14 @@
         "type": "object",
         "required": [
           "stage",
-          "label",
-          "showMs"
+          "subject",
+          "showMs",
+          "onAir"
         ],
         "properties": {
-          "label": {
-            "type": "string",
-            "description": "Raw text."
+          "onAir": {
+            "type": "boolean",
+            "description": "Its overlay is open in OBS right now; when it is not as its turn comes, the item is skipped."
           },
           "showMs": {
             "type": "integer",
@@ -4814,6 +5007,9 @@
           },
           "stage": {
             "$ref": "#/components/schemas/Stage"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/Subject"
           }
         }
       }

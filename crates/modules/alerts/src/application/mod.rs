@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use toolkit_core::{
     events::{Alert, AlertKind, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Stage},
+    presentation::{Item, Presenter, Shown, Stage, Subject},
 };
 
 /// How long an alert shows; the pause before the next item belongs to the presentation queue.
@@ -26,11 +26,12 @@ impl Default for Timing {
     }
 }
 
-/// Shows an alert on the overlays for the given time; `infrastructure` publishes it on the bus.
 /// Tells the admin window an alert arrived; `infrastructure` publishes it on the bus.
 type Announce = Box<dyn Fn(&Alert, Source, Duration) + Send + Sync>;
 
-type Publish = Arc<dyn Fn(Alert, Source, Duration) + Send + Sync>;
+/// Shows an alert on the overlays for the given time; `infrastructure` publishes it on the bus and says whether its
+/// sound file is missing.
+type Publish = Arc<dyn Fn(Alert, Source, Duration) -> Shown + Send + Sync>;
 
 pub struct AlertsService {
     modules: Arc<Modules>,
@@ -48,7 +49,7 @@ impl AlertsService {
         timing: Timing,
         presenter: Arc<Presenter>,
         announce: impl Fn(&Alert, Source, Duration) + Send + Sync + 'static,
-        publish: impl Fn(Alert, Source, Duration) + Send + Sync + 'static,
+        publish: impl Fn(Alert, Source, Duration) -> Shown + Send + Sync + 'static,
     ) -> Self {
         Self {
             modules,
@@ -77,16 +78,18 @@ impl AlertsService {
         let (modules, publish) = (self.modules.clone(), self.publish.clone());
         self.presenter.push(Item {
             stage: Stage::Alerts,
-            label: alert.user_name.clone().unwrap_or_default(),
+            subject: Subject::Alert {
+                alert: alert.kind.name().into(),
+                viewer: alert.user_name.clone(),
+            },
             show,
             simulated: source == Source::Simulation,
             ready: None,
             present: Box::new(move || {
                 if !modules.is_enabled(modules::ALERTS) {
-                    return false;
+                    return Shown::No;
                 }
-                publish(alert, source, show);
-                true
+                publish(alert, source, show)
             }),
         });
     }
@@ -150,6 +153,61 @@ mod tests {
                 return event;
             }
         }
+    }
+
+    #[tokio::test]
+    async fn an_alert_whose_sound_file_is_gone_still_plays_and_the_queue_says_so() {
+        let dir = std::env::temp_dir().join(format!("st-alerts-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let bus = Arc::new(EventBus::default());
+        let modules = Arc::new(Modules::load(dir.clone()));
+        let presenter = Presenter::start(Duration::ZERO, |_| true);
+        let mut status = presenter.subscribe();
+        let sounds = Arc::new(SoundService::new(
+            dir.clone(),
+            modules.clone(),
+            bus.clone(),
+            presenter.clone(),
+        ));
+        let alerts = AlertsService::new(bus.clone(), modules, Timing::default(), presenter, sounds);
+        // The library lists the follow sound, but its file was never there.
+        toolkit_core::settings::update(&dir, |s| {
+            s.sound.library.push(toolkit_core::settings::SoundEntry {
+                id: SOUND_ID.into(),
+                label: "Ding".into(),
+                volume: 40,
+                format: "wav".into(),
+                duration_ms: None,
+            });
+            s.sound.slots.insert("alert.follow".into(), SOUND_ID.into());
+        })
+        .unwrap();
+        let (_, mut rx) = bus.subscribe();
+        alerts.receive(alert("1", Some("Fan"), AlertKind::Follow), Source::Twitch);
+        assert_eq!(
+            next(&mut rx).await["payload"]["userName"],
+            "Fan",
+            "it still plays"
+        );
+        let playing = status
+            .wait_for(|s| s.current.as_ref().is_some_and(|c| c.problem.is_some()))
+            .await
+            .unwrap()
+            .current
+            .clone()
+            .unwrap();
+        assert_eq!(
+            playing.subject,
+            Subject::Alert {
+                alert: "follow".into(),
+                viewer: Some("Fan".into())
+            }
+        );
+        assert_eq!(
+            playing.problem,
+            Some(toolkit_core::presentation::Problem::SoundMissing)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

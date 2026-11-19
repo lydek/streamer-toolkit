@@ -146,7 +146,12 @@ describe('applyLive', () => {
   it('takes the presentation queue from the snapshot, then from newer events', () => {
     const status = (waiting: number): Schemas['QueueStatus'] => ({
       current: null,
-      waiting: Array.from({ length: waiting }, () => ({ stage: 'alerts' as const, label: 'Fan', showMs: 6000 })),
+      waiting: Array.from({ length: waiting }, () => ({
+        stage: 'alerts' as const,
+        subject: { kind: 'alert' as const, alert: 'follow', viewer: 'Fan' },
+        showMs: 6000,
+        onAir: true,
+      })),
       gapMs: 1000,
     })
     const queueEvent = (seq: number, waiting: number): Schemas['PresentationQueueEvent'] => ({

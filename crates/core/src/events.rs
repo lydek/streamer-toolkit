@@ -101,6 +101,20 @@ pub enum AlertKind {
     },
 }
 
+impl AlertKind {
+    /// The kind's name as payloads and sound slots use it, e.g. `follow`.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Follow => "follow",
+            Self::Subscribe { .. } => "subscribe",
+            Self::Resubscribe { .. } => "resubscribe",
+            Self::Gift { .. } => "gift",
+            Self::Cheer { .. } => "cheer",
+            Self::Raid { .. } => "raid",
+        }
+    }
+}
+
 /// The broadcaster's stream starting or ending; Twitch's field names stop at the integration layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamChange {

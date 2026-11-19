@@ -370,6 +370,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/queue/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ends the item playing; its overlay stops picture and sound at once, and the waiting items follow after the gap.
+         *     Records (redemptions, check-ins) are not touched.
+         */
+        post: operations["skip_queue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/queue/stop": {
         parameters: {
             query?: never;
@@ -1291,13 +1311,13 @@ export interface components {
             volume: number;
         };
         Playing: {
-            /** @description Raw text. */
-            label: string;
+            problem: components["schemas"]["Problem"] | null;
             /** Format: int64 */
             showMs: number;
             stage: components["schemas"]["Stage"];
             /** @description RFC 3339 time it started. */
             startedAt: string;
+            subject: components["schemas"]["Subject"];
         };
         /** @description A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
         PresentationQueueEvent: {
@@ -1313,6 +1333,23 @@ export interface components {
         };
         /** @enum {string} */
         PresentationQueueType: "presentation.queue";
+        /**
+         * @description A `presentation.skipped` event exactly as `/ws/overlay` sends it: the overlay of `stage` stops its picture and
+         *     sound at once. Not kept in snapshots.
+         */
+        PresentationSkippedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["SkippedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["PresentationSkippedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        PresentationSkippedType: "presentation.skipped";
         /**
          * @description A `presentation.stopped` event exactly as `/ws/overlay` sends it: every overlay stops its picture and sound at
          *     once. Not kept in snapshots.
@@ -1330,6 +1367,11 @@ export interface components {
         };
         /** @enum {string} */
         PresentationStoppedType: "presentation.stopped";
+        /**
+         * @description Something the Host itself can see went wrong with an item (overlays do not report back).
+         * @enum {string}
+         */
+        Problem: "sound_missing";
         Purged: {
             /**
              * Format: int64
@@ -1469,6 +1511,14 @@ export interface components {
              */
             stamps: number;
             userName?: string;
+        };
+        Skipped: {
+            /** @description Whether an item was playing. */
+            skipped: boolean;
+        };
+        SkippedPayload: {
+            /** @description The overlay whose item was skipped. */
+            stage: components["schemas"]["Stage"];
         };
         SlotChoice: {
             /** @description A sound's ID, `silent`, or `null` for the slot's default. */
@@ -1635,6 +1685,26 @@ export interface components {
             scenes: components["schemas"]["Scene"][];
             streaming: boolean;
         };
+        /** @description What an item is, as the queue area names it; names are raw text. */
+        Subject: {
+            alert: string;
+            /** @enum {string} */
+            kind: "alert";
+            viewer?: string | null;
+        } | {
+            /** @enum {string} */
+            kind: "card";
+            /** Format: int32 */
+            slots: number;
+            /** Format: int32 */
+            stamps: number;
+            viewer: string;
+        } | {
+            /** @enum {string} */
+            kind: "sound";
+            sound: string;
+            viewer: string;
+        };
         /**
          * @description Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
          *     where the bar sits. The Host checks the format only; which group IDs exist is the admin UI's business.
@@ -1685,11 +1755,12 @@ export interface components {
             current: string;
         };
         Waiting: {
-            /** @description Raw text. */
-            label: string;
+            /** @description Its overlay is open in OBS right now; when it is not as its turn comes, the item is skipped. */
+            onAir: boolean;
             /** Format: int64 */
             showMs: number;
             stage: components["schemas"]["Stage"];
+            subject: components["schemas"]["Subject"];
         };
     };
     responses: never;
@@ -2569,6 +2640,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Cleared"];
+                };
+            };
+        };
+    };
+    skip_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skipped"];
                 };
             };
         };

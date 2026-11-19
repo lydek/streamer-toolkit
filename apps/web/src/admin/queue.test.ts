@@ -6,10 +6,16 @@ const start = Date.parse('2026-11-19T10:00:00.000Z')
 describe('waitMs', () => {
   it('adds what is left of the one playing to every waiting item and its gap', () => {
     const status = {
-      current: { stage: 'alerts' as const, label: 'Fan', showMs: 6000, startedAt: '2026-11-19T10:00:00.000Z' },
+      current: {
+        stage: 'alerts' as const,
+        subject: { kind: 'alert' as const, alert: 'follow', viewer: 'Fan' },
+        showMs: 6000,
+        startedAt: '2026-11-19T10:00:00.000Z',
+        problem: null,
+      },
       waiting: [
-        { stage: 'checkin' as const, label: 'Fish', showMs: 5000 },
-        { stage: 'sound' as const, label: 'Bell', showMs: 1500 },
+        { stage: 'checkin' as const, subject: { kind: 'card' as const, viewer: 'Fish', stamps: 7, slots: 10 }, showMs: 5000, onAir: true },
+        { stage: 'sound' as const, subject: { kind: 'sound' as const, sound: 'Bell', viewer: 'Kai' }, showMs: 1500, onAir: true },
       ],
       gapMs: 1000,
     }
