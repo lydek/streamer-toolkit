@@ -18,7 +18,10 @@ use axum::{
 };
 use chat::ChatMessageEvent;
 
-use crate::obs::{ObsStateEvent, ObsStatusEvent};
+use crate::{
+    obs::{ObsStateEvent, ObsStatusEvent},
+    queue::PresentationQueueEvent,
+};
 use serde::{Deserialize, Serialize};
 use toolkit_core::{bus::EventBus, presentation::Stage};
 use utoipa::ToSchema;
@@ -220,6 +223,9 @@ struct SnapshotPayload {
     /// At most one: the latest streaming-software state.
     #[serde(rename = "obs.state")]
     obs_state: Vec<ObsStateEvent>,
+    /// At most one: the latest presentation queue status.
+    #[serde(rename = "presentation.queue")]
+    presentation_queue: Vec<PresentationQueueEvent>,
 }
 
 #[cfg(test)]
@@ -290,6 +296,24 @@ mod tests {
         );
         crate::obs::retain(&bus);
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
+        crate::queue::retain(&bus);
+        crate::queue::publish_status(
+            &bus,
+            &toolkit_core::presentation::QueueStatus {
+                current: Some(toolkit_core::presentation::Playing {
+                    stage: toolkit_core::presentation::Stage::Alerts,
+                    label: "Fan".into(),
+                    show_ms: 6000,
+                    started_at: "2026-11-19T10:00:00.000Z".into(),
+                }),
+                waiting: vec![toolkit_core::presentation::Waiting {
+                    stage: toolkit_core::presentation::Stage::Sound,
+                    label: "Bell".into(),
+                    show_ms: 1500,
+                }],
+                gap_ms: 1000,
+            },
+        );
         crate::obs::publish_state(
             &bus,
             &toolkit_core::streaming::StreamingState {

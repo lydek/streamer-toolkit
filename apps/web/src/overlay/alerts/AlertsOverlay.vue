@@ -9,7 +9,7 @@ import type { Incoming } from '../chat/chat'
 import type { AlertPayload } from './alerts'
 import chimeUrl from './chime.wav'
 import { stylesheetsLoaded } from '../chat/template'
-import { playSound } from '../sound'
+import { playSound, stopSounds } from '../sound'
 import { type AlertTemplate, fillAlert, loadAlertTemplate } from './template'
 
 const RETRY_MS = 2000
@@ -28,6 +28,8 @@ const TEMPLATE_BASE =
 const host = ref<HTMLElement>()
 let template: AlertTemplate | undefined
 let ready = Promise.resolve()
+// Bumped by an emergency stop: an alert still waiting for its template must not show after it.
+let generation = 0
 let loads = 0
 let lastSeq = 0
 let hide: ReturnType<typeof setTimeout> | undefined
@@ -62,9 +64,10 @@ const reload = () => (ready = applyTemplate())
  * A preview plays it silently, over and over.
  */
 async function play(p: AlertPayload) {
+  const mine = generation
   // The newest load: a template change during a load supersedes it.
   for (let r: Promise<void> | undefined; r !== ready; ) await (r = ready)
-  if (!template) return
+  if (!template || mine !== generation) return
   show(p, p.durationMs)
   if (preview) return
   const { sound } = p
@@ -93,6 +96,14 @@ function receive(msg: Incoming) {
     reload()
   } else if (msg.type === 'template.changed' && msg.payload.overlay === 'alerts') {
     reload()
+  } else if (msg.type === 'presentation.stopped' && (preview || msg.seq > lastSeq)) {
+    // Emergency stop: the alert and its sound go away at once.
+    lastSeq = Math.max(lastSeq, msg.seq)
+    generation++
+    clearTimeout(hide)
+    template?.stage.replaceChildren()
+    current = undefined
+    stopSounds()
   } else if (msg.type === 'alert' && (preview || msg.seq > lastSeq)) {
     // The admin window posts a preview's sample and live alerts in order, without a fitting `seq`.
     lastSeq = Math.max(lastSeq, msg.seq)

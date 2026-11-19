@@ -102,7 +102,7 @@ const snapshot = (...ns: number[]): Incoming => ({
   type: 'snapshot',
   version: 1,
   seq: 0,
-  payload: { 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [] },
+  payload: { 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [] },
 })
 const ids = (log: { messages: ChatEvent[] }) => log.messages.map((m) => m.seq)
 

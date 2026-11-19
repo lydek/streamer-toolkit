@@ -1,5 +1,6 @@
 // `/overlay/sound/`: plays channel point reward sounds one at a time, in order. It shows nothing.
 import type { Incoming } from '../chat/chat'
+import { stopSounds } from '../sound'
 import { playToEnd, soundQueue } from './queue'
 
 const RETRY_MS = 2000
@@ -15,6 +16,11 @@ function connect() {
     else if (msg.type === 'sound.play' && msg.seq > lastSeq) {
       lastSeq = msg.seq
       enqueue(msg.payload)
+    } else if (msg.type === 'presentation.stopped' && msg.seq > lastSeq) {
+      // Emergency stop: nothing waiting plays, and the sound playing goes silent.
+      lastSeq = msg.seq
+      enqueue.clear()
+      stopSounds()
     }
   }
   ws.onclose = () => setTimeout(connect, RETRY_MS)

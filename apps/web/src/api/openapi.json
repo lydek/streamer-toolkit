@@ -1001,6 +1001,46 @@
         }
       }
     },
+    "/api/admin/queue/clear": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancels every waiting item; the one playing finishes. Records (redemptions, check-ins) are not touched.",
+        "operationId": "clear_queue",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cleared"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/queue/stop": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Emergency stop: ends the item playing and cancels the waiting ones; overlays stop picture and sound at once.\nRecords (redemptions, check-ins) are not touched.",
+        "operationId": "stop_queue",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stopped"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/redemptions": {
       "get": {
         "tags": [
@@ -2971,6 +3011,19 @@
           }
         }
       },
+      "Cleared": {
+        "type": "object",
+        "required": [
+          "cancelled"
+        ],
+        "properties": {
+          "cancelled": {
+            "type": "integer",
+            "description": "Waiting items that will not play.",
+            "minimum": 0
+          }
+        }
+      },
       "ClientIdBody": {
         "type": "object",
         "required": [
@@ -3415,6 +3468,160 @@
           }
         }
       },
+      "Playing": {
+        "type": "object",
+        "required": [
+          "stage",
+          "label",
+          "showMs",
+          "startedAt"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Raw text."
+          },
+          "showMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "RFC 3339 time it started."
+          }
+        }
+      },
+      "PresentationQueueEvent": {
+        "type": "object",
+        "description": "A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/QueueStatus"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PresentationQueueType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PresentationQueueType": {
+        "type": "string",
+        "enum": [
+          "presentation.queue"
+        ]
+      },
+      "PresentationStoppedEvent": {
+        "type": "object",
+        "description": "A `presentation.stopped` event exactly as `/ws/overlay` sends it: every overlay stops its picture and sound at\nonce. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Stopped"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PresentationStoppedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PresentationStoppedType": {
+        "type": "string",
+        "enum": [
+          "presentation.stopped"
+        ]
+      },
+      "QueueStatus": {
+        "type": "object",
+        "description": "What the queue holds right now.",
+        "required": [
+          "current",
+          "waiting",
+          "gapMs"
+        ],
+        "properties": {
+          "current": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Playing",
+                "description": "The item on its overlay now; `null` while nothing plays."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gapMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The pause after each item, in ms.",
+            "minimum": 0
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Waiting"
+            },
+            "description": "In the order they will play."
+          }
+        }
+      },
       "RedemptionChangedEvent": {
         "type": "object",
         "description": "A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It\ncarries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.\nNot kept in snapshots.",
@@ -3764,7 +3971,8 @@
         "required": [
           "chat.message",
           "obs.status",
-          "obs.state"
+          "obs.state",
+          "presentation.queue"
         ],
         "properties": {
           "chat.message": {
@@ -3786,6 +3994,13 @@
               "$ref": "#/components/schemas/ObsStatusEvent"
             },
             "description": "At most one: the latest status."
+          },
+          "presentation.queue": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresentationQueueEvent"
+            },
+            "description": "At most one: the latest presentation queue status."
           }
         }
       },
@@ -3949,6 +4164,33 @@
           "simulation",
           "system"
         ]
+      },
+      "Stage": {
+        "type": "string",
+        "description": "The overlay that presents an item.",
+        "enum": [
+          "alerts",
+          "checkin",
+          "sound"
+        ]
+      },
+      "Stopped": {
+        "type": "object",
+        "required": [
+          "stopped",
+          "cancelled"
+        ],
+        "properties": {
+          "cancelled": {
+            "type": "integer",
+            "description": "Waiting items that will not play.",
+            "minimum": 0
+          },
+          "stopped": {
+            "type": "boolean",
+            "description": "Whether an item was playing."
+          }
+        }
       },
       "StreamingState": {
         "type": "object",
@@ -4126,6 +4368,28 @@
           "current": {
             "type": "string",
             "description": "The running version."
+          }
+        }
+      },
+      "Waiting": {
+        "type": "object",
+        "required": [
+          "stage",
+          "label",
+          "showMs"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Raw text."
+          },
+          "showMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
           }
         }
       }

@@ -47,7 +47,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], ...payload },
+  payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], ...payload },
 })
 
 afterEach(() => {
@@ -134,6 +134,27 @@ describe('applyLive', () => {
     expect(s.obsState).toEqual(state(false))
     s = applyLive(s, stateEvent(3, true))
     expect(s.obsState?.streaming).toBe(true)
+  })
+
+  it('takes the presentation queue from the snapshot, then from newer events', () => {
+    const status = (waiting: number): Schemas['QueueStatus'] => ({
+      current: null,
+      waiting: Array.from({ length: waiting }, () => ({ stage: 'alerts' as const, label: 'Fan', showMs: 6000 })),
+      gapMs: 1000,
+    })
+    const queueEvent = (seq: number, waiting: number): Schemas['PresentationQueueEvent'] => ({
+      id: `q${seq}`,
+      type: 'presentation.queue',
+      version: 1,
+      seq,
+      occurredAt: '',
+      source: 'system',
+      payload: status(waiting),
+    })
+    let s = applyLive(start, snapshot(2, { 'presentation.queue': [queueEvent(1, 3)] }))
+    expect(s.queue?.waiting).toHaveLength(3)
+    s = applyLive(s, queueEvent(3, 0))
+    expect(s.queue).toEqual(status(0))
   })
 
   it('keeps the latest alert until a new snapshot, which never holds alerts', () => {

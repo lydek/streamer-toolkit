@@ -230,3 +230,27 @@ test('the overlay plays every kind in order, one at a time with a sound, and a g
   // Each alert leaves once its time is up.
   await expect(page.locator('[data-alert-stage] [data-field="title"]')).toHaveCount(0, { timeout: 5_000 })
 })
+
+test('an emergency stop takes the alert off the overlay at once and nothing waiting plays', { tag: '@host' }, async ({
+  page,
+  request,
+}) => {
+  // Alerts other tests queued on the shared Host may play first; only this test's name counts.
+  test.setTimeout(60_000)
+  const name = `e2e-${randomUUID().slice(0, 8)}`
+  await page.goto(`${HOST}/overlay/alerts/`)
+  await expect(page.locator('[data-alert-stage]')).toBeAttached()
+  for (let n = 0; n < 3; n++) {
+    const res = await request.post(`${HOST}/api/admin/simulate/alert`, { headers: admin, data: { kind: 'follow', userName: name } })
+    expect(res.status()).toBe(204)
+  }
+  const title = page.locator('[data-alert-stage] [data-field="title"]', { hasText: name })
+  await expect(title).toBeVisible({ timeout: 30_000 })
+
+  const res = await request.post(`${HOST}/api/admin/queue/stop`, { headers: admin })
+  expect(await res.json()).toEqual({ stopped: true, cancelled: 2 })
+  // Well before the alert's own 1.5 s are up.
+  await expect(title).toHaveCount(0, { timeout: 500 })
+  await page.waitForTimeout(2500)
+  await expect(title).toHaveCount(0)
+})

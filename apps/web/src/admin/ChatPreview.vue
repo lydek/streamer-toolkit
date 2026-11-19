@@ -44,6 +44,6 @@ function start(): Incoming[] {
         sample(2, 'Someone', null, t('preview.sample.second')),
         sample(3, 'Streamer', '#9146FF', t('preview.sample.third')),
       ]
-  return [{ type: 'snapshot', version: 1, seq: chat.lastSeq, payload: { 'chat.message': messages, 'obs.status': [], 'obs.state': [] } }]
+  return [{ type: 'snapshot', version: 1, seq: chat.lastSeq, payload: { 'chat.message': messages, 'obs.status': [], 'obs.state': [], 'presentation.queue': [] } }]
 }
 </script>

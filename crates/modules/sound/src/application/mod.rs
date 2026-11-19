@@ -77,18 +77,23 @@ impl SoundService {
         let Cue::File { id, volume } = self.cue(&format!("reward.{}", r.reward_id)) else {
             return;
         };
-        let show = self
-            .list()
-            .into_iter()
-            .find(|e| e.id == id)
+        let entry = self.list().into_iter().find(|e| e.id == id);
+        let show = entry
+            .as_ref()
             .and_then(|e| e.duration_ms)
             .map_or(UNMEASURED, |ms| Duration::from_millis(ms.into()));
-        let play = self.play.clone();
+        let (play, modules) = (self.play.clone(), self.modules.clone());
         self.presenter.push(Item {
             stage: Stage::Sound,
+            label: entry.map(|e| e.label).unwrap_or_default(),
             show,
             simulated: false,
+            ready: None,
             present: Box::new(move || {
+                // Turned off while it waited: it does not play.
+                if !modules.is_enabled(modules::SOUND) {
+                    return false;
+                }
                 play(&id, volume, Source::Twitch);
                 true
             }),

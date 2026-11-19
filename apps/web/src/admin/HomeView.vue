@@ -34,6 +34,8 @@
         </ul>
       </section>
 
+      <QueueArea v-if="!arranging" :status="live.queue" />
+
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
         <ArrangeTiles
@@ -216,6 +218,7 @@ import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
+import QueueArea from './QueueArea.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'

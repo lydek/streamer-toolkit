@@ -262,11 +262,6 @@ pub(crate) struct Screen {
     pub(crate) presenter: Arc<Presenter>,
 }
 
-enum CardJob {
-    Real(CheckedIn),
-    Simulated(Card),
-}
-
 /// The card of a recorded check-in, with the stored profile image or, failing that, one looked up and stored.
 async fn card_for<R: CheckinRepository>(
     repo: &R,
@@ -342,15 +337,18 @@ enum Job {
 
 pub struct CheckinService {
     tx: mpsc::UnboundedSender<Job>,
-    cards: mpsc::UnboundedSender<CardJob>,
+    presenter: Arc<Presenter>,
+    show_card: ShowCard,
+    timing: Timing,
     modules: Arc<Modules>,
     config: Arc<Config>,
     on_checked_in: OnCheckedIn,
 }
 
 impl CheckinService {
-    /// Spawns the worker that records check-ins in order, and the one that builds their stamp cards in order and
-    /// queues them on the presentation queue; needs a Tokio runtime.
+    /// Spawns the worker that records check-ins in order; each recorded one queues its stamp card on the
+    /// presentation queue at once, so clearing, stopping and the order cover it while its avatar is looked up.
+    /// Needs a Tokio runtime.
     pub(crate) fn start<R: CheckinRepository>(
         repo: R,
         modules: Arc<Modules>,
@@ -358,8 +356,6 @@ impl CheckinService {
         screen: Screen,
     ) -> Self {
         let repo = Arc::new(repo);
-        let (cards, mut card_rx) = mpsc::unbounded_channel::<CardJob>();
-        let card_repo = repo.clone();
         let Screen {
             changed,
             show_card,
@@ -367,28 +363,31 @@ impl CheckinService {
             timing,
             presenter,
         } = screen;
-        tokio::spawn(async move {
-            while let Some(job) = card_rx.recv().await {
-                let card = match job {
-                    CardJob::Real(c) => card_for(&*card_repo, &*profiles, &c).await,
-                    CardJob::Simulated(card) => card,
-                };
-                let show_card = show_card.clone();
-                presenter.push(Item {
-                    stage: Stage::Checkin,
-                    show: timing.show,
-                    simulated: card.source == Source::Simulation,
-                    present: Box::new(move || {
-                        show_card(&card, timing.show);
-                        true
-                    }),
-                });
-            }
-        });
-        let card_tx = cards.clone();
+        let (card_repo, card_presenter, card_show) =
+            (repo.clone(), presenter.clone(), show_card.clone());
         let on_checked_in: OnCheckedIn = Arc::new(move |c| {
             changed(c);
-            let _ = card_tx.send(CardJob::Real(c.clone()));
+            // The card is built (avatar looked up) while it waits its turn; it shows only once built.
+            let card: Arc<std::sync::Mutex<Option<Card>>> = Arc::default();
+            let (built, repo, profiles, c) =
+                (card.clone(), card_repo.clone(), profiles.clone(), c.clone());
+            let show_card = card_show.clone();
+            card_presenter.push(Item {
+                stage: Stage::Checkin,
+                label: c.viewer.name.clone(),
+                show: timing.show,
+                simulated: false,
+                ready: Some(Box::pin(async move {
+                    *built.lock().unwrap() = Some(card_for(&*repo, &*profiles, &c).await);
+                })),
+                present: Box::new(move || match card.lock().unwrap().take() {
+                    Some(card) => {
+                        show_card(&card, timing.show);
+                        true
+                    }
+                    None => false,
+                }),
+            });
         });
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
         let worker_config = config.clone();
@@ -432,7 +431,9 @@ impl CheckinService {
         });
         Self {
             tx,
-            cards,
+            presenter,
+            show_card,
+            timing,
             modules,
             config,
             on_checked_in,
@@ -454,7 +455,19 @@ impl CheckinService {
             total: u64::from(stamps),
             source: Source::Simulation,
         };
-        self.cards.send(CardJob::Simulated(card)).is_ok()
+        let (show_card, show) = (self.show_card.clone(), self.timing.show);
+        self.presenter.push(Item {
+            stage: Stage::Checkin,
+            label: card.name.clone(),
+            show,
+            simulated: true,
+            ready: None,
+            present: Box::new(move || {
+                show_card(&card, show);
+                true
+            }),
+        });
+        true
     }
 
     pub(crate) fn config(&self) -> &Arc<Config> {

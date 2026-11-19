@@ -7,6 +7,8 @@ export type Incoming =
   | components['schemas']['AlertEvent']
   | components['schemas']['ObsStatusEvent']
   | components['schemas']['ObsStateEvent']
+  | components['schemas']['PresentationQueueEvent']
+  | components['schemas']['PresentationStoppedEvent']
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']

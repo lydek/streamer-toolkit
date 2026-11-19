@@ -8,6 +8,7 @@ mod home_tiles;
 mod obs;
 mod openapi;
 mod overlay;
+mod queue;
 mod tab_bar;
 mod templates;
 mod text_size;
@@ -186,6 +187,8 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         toolkit_core::presentation::Presenter::start(config.presentation_gap, move |stage| {
             on_air.count(overlay::OverlayKind::from(stage)) > 0
         });
+    queue::follow(&presenter, bus.clone());
+    let queue_routes = queue::routes(presenter.clone(), bus.clone());
     let sounds = Arc::new(sound::SoundService::new(
         config.data_dir.clone(),
         modules.clone(),
@@ -321,6 +324,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(text_size.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(queue_routes.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1175,6 +1182,41 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn clearing_and_stopping_the_queue_need_the_token() {
+        let post = |path: &str, token: bool| {
+            let mut b = get_req(path, "127.0.0.1:47810")
+                .method(Method::POST)
+                .header(header::ORIGIN, "http://127.0.0.1:47810");
+            if token {
+                b = b.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+            }
+            b.body(Body::empty()).unwrap()
+        };
+        let body = |res: axum::response::Response| async move {
+            let bytes = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        };
+        let res = app()
+            .oneshot(post("/api/admin/queue/clear", true))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(body(res).await, serde_json::json!({"cancelled": 0}));
+        let res = app()
+            .oneshot(post("/api/admin/queue/stop", true))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(
+            body(res).await,
+            serde_json::json!({"stopped": false, "cancelled": 0})
+        );
+        for path in ["/api/admin/queue/clear", "/api/admin/queue/stop"] {
+            assert_eq!(status(post(path, false)).await, StatusCode::UNAUTHORIZED);
+        }
     }
 
     #[tokio::test]
