@@ -15,6 +15,7 @@
   <template v-else>
     <div v-if="overview.status.state === 'signed_in'" class="stack">
       <p>{{ t('twitch.signedIn') }}<strong>{{ overview.status.login }}</strong></p>
+      <p class="muted">{{ t(overview.irc_connected ? 'twitch.firstChat.irc' : 'twitch.firstChat.fallback') }}</p>
       <Button ref="primary" :label="t('twitch.logout')" icon="pi pi-sign-out" outlined :disabled="busy" @click="logout" />
     </div>
 
@@ -89,6 +90,10 @@ function startEditClientId() {
 </script>
 
 <style scoped>
+.muted {
+  color: var(--p-text-muted-color);
+}
+
 .user-code {
   font-size: 1.5rem;
   font-weight: 600;

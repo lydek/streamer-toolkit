@@ -7,11 +7,14 @@ mod text;
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use host::{
-    AlertTiming, BoundHost, CheckinTiming, HostConfig, HostError, PRESENTATION_GAP,
+    AlertTiming, BoundHost, ChatService, CheckinTiming, HostConfig, HostError, PRESENTATION_GAP,
     TwitchEndpoints, settings,
 };
 use integrations::secrets::{CredentialManager, SecretStore};
@@ -35,6 +38,8 @@ const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
 const RELEASES_URL: &str = "https://github.com/lydek/streamer-toolkit/releases/latest";
 const WEBVIEW2_DOWNLOAD_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 const LOG_DAYS: usize = 14;
+/// How long quitting waits for chat writes already accepted.
+const EXIT_DRAIN: std::time::Duration = std::time::Duration::from_secs(10);
 
 struct AppState {
     admin_token: SecretString,
@@ -43,6 +48,8 @@ struct AppState {
     obs_secrets: Arc<dyn SecretStore>,
     /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
     host_port: Mutex<Option<u16>>,
+    chat: Mutex<Option<Arc<ChatService>>>,
+    exiting: AtomicBool,
     db: host::db::SqlitePool,
     close_hint: Mutex<close_hint::CloseHint>,
 }
@@ -109,6 +116,8 @@ fn main() {
                 twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
                 obs_secrets: CredentialManager::new(&format!("{instance}/obs"))?,
                 host_port: Mutex::new(None),
+                chat: Mutex::default(),
+                exiting: AtomicBool::default(),
                 db,
                 close_hint: Mutex::default(),
             });
@@ -402,7 +411,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         latest_release_url: (!cfg!(dev)).then(|| integrations::releases::LATEST_RELEASE_URL.into()),
         restart: Arc::new({
             let app = app.clone();
-            move || app.request_restart()
+            move || finish_with_chat(&app, true)
         }),
     }
 }
@@ -411,12 +420,39 @@ fn start(app: &AppHandle, bound: BoundHost) -> tauri::Result<()> {
     let port = bound.port();
     tracing::info!(port, "host listening");
     *app.state::<AppState>().host_port.lock().unwrap() = Some(port);
+    *app.state::<AppState>().chat.lock().unwrap() = Some(bound.chat());
     tauri::async_runtime::spawn(async move {
         if let Err(e) = bound.serve().await {
             tracing::error!(code = "host.stopped", error = %e, "host stopped");
         }
     });
     open_admin_window(app, port)
+}
+
+fn finish_with_chat(app: &AppHandle, restart: bool) {
+    let state = app.state::<AppState>();
+    if state.exiting.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let chat = state.chat.lock().unwrap().clone();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(chat) = chat {
+            tracing::info!("waiting for pending chat writes before exit");
+            // Storage retries a failing database forever; quitting must still quit.
+            if !chat.drain(EXIT_DRAIN).await {
+                tracing::error!(
+                    missed = chat.missed_writes(),
+                    "chat writes still pending at exit; leaving them unsaved"
+                );
+            }
+        }
+        if restart {
+            app.request_restart();
+        } else {
+            app.exit(0);
+        }
+    });
 }
 
 fn webview_data_dir(app: &AppHandle) -> PathBuf {
@@ -502,7 +538,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main_window(app),
-            "quit" => app.exit(0),
+            "quit" => finish_with_chat(app, false),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

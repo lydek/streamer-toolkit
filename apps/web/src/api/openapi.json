@@ -3019,6 +3019,64 @@
           }
         }
       },
+      "ChatFirstEvent": {
+        "type": "object",
+        "description": "A `chat.first` event exactly as `/ws/overlay` sends it: the admin window marks that message 第一次聊天. Not kept\nin snapshots; the message in the snapshot carries `firstChat` instead.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatFirstPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChatFirstType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatFirstPayload": {
+        "type": "object",
+        "description": "The `payload` of a `chat.first` event: the message already shown that is its sender's first in the channel.",
+        "required": [
+          "messageId"
+        ],
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatFirstType": {
+        "type": "string",
+        "enum": [
+          "chat.first"
+        ]
+      },
       "ChatFragment": {
         "oneOf": [
           {
@@ -3161,12 +3219,22 @@
             "description": "Bits cheered with this message, when there are any.",
             "minimum": 0
           },
+          "broadcasterId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "color": {
             "type": [
               "string",
               "null"
             ],
             "description": "`#RRGGBB`, or `null` when the user never picked a color."
+          },
+          "firstChat": {
+            "type": "boolean",
+            "description": "The sender's first message in the channel, when known as it is published; a later `chat.first` says so for\na message already shown."
           },
           "fragments": {
             "type": "array",
@@ -3273,7 +3341,7 @@
       },
       "ChatRemovedEvent": {
         "type": "object",
-        "description": "A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not\nkept in snapshots; the messages it names leave the snapshot instead.",
+        "description": "A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages\n(the ones before it in `seq` order). The messages it names leave the snapshot, and the latest removals are kept\nin it so a window that was away can drop what it still shows.",
         "required": [
           "id",
           "type",
@@ -3315,11 +3383,24 @@
         "type": "object",
         "description": "The `payload` of a `chat.removed` event: a moderator took down one message (`messageId`), every recent message\nof one viewer (`userId`), or the whole chat (neither).",
         "properties": {
+          "broadcasterId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "messageId": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a viewer or the whole chat: RFC 3339, the oldest message sent time it reaches (older ones stay)."
           },
           "userId": {
             "type": [
@@ -4321,15 +4402,36 @@
         "required": [
           "client_id",
           "status",
-          "eventsub_connected"
+          "eventsub_connected",
+          "irc_connected"
         ],
         "properties": {
+          "chat_missed_writes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Storage operations refused since launch after the bounded chat queue filled.",
+            "minimum": 0
+          },
+          "chat_write_delayed": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Present while a chat record or moderation update is waiting for storage to recover."
+          },
           "client_id": {
             "type": "string"
           },
           "eventsub_connected": {
             "type": "boolean",
             "description": "The EventSub session is connected and subscribed (chat, alerts, redemptions arrive)."
+          },
+          "irc_connected": {
+            "type": "boolean",
+            "description": "Twitch's first-chat mark can be read (anonymous IRC joined); otherwise 第一次聊天 is the toolkit's first\nsighting of the viewer."
           },
           "status": {
             "$ref": "#/components/schemas/AuthStatus"
@@ -5047,6 +5149,7 @@
         "type": "object",
         "required": [
           "chat.message",
+          "chat.removed",
           "obs.status",
           "obs.state",
           "presentation.queue",
@@ -5058,6 +5161,13 @@
             "items": {
               "$ref": "#/components/schemas/ChatMessageEvent"
             }
+          },
+          "chat.removed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatRemovedEvent"
+            },
+            "description": "The latest removals, oldest first: what was taken down before this snapshot."
           },
           "obs.state": {
             "type": "array",
@@ -5396,7 +5506,8 @@
           "bits",
           "raids",
           "redemptions",
-          "chatMessages"
+          "chatMessages",
+          "firstChats"
         ],
         "properties": {
           "bits": {
@@ -5420,6 +5531,12 @@
           "endedSinceLaunch": {
             "type": "boolean",
             "description": "The stream ended while this Host was running."
+          },
+          "firstChats": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Viewers' first messages in the channel (第一次聊天) during the session.",
+            "minimum": 0
           },
           "follows": {
             "type": "integer",

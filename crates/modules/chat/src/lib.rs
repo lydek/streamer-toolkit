@@ -7,10 +7,10 @@ mod infrastructure;
 
 pub use application::ChatService;
 pub use infrastructure::{
-    ChatMessageEvent, ChatMessagePayload, ChatRemovedEvent,
+    ChatFirstEvent, ChatMessageEvent, ChatMessagePayload, ChatRemovedEvent,
     db::{
         ChatRecords, MIGRATOR, StoredMessage, count_between, messages_between, recent_messages,
-        session_message_count,
+        session_chat_counts,
     },
     http::{StoredChatMessage, routes},
     openapi, start,

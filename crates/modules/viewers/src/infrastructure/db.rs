@@ -4,7 +4,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
-    application::{RepositoryError, ViewerRepository},
+    application::{Recorded, RepositoryError, ViewerRepository},
     domain::Sighting,
 };
 
@@ -25,11 +25,12 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 impl ViewerRepository for SqliteViewers {
-    async fn record(&self, s: &Sighting, at: DateTime<Utc>) -> Result<bool, RepositoryError> {
+    async fn record(&self, s: &Sighting, at: DateTime<Utc>) -> Result<Recorded, RepositoryError> {
         let at = at.to_rfc3339_opts(SecondsFormat::Micros, true);
         let role = |f: fn(&crate::domain::Roles) -> bool| s.roles.as_ref().map(f);
         // A NULL role (not shown by this event) keeps the stored one; a new viewer starts without roles.
-        let no_avatar: bool = sqlx::query_scalar(
+        // A new row's first sighting is this one; an existing row keeps its earlier first sighting.
+        let (no_avatar, new): (bool, bool) = sqlx::query_as(
             "INSERT INTO viewers (twitch_user_id, login, display_name, broadcaster, moderator, vip, subscriber, \
              first_seen_at, last_seen_at) \
              VALUES (?1, ?2, ?3, COALESCE(?4, 0), COALESCE(?5, 0), COALESCE(?6, 0), COALESCE(?7, 0), ?8, ?8) \
@@ -37,7 +38,7 @@ impl ViewerRepository for SqliteViewers {
              display_name = excluded.display_name, last_seen_at = excluded.last_seen_at, \
              broadcaster = COALESCE(?4, broadcaster), moderator = COALESCE(?5, moderator), \
              vip = COALESCE(?6, vip), subscriber = COALESCE(?7, subscriber) \
-             RETURNING avatar_url IS NULL",
+             RETURNING avatar_url IS NULL, first_seen_at = ?8",
         )
         .bind(&s.user_id)
         .bind(&s.login)
@@ -50,7 +51,7 @@ impl ViewerRepository for SqliteViewers {
         .fetch_one(&self.pool)
         .await
         .map_err(storage)?;
-        Ok(no_avatar)
+        Ok(Recorded { no_avatar, new })
     }
 
     async fn set_avatar(&self, user_id: &str, url: &str) -> Result<(), RepositoryError> {
@@ -152,6 +153,7 @@ mod tests {
     fn chat(login: &str, name: &str, badges: Vec<ChatBadge>) -> ChatMessage {
         ChatMessage {
             id: "c".into(),
+            broadcaster_id: String::new(),
             user_id: "7".into(),
             user_login: login.into(),
             user_name: name.into(),
@@ -170,6 +172,26 @@ mod tests {
 
     const AVATAR: &str =
         "https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png";
+
+    #[tokio::test]
+    async fn only_a_viewers_first_sighting_counts_as_new() {
+        let pool = pool().await;
+        let profiles = Arc::new(Fixed {
+            url: AVATAR,
+            asked: Mutex::default(),
+        });
+        let viewers = start(pool.clone(), profiles);
+        let m = chat("fan", "Fan", vec![]);
+        assert!(viewers.receive_chat_first_time(&m, Source::Twitch).await);
+        assert!(!viewers.receive_chat_first_time(&m, Source::Twitch).await);
+        let other = chat("sim", "Sim", vec![]);
+        assert!(
+            !viewers
+                .receive_chat_first_time(&other, Source::Simulation)
+                .await,
+            "simulations never count"
+        );
+    }
 
     #[tokio::test]
     async fn a_renamed_viewer_stays_one_row_with_roles_from_chat_and_one_avatar_lookup() {

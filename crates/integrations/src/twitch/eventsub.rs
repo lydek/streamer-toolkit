@@ -60,7 +60,7 @@ const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     (CHAT_CLEAR, "1", Some("user:read:chat")),
 ];
 
-type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+pub(super) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// Stable error codes, kept for the connection status shown in a later slice.
 #[derive(Debug, thiserror::Error)]
@@ -81,6 +81,8 @@ pub enum EventSubError {
     Revoked,
 }
 
+pub type RemovalDelivery = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+
 pub struct EventSub {
     pub url: String,
     pub helix: Helix,
@@ -89,8 +91,9 @@ pub struct EventSub {
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
     pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
     pub deliver_stream: Arc<dyn Fn(StreamChange) + Send + Sync>,
-    /// A message, a viewer's messages or the whole chat taken down by a moderator.
-    pub deliver_removal: Arc<dyn Fn(ChatRemoval) + Send + Sync>,
+    /// A message, a viewer's messages or the whole chat taken down by a moderator, with the channel (broadcaster
+    /// user ID) it happened in.
+    pub deliver_removal: Arc<dyn Fn(String, ChatRemoval) -> RemovalDelivery + Send + Sync>,
     /// `true` once a session is subscribed, `false` when it ends or the account signs out.
     pub connected: Arc<dyn Fn(bool) + Send + Sync>,
 }
@@ -173,7 +176,7 @@ impl EventSub {
                     keepalive = welcome.keepalive()?;
                     socket = next;
                 }
-                "notification" => self.notify(message, &mut seen),
+                "notification" => self.notify(message, &mut seen).await,
                 "revocation" => return Err(EventSubError::Revoked),
                 _ => {} // session_keepalive
             }
@@ -198,7 +201,7 @@ impl EventSub {
                     };
                 }
                 result = receive(old, keepalive), if old_open => match result {
-                    Ok(message) if message.metadata.message_type == "notification" => self.notify(message, seen),
+                    Ok(message) if message.metadata.message_type == "notification" => self.notify(message, seen).await,
                     Ok(_) => {}
                     Err(_) => old_open = false,
                 },
@@ -206,7 +209,7 @@ impl EventSub {
         }
     }
 
-    fn notify(&self, message: Message, seen: &mut VecDeque<String>) {
+    async fn notify(&self, message: Message, seen: &mut VecDeque<String>) {
         let id = message.metadata.message_id;
         // Twitch may deliver a notification more than once.
         if id.is_empty() || seen.contains(&id) {
@@ -229,8 +232,12 @@ impl EventSub {
             return;
         }
         if matches!(kind.as_str(), CHAT_DELETE | CHAT_CLEAR_USER | CHAT_CLEAR) {
+            let channel = event["broadcaster_user_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
             match chat_removal(&kind, event) {
-                Some(removal) => (self.deliver_removal)(removal),
+                Some(removal) => (self.deliver_removal)(channel, removal).await,
                 None => tracing::warn!(subscription = %kind, "unreadable chat removal"),
             }
             return;
@@ -348,7 +355,7 @@ fn allowed_endpoint(url: &str) -> bool {
     }
 }
 
-async fn connect(url: &str, tls: &Arc<ClientConfig>) -> Result<Socket, EventSubError> {
+pub(super) async fn connect(url: &str, tls: &Arc<ClientConfig>) -> Result<Socket, EventSubError> {
     if !allowed_endpoint(url) {
         return Err(EventSubError::Connect);
     }
@@ -556,6 +563,7 @@ impl ChatEvent {
         }
         ChatMessage {
             id: self.message_id,
+            broadcaster_id: self.broadcaster_user_id,
             user_id: self.chatter_user_id,
             user_login: self.chatter_user_login,
             user_name: self.chatter_user_name,
@@ -744,7 +752,7 @@ impl RedemptionEvent {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::{
         secrets::memory::MemoryStore,
@@ -956,7 +964,7 @@ mod tests {
     }
 
     /// Signed in before `bits:read` was added.
-    fn signed_in_auth(http: HttpsClient) -> TwitchAuth {
+    pub(crate) fn signed_in_auth(http: HttpsClient) -> TwitchAuth {
         let store = Arc::new(MemoryStore::default());
         let mut scopes = crate::twitch::MVP_SCOPES.to_vec();
         scopes.retain(|s| *s != "bits:read");
@@ -1017,7 +1025,7 @@ mod tests {
                 deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
                 deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
                 deliver_stream: Arc::new(|_| {}),
-                deliver_removal: Arc::new(|_| {}),
+                deliver_removal: Arc::new(|_, _| Box::pin(async {})),
                 connected: Arc::new(|_| {}),
             }
             .run(),
@@ -1310,7 +1318,7 @@ mod tests {
                 deliver_alert: Arc::new(|_| {}),
                 deliver_redemption: Arc::new(|_| {}),
                 deliver_stream: Arc::new(|_| {}),
-                deliver_removal: Arc::new(|_| {}),
+                deliver_removal: Arc::new(|_, _| Box::pin(async {})),
                 connected: Arc::new(move |c| log.lock().unwrap().push(c)),
             }
             .run(),

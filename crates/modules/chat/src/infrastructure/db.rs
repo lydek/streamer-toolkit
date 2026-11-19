@@ -1,20 +1,16 @@
 //! Chat messages in SQLite (`chat_messages`).
 
-use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool, migrate::Migrator};
 use toolkit_core::{
-    events::{ChatMessage, ChatRemoval},
+    events::ChatRemoval,
     records::{RecordFuture, RecordTable},
 };
 
 use super::{ChatMessagePayload, chat_payload};
-use crate::application::{ChatRepository, RepositoryError};
+use crate::application::{ChatRepository, Removal, RepositoryError, ToStore};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
-
-/// Clearing a viewer or the whole chat reaches back this far: Twitch clears what its chat window still shows, not
-/// the broadcaster's history. shortcut: a fixed window, not Twitch's own; widen it if older messages show up.
-const CLEAR_REACH: TimeDelta = TimeDelta::hours(24);
 
 /// Empties the text and fragments of the not yet deleted messages `$filter` picks, and marks them deleted.
 macro_rules! clear_where {
@@ -47,25 +43,29 @@ fn time_text(t: DateTime<Utc>) -> String {
 }
 
 impl ChatRepository for SqliteChat {
-    async fn store(
-        &self,
-        messages: &[(ChatMessage, Option<String>)],
-    ) -> Result<(), RepositoryError> {
+    async fn store(&self, messages: &[ToStore]) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        for (m, session) in messages {
+        for (m, session, first) in messages {
             // Twitch's time; a message without a readable one counts as arriving now.
             let sent_at = DateTime::parse_from_rfc3339(&m.sent_at)
                 .map_or_else(|_| Utc::now(), |t| t.to_utc());
-            let payload = serde_json::to_string(&chat_payload(m.clone())).map_err(storage)?;
+            let payload = serde_json::to_string(&ChatMessagePayload {
+                first_chat: *first,
+                ..chat_payload(m.clone())
+            })
+            .map_err(storage)?;
             sqlx::query(
-                "INSERT INTO chat_messages (id, twitch_message_id, session_id, user_id, payload, sent_at) \
-                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (twitch_message_id) DO NOTHING",
+                "INSERT INTO chat_messages \
+                 (id, twitch_message_id, broadcaster_id, session_id, user_id, payload, first_chat, sent_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (twitch_message_id) DO NOTHING",
             )
             .bind(uuid::Uuid::now_v7().to_string())
             .bind(&m.id)
+            .bind(&m.broadcaster_id)
             .bind(session)
             .bind(&m.user_id)
             .bind(payload)
+            .bind(first)
             .bind(time_text(sent_at))
             .execute(&mut *tx)
             .await
@@ -74,24 +74,46 @@ impl ChatRepository for SqliteChat {
         tx.commit().await.map_err(storage)
     }
 
-    async fn remove(&self, removal: &ChatRemoval) -> Result<u64, RepositoryError> {
-        let since = time_text(Utc::now() - CLEAR_REACH);
-        let query = match removal {
+    async fn remove(&self, removal: &Removal) -> Result<u64, RepositoryError> {
+        // A Twitch message ID names one message wherever it was sent; a viewer or the whole chat only in its channel.
+        let since = removal.since.map(time_text).unwrap_or_default();
+        let channel = removal.channel.clone();
+        let query = match &removal.removal {
             ChatRemoval::Message { id } => {
                 sqlx::query(clear_where!("twitch_message_id = ?")).bind(id.clone())
             }
-            ChatRemoval::User { user_id } => {
-                sqlx::query(clear_where!("user_id = ? AND sent_at >= ?"))
-                    .bind(user_id.clone())
-                    .bind(since)
-            }
-            ChatRemoval::All => sqlx::query(clear_where!("sent_at >= ?")).bind(since),
+            ChatRemoval::User { user_id } => sqlx::query(clear_where!(
+                "broadcaster_id = ? AND user_id = ? AND sent_at >= ?"
+            ))
+            .bind(channel)
+            .bind(user_id.clone())
+            .bind(since),
+            ChatRemoval::All => sqlx::query(clear_where!("broadcaster_id = ? AND sent_at >= ?"))
+                .bind(channel)
+                .bind(since),
         };
         Ok(query
             .execute(&self.pool)
             .await
             .map_err(storage)?
             .rows_affected())
+    }
+
+    async fn mark_first(&self, id: &str) -> Result<(), RepositoryError> {
+        self.mark(id).await.map_err(storage)
+    }
+}
+
+impl SqliteChat {
+    async fn mark(&self, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "UPDATE chat_messages SET first_chat = 1, payload = json_set(payload, '$.firstChat', json('true')) \
+             WHERE twitch_message_id = ?",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -218,23 +240,39 @@ fn stored(
     })
 }
 
-/// How many messages are stored for `session_id`.
-pub async fn session_message_count(
+/// How many messages and first chats are stored for the session, from the same read.
+pub async fn session_chat_counts(
     pool: &SqlitePool,
     session_id: &str,
-) -> Result<u32, sqlx::Error> {
-    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_messages WHERE session_id = ?")
+) -> Result<(u32, u32), sqlx::Error> {
+    let (messages, first): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE first_chat = 1) FROM chat_messages WHERE session_id = ?",
+    )
         .bind(session_id)
         .fetch_one(pool)
         .await?;
-    Ok(n.try_into().unwrap_or(u32::MAX))
+    Ok((
+        messages.try_into().unwrap_or(u32::MAX),
+        first.try_into().unwrap_or(u32::MAX),
+    ))
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use chrono::TimeDelta;
     use sqlx::sqlite::SqlitePoolOptions;
-    use toolkit_core::events::Fragment;
+    use toolkit_core::events::{ChatMessage, Fragment};
+
+    /// A removal in channel `42`, a viewer or the whole chat reaching back a day.
+    fn removal(removal: ChatRemoval) -> Removal {
+        Removal {
+            channel: "42".into(),
+            since: (!matches!(removal, ChatRemoval::Message { .. }))
+                .then(|| Utc::now() - TimeDelta::hours(24)),
+            removal,
+        }
+    }
 
     pub(crate) async fn pool() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -249,6 +287,7 @@ pub(crate) mod tests {
     pub(crate) fn message(id: &str, user_id: &str, text: &str, sent_at: &str) -> ChatMessage {
         ChatMessage {
             id: id.into(),
+            broadcaster_id: "42".into(),
             user_id: user_id.into(),
             user_login: format!("u{user_id}"),
             user_name: format!("U{user_id}"),
@@ -272,18 +311,26 @@ pub(crate) mod tests {
         let now = Utc::now();
         let at = |mins: i64| time_text(now - TimeDelta::minutes(mins));
         repo.store(&[
-            (message("m1", "7", "hi", &at(3)), Some("s1".into())),
-            (message("m2", "8", "<b>yo</b>", &at(2)), Some("s1".into())),
+            (message("m1", "7", "hi", &at(3)), Some("s1".into()), false),
+            (
+                message("m2", "8", "<b>yo</b>", &at(2)),
+                Some("s1".into()),
+                false,
+            ),
         ])
         .await
         .unwrap();
         repo.store(&[
-            (message("m1", "7", "hi again", &at(1)), Some("s1".into())),
-            (message("m3", "7", "later", &at(1)), None),
+            (
+                message("m1", "7", "hi again", &at(1)),
+                Some("s1".into()),
+                false,
+            ),
+            (message("m3", "7", "later", &at(1)), None, false),
         ])
         .await
         .unwrap();
-        assert_eq!(session_message_count(&pool, "s1").await.unwrap(), 2);
+        assert_eq!(session_chat_counts(&pool, "s1").await.unwrap().0, 2);
         let recent = recent_messages(&pool, 2).await.unwrap();
         let ids: Vec<&str> = recent.iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["m2", "m3"], "the latest two, oldest first");
@@ -303,10 +350,10 @@ pub(crate) mod tests {
         let at = |mins: i64| time_text(now - TimeDelta::minutes(mins));
         let old = time_text(now - TimeDelta::days(3));
         repo.store(&[
-            (message("m1", "7", "one", &at(5)), None),
-            (message("m2", "7", "two", &at(4)), None),
-            (message("m3", "8", "three", &at(3)), None),
-            (message("m4", "7", "old", &old), None),
+            (message("m1", "7", "one", &at(5)), None, false),
+            (message("m2", "7", "two", &at(4)), None, false),
+            (message("m3", "8", "three", &at(3)), None, false),
+            (message("m4", "7", "old", &old), None, false),
         ])
         .await
         .unwrap();
@@ -319,15 +366,15 @@ pub(crate) mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            repo.remove(&ChatRemoval::Message { id: "m3".into() })
+            repo.remove(&removal(ChatRemoval::Message { id: "m3".into() }))
                 .await
                 .unwrap(),
             1
         );
         assert_eq!(
-            repo.remove(&ChatRemoval::User {
+            repo.remove(&removal(ChatRemoval::User {
                 user_id: "7".into()
-            })
+            }))
             .await
             .unwrap(),
             2
@@ -343,9 +390,88 @@ pub(crate) mod tests {
             "older than a day stays"
         );
         assert_eq!(
-            repo.remove(&ChatRemoval::All).await.unwrap(),
+            repo.remove(&removal(ChatRemoval::All)).await.unwrap(),
             0,
             "already cleared"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_message_after_a_clear_stays_until_the_next_clear() {
+        let pool = pool().await;
+        let repo = SqliteChat::new(pool.clone());
+        let at = |mins: i64| time_text(Utc::now() - TimeDelta::minutes(mins));
+        let deleted = |pool: SqlitePool| async move {
+            recent_messages(&pool, 10)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|m| (m.id, m.deleted))
+                .collect::<Vec<_>>()
+        };
+        repo.store(&[(message("m1", "7", "before", &at(2)), None, false)])
+            .await
+            .unwrap();
+        repo.remove(&removal(ChatRemoval::All)).await.unwrap();
+        repo.store(&[(message("m2", "7", "after", &at(1)), None, false)])
+            .await
+            .unwrap();
+        assert_eq!(
+            deleted(pool.clone()).await,
+            [("m1".to_owned(), true), ("m2".to_owned(), false)],
+            "a clear never reaches a message stored after it"
+        );
+        repo.remove(&removal(ChatRemoval::All)).await.unwrap();
+        assert_eq!(
+            deleted(pool.clone()).await,
+            [("m1".to_owned(), true), ("m2".to_owned(), true)]
+        );
+    }
+
+    #[tokio::test]
+    async fn clearing_a_viewer_or_the_chat_stays_in_its_channel() {
+        let pool = pool().await;
+        let repo = SqliteChat::new(pool.clone());
+        let at = time_text(Utc::now() - TimeDelta::minutes(5));
+        let other = |id: &str| ChatMessage {
+            broadcaster_id: "99".into(),
+            ..message(id, "7", "elsewhere", &at)
+        };
+        repo.store(&[
+            (message("a1", "7", "here", &at), None, false),
+            (other("b1"), None, false),
+            (message("a2", "8", "here too", &at), None, false),
+            (other("b2"), None, false),
+        ])
+        .await
+        .unwrap();
+        // Stored before the channel was kept: no clear can tell whose it is, so none reaches it.
+        sqlx::query(
+            "UPDATE chat_messages SET broadcaster_id = NULL WHERE twitch_message_id = 'b2'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let user = ChatRemoval::User {
+            user_id: "7".into(),
+        };
+        assert_eq!(repo.remove(&removal(user)).await.unwrap(), 1);
+        assert_eq!(repo.remove(&removal(ChatRemoval::All)).await.unwrap(), 1);
+        let mut deleted: Vec<(String, bool)> = recent_messages(&pool, 10)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|m| (m.id, m.deleted))
+            .collect();
+        deleted.sort();
+        assert_eq!(
+            deleted,
+            [
+                ("a1".to_owned(), true),
+                ("a2".to_owned(), true),
+                ("b1".to_owned(), false),
+                ("b2".to_owned(), false)
+            ]
         );
     }
 
@@ -354,9 +480,9 @@ pub(crate) mod tests {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
         repo.store(&[
-            (message("m1", "7", "a", "2026-11-19T09:00:00Z"), None),
-            (message("m2", "7", "b", "2026-11-19T10:00:00Z"), None),
-            (message("m3", "7", "c", "2026-11-19T11:00:00Z"), None),
+            (message("m1", "7", "a", "2026-11-19T09:00:00Z"), None, false),
+            (message("m2", "7", "b", "2026-11-19T10:00:00Z"), None, false),
+            (message("m3", "7", "c", "2026-11-19T11:00:00Z"), None, false),
         ])
         .await
         .unwrap();
@@ -409,8 +535,16 @@ pub(crate) mod tests {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
         repo.store(&[
-            (message("m1", "7", "old", "2026-11-01T10:00:00Z"), None),
-            (message("m2", "7", "new", "2026-11-19T10:00:00Z"), None),
+            (
+                message("m1", "7", "old", "2026-11-01T10:00:00Z"),
+                None,
+                false,
+            ),
+            (
+                message("m2", "7", "new", "2026-11-19T10:00:00Z"),
+                None,
+                false,
+            ),
         ])
         .await
         .unwrap();

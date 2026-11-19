@@ -62,6 +62,7 @@
       "all": "全部",
       "mentions": "提到我",
       "commands": "!指令",
+      "first": "第一次聊天",
       "mods": "管理員和 VIP",
       "subscribers": "訂閱者",
       "highlights": "醒目訊息和小奇點",
@@ -391,7 +392,8 @@
       "bits": "小奇點",
       "raids": "揪團",
       "redemptions": "兌換",
-      "chatMessages": "聊天訊息"
+      "chatMessages": "聊天訊息",
+      "firstChats": "第一次聊天"
     }
   },
   "queue": {
@@ -472,6 +474,9 @@
     "restored": "已還原預設功能磚"
   },
   "chat": {
+    "missedWrites": "本次啟動已有 {n} 筆聊天操作因佇列已滿而未儲存，歷史訊息或刪除狀態可能不完整。",
+    "writeDelayed": "聊天紀錄暫時無法寫入，正在重試。請保持程式開啟。",
+    "historyRetry": "暫時無法載入先前的聊天紀錄，正在重試。",
     "log": "聊天紀錄",
     "pause": "暫停",
     "jump": "跳到最新",
@@ -479,6 +484,7 @@
     "disconnected": "已斷線，正在重新連線……",
     "broadcaster": "實況主",
     "deleted": "這則訊息已被管理員刪除",
+    "firstChat": "第一次聊天",
     "shared": "共享聊天中：{channels}",
     "ownOnly": "只看本頻道",
     "sharedFrom": "來自 {channel}",
@@ -594,6 +600,10 @@
     }
   },
   "twitch": {
+    "firstChat": {
+      "irc": "第一次聊天：讀取 Twitch 的標記。",
+      "fallback": "第一次聊天：讀不到 Twitch 的標記，改用本工具第一次看到這位觀眾。"
+    },
     "heading": "Twitch 連線",
     "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",
     "clientId": "Client ID",

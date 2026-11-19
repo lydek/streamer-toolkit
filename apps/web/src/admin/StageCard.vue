@@ -119,6 +119,7 @@ const stats = computed(() => {
     { key: 'raids', value: s.raids },
     { key: 'redemptions', value: s.redemptions },
     { key: 'chatMessages', value: s.chatMessages },
+    { key: 'firstChats', value: s.firstChats },
   ]
 })
 </script>

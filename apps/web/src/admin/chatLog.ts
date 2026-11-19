@@ -1,3 +1,5 @@
+import { onScopeDispose, shallowRef } from 'vue'
+import { api, client } from './api'
 import { type ChatEvent, type Incoming, removes } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 
@@ -144,11 +146,24 @@ export function receive(log: ChatLog, incoming: LoggedChat[]): ChatLog {
 
 /** Feeds one `/ws/overlay` message into the log; other event types leave it as it is. */
 export function applyChat(log: ChatLog, msg: Incoming): ChatLog {
-  if (msg.type === 'snapshot') return receive(log, msg.payload['chat.message'])
+  if (msg.type === 'snapshot') {
+    const snapshot = msg.payload['chat.message']
+    const first = new Set(snapshot.filter((m) => m.payload.firstChat).map((m) => m.id))
+    const next = receive(log, snapshot)
+    const marked = first.size ? { ...next, messages: next.messages.map((m) =>
+      first.has(m.id) ? { ...m, payload: { ...m.payload, firstChat: true } } : m) } : next
+    return (msg.payload['chat.removed'] ?? []).reduce(applyChat, marked)
+  }
   if (msg.type === 'chat.message') return receive(log, [msg])
+  if (msg.type === 'chat.first') {
+    const messages = log.messages.map((m) =>
+      m.id === msg.payload.messageId && !m.payload.firstChat ? { ...m, payload: { ...m.payload, firstChat: true } } : m,
+    )
+    return { ...log, messages }
+  }
   if (msg.type === 'chat.removed') {
     const messages = log.messages.map((m) =>
-      !m.deleted && removes(msg.payload, m) ? { ...m, deleted: true, payload: { ...m.payload, text: '', fragments: [] } } : m,
+      !m.deleted && m.seq < msg.seq && (msg.payload.messageId || m.seq > 0 || !(Date.parse(m.occurredAt) > Date.parse(msg.occurredAt))) && removes(msg.payload, m) ? { ...m, deleted: true, payload: { ...m.payload, text: '', fragments: [] } } : m,
     )
     return { ...log, messages }
   }
@@ -171,8 +186,15 @@ export const fromStored = (s: Schemas['StoredChatMessage']): LoggedChat => ({
 export function withHistory(log: ChatLog, stored: Schemas['StoredChatMessage'][]): ChatLog {
   const known = new Set(log.messages.map((m) => m.id))
   const older = stored.filter((s) => !known.has(s.id)).map(fromStored)
-  if (!older.length) return log
-  const messages = [...older, ...log.messages]
+  const updates = new Map(stored.map((m) => [m.id, m]))
+  const current = log.messages.map((m) => {
+    const row = updates.get(m.id)
+    if (row?.deleted && !m.deleted) return fromStored(row)
+    if (row?.payload.firstChat && !m.payload.firstChat) return { ...m, payload: { ...m.payload, firstChat: true } }
+    return m
+  })
+  if (!older.length && current.every((m, i) => m === log.messages[i])) return log
+  const messages = [...older, ...current]
     .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt))
     .slice(-(log.paused ? PAUSED_LIMIT : LOG_LIMIT))
   return { ...log, messages }
@@ -180,3 +202,50 @@ export function withHistory(log: ChatLog, stored: Schemas['StoredChatMessage'][]
 
 export const pause = (log: ChatLog): ChatLog => (log.paused ? log : { ...log, paused: true })
 export const resume = (log: ChatLog): ChatLog => ({ messages: log.messages.slice(-LOG_LIMIT), paused: false, unseen: 0 })
+
+/** Refresh persisted history on each connection. Replay moderation received while the read was pending. */
+export function useChatHistory() {
+  const log = shallowRef(EMPTY_LOG)
+  const historyFailed = shallowRef(false)
+  let pending: ChatUpdate[] | undefined
+  let retry: ReturnType<typeof setTimeout> | undefined
+  async function read(changes: ChatUpdate[], delay: number) {
+    try {
+      const rows = await api(client.GET('/api/admin/chat/messages'))
+      if (pending !== changes) return
+      log.value = changes.reduce(applyChat, withHistory(log.value, rows))
+      pending = undefined
+      historyFailed.value = false
+    } catch {
+      if (pending !== changes) return
+      historyFailed.value = true
+      retry = setTimeout(() => void read(changes, Math.min(delay * 2, 30_000)), delay)
+    }
+  }
+  function refresh() {
+    clearTimeout(retry)
+    pending = []
+    void read(pending, 1000)
+  }
+  onScopeDispose(() => {
+    clearTimeout(retry)
+    pending = undefined
+  })
+  refresh()
+  let connected = false
+  function accept(msg: Incoming) {
+    if (msg.type === 'snapshot') {
+      if (connected) {
+        log.value = { ...log.value, messages: [], unseen: 0 }
+        refresh()
+      }
+      connected = true
+      pending?.push(...(msg.payload['chat.removed'] ?? []))
+    }
+    if (msg.type === 'chat.removed' || msg.type === 'chat.first') pending?.push(msg)
+    log.value = applyChat(log.value, msg)
+  }
+  return { log, accept, historyFailed }
+}
+
+export type ChatUpdate = Extract<Incoming, { type: 'chat.removed' | 'chat.first' }>

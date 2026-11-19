@@ -374,6 +374,7 @@ pub(crate) mod tests {
     pub(crate) fn chat(user_id: &str, text: &str, sent_at: &str) -> ChatMessage {
         ChatMessage {
             id: Uuid::now_v7().to_string(),
+            broadcaster_id: String::new(),
             user_id: user_id.into(),
             user_login: format!("login{user_id}"),
             user_name: format!("<b>Viewer {user_id}</b>"),

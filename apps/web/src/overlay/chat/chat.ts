@@ -12,6 +12,7 @@ export type Incoming =
   | components['schemas']['PresentationStoppedEvent']
   | components['schemas']['PresentationSkippedEvent']
   | components['schemas']['ChatRemovedEvent']
+  | components['schemas']['ChatFirstEvent']
   | components['schemas']['StreamStatusEvent']
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
@@ -33,6 +34,8 @@ export const MAX_MESSAGES = 50
 /** Whether a moderator's `chat.removed` takes `m` down: one message, every message of one viewer, or all. */
 export function removes(removal: components['schemas']['ChatRemovedPayload'], m: ChatEvent): boolean {
   if (removal.messageId !== undefined) return m.id === removal.messageId
+  if (removal.broadcasterId && removal.broadcasterId !== m.payload.broadcasterId) return false
+  if (removal.since && Date.parse(m.occurredAt) < Date.parse(removal.since)) return false
   if (removal.userId !== undefined) return m.payload.userId === removal.userId
   return true
 }

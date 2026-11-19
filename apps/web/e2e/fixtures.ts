@@ -9,8 +9,8 @@ export const zh = JSON.parse(readFileSync(new URL('../src/locales/zh-TW.json', i
 
 /** What the mocked admin API answers; tests change it to change later answers. */
 export interface AdminState {
-  /** `eventsub_connected` defaults to whether Twitch is signed in. */
-  overview: Omit<Schemas['Overview'], 'eventsub_connected'> & { eventsub_connected?: boolean }
+  /** `eventsub_connected` defaults to whether Twitch is signed in, `irc_connected` to false. */
+  overview: Omit<Schemas['Overview'], 'eventsub_connected' | 'irc_connected'> & { eventsub_connected?: boolean; irc_connected?: boolean }
   modules: Schemas['ModuleState'][]
   template: Schemas['TemplateStatus']
   alertTemplate: Schemas['AlertTemplateChoice']
@@ -113,7 +113,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     r.request().method() === 'GET' ? r.fulfill({ json: pick() }) : r.fallback()
   await page.route(
     '**/api/admin/twitch',
-    get(() => ({ eventsub_connected: s.overview.status.state === 'signed_in', ...s.overview })),
+    get(() => ({ eventsub_connected: s.overview.status.state === 'signed_in', irc_connected: false, ...s.overview })),
   )
   await page.route('**/api/admin/modules', get(() => s.modules))
   await page.route('**/api/admin/templates/chat', (r) => {

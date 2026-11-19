@@ -16,11 +16,13 @@ const signedIn: Schemas['Overview'] = {
   client_id: 'cid',
   status: { state: 'signed_in', user_id: '42', login: 'streamer' },
   eventsub_connected: true,
+  irc_connected: false,
 }
-const signedOut: Schemas['Overview'] = { client_id: 'cid', status: { state: 'signed_out' }, eventsub_connected: false }
+const signedOut: Schemas['Overview'] = { client_id: 'cid', status: { state: 'signed_out' }, eventsub_connected: false, irc_connected: false }
 const pending: Schemas['Overview'] = {
   client_id: 'cid',
   eventsub_connected: false,
+  irc_connected: false,
   status: { state: 'pending', user_code: 'ABCD', verification_uri: 'https://www.twitch.tv/activate' },
 }
 

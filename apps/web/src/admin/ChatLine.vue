@@ -9,6 +9,7 @@
     </template>
     <span v-if="ownBadge" class="badge">{{ t('chat.broadcaster') }}</span>
     <span class="name" :style="nameColor ? { color: nameColor } : undefined">{{ p.userName }}</span>
+    <span v-if="p.firstChat" class="tag first">{{ t('chat.firstChat') }}</span>
     <span v-if="p.sharedFrom" class="tag">{{ t('chat.sharedFrom', { channel: p.sharedFrom.userName }) }}</span>
     <span v-if="p.reply" class="tag">{{ t('chat.replyTo', { name: p.reply.userName }) }}</span>
     <span v-if="p.bits" class="tag bits">{{ t('chat.bits', { bits: p.bits }) }}</span>：<span
@@ -113,6 +114,10 @@ time {
 
 .bits {
   color: var(--p-yellow-400);
+}
+
+.first {
+  color: var(--p-green-400);
 }
 
 .deleted {

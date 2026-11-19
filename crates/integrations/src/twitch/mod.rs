@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod eventsub;
 pub mod helix;
+pub mod irc;
 pub mod streams;
 
 /// Scopes requested at login. A stored token missing any of them (issued before one was added) asks the user

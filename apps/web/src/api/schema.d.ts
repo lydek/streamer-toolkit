@@ -1103,6 +1103,27 @@ export interface components {
             /** Format: int32 */
             width: number;
         };
+        /**
+         * @description A `chat.first` event exactly as `/ws/overlay` sends it: the admin window marks that message 第一次聊天. Not kept
+         *     in snapshots; the message in the snapshot carries `firstChat` instead.
+         */
+        ChatFirstEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ChatFirstPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ChatFirstType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The `payload` of a `chat.first` event: the message already shown that is its sender's first in the channel. */
+        ChatFirstPayload: {
+            messageId: string;
+        };
+        /** @enum {string} */
+        ChatFirstType: "chat.first";
         ChatFragment: {
             text: string;
             /** @enum {string} */
@@ -1142,8 +1163,14 @@ export interface components {
              * @description Bits cheered with this message, when there are any.
              */
             bits?: number | null;
+            broadcasterId?: string | null;
             /** @description `#RRGGBB`, or `null` when the user never picked a color. */
             color: string | null;
+            /**
+             * @description The sender's first message in the channel, when known as it is published; a later `chat.first` says so for
+             *     a message already shown.
+             */
+            firstChat?: boolean;
             fragments: components["schemas"]["ChatFragment"][];
             /** @description Highlighted with channel points. */
             highlighted: boolean;
@@ -1178,8 +1205,9 @@ export interface components {
             to: string | null;
         };
         /**
-         * @description A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages. Not
-         *     kept in snapshots; the messages it names leave the snapshot instead.
+         * @description A `chat.removed` event exactly as `/ws/overlay` sends it: overlays and the admin window drop those messages
+         *     (the ones before it in `seq` order). The messages it names leave the snapshot, and the latest removals are kept
+         *     in it so a window that was away can drop what it still shows.
          */
         ChatRemovedEvent: {
             id: string;
@@ -1197,7 +1225,10 @@ export interface components {
          *     of one viewer (`userId`), or the whole chat (neither).
          */
         ChatRemovedPayload: {
+            broadcasterId?: string | null;
             messageId?: string | null;
+            /** @description For a viewer or the whole chat: RFC 3339, the oldest message sent time it reaches (older ones stay). */
+            since?: string | null;
             userId?: string | null;
         };
         /** @enum {string} */
@@ -1551,9 +1582,21 @@ export interface components {
             sound: number;
         };
         Overview: {
+            /**
+             * Format: int64
+             * @description Storage operations refused since launch after the bounded chat queue filled.
+             */
+            chat_missed_writes?: number | null;
+            /** @description Present while a chat record or moderation update is waiting for storage to recover. */
+            chat_write_delayed?: boolean | null;
             client_id: string;
             /** @description The EventSub session is connected and subscribed (chat, alerts, redemptions arrive). */
             eventsub_connected: boolean;
+            /**
+             * @description Twitch's first-chat mark can be read (anonymous IRC joined); otherwise 第一次聊天 is the toolkit's first
+             *     sighting of the viewer.
+             */
+            irc_connected: boolean;
             status: components["schemas"]["AuthStatus"];
         };
         /** @enum {string} */
@@ -1805,6 +1848,8 @@ export interface components {
         };
         SnapshotPayload: {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
+            /** @description The latest removals, oldest first: what was taken down before this snapshot. */
+            "chat.removed": components["schemas"]["ChatRemovedEvent"][];
             /** @description At most one: the latest streaming-software state. */
             "obs.state": components["schemas"]["ObsStateEvent"][];
             /** @description At most one: the latest status. */
@@ -1941,6 +1986,11 @@ export interface components {
             endedAt?: string | null;
             /** @description The stream ended while this Host was running. */
             endedSinceLaunch: boolean;
+            /**
+             * Format: int32
+             * @description Viewers' first messages in the channel (第一次聊天) during the session.
+             */
+            firstChats: number;
             /** Format: int32 */
             follows: number;
             /**

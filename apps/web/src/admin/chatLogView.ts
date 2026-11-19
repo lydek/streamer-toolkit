@@ -2,7 +2,7 @@ import type { Schemas } from './api'
 import type { LoggedChat } from './chatLog'
 
 /** What the chat log page filters by; message filters show messages only, event filters events only. */
-export const LOG_FILTERS = ['all', 'mentions', 'commands', 'mods', 'subscribers', 'highlights', 'redemptions', 'alerts'] as const
+export const LOG_FILTERS = ['all', 'mentions', 'commands', 'first', 'mods', 'subscribers', 'highlights', 'redemptions', 'alerts'] as const
 export type LogFilter = (typeof LOG_FILTERS)[number]
 
 // shortcut: a fixed list of common chat bots; a broadcaster's own list waits for viewer roles (phase 7).
@@ -33,6 +33,8 @@ function messageMatches(m: LoggedChat, filter: LogFilter, mention: RegExp | unde
       return !!mention && mention.test(p.text)
     case 'commands':
       return p.text.trimStart().startsWith('!')
+    case 'first':
+      return !!p.firstChat
     case 'mods':
       return p.badges.some((b) => b === 'broadcaster' || b === 'moderator' || b === 'vip')
     case 'subscribers':

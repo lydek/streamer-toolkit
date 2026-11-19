@@ -65,6 +65,7 @@ mod tests {
     fn only_chat_carries_roles_and_anonymous_alerts_are_nobody() {
         let chat = ChatMessage {
             id: "c".into(),
+            broadcaster_id: String::new(),
             user_id: "7".into(),
             user_login: "fan".into(),
             user_name: "Fan".into(),

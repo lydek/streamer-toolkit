@@ -13,7 +13,7 @@ const chat = (seq: number): ChatEvent => ({
 
 describe('apply', () => {
   it('starts from the snapshot and skips events it already contains', () => {
-    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.message': [chat(1), chat(2)], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } })
+    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.removed': [], 'chat.message': [chat(1), chat(2)], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } })
     state = apply(state, chat(2))
     state = apply(state, chat(3))
     expect(state.messages.map((m) => m.seq)).toEqual([1, 2, 3])
@@ -21,7 +21,7 @@ describe('apply', () => {
   })
 
   it('replaces everything on a new snapshot after a reconnect', () => {
-    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } })
+    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } })
     expect(before).toEqual({ messages: [], lastSeq: 0 })
   })
 
@@ -51,6 +51,18 @@ describe('chat.removed', () => {
   const removed = (seq: number, payload: { messageId?: string; userId?: string }) =>
     ({ id: `r${seq}`, type: 'chat.removed', version: 1, seq, occurredAt: '', source: 'twitch', payload }) as const
   const other = (seq: number): ChatEvent => ({ ...chat(seq), payload: { ...chat(seq).payload, userId: '8' } })
+
+  it('limits a channel clear to its broadcaster and time window', () => {
+    const message = { ...chat(1), occurredAt: '2026-11-20T12:00:00Z', payload: { ...chat(1).payload, broadcasterId: '42' } }
+    const state = { messages: [message], lastSeq: 1 }
+    for (const [channel, since, left] of [
+      ['43', '2026-11-19T12:00:00Z', 1],
+      ['42', '2026-11-20T12:01:00Z', 1],
+      ['42', '2026-11-20T12:00:00Z', 0],
+    ] as const) {
+      expect(apply(state, { ...removed(2, {}), payload: { broadcasterId: channel, since } }).messages).toHaveLength(left)
+    }
+  })
 
   it("drops one message, one viewer's messages, or everything", () => {
     const state = { messages: [chat(1), other(2), chat(3)], lastSeq: 3 }

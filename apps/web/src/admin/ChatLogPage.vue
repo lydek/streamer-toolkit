@@ -1,5 +1,8 @@
 <template>
   <FullPage :title="t('pages.chatLog.name')">
+    <p v-if="twitchOverview?.chat_missed_writes" role="alert">{{ t('chat.missedWrites', { n: twitchOverview.chat_missed_writes }) }}</p>
+    <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
+    <p v-if="periodKey === LIVE && historyFailed" role="alert">{{ t('chat.historyRetry') }}</p>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <div class="controls">
       <label for="chat-period" class="sr-only">{{ t('chatLog.period') }}</label>
@@ -57,11 +60,12 @@ import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
+import type { Incoming } from '../overlay/chat/chat'
 import { ApiError, type Schemas, api, client } from './api'
-import { EMPTY_LOG, applyChat, fromStored, withHistory } from './chatLog'
+import { applyChat, fromStored, useChatHistory, EMPTY_LOG, type ChatUpdate } from './chatLog'
 import {
   type LogEvent,
   type LogFilter,
@@ -95,58 +99,134 @@ const broadcasterId = computed(() => {
   const status = twitchOverview.value?.status
   return status?.state === 'signed_in' ? status.user_id : undefined
 })
-void loadChatDisplay()
-loadBadges()
+void loadChatDisplay().catch(() => {})
+watch(broadcasterId, loadBadges, { immediate: true })
 
 // 即時: the stored chat before this page opened, then the live messages and the alerts heard since.
-const live = shallowRef(EMPTY_LOG)
+const { log: live, accept, historyFailed } = useChatHistory()
 const liveAlerts = shallowRef<LogEvent[]>([])
-useLiveEvents(2000, (msg) => {
-  live.value = applyChat(live.value, msg)
-  if (msg.type === 'alert.received') liveAlerts.value = [...liveAlerts.value, fromAlert(msg)]
-})
-void api(client.GET('/api/admin/chat/messages'))
-  .then((stored) => (live.value = withHistory(live.value, stored)))
-  .catch(() => {})
-
-// Past periods: each stream, and the chat between streams.
 const periods = shallowRef<Schemas['ChatPeriod'][]>([])
-void api(client.GET('/api/admin/chat/periods'))
-  .then((p) => (periods.value = p))
-  .catch((e) => (failed.value = e instanceof ApiError ? errorMessage(e.code) : String(e)))
+let periodRequest = 0
+async function refreshPeriods() {
+  const version = ++periodRequest
+  try {
+    const rows = await api(client.GET('/api/admin/chat/periods'))
+    if (version === periodRequest) periods.value = rows
+  } catch (e) {
+    if (version === periodRequest) failed.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
+  }
+}
+const redeemed = shallowRef<LogEvent[]>([])
+const openedAt = new Date().toISOString()
+let redemptionRequest = 0
+async function refreshRedemptions() {
+  const request = ++redemptionRequest
+  try {
+    const page = await api(client.GET('/api/admin/redemptions', { params: { query: { from: openedAt, limit: 100 } } }))
+    if (request === redemptionRequest) redeemed.value = page.items.map((row) => ({
+      at: row.redeemed_at, kind: 'redemption', userName: row.user_name, reward: row.reward_title, message: row.user_input || undefined,
+    }))
+  } catch (e) {
+    if (request === redemptionRequest) failed.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
+  }
+}
+const snapshot = shallowRef<Extract<Incoming, { type: 'snapshot' }>>()
+let offlineRefresh: ReturnType<typeof setTimeout> | undefined
+let disposed = false
+let sawOfflineChat = false
+const connection = useLiveEvents(2000, (msg) => {
+  accept(msg)
+  if (msg.type === 'snapshot') {
+    snapshot.value = msg
+    if (msg.payload['chat.message'].some((m) => m.source === 'twitch')) refreshAfterOfflineChat()
+  }
+  if (msg.type === 'chat.message' && msg.source === 'twitch') refreshAfterOfflineChat()
+  if (msg.type === 'redemption.changed' || msg.type === 'snapshot') void refreshRedemptions()
+  if (msg.type === 'alert.received') liveAlerts.value = [...liveAlerts.value, fromAlert(msg)].slice(-200)
+  if (msg.type === 'chat.removed' || msg.type === 'chat.first') {
+    pendingUpdates?.push(msg)
+    if (past.value) past.value = updatePast(past.value, [msg])
+  }
+})
+watch([() => connection.value.status, () => connection.value.stream?.state, () => connection.value.stream?.startedAt], () => {
+  if (connection.value.stream?.state === 'live') sawOfflineChat = false
+  if (connection.value.status !== 'failed') void refreshPeriods()
+}, { immediate: true })
+function refreshAfterOfflineChat() {
+  if (connection.value.stream?.state === 'live') return
+  sawOfflineChat = true
+  scheduleOfflineRefresh()
+}
+function scheduleOfflineRefresh(remaining = 3) {
+  if (disposed || !remaining || offlineRefresh || connection.value.stream?.state === 'live'
+    || periods.value.some((p) => p.kind === 'offline' && p.to === null)) return
+  offlineRefresh = setTimeout(async () => {
+    if (connection.value.stream?.state !== 'live') await refreshPeriods()
+    offlineRefresh = undefined
+    scheduleOfflineRefresh(remaining - 1)
+  }, 2000)
+}
+watch(() => twitchOverview.value?.chat_write_delayed, (delayed, wasDelayed) => {
+  if (wasDelayed && !delayed && sawOfflineChat) scheduleOfflineRefresh()
+})
+onScopeDispose(() => {
+  disposed = true
+  clearTimeout(offlineRefresh)
+})
+const periodId = (p: Schemas['ChatPeriod']) => p.kind + '/' + (p.from ?? '')
+// Two periods on one day differ by their time.
+const dayClock = (at: string) => `${dayText(at)} ${clockText(at)}`
 const periodKey = ref(LIVE)
 const periodOptions = computed(() => [
   { value: LIVE, label: t('chatLog.live') },
-  ...periods.value.map((p, i) => ({
-    value: String(i),
+  ...periods.value.map((p) => ({
+    value: periodId(p),
     label:
       p.kind === 'stream'
-        ? t('chatLog.stream', { day: dayText(p.from!) })
-        : t('chatLog.offline', { day: dayText(p.firstAt ?? p.from ?? new Date().toISOString()) }),
+        ? t('chatLog.stream', { day: dayClock(p.from!) })
+        : t('chatLog.offline', { day: dayClock(p.firstAt ?? p.from ?? new Date().toISOString()) }),
   })),
 ])
 
 const past = shallowRef<Schemas['ChatLogBody']>()
 const loading = ref(false)
-watch(periodKey, async (key) => {
+let pendingUpdates: ChatUpdate[] | undefined
+function updatePast(body: Schemas['ChatLogBody'], updates: ChatUpdate[]) {
+  if (!updates.length) return body
+  const log = updates.reduce((s, msg) => applyChat(s, msg), { ...EMPTY_LOG, messages: body.messages.map(fromStored) })
+  return { ...body, messages: body.messages.map((m, i) => ({ ...m, payload: log.messages[i].payload, deleted: !!log.messages[i].deleted })) }
+}
+const selected = computed(() => periods.value.find((p) => periodId(p) === periodKey.value))
+watch([periodKey, () => selected.value?.to, snapshot], async (_, __, cleanup) => {
+  let current = true
+  cleanup(() => { current = false })
+  const changes: ChatUpdate[] = [...(snapshot.value?.payload['chat.removed'] ?? [])]
+  const first = new Set(snapshot.value?.payload['chat.message'].filter((m) => m.payload.firstChat).map((m) => m.id))
+  pendingUpdates = changes
   past.value = undefined
-  if (key === LIVE) return
-  const p = periods.value[Number(key)]
-  loading.value = true
+  failed.value = ''
+  loading.value = !!selected.value
+  const p = selected.value
+  if (!p) { pendingUpdates = undefined; return }
   try {
     const query = { from: p.from ?? undefined, to: p.to ?? undefined }
-    past.value = await api(client.GET('/api/admin/chat/log', { params: { query } }))
-    failed.value = ''
+    const body = await api(client.GET('/api/admin/chat/log', { params: { query } }))
+    if (current) {
+      const messages = first.size ? body.messages.map((m) => first.has(m.id)
+        ? { ...m, payload: { ...m.payload, firstChat: true } }
+        : m) : body.messages
+      past.value = updatePast({ ...body, messages }, changes)
+    }
   } catch (e) {
-    failed.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
+    if (current) failed.value = e instanceof ApiError ? errorMessage(e.code) : String(e)
   } finally {
-    loading.value = false
+    if (current) { loading.value = false; pendingUpdates = undefined }
   }
 })
 
 const entries = computed(() =>
   periodKey.value === LIVE
-    ? merge(live.value.messages, liveAlerts.value)
+    ? merge(live.value.messages, [...liveAlerts.value, ...redeemed.value])
     : merge((past.value?.messages ?? []).map(fromStored), past.value?.events ?? []),
 )
 const truncated = computed(() => periodKey.value !== LIVE && !!past.value?.truncated)
