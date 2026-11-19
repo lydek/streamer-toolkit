@@ -7,7 +7,7 @@ mod infrastructure;
 
 pub use application::ActivityService;
 pub use infrastructure::{
-    db::{MIGRATOR, SessionCounts, session_counts},
+    db::{MIGRATOR, OtherRecords, SessionCounts, session_counts},
     http::routes,
     openapi, start,
 };

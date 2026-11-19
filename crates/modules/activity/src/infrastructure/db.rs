@@ -1,7 +1,10 @@
 //! Activity records in SQLite (`activity_events`).
 
+use std::sync::Arc;
+
 use chrono::{DateTime, SecondsFormat, Utc};
-use sqlx::{SqlitePool, migrate::Migrator};
+use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
+use toolkit_core::records::RecordTable;
 
 use crate::{
     application::{ActivityRepository, RepositoryError},
@@ -10,13 +13,34 @@ use crate::{
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
+/// Other modules' record tables that share the retention (e.g. chat).
+pub type OtherRecords = Vec<Arc<dyn RecordTable>>;
+
 pub(crate) struct SqliteActivity {
     pool: SqlitePool,
+    others: OtherRecords,
 }
 
 impl SqliteActivity {
-    pub(crate) fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub(crate) fn new(pool: SqlitePool, others: OtherRecords) -> Self {
+        Self { pool, others }
+    }
+
+    /// Deletes from this module's table and every other one on `conn`.
+    async fn delete_all(
+        &self,
+        conn: &mut SqliteConnection,
+        cutoff: &str,
+    ) -> Result<u64, sqlx::Error> {
+        let mut deleted = sqlx::query("DELETE FROM activity_events WHERE occurred_at < ?")
+            .bind(cutoff)
+            .execute(&mut *conn)
+            .await?
+            .rows_affected();
+        for table in &self.others {
+            deleted += table.delete_before(conn, cutoff).await?;
+        }
+        Ok(deleted)
     }
 }
 
@@ -91,12 +115,13 @@ impl ActivityRepository for SqliteActivity {
     }
 
     async fn delete_before(&self, cutoff: DateTime<Utc>) -> Result<u64, RepositoryError> {
-        let result = sqlx::query("DELETE FROM activity_events WHERE occurred_at < ?")
-            .bind(time_text(cutoff))
-            .execute(&self.pool)
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let deleted = self
+            .delete_all(&mut tx, &time_text(cutoff))
             .await
             .map_err(storage)?;
-        Ok(result.rows_affected())
+        tx.commit().await.map_err(storage)?;
+        Ok(deleted)
     }
 
     async fn delete_before_if_saved(
@@ -106,12 +131,10 @@ impl ActivityRepository for SqliteActivity {
     ) -> Result<Option<u64>, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let deleted = match cutoff {
-            Some(cutoff) => sqlx::query("DELETE FROM activity_events WHERE occurred_at < ?")
-                .bind(time_text(cutoff))
-                .execute(&mut *tx)
+            Some(cutoff) => self
+                .delete_all(&mut tx, &time_text(cutoff))
                 .await
-                .map_err(storage)?
-                .rows_affected(),
+                .map_err(storage)?,
             None => 0,
         };
         if !save() {
@@ -123,13 +146,22 @@ impl ActivityRepository for SqliteActivity {
     }
 
     async fn count_before(&self, cutoff: DateTime<Utc>) -> Result<u64, RepositoryError> {
+        let cutoff = time_text(cutoff);
+        let mut conn = self.pool.acquire().await.map_err(storage)?;
         let n: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM activity_events WHERE occurred_at < ?")
-                .bind(time_text(cutoff))
-                .fetch_one(&self.pool)
+                .bind(&cutoff)
+                .fetch_one(&mut *conn)
                 .await
                 .map_err(storage)?;
-        Ok(n.try_into().unwrap_or(0))
+        let mut count: u64 = n.try_into().unwrap_or(0);
+        for table in &self.others {
+            count += table
+                .count_before(&mut conn, &cutoff)
+                .await
+                .map_err(storage)?;
+        }
+        Ok(count)
     }
 }
 
@@ -190,5 +222,77 @@ pub(crate) mod tests {
             }
         );
         assert_eq!(session_counts(&pool, "s2").await.unwrap().raids, 1);
+    }
+
+    /// Another module's table, as a test stand-in.
+    struct Other;
+
+    impl RecordTable for Other {
+        fn delete_before<'c>(
+            &'c self,
+            conn: &'c mut SqliteConnection,
+            cutoff: &'c str,
+        ) -> toolkit_core::records::RecordFuture<'c> {
+            Box::pin(async move {
+                Ok(sqlx::query("DELETE FROM other WHERE at < ?")
+                    .bind(cutoff)
+                    .execute(conn)
+                    .await?
+                    .rows_affected())
+            })
+        }
+
+        fn count_before<'c>(
+            &'c self,
+            conn: &'c mut SqliteConnection,
+            cutoff: &'c str,
+        ) -> toolkit_core::records::RecordFuture<'c> {
+            Box::pin(async move {
+                let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM other WHERE at < ?")
+                    .bind(cutoff)
+                    .fetch_one(conn)
+                    .await?;
+                Ok(n as u64)
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn the_retention_covers_other_modules_tables_in_the_same_transaction() {
+        let pool = pool().await;
+        sqlx::query("CREATE TABLE other (at TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for at in ["2026-11-01T00:00:00.000000Z", "2026-11-19T00:00:00.000000Z"] {
+            sqlx::query("INSERT INTO other (at) VALUES (?)")
+                .bind(at)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let repo = SqliteActivity::new(pool.clone(), vec![Arc::new(Other)]);
+        let cutoff = DateTime::parse_from_rfc3339("2026-11-10T00:00:00Z")
+            .unwrap()
+            .to_utc();
+        assert_eq!(repo.count_before(cutoff).await.unwrap(), 1);
+        assert_eq!(
+            repo.delete_before_if_saved(Some(cutoff), || false)
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            repo.count_before(cutoff).await.unwrap(),
+            1,
+            "a failed save deletes nothing anywhere"
+        );
+        assert_eq!(
+            repo.delete_before_if_saved(Some(cutoff), || true)
+                .await
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(repo.count_before(cutoff).await.unwrap(), 0);
     }
 }

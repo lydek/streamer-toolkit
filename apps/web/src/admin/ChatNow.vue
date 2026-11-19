@@ -19,7 +19,10 @@
       <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
       <p v-for="m in log.messages" :key="m.id" class="msg">
         <span v-if="broadcasterId && m.payload.userId === broadcasterId" class="badge">{{ t('chat.broadcaster') }}</span>
-        <span class="name" :style="{ color: color(m) }">{{ m.payload.userName }}</span>：{{ m.payload.text }}
+        <span class="name" :style="{ color: color(m) }">{{ m.payload.userName }}</span>：<span v-if="m.deleted" class="deleted">{{
+          t('chat.deleted')
+        }}</span
+        ><template v-else>{{ m.payload.text }}</template>
       </p>
     </div>
   </div>
@@ -92,6 +95,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.deleted {
+  color: var(--p-text-muted-color);
+  font-style: italic;
+}
+
 .chat-now {
   display: flex;
   flex-direction: column;

@@ -142,3 +142,40 @@ test('events lists every alert that arrived, even one no OBS overlay plays', asy
   await panel(page).getByRole('button', { name: zh.dock.filter.events }).click()
   await expect(panel(page).getByText(/Fan/)).toBeVisible()
 })
+
+test('chat from before a restart shows first, and a message a moderator deletes keeps a marker', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  await page.route('**/api/admin/chat-dock', (r) => r.fulfill({ json: { open: true, width: 340 } }))
+  await page.route('**/api/admin/chat/messages', (r) =>
+    r.fulfill({
+      json: [
+        { id: 'old1', sentAt: '2026-11-18T09:00:00.000Z', deleted: false, payload: { ...chat(9, 'Ann', 'from yesterday').payload } },
+        { id: 'old2', sentAt: '2026-11-18T09:01:00.000Z', deleted: true, payload: { ...chat(9, 'Spam', '').payload } },
+      ],
+    }),
+  )
+  // Each part of the page opens its own socket; the removal goes to all of them.
+  const sockets: { send: (m: string) => void }[] = []
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+    sockets.push(ws)
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+      }),
+    )
+  })
+  await page.goto('/admin/')
+  const log = panel(page).getByRole('log')
+  await expect(log.getByText('from yesterday')).toBeVisible()
+  await expect(log.getByText(zh.chat.deleted)).toHaveCount(1)
+  const order = await log.locator('.msg').allTextContents()
+  expect(order.findIndex((t) => t.includes('from yesterday'))).toBeLessThan(order.findIndex((t) => t.includes('hello everyone')))
+
+  for (const ws of sockets) ws.send(JSON.stringify({ id: 'r', type: 'chat.removed', version: 1, seq: 2, occurredAt: '', source: 'twitch', payload: { messageId: 'c1' } }))
+  await expect(log.getByText('hello everyone')).toHaveCount(0)
+  await expect(log.getByText(zh.chat.deleted)).toHaveCount(2)
+})

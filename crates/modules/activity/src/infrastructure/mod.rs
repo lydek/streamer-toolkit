@@ -11,17 +11,19 @@ pub mod db;
 pub mod http;
 
 /// Starts activity records in `pool`, which must already have [`db::MIGRATOR`] applied, with the retention in
-/// `data_dir`; `session` asks for the stream session an event arriving now belongs to. Needs a Tokio runtime.
+/// `data_dir`, which also deletes old records from `others`; `session` asks for the stream session an event
+/// arriving now belongs to. Needs a Tokio runtime.
 pub fn start<F>(
     pool: SqlitePool,
     data_dir: PathBuf,
     session: impl Fn() -> F + Send + Sync + 'static,
+    others: db::OtherRecords,
 ) -> ActivityService
 where
     F: Future<Output = Option<String>> + Send + 'static,
 {
     ActivityService::start(
-        db::SqliteActivity::new(pool),
+        db::SqliteActivity::new(pool, others),
         data_dir,
         Arc::new(move || Box::pin(session())),
     )

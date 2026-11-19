@@ -15,6 +15,7 @@ const summary = (endedAt: string | null, endedSinceLaunch = true): Schemas['Stre
   bits: 1200,
   raids: 1,
   redemptions: 42,
+  chatMessages: 1204,
 })
 
 /** Opens home with Twitch's status `stream` in the snapshot; `push` sends a later status. */

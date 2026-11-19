@@ -1,4 +1,5 @@
-import type { ChatEvent, Incoming } from '../overlay/chat/chat'
+import { type ChatEvent, type Incoming, removes } from '../overlay/chat/chat'
+import type { Schemas } from './api'
 
 // ---- Name colors (admin UI only; overlays follow their template) ----
 
@@ -116,8 +117,11 @@ export function backgroundOf(el: Element | null, fallback: Rgb): Rgb {
 
 // ---- The drawer's live log ----
 
+/** A message in the admin log; a deleted one keeps its place with its text gone. */
+export type LoggedChat = ChatEvent & { deleted?: boolean }
+
 export interface ChatLog {
-  messages: ChatEvent[]
+  messages: LoggedChat[]
   paused: boolean
   /** Messages added since the log was paused. */
   unseen: number
@@ -130,7 +134,7 @@ const PAUSED_LIMIT = 1000
 export const EMPTY_LOG: ChatLog = { messages: [], paused: false, unseen: 0 }
 
 /** Appends messages not already shown, by event `id`; a reconnect snapshot only adds what was missed. */
-export function receive(log: ChatLog, incoming: ChatEvent[]): ChatLog {
+export function receive(log: ChatLog, incoming: LoggedChat[]): ChatLog {
   const known = new Set(log.messages.map((m) => m.id))
   const added = incoming.filter((m) => !known.has(m.id) && known.add(m.id))
   if (!added.length) return log
@@ -142,7 +146,26 @@ export function receive(log: ChatLog, incoming: ChatEvent[]): ChatLog {
 export function applyChat(log: ChatLog, msg: Incoming): ChatLog {
   if (msg.type === 'snapshot') return receive(log, msg.payload['chat.message'])
   if (msg.type === 'chat.message') return receive(log, [msg])
+  if (msg.type === 'chat.removed') {
+    const messages = log.messages.map((m) =>
+      !m.deleted && removes(msg.payload, m) ? { ...m, deleted: true, payload: { ...m.payload, text: '', fragments: [] } } : m,
+    )
+    return { ...log, messages }
+  }
   return log
+}
+
+/** Puts stored chat from before this page opened (oldest first) ahead of what the live log already has. */
+export function withHistory(log: ChatLog, stored: Schemas['StoredChatMessage'][]): ChatLog {
+  const known = new Set(log.messages.map((m) => m.id))
+  const older: LoggedChat[] = stored
+    .filter((s) => !known.has(s.id))
+    .map((s) => ({ id: s.id, type: 'chat.message', version: 1, seq: 0, occurredAt: s.sentAt, source: 'twitch', payload: s.payload, deleted: s.deleted }))
+  if (!older.length) return log
+  const messages = [...older, ...log.messages]
+    .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt))
+    .slice(-(log.paused ? PAUSED_LIMIT : LOG_LIMIT))
+  return { ...log, messages }
 }
 
 export const pause = (log: ChatLog): ChatLog => (log.paused ? log : { ...log, paused: true })

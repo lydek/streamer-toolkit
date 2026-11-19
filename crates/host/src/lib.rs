@@ -181,7 +181,14 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     let modules = Arc::new(toolkit_core::modules::Modules::load(
         config.data_dir.clone(),
     ));
-    let chat = Arc::new(chat::ChatService::new(bus.clone(), modules.clone()));
+    let stream = Arc::new(stream::start(config.db.clone(), bus.clone()));
+    let chat_sessions = stream.clone();
+    let chat = Arc::new(chat::start(
+        bus.clone(),
+        modules.clone(),
+        config.db.clone(),
+        move || chat_sessions.session_after_pending(),
+    ));
     let overlays = Arc::new(overlay::OverlayConnections::default());
     let on_air = overlays.clone();
     let presenter =
@@ -248,14 +255,17 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         modules.clone(),
         outbox.clone(),
     ));
-    let stream = Arc::new(stream::start(config.db.clone(), bus.clone()));
     let sessions = stream.clone();
+    // Chat records share the activity module's record retention.
+    let records = || -> activity::OtherRecords { vec![Arc::new(chat::ChatRecords)] };
     let activity = Arc::new(activity::start(
         config.db.clone(),
         config.data_dir.clone(),
         move || sessions.session_after_pending(),
+        records(),
     ));
-    let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone());
+    let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone(), records());
+    let chat_routes = chat::routes(config.db.clone());
     let stream_summary = stream_summary::routes(config.db.clone(), chrono::Utc::now());
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
@@ -362,6 +372,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(alert_routes.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(chat_routes.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1400,6 +1414,7 @@ mod tests {
         for sql in [
             "INSERT INTO activity_events (id, twitch_message_id, kind, session_id, occurred_at) VALUES              ('1', 'm1', 'follow', 's1', '2026-11-19T10:05:00.000000Z'),              ('2', 'm2', 'follow', 'old', '2026-11-18T10:05:00.000000Z')",
             "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id,              reward_title, reward_cost, user_input, status, redeemed_at, updated_at) VALUES              ('1', 't1', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T10:30:00.000000Z', 'x'),              ('2', 't2', 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', '2026-11-19T09:30:00.000000Z', 'x')",
+            "INSERT INTO chat_messages (id, twitch_message_id, session_id, user_id, payload, sent_at) VALUES              ('1', 'c1', 's1', 'u', '{}', '2026-11-19T10:06:00.000000Z'),              ('2', 'c2', 'old', 'u', '{}', '2026-11-18T10:06:00.000000Z')",
         ] {
             sqlx::query(sql).execute(&pool).await.unwrap();
         }
@@ -1410,6 +1425,7 @@ mod tests {
         assert_eq!(summary["follows"], 1);
         assert_eq!(summary["subs"], 0);
         assert_eq!(summary["redemptions"], 1);
+        assert_eq!(summary["chatMessages"], 1);
         assert_eq!(
             status(req(false)).await,
             StatusCode::UNAUTHORIZED,

@@ -7,6 +7,7 @@ pub mod events;
 pub mod modules;
 pub mod outbox;
 pub mod presentation;
+pub mod records;
 pub mod settings;
 pub mod streaming;
 pub mod twitch;

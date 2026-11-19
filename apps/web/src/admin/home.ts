@@ -1,5 +1,5 @@
 import { onScopeDispose, shallowRef, watch } from 'vue'
-import type { Incoming } from '../overlay/chat/chat'
+import { removes, type Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 
 /** The Twitch status the app bar polls every 2 s (undefined until its first answer); read it instead of polling again. */
@@ -150,6 +150,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'presentation.queue') next.queue = msg.payload
   if (msg.type === 'stream.status') next.stream = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
+  if (msg.type === 'chat.removed' && next.lastChat && removes(msg.payload, next.lastChat)) next.lastChat = undefined
   if (msg.type === 'alert') next.lastAlert = msg
   return next
 }

@@ -73,9 +73,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
-import { ApiError } from './api'
+import { ApiError, api, client } from './api'
 import ChatNow from './ChatNow.vue'
-import { EMPTY_LOG, applyChat, pause, resume } from './chatLog'
+import { EMPTY_LOG, applyChat, pause, resume, withHistory } from './chatLog'
 import { DOCK_MAX, DOCK_MIN, clampWidth, saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
@@ -100,6 +100,11 @@ const shown = computed(() => !hidden.value.has('/chat') && (wide.value ? dock.op
 const filter = ref<(typeof FILTERS)[number]>('all')
 const query = ref('')
 const log = shallowRef(EMPTY_LOG)
+// Chat from before this page opened (or the Host restarted) goes ahead of the live log; without it the log just
+// starts empty.
+void api(client.GET('/api/admin/chat/messages'))
+  .then((stored) => (log.value = withHistory(log.value, stored)))
+  .catch(() => {})
 const events = shallowRef<{ id: string; title: string }[]>([])
 const live = useLiveEvents(2000, (msg) => {
   log.value = applyChat(log.value, msg)
