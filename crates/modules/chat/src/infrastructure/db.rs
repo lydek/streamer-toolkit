@@ -259,6 +259,8 @@ pub(crate) mod tests {
             highlighted: false,
             bits: 0,
             reply: None,
+            twitch_badges: Vec::new(),
+            shared_from: None,
             sent_at: sent_at.into(),
         }
     }

@@ -2,6 +2,10 @@
   <div class="chat-now">
     <!-- Always in the DOM, so screen readers announce the text when it appears. -->
     <p role="status" class="connection">{{ disconnected ? t('chat.disconnected') : '' }}</p>
+    <p v-if="partners.length" class="shared">
+      {{ t('chat.shared', { channels: partners.join('、') }) }}
+      <Button :label="t('chat.ownOnly')" size="small" text :aria-pressed="ownOnly" @click="ownOnly = !ownOnly" />
+    </p>
     <div class="bar">
       <span v-if="log.paused">{{ t('chat.paused', { n: log.unseen }) }}</span>
       <!-- WCAG 2.2.2: moving content can be paused without scrolling. -->
@@ -12,27 +16,34 @@
         outlined
         @click="log.paused ? jump() : emit('update:log', pause(log))"
       />
+      <ChatDisplayMenu class="display" />
     </div>
     <!-- aria-live off: a busy chat would talk over everything else. Focusable so the keyboard can scroll it. -->
-    <div ref="el" class="log" role="log" aria-live="off" tabindex="0" :aria-label="t('chat.log')" @scroll="onScroll">
+    <div
+      ref="el"
+      class="log"
+      role="log"
+      aria-live="off"
+      tabindex="0"
+      :aria-label="t('chat.log')"
+      :style="{ fontSize: `${chatDisplay.textSize}%` }"
+      @scroll="onScroll"
+    >
       <p v-if="!log.messages.length">{{ t('home.chatEmpty') }}</p>
       <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
-      <p v-for="m in log.messages" :key="m.id" class="msg">
-        <span v-if="broadcasterId && m.payload.userId === broadcasterId" class="badge">{{ t('chat.broadcaster') }}</span>
-        <span class="name" :style="{ color: color(m) }">{{ m.payload.userName }}</span>：<span v-if="m.deleted" class="deleted">{{
-          t('chat.deleted')
-        }}</span
-        ><template v-else>{{ m.payload.text }}</template>
-      </p>
+      <ChatLine v-for="m in shownMessages" :key="m.id" class="msg" :message="m" :name-color="color(m)" :broadcaster-id="broadcasterId" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatEvent } from '../overlay/chat/chat'
+import { chatDisplay, loadBadges, loadChatDisplay, sharedChannels, wantAvatars } from './chatDisplay'
+import ChatDisplayMenu from './ChatDisplayMenu.vue'
+import ChatLine from './ChatLine.vue'
 import { type ChatLog, type Rgb, backgroundOf, nameColor, pause, resume } from './chatLog'
 
 const props = defineProps<{ log: ChatLog; broadcasterId?: string; disconnected?: boolean }>()
@@ -40,6 +51,15 @@ const emit = defineEmits<{ 'update:log': [ChatLog] }>()
 const { t } = useI18n()
 
 const el = ref<HTMLElement>()
+void loadChatDisplay().catch(() => {})
+watch(() => props.broadcasterId, loadBadges, { immediate: true })
+
+// A shared chat: the other channels taking part, and 只看本頻道 to hide their messages.
+const partners = computed(() => sharedChannels(props.log.messages))
+const ownOnly = ref(false)
+const shownMessages = computed(() =>
+  ownOnly.value && partners.value.length ? props.log.messages.filter((m) => !m.payload.sharedFrom) : props.log.messages,
+)
 // Theme surface.900 until the real background is read on mount.
 const bg = ref<Rgb>([0x15, 0x17, 0x25])
 const colors = new Map<string, string>()
@@ -80,10 +100,11 @@ async function jump() {
 
 watch(
   () => props.log.messages,
-  () => {
+  (messages) => {
+    wantAvatars(messages)
     if (!props.log.paused) toBottom()
   },
-  { flush: 'post' },
+  { flush: 'post', immediate: true },
 )
 
 onMounted(() => {
@@ -123,8 +144,12 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-.bar .p-button {
+.bar > .p-button {
   margin-inline-start: auto;
+}
+
+.display {
+  flex-basis: 100%;
 }
 
 .log {
@@ -141,21 +166,16 @@ onMounted(() => {
 }
 
 .log p {
-  margin: 0 0 0.25rem;
-  overflow-wrap: anywhere;
+  margin: 0;
 }
 
-.name {
-  font-weight: 600;
+.log .msg {
+  margin-bottom: 0.125rem;
 }
 
-/* surface.950 on primary.400: 11:1. */
-.badge {
-  margin-inline-end: 0.25rem;
-  padding: 0 0.375rem;
-  border-radius: 6px;
-  background: var(--p-primary-400);
-  color: var(--p-surface-950);
+.shared {
+  margin: 0;
+  color: var(--p-text-muted-color);
   font-size: 0.875rem;
 }
 </style>

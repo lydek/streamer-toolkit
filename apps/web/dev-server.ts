@@ -6,7 +6,7 @@ import type { Plugin, ProxyOptions } from 'vite'
 // All three must match crates/host/src/lib.rs (dev-server.test.ts checks them).
 export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
-  "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
+  "style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static-cdn.jtvnw.net; font-src 'self' data:"
 export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
 export const PREVIEW_PATHS = ['/overlay/chat/', '/overlay/alerts/']
 
