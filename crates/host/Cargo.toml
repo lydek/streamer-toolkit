@@ -14,6 +14,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 integrations = { version = "0.1.0", path = "../integrations" }
 mime_guess = "2.0.5"
 redemption = { version = "0.1.0", path = "../modules/redemption" }
+stream = { version = "0.1.0", path = "../modules/stream" }
 rust-embed = { version = "8.14.0", features = ["debug-embed"] }
 sound = { version = "0.1.0", path = "../modules/sound" }
 secrecy = { version = "0.10.3", features = ["serde"] }

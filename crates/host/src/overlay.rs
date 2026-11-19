@@ -226,6 +226,9 @@ struct SnapshotPayload {
     /// At most one: the latest presentation queue status.
     #[serde(rename = "presentation.queue")]
     presentation_queue: Vec<PresentationQueueEvent>,
+    /// At most one: the latest live state.
+    #[serde(rename = "stream.status")]
+    stream_status: Vec<stream::StreamStatusEvent>,
 }
 
 #[cfg(test)]
@@ -296,6 +299,15 @@ mod tests {
         );
         crate::obs::retain(&bus);
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
+        bus.retain("stream.status", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "s".into(),
+            event_type: "stream.status",
+            version: 1,
+            occurred_at: "2026-11-19T10:00:00.000Z".into(),
+            source: Source::Twitch,
+            payload: serde_json::json!({"state": "live", "startedAt": "2026-11-19T10:00:00.000Z", "viewers": 42}),
+        });
         crate::queue::retain(&bus);
         crate::queue::publish_status(
             &bus,

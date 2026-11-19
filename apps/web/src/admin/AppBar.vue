@@ -5,6 +5,14 @@
       <span class="brand"><i class="pi pi-video" aria-hidden="true"></i>{{ t('app.name') }}</span>
       <div class="bar-status">
         <!-- What OBS is sending out right now; nothing while it is idle or not connected. -->
+        <!-- Twitch's view: live since when and for how many viewers, or ended; nothing until Twitch has answered. -->
+        <span v-if="live.stream?.state === 'live'" class="live-pill">
+          <span class="dot" aria-hidden="true"></span>{{ t('nav.live') }}
+          <span class="live-meta">{{ liveMeta }}</span>
+        </span>
+        <span v-else-if="live.stream?.state === 'offline'" class="live-pill offline">
+          <span class="dot" aria-hidden="true"></span>{{ t('nav.offline') }}
+        </span>
         <span v-if="live.obsState?.streaming" class="on-air">{{ t('nav.streaming') }}</span>
         <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
@@ -148,6 +156,17 @@ const toast = useToast()
 const overview = twitchOverview
 const overviewFailed = ref(false)
 const live = useLiveEvents()
+
+// How long the stream has run, ticking each second, and the viewers from the last minute's check.
+const now = ref(Date.now())
+const clock = window.setInterval(() => (now.value = Date.now()), 1000)
+const liveMeta = computed(() => {
+  const s = live.value.stream
+  if (s?.state !== 'live' || !s.startedAt) return ''
+  const total = Math.max(0, Math.floor((now.value - Date.parse(s.startedAt)) / 1000))
+  const hms = `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  return s.viewers === undefined ? hms : `${hms} · ${t('nav.viewers', { n: s.viewers })}`
+})
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
 const problems = computed(() =>
@@ -318,6 +337,7 @@ onMounted(() => {
   if (tabsEl.value) tabsObserver.observe(tabsEl.value)
 })
 onBeforeUnmount(() => {
+  window.clearInterval(clock)
   window.clearInterval(timer)
   window.removeEventListener('scroll', onScroll)
   barObserver?.disconnect()
@@ -375,6 +395,45 @@ onBeforeUnmount(() => {
 
 .estop {
   color: var(--p-red-400, #f87171);
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  background: var(--p-red-950, #450a0a);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.live-pill .dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--p-red-500, #ef4444);
+}
+
+.live-meta {
+  color: var(--p-text-muted-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-pill.offline {
+  background: var(--p-surface-900);
+  color: var(--p-text-muted-color);
+}
+
+.live-pill.offline .dot {
+  background: var(--p-surface-500);
+}
+
+/* Phones keep only 「直播中」. */
+@container top (max-width: 37.5rem) {
+  .live-meta {
+    display: none;
+  }
 }
 
 .on-air {

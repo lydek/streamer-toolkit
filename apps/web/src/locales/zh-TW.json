@@ -23,6 +23,9 @@
     "more": "更多",
     "edit": "編輯分頁",
     "streaming": "串流中",
+    "live": "直播中",
+    "offline": "已下播",
+    "viewers": "{n} 位觀眾",
     "recording": "錄影中",
     "editor": {
       "title": "編輯分頁",

@@ -3972,7 +3972,8 @@
           "chat.message",
           "obs.status",
           "obs.state",
-          "presentation.queue"
+          "presentation.queue",
+          "stream.status"
         ],
         "properties": {
           "chat.message": {
@@ -4001,6 +4002,13 @@
               "$ref": "#/components/schemas/PresentationQueueEvent"
             },
             "description": "At most one: the latest presentation queue status."
+          },
+          "stream.status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StreamStatusEvent"
+            },
+            "description": "At most one: the latest live state."
           }
         }
       },
@@ -4191,6 +4199,88 @@
             "description": "Whether an item was playing."
           }
         }
+      },
+      "StreamStateName": {
+        "type": "string",
+        "enum": [
+          "unknown",
+          "offline",
+          "live"
+        ]
+      },
+      "StreamStatusEvent": {
+        "type": "object",
+        "description": "A `stream.status` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/StreamStatusPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/StreamStatusType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "StreamStatusPayload": {
+        "type": "object",
+        "description": "The `payload` of a `stream.status` event.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While live: Twitch's start time (RFC 3339)."
+          },
+          "state": {
+            "$ref": "#/components/schemas/StreamStateName"
+          },
+          "viewers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "While live, once a check has counted them (every minute).",
+            "minimum": 0
+          }
+        }
+      },
+      "StreamStatusType": {
+        "type": "string",
+        "enum": [
+          "stream.status"
+        ]
       },
       "StreamingState": {
         "type": "object",

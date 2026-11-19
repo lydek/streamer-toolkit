@@ -101,6 +101,28 @@ pub enum AlertKind {
     },
 }
 
+/// The broadcaster's stream starting or ending; Twitch's field names stop at the integration layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamChange {
+    /// Twitch says a live stream started (`stream.online`).
+    Online { id: String, started_at: String },
+    /// Twitch says the stream ended (`stream.offline`).
+    Offline,
+    /// A check of what is live (Helix Get Streams): the stream with its viewers, or `None` when not live. Checks
+    /// can lag behind the events by a minute or so.
+    Checked(Option<LiveStream>),
+    /// Signed out of Twitch: nothing says whether the stream is live any more, and nothing proves it ended.
+    SignedOut,
+}
+
+/// A live stream as a check found it. `id` is Twitch's stream ID; `started_at` is RFC 3339.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveStream {
+    pub id: String,
+    pub started_at: String,
+    pub viewers: u32,
+}
+
 /// A channel points redemption as Twitch reports it; Twitch's status strings stop at the integration layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelPointsRedemption {

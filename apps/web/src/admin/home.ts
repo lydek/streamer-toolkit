@@ -53,6 +53,8 @@ export interface LiveState {
   obsState?: Schemas['StreamingState']
   /** What the presentation queue plays and holds. */
   queue?: Schemas['QueueStatus']
+  /** Whether the broadcaster is live on Twitch, since when and for how many viewers. */
+  stream?: Schemas['StreamStatusPayload']
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -66,6 +68,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       obs: msg.payload['obs.status'].at(-1)?.payload,
       obsState: msg.payload['obs.state'].at(-1)?.payload,
       queue: msg.payload['presentation.queue'].at(-1)?.payload,
+      stream: msg.payload['stream.status'].at(-1)?.payload,
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -75,6 +78,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'obs.status') next.obs = msg.payload
   if (msg.type === 'obs.state') next.obsState = msg.payload
   if (msg.type === 'presentation.queue') next.queue = msg.payload
+  if (msg.type === 'stream.status') next.stream = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'alert') next.lastAlert = msg
   return next
