@@ -192,6 +192,15 @@ mod tests {
             rows[0].1.is_some(),
             "kept, with its end, until the next stream starts"
         );
+        // Checks while live counted 42, 50 and 51.
+        assert_eq!(
+            db::latest_session(&pool)
+                .await
+                .unwrap()
+                .unwrap()
+                .peak_viewers,
+            Some(51)
+        );
 
         // A restart reads the last session back; the next stream opens a new one.
         let (_, mut rx) = bus.subscribe();

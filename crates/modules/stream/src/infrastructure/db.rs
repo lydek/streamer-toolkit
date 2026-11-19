@@ -110,6 +110,51 @@ impl SessionRepository for SqliteSessions {
             .map_err(storage)?;
         Ok(())
     }
+
+    async fn raise_peak(&self, id: &str, viewers: u32) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "UPDATE stream_sessions SET peak_viewers = MAX(COALESCE(peak_viewers, 0), ?) WHERE id = ?",
+        )
+        .bind(viewers)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+}
+
+/// The session that started last, live or ended, as the host's stream summary shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LatestSession {
+    pub id: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub peak_viewers: Option<u32>,
+}
+
+/// The session that started last; `None` before the first stream.
+pub async fn latest_session(pool: &SqlitePool) -> Result<Option<LatestSession>, sqlx::Error> {
+    let row: Option<(String, String, Option<String>, Option<u32>)> = sqlx::query_as(
+        "SELECT id, started_at, ended_at, peak_viewers FROM stream_sessions \
+         ORDER BY started_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    let parse = |s: &str| {
+        DateTime::parse_from_rfc3339(s)
+            .map(|t| t.to_utc())
+            .map_err(|e| sqlx::Error::Decode(e.into()))
+    };
+    row.map(|(id, started_at, ended_at, peak_viewers)| {
+        Ok(LatestSession {
+            id,
+            started_at: parse(&started_at)?,
+            ended_at: ended_at.as_deref().map(parse).transpose()?,
+            peak_viewers,
+        })
+    })
+    .transpose()
 }
 
 #[cfg(test)]
@@ -140,6 +185,33 @@ pub(crate) mod tests {
         assert_eq!(again.id, first.id);
         assert_eq!(again.ended_at, None);
         assert_eq!(again.started_at, start);
+    }
+
+    #[tokio::test]
+    async fn the_peak_keeps_the_most_viewers_and_the_latest_session_shows_it() {
+        let pool = pool().await;
+        let repo = SqliteSessions::new(pool.clone());
+        assert_eq!(latest_session(&pool).await.unwrap(), None);
+        let start = parse_time("2026-11-19T10:00:00Z").unwrap();
+        let s = repo.open("9001", start).await.unwrap();
+        assert_eq!(
+            latest_session(&pool).await.unwrap().unwrap().peak_viewers,
+            None
+        );
+        for viewers in [40, 58, 51] {
+            repo.raise_peak(&s.id, viewers).await.unwrap();
+        }
+        let end = start + chrono::TimeDelta::hours(2);
+        repo.end(&s.id, end).await.unwrap();
+        assert_eq!(
+            latest_session(&pool).await.unwrap(),
+            Some(LatestSession {
+                id: s.id,
+                started_at: start,
+                ended_at: Some(end),
+                peak_viewers: Some(58),
+            })
+        );
     }
 
     #[tokio::test]

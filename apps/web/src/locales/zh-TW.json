@@ -331,6 +331,23 @@
     "savedForever": "紀錄改成永久保存。",
     "deleted": "已刪除超過 {days} 天的紀錄，之後保存 {days} 天。"
   },
+  "stage": {
+    "title": "直播階段",
+    "before": "開播前",
+    "live": "直播中",
+    "after": "下播後",
+    "notLive": "還沒開播。",
+    "waiting": "正在讀取本場直播…",
+    "noStream": "還沒有直播紀錄。",
+    "peak": "最高 {n} 位觀眾",
+    "stats": {
+      "follows": "追隨",
+      "subs": "訂閱",
+      "bits": "小奇點",
+      "raids": "揪團",
+      "redemptions": "兌換"
+    }
+  },
   "queue": {
     "title": "呈現佇列",
     "summary": "排隊 {waiting} 個 · 約 {seconds} 秒",
@@ -701,6 +718,9 @@
       "invalid_retention": "保存天數要在 1 到 3650 之間。",
       "storage_failed": "活動紀錄存取失敗。",
       "retention_unreadable": "讀不到 settings.json，保存期限暫時無法顯示，也不會刪除任何紀錄。"
+    },
+    "stream": {
+      "storage_failed": "讀不到本場直播的資料。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

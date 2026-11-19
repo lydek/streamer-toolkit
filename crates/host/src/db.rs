@@ -208,6 +208,23 @@ pub(crate) fn memory() -> SqlitePool {
         .unwrap()
 }
 
+/// An in-memory database with every module's migrations applied, for tests that read or write tables.
+#[cfg(test)]
+pub(crate) async fn memory_migrated() -> SqlitePool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .idle_timeout(None)
+        .max_lifetime(None)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    Migrator::with_migrations(merged(&modules()).unwrap())
+        .run(&pool)
+        .await
+        .unwrap();
+    pool
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

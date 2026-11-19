@@ -137,7 +137,7 @@ import { useToast } from 'primevue/usetoast'
 import { errorMessage } from '../i18n'
 import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
-import { errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from './home'
+import { clockText, errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
 import { saveDock, useDock } from './dock'
 import { useModules } from './features'
@@ -163,8 +163,7 @@ const clock = window.setInterval(() => (now.value = Date.now()), 1000)
 const liveMeta = computed(() => {
   const s = live.value.stream
   if (s?.state !== 'live' || !s.startedAt) return ''
-  const total = Math.max(0, Math.floor((now.value - Date.parse(s.startedAt)) / 1000))
-  const hms = `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  const hms = clockText(now.value - Date.parse(s.startedAt))
   return s.viewers === undefined ? hms : `${hms} · ${t('nav.viewers', { n: s.viewers })}`
 })
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))

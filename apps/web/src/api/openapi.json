@@ -1729,6 +1729,42 @@
         }
       }
     },
+    "/api/admin/stream/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest stream session and what happened during it; `null` before the first stream.",
+        "operationId": "stream_summary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/StreamSummary"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/tab-bar": {
       "get": {
         "tags": [
@@ -4510,6 +4546,70 @@
         "enum": [
           "stream.status"
         ]
+      },
+      "StreamSummary": {
+        "type": "object",
+        "required": [
+          "startedAt",
+          "endedSinceLaunch",
+          "follows",
+          "subs",
+          "bits",
+          "raids",
+          "redemptions"
+        ],
+        "properties": {
+          "bits": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` while live (or until the end is seen)."
+          },
+          "endedSinceLaunch": {
+            "type": "boolean",
+            "description": "The stream ended while this Host was running."
+          },
+          "follows": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "peakViewers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The most viewers a check counted; `null` until one has.",
+            "minimum": 0
+          },
+          "raids": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "redemptions": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "Twitch's start time (RFC 3339)."
+          },
+          "subs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "New subs and resubs, each gifted sub included.",
+            "minimum": 0
+          }
+        }
       },
       "StreamingState": {
         "type": "object",

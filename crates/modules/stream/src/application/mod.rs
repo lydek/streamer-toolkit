@@ -27,6 +27,12 @@ pub(crate) trait SessionRepository: Send + Sync + 'static {
         id: &str,
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    /// Keeps `viewers` as the session's peak when no check counted more.
+    fn raise_peak(
+        &self,
+        id: &str,
+        viewers: u32,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 
 /// The live state as the admin UI shows it.
@@ -105,6 +111,9 @@ impl StreamService {
                     && s.twitch_id == checked.id
                 {
                     viewers = Some(checked.viewers);
+                    if let Err(e) = repo.raise_peak(&s.id, checked.viewers).await {
+                        tracing::error!(error = %e, "stream peak viewers not stored");
+                    }
                 }
                 report(&match live {
                     Some(s) => Broadcast::Live {

@@ -6,4 +6,8 @@ mod domain;
 mod infrastructure;
 
 pub use application::ActivityService;
-pub use infrastructure::{db::MIGRATOR, http::routes, openapi, start};
+pub use infrastructure::{
+    db::{MIGRATOR, SessionCounts, session_counts},
+    http::routes,
+    openapi, start,
+};

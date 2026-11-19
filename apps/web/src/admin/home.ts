@@ -44,6 +44,37 @@ export function obsLight(live: LiveState): Light {
   }[live.obs.state] as Light
 }
 
+/** `H:MM:SS` for a length in milliseconds (negative counts as 0). */
+export function clockText(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+export type Stage = 'before' | 'live' | 'after'
+
+/**
+ * Which stage home shows by itself: live while Twitch says so; after a stream that ended while the Host was running
+ * (the summary stays reachable until the next stream starts); before otherwise, signed out included.
+ */
+export function streamStage(stream: Schemas['StreamStatusPayload'] | undefined, summary: Schemas['StreamSummary'] | null | undefined): Stage {
+  if (stream?.state === 'live') return 'live'
+  if (stream?.state === 'offline' && summary?.endedAt && summary.endedSinceLaunch) return 'after'
+  return 'before'
+}
+
+const twoDigits = (n: number) => String(n).padStart(2, '0')
+const dayTime = (d: Date) => `${d.getMonth() + 1}/${d.getDate()} ${twoDigits(d.getHours())}:${twoDigits(d.getMinutes())}`
+
+/** `11/18 19:58–22:39 · 2:41` in local time; the end's day shows when it differs. */
+export function sessionRange(startedAt: string, endedAt: string): string {
+  const start = new Date(startedAt)
+  const end = new Date(endedAt)
+  const sameDay = start.toDateString() === end.toDateString()
+  const endText = sameDay ? `${twoDigits(end.getHours())}:${twoDigits(end.getMinutes())}` : dayTime(end)
+  const minutes = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 60000))
+  return `${dayTime(start)}–${endText} · ${Math.floor(minutes / 60)}:${twoDigits(minutes % 60)}`
+}
+
 /** What the home page keeps from `/ws/overlay`. `loading` until the first snapshot, `failed` while disconnected. */
 export interface LiveState {
   status: 'loading' | 'open' | 'failed'
