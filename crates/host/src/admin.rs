@@ -40,6 +40,7 @@ use toolkit_core::{
     outbox::Outbox,
     settings,
 };
+use viewers::ViewerService;
 
 use utoipa::ToSchema;
 
@@ -59,6 +60,7 @@ pub(crate) struct AdminState {
     sounds: Arc<SoundService>,
     stream: Arc<StreamService>,
     activity: Arc<ActivityService>,
+    viewers: Arc<ViewerService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
@@ -85,6 +87,7 @@ impl AdminState {
         sounds: Arc<SoundService>,
         stream: Arc<StreamService>,
         activity: Arc<ActivityService>,
+        viewers: Arc<ViewerService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
@@ -103,6 +106,7 @@ impl AdminState {
             sounds,
             stream,
             activity,
+            viewers,
             outbox,
             modules,
             twitch,
@@ -122,6 +126,12 @@ impl AdminState {
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
         let sounds = self.sounds.clone();
+        // One handle per delivery: chat, alerts and redemptions each record their viewer.
+        let (chat_viewers, alert_viewers, redemption_viewers) = (
+            self.viewers.clone(),
+            self.viewers.clone(),
+            self.viewers.clone(),
+        );
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
         let check = StreamCheck {
             helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
@@ -132,15 +142,18 @@ impl AdminState {
             helix: Helix::new(&self.endpoints.helix, auth, self.http.clone()),
             tls: self.tls.clone(),
             deliver: Arc::new(move |m| {
+                chat_viewers.receive_chat(&m, Source::Twitch);
                 checkin.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),
             deliver_alert: Arc::new(move |a| {
+                alert_viewers.receive_alert(&a, Source::Twitch);
                 activity.receive(a.clone(), Source::Twitch);
                 alerts.receive(a, Source::Twitch)
             }),
             // Reward sounds take the in-memory path, not the outbox: a sound played late is worse than none.
             deliver_redemption: Arc::new(move |r| {
+                redemption_viewers.receive_redemption(&r, Source::Twitch);
                 sounds.receive_redemption(&r);
                 redemption.receive(r, Source::Twitch)
             }),

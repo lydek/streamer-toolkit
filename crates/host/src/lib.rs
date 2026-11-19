@@ -216,6 +216,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         http: http.clone(),
         twitch: twitch.clone(),
     });
+    let viewers = Arc::new(viewers::start(config.db.clone(), profiles.clone()));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
@@ -280,6 +281,7 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         sounds.clone(),
         stream,
         activity,
+        viewers,
         outbox,
         modules,
     ));

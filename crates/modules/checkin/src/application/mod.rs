@@ -4,7 +4,6 @@
 use std::{
     future::Future,
     path::PathBuf,
-    pin::Pin,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -213,22 +212,9 @@ impl Default for Timing {
     }
 }
 
-/// Looks up a viewer's Twitch profile image URL; the host implements it with Helix. `None` when it cannot.
-pub trait ProfileImages: Send + Sync + 'static {
-    fn profile_image<'a>(
-        &'a self,
-        twitch_user_id: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>>;
-}
-
-/// Only Twitch's image CDN is shown on the overlay.
-pub(crate) fn is_twitch_image(url: &str) -> bool {
-    url.len() <= 512
-        && url.starts_with("https://static-cdn.jtvnw.net/")
-        && !url.contains(|c: char| {
-            c.is_whitespace() || c.is_control() || matches!(c, '"' | '\'' | '<' | '>' | '\\')
-        })
-}
+// Shared with the viewer directory, so they live in `core`.
+pub use toolkit_core::twitch::ProfileImages;
+pub(crate) use toolkit_core::twitch::is_twitch_image;
 
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
 

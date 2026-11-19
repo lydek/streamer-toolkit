@@ -38,6 +38,7 @@ fn modules() -> Vec<&'static Migrator> {
         &checkin::MIGRATOR,
         &stream::MIGRATOR,
         &activity::MIGRATOR,
+        &viewers::MIGRATOR,
     ]
 }
 
