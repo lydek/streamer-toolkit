@@ -111,6 +111,7 @@
 
         <section v-show="section === 'backup'" aria-labelledby="backup">
           <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
+          <RecordRetention />
           <BackupRestore />
         </section>
 
@@ -143,6 +144,7 @@ import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import BackupRestore from './BackupRestore.vue'
+import RecordRetention from './RecordRetention.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
 import CheckinSettings from './CheckinSettings.vue'

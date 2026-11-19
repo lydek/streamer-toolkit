@@ -1041,6 +1041,137 @@
         }
       }
     },
+    "/api/admin/records/expired": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "How many records keeping only `days` days would delete now; asked before shortening the retention.",
+        "operationId": "expired",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "description": "The retention to check, 1-3650 days.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpiredCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`activity.invalid_retention`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`activity.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/records/retention": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "How long chat and activity records are kept: `{\"days\": n}` or `\"forever\"`.",
+        "operationId": "retention",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordRetention"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`activity.retention_unreadable`: settings.json cannot be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the retention (1-3650 days, or forever) and deletes the records it no longer keeps, together: a failed\nsave deletes nothing. The admin UI asks before shortening it and reads the retention again after an error.",
+        "operationId": "set_retention",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRetention"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`activity.invalid_retention`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`: nothing changed; `activity.storage_failed`: the delete did not commit, the new retention may be saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/redemptions": {
       "get": {
         "tags": [
@@ -1534,7 +1665,7 @@
         "responses": {
           "204": {},
           "400": {
-            "description": "`sound.invalid`: not between 1 ms and 10 minutes",
+            "description": "`sound.invalid`: not between 1 ms and 6 hours",
             "content": {
               "application/json": {
                 "schema": {
@@ -2215,6 +2346,52 @@
             "minimum": 0
           }
         }
+      },
+      "AlertReceivedEvent": {
+        "type": "object",
+        "description": "An `alert.received` event exactly as `/ws/overlay` sends it: an alert arrived, sent at once whether or not an\noverlay will play it (the admin window lists it). Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AlertPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AlertReceivedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AlertReceivedType": {
+        "type": "string",
+        "enum": [
+          "alert.received"
+        ]
       },
       "AlertSound": {
         "oneOf": [
@@ -3080,6 +3257,20 @@
           }
         }
       },
+      "ExpiredCount": {
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Records older than that, which a change to it would delete now.",
+            "minimum": 0
+          }
+        }
+      },
       "GeneralSettings": {
         "type": "object",
         "description": "Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window.",
@@ -3587,6 +3778,20 @@
           "presentation.stopped"
         ]
       },
+      "Purged": {
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Records deleted because the new retention no longer keeps them.",
+            "minimum": 0
+          }
+        }
+      },
       "QueueStatus": {
         "type": "object",
         "description": "What the queue holds right now.",
@@ -3621,6 +3826,30 @@
             "description": "In the order they will play."
           }
         }
+      },
+      "RecordRetention": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "days"
+            ],
+            "properties": {
+              "days": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "string",
+            "enum": [
+              "forever"
+            ]
+          }
+        ],
+        "description": "Keep records for this many days (1–3650), or forever; older ones are deleted on their own."
       },
       "RedemptionChangedEvent": {
         "type": "object",
@@ -4068,7 +4297,7 @@
           "duration_ms": {
             "type": "integer",
             "format": "int32",
-            "description": "How long the sound plays, 1 ms to 10 minutes.",
+            "description": "How long the sound plays, 1 ms to 6 hours.",
             "minimum": 0
           }
         }

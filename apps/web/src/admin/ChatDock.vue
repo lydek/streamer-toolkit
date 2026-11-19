@@ -103,7 +103,8 @@ const log = shallowRef(EMPTY_LOG)
 const events = shallowRef<{ id: string; title: string }[]>([])
 const live = useLiveEvents(2000, (msg) => {
   log.value = applyChat(log.value, msg)
-  if (msg.type === 'alert') events.value = [...events.value, { id: msg.id, title: alertTitle(msg.payload) }].slice(-EVENT_LIMIT)
+  // Every alert that arrived, whether or not an overlay in OBS plays it.
+  if (msg.type === 'alert.received') events.value = [...events.value, { id: msg.id, title: alertTitle(msg.payload) }].slice(-EVENT_LIMIT)
 })
 
 // "Mentions me" needs the broadcaster's login; it follows signing in, out and switching accounts (app bar polling).

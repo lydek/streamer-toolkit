@@ -27,32 +27,40 @@ impl Default for Timing {
 }
 
 /// Shows an alert on the overlays for the given time; `infrastructure` publishes it on the bus.
+/// Tells the admin window an alert arrived; `infrastructure` publishes it on the bus.
+type Announce = Box<dyn Fn(&Alert, Source, Duration) + Send + Sync>;
+
 type Publish = Arc<dyn Fn(Alert, Source, Duration) + Send + Sync>;
 
 pub struct AlertsService {
     modules: Arc<Modules>,
     timing: Timing,
     presenter: Arc<Presenter>,
+    announce: Announce,
     publish: Publish,
 }
 
 impl AlertsService {
+    /// `announce` tells the admin window an alert arrived, at once and whether or not it will play; `publish` hands
+    /// it to the overlays when its turn comes.
     pub(crate) fn with_publisher(
         modules: Arc<Modules>,
         timing: Timing,
         presenter: Arc<Presenter>,
+        announce: impl Fn(&Alert, Source, Duration) + Send + Sync + 'static,
         publish: impl Fn(Alert, Source, Duration) + Send + Sync + 'static,
     ) -> Self {
         Self {
             modules,
             timing,
             presenter,
+            announce: Box::new(announce),
             publish: Arc::new(publish),
         }
     }
 
-    /// Queues `alert`. A gifted sub is covered by its gift's alert, so one gift of N plays once. An alert reaching
-    /// the front while the module is disabled is dropped.
+    /// Announces `alert` and queues it. A gifted sub is covered by its gift's alert, so one gift of N plays once.
+    /// An alert reaching the front while the module is disabled is dropped.
     pub fn receive(&self, alert: Alert, source: Source) {
         if matches!(alert.kind, AlertKind::Subscribe { gifted: true, .. }) {
             return;
@@ -65,6 +73,7 @@ impl AlertsService {
             true => self.timing.show_with_message,
             false => self.timing.show,
         };
+        (self.announce)(&alert, source, show);
         let (modules, publish) = (self.modules.clone(), self.publish.clone());
         self.presenter.push(Item {
             stage: Stage::Alerts,
@@ -133,8 +142,56 @@ mod tests {
 
     const SOUND_ID: &str = "0190a5b0-0000-7000-8000-000000000001";
 
+    /// The next alert handed to the overlays (announcements skipped).
     async fn next(rx: &mut broadcast::Receiver<Arc<str>>) -> Value {
-        serde_json::from_str(&rx.recv().await.unwrap()).unwrap()
+        loop {
+            let event: Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
+            if event["type"] == "alert" {
+                return event;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn an_alert_is_announced_at_once_even_when_no_overlay_plays_it() {
+        let dir = std::env::temp_dir().join(format!("st-alerts-announce-{}", std::process::id()));
+        let bus = Arc::new(EventBus::default());
+        let modules = Arc::new(Modules::load(dir.clone()));
+        // No alerts overlay in OBS: nothing plays.
+        let presenter = Presenter::start(toolkit_core::presentation::DEFAULT_GAP, |_| false);
+        let sounds = Arc::new(SoundService::new(
+            dir.clone(),
+            modules.clone(),
+            bus.clone(),
+            presenter.clone(),
+        ));
+        let alerts = AlertsService::new(bus.clone(), modules, Timing::default(), presenter, sounds);
+        let (_, mut rx) = bus.subscribe();
+        alerts.receive(
+            alert("follow", Some("Fan"), AlertKind::Follow),
+            Source::Twitch,
+        );
+        let event: Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
+        assert_eq!(
+            (
+                event["type"].as_str(),
+                event["payload"]["userName"].as_str()
+            ),
+            (Some("alert.received"), Some("Fan"))
+        );
+        let typed: crate::AlertReceivedEvent = serde_json::from_value(event.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(typed).unwrap(),
+            event,
+            "the schema type matches the bus"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), rx.recv())
+                .await
+                .is_err(),
+            "and it never plays"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     // Paused time: the clock jumps ahead whenever every task waits, so the pacing is checked exactly.
@@ -270,8 +327,9 @@ mod tests {
         }
         modules.set_enabled(modules::ALERTS, false).unwrap();
         alerts.receive(alert("off", None, AlertKind::Follow), Source::Twitch);
+        // Still announced (it happened), but never played.
         assert!(
-            tokio::time::timeout(Duration::from_secs(60), rx.recv())
+            tokio::time::timeout(Duration::from_secs(60), next(&mut rx))
                 .await
                 .is_err(),
             "the alert sent while disabled is dropped"

@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use activity::ActivityService;
 use alerts::{AlertKindName, AlertsService};
 use axum::{
     Json, Router,
@@ -57,6 +58,7 @@ pub(crate) struct AdminState {
     checkin: Arc<CheckinService>,
     sounds: Arc<SoundService>,
     stream: Arc<StreamService>,
+    activity: Arc<ActivityService>,
     outbox: Arc<Outbox>,
     modules: Arc<Modules>,
     /// Shared with [`TwitchProfiles`], which looks up profile images with the same sign-in.
@@ -82,6 +84,7 @@ impl AdminState {
         checkin: Arc<CheckinService>,
         sounds: Arc<SoundService>,
         stream: Arc<StreamService>,
+        activity: Arc<ActivityService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
     ) -> Self {
@@ -99,6 +102,7 @@ impl AdminState {
             checkin,
             sounds,
             stream,
+            activity,
             outbox,
             modules,
             twitch,
@@ -114,6 +118,7 @@ impl AdminState {
     fn start_eventsub(&self, auth: TwitchAuth) {
         let chat = self.chat.clone();
         let alerts = self.alerts.clone();
+        let activity = self.activity.clone();
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
         let sounds = self.sounds.clone();
@@ -130,7 +135,10 @@ impl AdminState {
                 checkin.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),
-            deliver_alert: Arc::new(move |a| alerts.receive(a, Source::Twitch)),
+            deliver_alert: Arc::new(move |a| {
+                activity.receive(a.clone(), Source::Twitch);
+                alerts.receive(a, Source::Twitch)
+            }),
             // Reward sounds take the in-memory path, not the outbox: a sound played late is worse than none.
             deliver_redemption: Arc::new(move |r| {
                 sounds.receive_redemption(&r);

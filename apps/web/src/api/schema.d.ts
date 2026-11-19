@@ -390,6 +390,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/records/expired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many records keeping only `days` days would delete now; asked before shortening the retention. */
+        get: operations["expired"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/records/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How long chat and activity records are kept: `{"days": n}` or `"forever"`. */
+        get: operations["retention"];
+        /**
+         * Saves the retention (1-3650 days, or forever) and deletes the records it no longer keeps, together: a failed
+         *     save deletes nothing. The admin UI asks before shortening it and reads the retention again after an error.
+         */
+        put: operations["set_retention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/redemptions": {
         parameters: {
             query?: never;
@@ -792,6 +830,23 @@ export interface components {
              */
             viewers?: number | null;
         };
+        /**
+         * @description An `alert.received` event exactly as `/ws/overlay` sends it: an alert arrived, sent at once whether or not an
+         *     overlay will play it (the admin window lists it). Not kept in snapshots.
+         */
+        AlertReceivedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["AlertPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["AlertReceivedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        AlertReceivedType: "alert.received";
         /** @description The sound an alert plays: the overlay's built-in one, none, or a library sound. */
         AlertSound: {
             /** @enum {string} */
@@ -1081,6 +1136,13 @@ export interface components {
         ErrorBody: {
             code: string;
         };
+        ExpiredCount: {
+            /**
+             * Format: int64
+             * @description Records older than that, which a change to it would delete now.
+             */
+            count: number;
+        };
         /** @description Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window. */
         GeneralSettings: {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
@@ -1249,6 +1311,13 @@ export interface components {
         };
         /** @enum {string} */
         PresentationStoppedType: "presentation.stopped";
+        Purged: {
+            /**
+             * Format: int64
+             * @description Records deleted because the new retention no longer keeps them.
+             */
+            deleted: number;
+        };
         /** @description What the queue holds right now. */
         QueueStatus: {
             current: components["schemas"]["Playing"] | null;
@@ -1260,6 +1329,11 @@ export interface components {
             /** @description In the order they will play. */
             waiting: components["schemas"]["Waiting"][];
         };
+        /** @description Keep records for this many days (1–3650), or forever; older ones are deleted on their own. */
+        RecordRetention: {
+            /** Format: int32 */
+            days: number;
+        } | "forever";
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
          *     carries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.
@@ -1423,7 +1497,7 @@ export interface components {
         SoundDuration: {
             /**
              * Format: int32
-             * @description How long the sound plays, 1 ms to 10 minutes.
+             * @description How long the sound plays, 1 ms to 6 hours.
              */
             duration_ms: number;
         };
@@ -2473,6 +2547,115 @@ export interface operations {
             };
         };
     };
+    expired: {
+        parameters: {
+            query: {
+                /** @description The retention to check, 1-3650 days. */
+                days: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpiredCount"];
+                };
+            };
+            /** @description `activity.invalid_retention` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `activity.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    retention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordRetention"];
+                };
+            };
+            /** @description `activity.retention_unreadable`: settings.json cannot be read */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_retention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRetention"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purged"];
+                };
+            };
+            /** @description `activity.invalid_retention` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed`: nothing changed; `activity.storage_failed`: the delete did not commit, the new retention may be saved */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_redemptions: {
         parameters: {
             query?: {
@@ -2846,7 +3029,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `sound.invalid`: not between 1 ms and 10 minutes */
+            /** @description `sound.invalid`: not between 1 ms and 6 hours */
             400: {
                 headers: {
                     [name: string]: unknown;

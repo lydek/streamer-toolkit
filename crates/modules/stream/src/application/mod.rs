@@ -3,7 +3,7 @@
 use std::future::Future;
 
 use chrono::{DateTime, Utc};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use toolkit_core::events::StreamChange;
 
 use crate::domain::{self, Session, Step};
@@ -41,8 +41,15 @@ pub(crate) enum Broadcast {
     },
 }
 
+/// What the worker handles, in arrival order.
+enum Message {
+    Change(StreamChange),
+    /// Asks for the current session's ID once everything before it has been applied.
+    Session(oneshot::Sender<Option<String>>),
+}
+
 pub struct StreamService {
-    tx: mpsc::UnboundedSender<StreamChange>,
+    tx: mpsc::UnboundedSender<Message>,
 }
 
 impl StreamService {
@@ -51,7 +58,7 @@ impl StreamService {
         repo: R,
         report: impl Fn(&Broadcast) + Send + Sync + 'static,
     ) -> Self {
-        let (tx, mut rx) = mpsc::unbounded_channel::<StreamChange>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
         tokio::spawn(async move {
             report(&Broadcast::Unknown);
             let mut current = match repo.latest().await {
@@ -62,7 +69,14 @@ impl StreamService {
                 }
             };
             let mut viewers = None;
-            while let Some(change) = rx.recv().await {
+            while let Some(message) = rx.recv().await {
+                let change = match message {
+                    Message::Change(change) => change,
+                    Message::Session(reply) => {
+                        let _ = reply.send(current.as_ref().map(|s| s.id.clone()));
+                        continue;
+                    }
+                };
                 // Signed out: the state is unknown until Twitch says again; sessions stay as they are.
                 if change == StreamChange::SignedOut {
                     report(&Broadcast::Unknown);
@@ -104,8 +118,17 @@ impl StreamService {
         Self { tx }
     }
 
+    /// The current session's ID (the live stream's, or after it ended the last one's until the next starts; `None`
+    /// before the first stream) once every start, end and check received so far is applied. Ask when an event
+    /// arrives, so a follow right after a start gets that stream's session; other modules tag records with it.
+    pub fn session_after_pending(&self) -> impl Future<Output = Option<String>> + Send + use<> {
+        let (reply, answer) = oneshot::channel();
+        let _ = self.tx.send(Message::Session(reply));
+        async move { answer.await.ok().flatten() }
+    }
+
     /// Queues a start, an end or a check from Twitch.
     pub fn receive(&self, change: StreamChange) {
-        let _ = self.tx.send(change);
+        let _ = self.tx.send(Message::Change(change));
     }
 }
