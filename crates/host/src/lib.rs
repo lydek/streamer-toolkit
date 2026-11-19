@@ -188,6 +188,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         toolkit_core::presentation::Presenter::start(config.presentation_gap, move |stage| {
             on_air.count(overlay::OverlayKind::from(stage)) > 0
         });
+    // Waiting items say whether their overlay is open; follow OBS opening and closing them.
+    let (mut changes, refreshed) = (overlays.changes(), presenter.clone());
+    tokio::spawn(async move {
+        while changes.changed().await.is_ok() {
+            refreshed.refresh();
+        }
+    });
     queue::follow(&presenter, bus.clone());
     let queue_routes = queue::routes(presenter.clone(), bus.clone());
     let sounds = Arc::new(sound::SoundService::new(
@@ -1214,7 +1221,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn clearing_and_stopping_the_queue_need_the_token() {
+    async fn skipping_clearing_and_stopping_the_queue_need_the_token() {
         let post = |path: &str, token: bool| {
             let mut b = get_req(path, "127.0.0.1:47810")
                 .method(Method::POST)
@@ -1243,7 +1250,17 @@ mod tests {
             body(res).await,
             serde_json::json!({"stopped": false, "cancelled": 0})
         );
-        for path in ["/api/admin/queue/clear", "/api/admin/queue/stop"] {
+        let res = app()
+            .oneshot(post("/api/admin/queue/skip", true))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(body(res).await, serde_json::json!({"skipped": false}));
+        for path in [
+            "/api/admin/queue/skip",
+            "/api/admin/queue/clear",
+            "/api/admin/queue/stop",
+        ] {
             assert_eq!(status(post(path, false)).await, StatusCode::UNAUTHORIZED);
         }
     }

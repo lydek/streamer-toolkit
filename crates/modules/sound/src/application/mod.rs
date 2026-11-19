@@ -12,7 +12,7 @@ use std::{
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Stage},
+    presentation::{Item, Presenter, Shown, Stage, Subject},
     settings::{self, SoundEntry},
 };
 use uuid::Uuid;
@@ -82,20 +82,31 @@ impl SoundService {
             .as_ref()
             .and_then(|e| e.duration_ms)
             .map_or(UNMEASURED, |ms| Duration::from_millis(ms.into()));
-        let (play, modules) = (self.play.clone(), self.modules.clone());
+        let (play, modules, missing) = (
+            self.play.clone(),
+            self.modules.clone(),
+            self.file_missing(&id),
+        );
         self.presenter.push(Item {
             stage: Stage::Sound,
-            label: entry.map(|e| e.label).unwrap_or_default(),
+            subject: Subject::Sound {
+                sound: entry.map(|e| e.label).unwrap_or_default(),
+                viewer: r.user_name.clone(),
+            },
             show,
             simulated: false,
             ready: None,
             present: Box::new(move || {
                 // Turned off while it waited: it does not play.
                 if !modules.is_enabled(modules::SOUND) {
-                    return false;
+                    return Shown::No;
+                }
+                // Its file is gone: nothing to hear, but it keeps its turn so the queue area shows why.
+                if missing {
+                    return Shown::WithoutSound;
                 }
                 play(&id, volume, Source::Twitch);
-                true
+                Shown::Yes
             }),
         });
     }
@@ -246,6 +257,11 @@ impl SoundService {
             tracing::warn!(code = "sound.file_not_removed", error = %e, "left a sound file behind");
         }
         Ok(())
+    }
+
+    /// The library lists it but its file is gone from the sounds folder (deleted outside the app).
+    pub fn file_missing(&self, id: &str) -> bool {
+        !self.file(id).is_some_and(|(path, _)| path.is_file())
     }
 
     /// Where a library sound's file is, and its format.

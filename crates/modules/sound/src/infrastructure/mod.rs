@@ -884,6 +884,54 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[tokio::test]
+    async fn a_reward_sound_whose_file_is_gone_is_marked_and_plays_nothing() {
+        use toolkit_core::events::RedemptionChange::Added;
+        use toolkit_core::presentation::{Problem, Subject};
+        let dir = data_dir("reward-missing");
+        let bus = Arc::new(EventBus::default());
+        let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
+        let presenter =
+            toolkit_core::presentation::Presenter::start(std::time::Duration::ZERO, |_| true);
+        let mut status = presenter.subscribe();
+        let service = Arc::new(SoundService::new(
+            dir.clone(),
+            modules,
+            bus.clone(),
+            presenter,
+        ));
+        let app = routes(service.clone());
+        let id = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let reward = "92af127c-7326-4483-a52b-b0da0be61c01";
+        send(&app, choose(&format!("reward.{reward}"), id.clone().into())).await;
+        assert!(!service.file_missing(&id));
+        std::fs::remove_file(service.file(&id).unwrap().0).unwrap();
+        assert!(service.file_missing(&id));
+        let (_, mut rx) = bus.subscribe();
+
+        service.receive_redemption(&redemption(reward, Added));
+        let playing = status
+            .wait_for(|s| s.current.as_ref().is_some_and(|c| c.problem.is_some()))
+            .await
+            .unwrap()
+            .current
+            .clone()
+            .unwrap();
+        assert_eq!(playing.problem, Some(Problem::SoundMissing));
+        assert_eq!(
+            playing.subject,
+            Subject::Sound {
+                sound: "bell".into(),
+                viewer: "Viewer".into()
+            }
+        );
+        assert!(rx.try_recv().is_err(), "nothing sent to the sound overlay");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn redemption(
         reward: &str,
         change: toolkit_core::events::RedemptionChange,

@@ -1,5 +1,5 @@
 // `/overlay/sound/`: plays channel point reward sounds one at a time, in order. It shows nothing.
-import type { Incoming } from '../chat/chat'
+import { type Incoming, stopsStage } from '../chat/chat'
 import { stopSounds } from '../sound'
 import { playToEnd, soundQueue } from './queue'
 
@@ -16,8 +16,8 @@ function connect() {
     else if (msg.type === 'sound.play' && msg.seq > lastSeq) {
       lastSeq = msg.seq
       enqueue(msg.payload)
-    } else if (msg.type === 'presentation.stopped' && msg.seq > lastSeq) {
-      // Emergency stop: nothing waiting plays, and the sound playing goes silent.
+    } else if (stopsStage(msg, 'sound') && msg.seq > lastSeq) {
+      // Emergency stop or skip: nothing waiting plays, and the sound playing goes silent.
       lastSeq = msg.seq
       enqueue.clear()
       stopSounds()

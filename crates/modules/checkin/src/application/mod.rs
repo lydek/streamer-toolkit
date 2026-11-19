@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, oneshot};
 use toolkit_core::{
     events::{ChatMessage, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Stage},
+    presentation::{Item, Presenter, Shown, Stage, Subject},
     settings::{self, CheckinSettings},
 };
 
@@ -360,7 +360,11 @@ impl CheckinService {
             let show_card = card_show.clone();
             card_presenter.push(Item {
                 stage: Stage::Checkin,
-                label: c.viewer.name.clone(),
+                subject: Subject::Card {
+                    viewer: c.viewer.name.clone(),
+                    stamps: c.stamps,
+                    slots: c.slots,
+                },
                 show: timing.show,
                 simulated: false,
                 ready: Some(Box::pin(async move {
@@ -369,9 +373,9 @@ impl CheckinService {
                 present: Box::new(move || match card.lock().unwrap().take() {
                     Some(card) => {
                         show_card(&card, timing.show);
-                        true
+                        Shown::Yes
                     }
-                    None => false,
+                    None => Shown::No,
                 }),
             });
         });
@@ -444,13 +448,17 @@ impl CheckinService {
         let (show_card, show) = (self.show_card.clone(), self.timing.show);
         self.presenter.push(Item {
             stage: Stage::Checkin,
-            label: card.name.clone(),
+            subject: Subject::Card {
+                viewer: card.name.clone(),
+                stamps,
+                slots,
+            },
             show,
             simulated: true,
             ready: None,
             present: Box::new(move || {
                 show_card(&card, show);
-                true
+                Shown::Yes
             }),
         });
         true

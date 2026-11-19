@@ -26,7 +26,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { components } from '../../api/schema'
-import type { Incoming } from '../chat/chat'
+import { type Incoming, stopsStage } from '../chat/chat'
 import { playSound, stopSounds } from '../sound'
 import { twitchImage } from './checkin'
 
@@ -57,8 +57,8 @@ function receive(msg: Incoming) {
   if (msg.type === 'snapshot') {
     // Cards are never in snapshots, so none replays after a reconnect.
     lastSeq = msg.seq
-  } else if (msg.type === 'presentation.stopped' && msg.seq > lastSeq) {
-    // Emergency stop: the card and its sound go away at once.
+  } else if (stopsStage(msg, 'checkin') && msg.seq > lastSeq) {
+    // Emergency stop or skip: the card and its sound go away at once.
     lastSeq = msg.seq
     clearTimeout(hide)
     card.value = undefined

@@ -254,3 +254,22 @@ test('an emergency stop takes the alert off the overlay at once and nothing wait
   await page.waitForTimeout(2500)
   await expect(title).toHaveCount(0)
 })
+
+test('跳過 takes the alert playing off the overlay and the next one follows', { tag: '@host' }, async ({ page, request }) => {
+  test.setTimeout(60_000)
+  const name = `e2e-${randomUUID().slice(0, 8)}`
+  await page.goto(`${HOST}/overlay/alerts/`)
+  await expect(page.locator('[data-alert-stage]')).toBeAttached()
+  for (let n = 0; n < 2; n++) {
+    const res = await request.post(`${HOST}/api/admin/simulate/alert`, { headers: admin, data: { kind: 'follow', userName: name } })
+    expect(res.status()).toBe(204)
+  }
+  const title = page.locator('[data-alert-stage] [data-field="title"]', { hasText: name })
+  await expect(title).toBeVisible({ timeout: 30_000 })
+
+  const res = await request.post(`${HOST}/api/admin/queue/skip`, { headers: admin })
+  expect(await res.json()).toEqual({ skipped: true })
+  await expect(title).toHaveCount(0, { timeout: 500 })
+  // The second one plays after the gap.
+  await expect(title).toBeVisible({ timeout: 5_000 })
+})

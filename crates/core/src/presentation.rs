@@ -1,6 +1,7 @@
 //! One queue for what the overlays present (alerts, stamp cards, reward sounds): items play one at a time, in the
 //! order they came, with no size limit, so nothing overlaps and nothing is dropped. Modules still decide what to
-//! show; the queue only paces it. The broadcaster can clear what waits, or stop everything at once.
+//! show; the queue only paces it. The broadcaster can skip the item playing, clear what waits, or stop everything
+//! at once.
 
 use std::{
     collections::VecDeque,
@@ -26,10 +27,48 @@ pub enum Stage {
     Sound,
 }
 
+/// What an item is, as the queue area names it; names are raw text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Subject {
+    /// An alert; `alert` is its kind as in the `alert` payload (`follow`, `subscribe`, ...). No viewer for an
+    /// anonymous gift or cheer.
+    Alert {
+        alert: String,
+        viewer: Option<String>,
+    },
+    /// A stamp card with `stamps` of its `slots` filled.
+    Card {
+        viewer: String,
+        stamps: u32,
+        slots: u32,
+    },
+    /// A reward sound and the viewer who redeemed it.
+    Sound { sound: String, viewer: String },
+}
+
+/// Something the Host itself can see went wrong with an item (overlays do not report back).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Problem {
+    /// Its sound file is gone from the sounds folder; the rest still shows.
+    SoundMissing,
+}
+
+/// What became of an item when its turn came.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shown {
+    /// Skipped after all (e.g. its module was turned off while it waited); it costs no time.
+    No,
+    Yes,
+    /// Shown, but its sound file is missing.
+    WithoutSound,
+}
+
 pub struct Item {
     pub stage: Stage,
-    /// What the queue area shows for it, e.g. the viewer's name or the sound's label; raw text.
-    pub label: String,
+    /// What the queue area shows for it.
+    pub subject: Subject,
     /// How long the overlay shows it.
     pub show: Duration,
     /// From the simulator: shown even when the overlay is not open in OBS, so the admin window's preview still
@@ -38,8 +77,8 @@ pub struct Item {
     /// Work it needs before it can show (a stamp card's avatar lookup); it holds its place meanwhile, and a stop
     /// ends it.
     pub ready: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
-    /// Publishes it to the overlay; `false` skips it after all (e.g. its module was turned off while it waited).
-    pub present: Box<dyn FnOnce() -> bool + Send>,
+    /// Publishes it to the overlay.
+    pub present: Box<dyn FnOnce() -> Shown + Send>,
 }
 
 /// What the queue holds right now.
@@ -59,20 +98,23 @@ pub struct QueueStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Playing {
     pub stage: Stage,
-    /// Raw text.
-    pub label: String,
+    pub subject: Subject,
     pub show_ms: u64,
     /// RFC 3339 time it started.
     pub started_at: String,
+    /// What went wrong that the Host can see; `null` when nothing did.
+    #[schema(required)]
+    pub problem: Option<Problem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Waiting {
     pub stage: Stage,
-    /// Raw text.
-    pub label: String,
+    pub subject: Subject,
     pub show_ms: u64,
+    /// Its overlay is open in OBS right now; when it is not as its turn comes, the item is skipped.
+    pub on_air: bool,
 }
 
 type OnAir = Box<dyn Fn(Stage) -> bool + Send + Sync>;
@@ -91,6 +133,8 @@ pub struct Presenter {
     status: watch::Sender<QueueStatus>,
     /// Counts emergency stops; the item playing ends its wait when it changes.
     stops: watch::Sender<u64>,
+    /// Counts skips; the item playing when it changes ends, and the next one follows after the gap.
+    skips: watch::Sender<u64>,
 }
 
 impl Presenter {
@@ -110,6 +154,7 @@ impl Presenter {
             })
             .0,
             stops: watch::channel(0).0,
+            skips: watch::channel(0).0,
         });
         tokio::spawn(play(presenter.clone()));
         presenter
@@ -138,6 +183,26 @@ impl Presenter {
         cancelled
     }
 
+    /// Ends the item playing now; the waiting ones follow after the gap. Returns whether one was playing.
+    ///
+    /// `announce` tells the overlays which stage to stop (gets the item's stage) while the queue is still locked.
+    pub fn skip(&self, announce: impl FnOnce(Stage)) -> bool {
+        let mut state = self.state.lock().unwrap();
+        let Some(playing) = state.current.take() else {
+            return false;
+        };
+        self.publish(&state);
+        self.skips.send_modify(|n| *n += 1);
+        announce(playing.stage);
+        true
+    }
+
+    /// Publishes the status again, e.g. after an overlay opened or closed in OBS.
+    pub fn refresh(&self) {
+        let state = self.state.lock().unwrap();
+        self.publish(&state);
+    }
+
     /// Drops every waiting item and ends the one playing now; the caller tells the overlays to stop at once.
     /// Returns whether one was playing and how many waiting ones were dropped.
     ///
@@ -162,8 +227,9 @@ impl Presenter {
                 .iter()
                 .map(|i| Waiting {
                     stage: i.stage,
-                    label: i.label.clone(),
+                    subject: i.subject.clone(),
                     show_ms: millis(i.show),
+                    on_air: i.simulated || (self.on_air)(i.stage),
                 })
                 .collect(),
             gap_ms: millis(self.gap),
@@ -176,7 +242,8 @@ fn millis(d: Duration) -> u64 {
 }
 
 /// Presents the waiting items in order, each after the previous one has shown. An item whose overlay is not open
-/// is skipped without waiting: nobody would see it. An emergency stop ends the wait of the one playing.
+/// is skipped without waiting: nobody would see it. An emergency stop ends the wait of the one playing; a skip
+/// ends it and keeps the gap before the next.
 async fn play(presenter: Arc<Presenter>) {
     loop {
         // Taken, checked and marked as playing in one step under the lock stop() takes, with the stop signal read
@@ -185,16 +252,21 @@ async fn play(presenter: Arc<Presenter>) {
             let mut state = presenter.state.lock().unwrap();
             match state.waiting.pop_front() {
                 None => None,
-                Some(mut item) => {
+                Some(item) => {
                     let taken = if item.simulated || (presenter.on_air)(item.stage) {
                         state.current = Some(Playing {
                             stage: item.stage,
-                            label: std::mem::take(&mut item.label),
+                            subject: item.subject.clone(),
                             show_ms: millis(item.show),
                             started_at: chrono::Utc::now()
                                 .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                            problem: None,
                         });
-                        Some((item, presenter.stops.subscribe()))
+                        Some((
+                            item,
+                            presenter.stops.subscribe(),
+                            presenter.skips.subscribe(),
+                        ))
                     } else {
                         tracing::debug!(stage = ?item.stage, "overlay not open, item skipped");
                         None
@@ -204,7 +276,7 @@ async fn play(presenter: Arc<Presenter>) {
                 }
             }
         };
-        let (item, mut stops) = match next {
+        let (item, mut stops, mut skips) = match next {
             Some(Some(taken)) => taken,
             Some(None) => continue,
             None => {
@@ -213,21 +285,43 @@ async fn play(presenter: Arc<Presenter>) {
                 continue;
             }
         };
-        let mut stopped = false;
+        let (mut ended, mut skipped) = (false, false);
         if let Some(ready) = item.ready {
             tokio::select! {
                 _ = ready => {}
-                _ = stops.changed() => stopped = true,
+                _ = stops.changed() => ended = true,
+                _ = skips.changed() => (ended, skipped) = (true, true),
             }
         }
-        // Checked and published under the lock stop() takes, so a stop is never followed by this item's picture.
+        // Checked and published under the lock stop() and skip() take, so neither is ever followed by this item's
+        // picture.
         let shown = {
-            let _state = presenter.state.lock().unwrap();
-            !stopped && !stops.has_changed().unwrap_or(false) && (item.present)()
+            let mut state = presenter.state.lock().unwrap();
+            if !ended && stops.has_changed().unwrap_or(false) {
+                ended = true;
+            } else if !ended && skips.has_changed().unwrap_or(false) {
+                (ended, skipped) = (true, true);
+            }
+            let shown = if ended { Shown::No } else { (item.present)() };
+            if shown == Shown::WithoutSound
+                && let Some(playing) = &mut state.current
+            {
+                playing.problem = Some(Problem::SoundMissing);
+                presenter.publish(&state);
+            }
+            shown != Shown::No
         };
         if shown {
+            skipped = tokio::select! {
+                _ = tokio::time::sleep(item.show + presenter.gap) => false,
+                _ = stops.changed() => false,
+                _ = skips.changed() => true,
+            };
+        }
+        // A skip keeps the gap before the next item, whether it came while playing or while getting ready.
+        if skipped {
             tokio::select! {
-                _ = tokio::time::sleep(item.show + presenter.gap) => {}
+                _ = tokio::time::sleep(presenter.gap) => {}
                 _ = stops.changed() => {}
             }
         }
@@ -253,10 +347,16 @@ mod tests {
         Item {
             stage,
             show: Duration::from_millis(show_ms),
-            label: "item".into(),
+            subject: Subject::Sound {
+                sound: format!("item {n}"),
+                viewer: "viewer".into(),
+            },
             simulated: false,
             ready: None,
-            present: Box::new(move || tx.send((n, Instant::now())).is_ok()),
+            present: Box::new(move || match tx.send((n, Instant::now())) {
+                Ok(()) => Shown::Yes,
+                Err(_) => Shown::No,
+            }),
         }
     }
 
@@ -321,10 +421,13 @@ mod tests {
         presenter.push(Item {
             stage: Stage::Alerts,
             show: Duration::from_secs(5),
-            label: "item".into(),
+            subject: Subject::Sound {
+                sound: "declines".into(),
+                viewer: "v".into(),
+            },
             simulated: false,
             ready: None,
-            present: Box::new(|| false),
+            present: Box::new(|| Shown::No),
         });
         presenter.push(item(Stage::Alerts, 1000, &tx, 1));
         assert_eq!(rx.recv().await.unwrap(), (1, start));
@@ -335,27 +438,41 @@ mod tests {
         let presenter = Presenter::start(Duration::from_millis(100), |_| true);
         let mut status = presenter.subscribe();
         let (tx, mut rx) = mpsc::unbounded_channel();
+        let fan = Subject::Alert {
+            alert: "follow".into(),
+            viewer: Some("Fan".into()),
+        };
+        let bell = Subject::Sound {
+            sound: "Bell".into(),
+            viewer: "Kai".into(),
+        };
         presenter.push(Item {
-            label: "Fan".into(),
+            subject: fan.clone(),
             ..item(Stage::Alerts, 1000, &tx, 0)
         });
         presenter.push(Item {
-            label: "Bell".into(),
+            subject: bell.clone(),
             ..item(Stage::Sound, 2000, &tx, 1)
         });
         rx.recv().await.unwrap();
         let now = status.borrow_and_update().clone();
         let current = now.current.unwrap();
         assert_eq!(
-            (current.stage, current.label.as_str(), current.show_ms),
-            (Stage::Alerts, "Fan", 1000)
+            (
+                current.stage,
+                current.subject,
+                current.show_ms,
+                current.problem
+            ),
+            (Stage::Alerts, fan, 1000, None)
         );
         assert_eq!(
             now.waiting,
             [Waiting {
                 stage: Stage::Sound,
-                label: "Bell".into(),
-                show_ms: 2000
+                subject: bell,
+                show_ms: 2000,
+                on_air: true,
             }]
         );
         assert_eq!(now.gap_ms, 100);
@@ -452,7 +569,8 @@ mod tests {
         presenter.push(Item {
             present: Box::new(move || {
                 play_log.lock().unwrap().push("played");
-                tx2.send((1, Instant::now())).is_ok()
+                tx2.send((1, Instant::now())).unwrap();
+                Shown::Yes
             }),
             ..item(Stage::Alerts, 1000, &tx, 1)
         });
@@ -486,5 +604,116 @@ mod tests {
             (false, 0),
             "nothing left to stop"
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn skip_ends_the_one_playing_and_the_next_follows_after_the_gap() {
+        let presenter = Presenter::start(Duration::from_millis(100), |_| true);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        presenter.push(item(Stage::Alerts, 5000, &tx, 0));
+        presenter.push(item(Stage::Sound, 1000, &tx, 1));
+        let (_, started) = rx.recv().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let announced = Arc::new(Mutex::new(None));
+        let log = announced.clone();
+        assert!(presenter.skip(move |stage| *log.lock().unwrap() = Some(stage)));
+        assert_eq!(*announced.lock().unwrap(), Some(Stage::Alerts));
+        assert_eq!(presenter.subscribe().borrow().current, None);
+        assert_eq!(
+            presenter.subscribe().borrow().waiting.len(),
+            1,
+            "what waits stays"
+        );
+        let (n, at) = rx.recv().await.unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(
+            at - started,
+            Duration::from_millis(600),
+            "skipped at 500 ms, then the gap"
+        );
+        // Nothing playing: nothing to skip, nothing announced.
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        assert!(!presenter.skip(|_| panic!("nothing to announce")));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_skip_while_getting_ready_ends_it_unseen() {
+        let presenter = Presenter::start(Duration::from_millis(100), |_| true);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        presenter.push(Item {
+            ready: Some(Box::pin(std::future::pending())),
+            ..item(Stage::Checkin, 5000, &tx, 0)
+        });
+        presenter.push(item(Stage::Alerts, 1000, &tx, 1));
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let skipped = Instant::now();
+        assert!(presenter.skip(|_| {}));
+        let (n, at) = rx.recv().await.unwrap();
+        assert_eq!(n, 1, "the card never showed");
+        assert_eq!(
+            at - skipped,
+            Duration::from_millis(100),
+            "the gap still comes first"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_missing_sound_file_marks_the_item_and_it_still_shows() {
+        let presenter = Presenter::start(Duration::from_millis(100), |_| true);
+        let mut status = presenter.subscribe();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let tx2 = tx.clone();
+        presenter.push(Item {
+            present: Box::new(move || {
+                tx2.send((0, Instant::now())).unwrap();
+                Shown::WithoutSound
+            }),
+            ..item(Stage::Alerts, 1000, &tx, 0)
+        });
+        let (_, started) = rx.recv().await.unwrap();
+        status
+            .wait_for(|s| s.current.as_ref().is_some_and(|c| c.problem.is_some()))
+            .await
+            .unwrap();
+        presenter.push(item(Stage::Alerts, 1000, &tx, 1));
+        let (_, next) = rx.recv().await.unwrap();
+        assert_eq!(
+            next - started,
+            Duration::from_millis(1100),
+            "it kept its time"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn waiting_items_say_whether_their_overlay_is_open_and_refresh_follows_obs() {
+        let open = Arc::new(AtomicBool::new(false));
+        let on_air = open.clone();
+        let presenter = Presenter::start(Duration::from_millis(100), move |stage| {
+            stage == Stage::Alerts || on_air.load(Ordering::Relaxed)
+        });
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        presenter.push(item(Stage::Alerts, 5000, &tx, 0));
+        rx.recv().await.unwrap();
+        presenter.push(item(Stage::Sound, 1000, &tx, 1));
+        presenter.push(Item {
+            simulated: true,
+            ..item(Stage::Sound, 1000, &tx, 2)
+        });
+        let on_air = |p: &Presenter| -> Vec<bool> {
+            p.subscribe()
+                .borrow()
+                .waiting
+                .iter()
+                .map(|w| w.on_air)
+                .collect()
+        };
+        assert_eq!(
+            on_air(&presenter),
+            [false, true],
+            "simulated items always show"
+        );
+        open.store(true, Ordering::Relaxed);
+        presenter.refresh();
+        assert_eq!(on_air(&presenter), [true, true]);
     }
 }

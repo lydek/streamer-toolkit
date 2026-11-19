@@ -5,7 +5,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import type { Incoming } from '../chat/chat'
+import { type Incoming, stopsStage } from '../chat/chat'
 import type { AlertPayload } from './alerts'
 import chimeUrl from './chime.wav'
 import { stylesheetsLoaded } from '../chat/template'
@@ -96,8 +96,8 @@ function receive(msg: Incoming) {
     reload()
   } else if (msg.type === 'template.changed' && msg.payload.overlay === 'alerts') {
     reload()
-  } else if (msg.type === 'presentation.stopped' && (preview || msg.seq > lastSeq)) {
-    // Emergency stop: the alert and its sound go away at once.
+  } else if (stopsStage(msg, 'alerts') && (preview || msg.seq > lastSeq)) {
+    // Emergency stop or skip: the alert and its sound go away at once.
     lastSeq = Math.max(lastSeq, msg.seq)
     generation++
     clearTimeout(hide)

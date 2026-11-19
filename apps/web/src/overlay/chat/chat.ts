@@ -10,12 +10,17 @@ export type Incoming =
   | components['schemas']['ObsStateEvent']
   | components['schemas']['PresentationQueueEvent']
   | components['schemas']['PresentationStoppedEvent']
+  | components['schemas']['PresentationSkippedEvent']
   | components['schemas']['StreamStatusEvent']
   | components['schemas']['TemplateChangedEvent']
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']
   | components['schemas']['CheckinStampedEvent']
   | components['schemas']['SoundPlayEvent']
+
+/** The emergency stop (every overlay), or a skip of the item `stage`'s overlay is playing. */
+export const stopsStage = (msg: Incoming, stage: components['schemas']['Stage']) =>
+  msg.type === 'presentation.stopped' || (msg.type === 'presentation.skipped' && msg.payload.stage === stage)
 
 export interface ChatState {
   messages: ChatEvent[]

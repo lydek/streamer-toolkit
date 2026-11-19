@@ -4,12 +4,12 @@ use std::{sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sound::{AlertSound, SoundService};
+use sound::{AlertSound, Cue, SoundService};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::{Alert, AlertKind, Source},
     modules::Modules,
-    presentation::Presenter,
+    presentation::{Presenter, Shown},
 };
 use utoipa::ToSchema;
 
@@ -45,6 +45,10 @@ impl AlertsService {
                 });
             },
             move |alert, source, show| {
+                let missing = matches!(
+                    sounds.alert(alert.kind.name()),
+                    Cue::File { id, .. } if sounds.file_missing(&id)
+                );
                 bus.publish(Event {
                     id: alert.id.clone(),
                     event_type: ALERT,
@@ -53,6 +57,11 @@ impl AlertsService {
                     source,
                     payload: payload(alert, show, &sounds),
                 });
+                if missing {
+                    Shown::WithoutSound
+                } else {
+                    Shown::Yes
+                }
             },
         )
     }
