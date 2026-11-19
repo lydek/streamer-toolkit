@@ -75,6 +75,8 @@ mod tests {
             highlighted: false,
             bits: 0,
             reply: None,
+            twitch_badges: Vec::new(),
+            shared_from: None,
             sent_at: "2026-11-19T10:00:00Z".into(),
         };
         assert_eq!(

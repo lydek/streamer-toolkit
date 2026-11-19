@@ -64,6 +64,26 @@ impl ViewerRepository for SqliteViewers {
     }
 }
 
+/// The stored avatars of `ids` (Twitch user IDs); viewers without one are left out.
+pub async fn avatars(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<std::collections::HashMap<String, String>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Default::default());
+    }
+    let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+        "SELECT twitch_user_id, avatar_url FROM viewers WHERE avatar_url IS NOT NULL AND twitch_user_id IN (",
+    );
+    let mut list = q.separated(", ");
+    for id in ids {
+        list.push_bind(id);
+    }
+    q.push(")");
+    let rows: Vec<(String, String)> = q.build_query_as().fetch_all(pool).await?;
+    Ok(rows.into_iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +162,8 @@ mod tests {
             highlighted: false,
             bits: 0,
             reply: None,
+            twitch_badges: Vec::new(),
+            shared_from: None,
             sent_at: "2026-11-19T10:00:00Z".into(),
         }
     }

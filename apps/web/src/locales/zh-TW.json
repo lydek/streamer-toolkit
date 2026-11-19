@@ -479,6 +479,24 @@
     "disconnected": "已斷線，正在重新連線……",
     "broadcaster": "實況主",
     "deleted": "這則訊息已被管理員刪除",
+    "shared": "共享聊天中：{channels}",
+    "ownOnly": "只看本頻道",
+    "sharedFrom": "來自 {channel}",
+    "replyTo": "回覆 {name}",
+    "bits": "{bits} 小奇點",
+    "display": {
+      "title": "顯示",
+      "style": "聊天室風格",
+      "styles": {
+        "compact": "精簡",
+        "standard": "標準",
+        "comfortable": "寬鬆"
+      },
+      "avatars": "頭像",
+      "badges": "徽章",
+      "time": "時間",
+      "textSize": "字級"
+    },
     "copyObsUrl": "複製 OBS 網址",
     "copied": "已複製 OBS 網址。",
     "copyFailed": "無法複製到剪貼簿。"
@@ -809,6 +827,13 @@
     },
     "chat_log": {
       "invalid_time": "時間格式不正確。"
+    },
+    "chat_display": {
+      "invalid": "聊天室顯示設定不正確。"
+    },
+    "viewers": {
+      "invalid_ids": "觀眾 ID 格式不正確。",
+      "storage_failed": "讀不到觀眾資料。"
     },
     "update": {
       "invalid_version": "版本號格式不正確。"

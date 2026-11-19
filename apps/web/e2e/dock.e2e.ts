@@ -179,3 +179,50 @@ test('chat from before a restart shows first, and a message a moderator deletes 
   await expect(log.getByText('hello everyone')).toHaveCount(0)
   await expect(log.getByText(zh.chat.deleted)).toHaveCount(2)
 })
+
+test('badge images, shared chat with 只看本頻道, and display settings that are saved', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  await page.route('**/api/admin/chat-dock', (r) => r.fulfill({ json: { open: true, width: 400 } }))
+  const saved: unknown[] = []
+  await page.route('**/api/admin/chat-display', (r) => {
+    if (r.request().method() === 'GET') return r.fulfill({ json: null })
+    saved.push(r.request().postDataJSON())
+    return r.fulfill({ status: 204 })
+  })
+  await page.route('**/api/admin/chat/badges', (r) =>
+    r.fulfill({ json: [{ setId: 'moderator', id: '1', title: 'Moderator', url: 'https://static-cdn.jtvnw.net/badges/mod' }] }),
+  )
+  // A 1x1 transparent PNG stands in for Twitch's CDN.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
+  await page.route('https://static-cdn.jtvnw.net/**', (r) => r.fulfill({ body: png, contentType: 'image/png' }))
+  const mod = { ...chat(1, 'Kai', 'hello from here'), payload: { ...chat(1, 'Kai', 'hello from here').payload, twitchBadges: [{ setId: 'moderator', id: '1', info: '' }] } }
+  const shared = {
+    ...chat(2, 'Neko', 'hi from the other channel'),
+    payload: { ...chat(2, 'Neko', 'hi from the other channel').payload, sharedFrom: { userId: '99', userLogin: 'pianocat', userName: 'PianoCat' } },
+  }
+  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+    ws.send(
+      JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 2,
+        payload: { 'chat.message': [mod, shared], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+      }),
+    ),
+  )
+  await page.goto('/admin/')
+  const log = panel(page).getByRole('log')
+  await expect(log.getByRole('img', { name: 'Moderator' })).toBeVisible()
+  await expect(panel(page).getByText(zh.chat.shared.replace('{channels}', 'PianoCat'))).toBeVisible()
+  await expect(log.getByText(zh.chat.sharedFrom.replace('{channel}', 'PianoCat'))).toBeVisible()
+
+  await panel(page).getByRole('button', { name: zh.chat.ownOnly }).click()
+  await expect(log.getByText('hi from the other channel')).toHaveCount(0)
+  await expect(log.getByText('hello from here')).toBeVisible()
+
+  await panel(page).getByRole('button', { name: zh.chat.display.title }).click()
+  await panel(page).getByRole('checkbox', { name: zh.chat.display.badges }).uncheck()
+  await expect(log.getByRole('img', { name: 'Moderator' })).toHaveCount(0)
+  await expect.poll(() => saved.at(-1)).toEqual({ style: 'standard', avatars: true, badges: false, time: true, textSize: 100 })
+})

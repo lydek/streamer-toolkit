@@ -31,6 +31,9 @@ pub struct Settings {
     /// The admin UI's docked chat panel. `None`: never changed, the admin UI shows its defaults (closed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_dock: Option<ChatDock>,
+    /// How the admin UI shows chat. `None`: never changed, the admin UI's defaults.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_display: Option<ChatDisplay>,
     /// The admin UI's tab bar. `None`: never edited, every group is in the bar on top.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tab_bar: Option<TabBar>,
@@ -61,6 +64,27 @@ pub struct Settings {
 pub struct ChatDock {
     pub open: bool,
     pub width: u16,
+}
+
+/// How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatDisplay {
+    pub style: ChatStyle,
+    pub avatars: bool,
+    pub badges: bool,
+    pub time: bool,
+    /// Percent of the admin UI's text size, 80-150 in steps of 10 (the Host checks).
+    pub text_size: u16,
+}
+
+/// How much room each chat line takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatStyle {
+    Compact,
+    Standard,
+    Comfortable,
 }
 
 /// Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
@@ -177,6 +201,7 @@ impl Default for Settings {
             skip_close_hint: false,
             home_tiles: None,
             chat_dock: None,
+            chat_display: None,
             tab_bar: None,
             text_size: None,
             record_retention: None,

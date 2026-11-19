@@ -6,4 +6,7 @@ mod domain;
 mod infrastructure;
 
 pub use application::ViewerService;
-pub use infrastructure::{db::MIGRATOR, start};
+pub use infrastructure::{
+    db::{MIGRATOR, avatars},
+    start,
+};

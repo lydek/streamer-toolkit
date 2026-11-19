@@ -98,6 +98,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat-display": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chat display settings; `null` when never changed (the admin UI shows its defaults). */
+        get: operations["chat_display"];
+        /** Saves the chat display settings; `textSize` is 80-150 in steps of 10. */
+        put: operations["set_chat_display"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chat-dock": {
         parameters: {
             query?: never;
@@ -109,6 +127,26 @@ export interface paths {
         get: operations["chat_dock"];
         /** Saves the panel's state; `width` is 280-560. */
         put: operations["set_chat_dock"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/chat/badges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Twitch's global chat badges and the broadcaster's own (subscriber badges and the like), read once per launch;
+         *     empty while signed out or when Twitch cannot be reached, so chat just shows no badge images.
+         */
+        get: operations["badges"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -893,6 +931,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/viewers/avatars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The stored avatars of these viewers, by Twitch user ID; viewers without one (yet) are left out. */
+        get: operations["avatars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1016,11 +1071,32 @@ export interface components {
             /** @enum {string} */
             state: "failed";
         };
+        /** @description One Twitch chat badge version and its image. */
+        BadgeImage: {
+            id: string;
+            setId: string;
+            /** @description Twitch's name for it, e.g. `Moderator` (raw text). */
+            title: string;
+            /** @description On Twitch's image CDN only. */
+            url: string;
+        };
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
          * @enum {string}
          */
         ChatBadgeName: "broadcaster" | "moderator" | "vip" | "subscriber";
+        /** @description How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template. */
+        ChatDisplay: {
+            avatars: boolean;
+            badges: boolean;
+            style: components["schemas"]["ChatStyle"];
+            /**
+             * Format: int32
+             * @description Percent of the admin UI's text size, 80-150 in steps of 10 (the Host checks).
+             */
+            textSize: number;
+            time: boolean;
+        };
         /** @description Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range). */
         ChatDock: {
             open: boolean;
@@ -1072,8 +1148,11 @@ export interface components {
             /** @description Highlighted with channel points. */
             highlighted: boolean;
             reply?: components["schemas"]["ChatReplyPayload"] | null;
+            sharedFrom?: components["schemas"]["SharedChannelPayload"] | null;
             /** @description Raw viewer text; overlays escape it when rendering. */
             text: string;
+            /** @description Every badge as Twitch names it, in Twitch's order (the admin window shows their images). */
+            twitchBadges?: components["schemas"]["TwitchBadgePayload"][];
             userId: string;
             userLogin: string;
             userName: string;
@@ -1131,6 +1210,11 @@ export interface components {
             /** @description Raw viewer text; overlays escape it when rendering. */
             userName: string;
         };
+        /**
+         * @description How much room each chat line takes.
+         * @enum {string}
+         */
+        ChatStyle: "compact" | "standard" | "comfortable";
         /**
          * @description Which template the chat overlay shows. `custom` (the data folder's `templates/chat/`) has no UI entry.
          * @enum {string}
@@ -1666,6 +1750,13 @@ export interface components {
             /** @description The source the item shows. */
             source: string;
         };
+        /** @description Another channel in a shared chat. */
+        SharedChannelPayload: {
+            userId: string;
+            userLogin: string;
+            /** @description Raw text. */
+            userName: string;
+        };
         SimulatedAlert: {
             /**
              * Format: int32
@@ -1940,6 +2031,15 @@ export interface components {
             error: string | null;
             selected: components["schemas"]["ChatTemplate"];
         };
+        /** @description A chat badge as Twitch names it. */
+        TwitchBadgePayload: {
+            /** @description The version within the set (e.g. a subscriber badge's tier and months). */
+            id: string;
+            /** @description Extra info, e.g. the months subscribed; often empty. */
+            info: string;
+            /** @description E.g. `subscriber`. */
+            setId: string;
+        };
         UpdateState: {
             /** @description The newer release to tell the broadcaster about; `null`: no notice. */
             available?: string | null;
@@ -2137,6 +2237,62 @@ export interface operations {
             };
         };
     };
+    chat_display: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatDisplay"] | null;
+                };
+            };
+        };
+    };
+    set_chat_display: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatDisplay"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     chat_dock: {
         parameters: {
             query?: never;
@@ -2189,6 +2345,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    badges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadgeImage"][];
                 };
             };
         };
@@ -3998,6 +4173,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    avatars: {
+        parameters: {
+            query: {
+                /** @description Twitch user IDs, comma-separated (at most 200). */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
             };
             400: {
                 headers: {

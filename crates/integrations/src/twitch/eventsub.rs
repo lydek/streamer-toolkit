@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
 use toolkit_core::events::{
     Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatRemoval, ChatReply,
-    Fragment, RedemptionChange, RedemptionStatus, StreamChange,
+    Fragment, RedemptionChange, RedemptionStatus, SharedChannel, StreamChange, TwitchBadge,
 };
 
 use super::{
@@ -430,6 +430,8 @@ impl Session {
 
 #[derive(Deserialize)]
 struct ChatEvent {
+    #[serde(default)]
+    broadcaster_user_id: String,
     message_id: String,
     chatter_user_id: String,
     chatter_user_login: String,
@@ -445,11 +447,22 @@ struct ChatEvent {
     cheer: Option<CheerRef>,
     #[serde(default)]
     reply: Option<ReplyRef>,
+    /// Set during a shared chat: the channel the message was sent in (this channel's own too).
+    #[serde(default)]
+    source_broadcaster_user_id: Option<String>,
+    #[serde(default)]
+    source_broadcaster_user_login: Option<String>,
+    #[serde(default)]
+    source_broadcaster_user_name: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct BadgeRef {
     set_id: String,
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    info: String,
 }
 
 #[derive(Deserialize)]
@@ -504,7 +517,30 @@ impl ChatEvent {
                 _ => Fragment::Text(f.text),
             })
             .collect();
-        // Badges for other things (Turbo, bits, predictions…) are dropped.
+        let twitch_badges = self
+            .badges
+            .iter()
+            .map(|b| TwitchBadge {
+                set_id: b.set_id.clone(),
+                id: b.id.clone(),
+                info: b.info.clone(),
+            })
+            .collect();
+        let shared_from = match (
+            self.source_broadcaster_user_id,
+            self.source_broadcaster_user_login,
+            self.source_broadcaster_user_name,
+        ) {
+            (Some(user_id), Some(login), Some(name)) if user_id != self.broadcaster_user_id => {
+                Some(SharedChannel {
+                    user_id,
+                    login,
+                    name,
+                })
+            }
+            _ => None,
+        };
+        // Roles: badges for other things (Turbo, bits, predictions…) are left out.
         let mut badges: Vec<ChatBadge> = Vec::new();
         for badge in self.badges {
             let role = match badge.set_id.as_str() {
@@ -529,6 +565,8 @@ impl ChatEvent {
             badges,
             highlighted: self.message_type == "channel_points_highlighted",
             bits: self.cheer.map_or(0, |c| c.bits),
+            twitch_badges,
+            shared_from,
             reply: self.reply.map(|r| ChatReply {
                 message_id: r.parent_message_id,
                 user_id: r.parent_user_id,
@@ -1423,6 +1461,47 @@ mod tests {
             let m = chat_event(json!({"badges":[{"set_id":set_id,"id":"1","info":""}]}));
             assert_eq!(m.badges, vec![role]);
         }
+    }
+
+    #[test]
+    fn chat_keeps_every_badge_and_where_a_shared_chat_message_came_from() {
+        let m = chat_event(json!({
+            "broadcaster_user_id":"42",
+            "badges":[{"set_id":"subscriber","id":"3012","info":"16"},{"set_id":"turbo","id":"1","info":""}],
+            "source_broadcaster_user_id":"99","source_broadcaster_user_login":"pianocat",
+            "source_broadcaster_user_name":"PianoCat"}));
+        assert_eq!(
+            m.twitch_badges,
+            [
+                TwitchBadge {
+                    set_id: "subscriber".into(),
+                    id: "3012".into(),
+                    info: "16".into()
+                },
+                TwitchBadge {
+                    set_id: "turbo".into(),
+                    id: "1".into(),
+                    info: String::new()
+                }
+            ]
+        );
+        assert_eq!(
+            m.shared_from,
+            Some(SharedChannel {
+                user_id: "99".into(),
+                login: "pianocat".into(),
+                name: "PianoCat".into()
+            })
+        );
+        // This channel's own messages during a shared chat, and chat outside one, have no other channel.
+        let own = chat_event(
+            json!({"broadcaster_user_id":"42","source_broadcaster_user_id":"42",
+            "source_broadcaster_user_login":"me","source_broadcaster_user_name":"Me"}),
+        );
+        assert_eq!(own.shared_from, None);
+        let plain =
+            chat_event(json!({"broadcaster_user_id":"42","source_broadcaster_user_id":null}));
+        assert_eq!(plain.shared_from, None);
     }
 
     #[test]

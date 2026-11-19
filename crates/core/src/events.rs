@@ -32,8 +32,29 @@ pub struct ChatMessage {
     pub bits: u32,
     /// The message this one replies to.
     pub reply: Option<ChatReply>,
+    /// Every badge as Twitch names it, in Twitch's order, for showing its image.
+    pub twitch_badges: Vec<TwitchBadge>,
+    /// During a shared chat, the other channel the message was sent in; `None` for this channel's own chat.
+    pub shared_from: Option<SharedChannel>,
     /// RFC 3339 time the message was sent.
     pub sent_at: String,
+}
+
+/// A chat badge as Twitch names it: its set (e.g. `subscriber`), the version within it, and extra info (e.g. the
+/// months subscribed).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TwitchBadge {
+    pub set_id: String,
+    pub id: String,
+    pub info: String,
+}
+
+/// Another channel taking part in a shared chat.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedChannel {
+    pub user_id: String,
+    pub login: String,
+    pub name: String,
 }
 
 /// A role shown by a chat badge (a founder counts as a subscriber).

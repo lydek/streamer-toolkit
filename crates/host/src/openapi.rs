@@ -4,8 +4,8 @@
 use utoipa::OpenApi;
 
 use crate::{
-    admin, backup, chat_dock, chat_log, home_tiles, obs, overlay, queue, stream_summary, tab_bar,
-    templates, text_size, update,
+    admin, backup, chat_display, chat_dock, chat_log, home_tiles, obs, overlay, queue,
+    stream_summary, tab_bar, templates, text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -42,6 +42,10 @@ use crate::{
         tab_bar::tab_bar,
         tab_bar::set_tab_bar,
         overlay::overlay_counts,
+        chat_display::chat_display,
+        chat_display::set_chat_display,
+        chat_display::badges,
+        chat_display::avatars,
         chat_log::periods,
         chat_log::log,
         queue::skip_queue,
@@ -71,6 +75,9 @@ use crate::{
         queue::PresentationStoppedEvent,
         queue::PresentationSkippedEvent,
         stream_summary::StreamSummary,
+        chat_display::BadgeImage,
+        toolkit_core::settings::ChatDisplay,
+        toolkit_core::settings::ChatStyle,
         chat_log::ChatPeriod,
         chat_log::ChatLogBody,
         templates::TemplateChangedEvent,

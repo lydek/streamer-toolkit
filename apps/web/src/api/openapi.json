@@ -201,6 +201,71 @@
         }
       }
     },
+    "/api/admin/chat-display": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The chat display settings; `null` when never changed (the admin UI shows its defaults).",
+        "operationId": "chat_display",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatDisplay"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the chat display settings; `textSize` is 80-150 in steps of 10.",
+        "operationId": "set_chat_display",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatDisplay"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/chat-dock": {
       "get": {
         "tags": [
@@ -259,6 +324,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/chat/badges": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Twitch's global chat badges and the broadcaster's own (subscriber badges and the like), read once per launch;\nempty while signed out or when Twitch cannot be reached, so chat just shows no badge images.",
+        "operationId": "badges",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BadgeImage"
+                  }
                 }
               }
             }
@@ -2426,6 +2514,61 @@
           }
         }
       }
+    },
+    "/api/admin/viewers/avatars": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The stored avatars of these viewers, by Twitch user ID; viewers without one (yet) are left out.",
+        "operationId": "avatars",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Twitch user IDs, comma-separated (at most 200).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2791,6 +2934,32 @@
         ],
         "description": "What the admin UI may see; never contains tokens."
       },
+      "BadgeImage": {
+        "type": "object",
+        "description": "One Twitch chat badge version and its image.",
+        "required": [
+          "setId",
+          "id",
+          "title",
+          "url"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "setId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "Twitch's name for it, e.g. `Moderator` (raw text)."
+          },
+          "url": {
+            "type": "string",
+            "description": "On Twitch's image CDN only."
+          }
+        }
+      },
       "ChatBadgeName": {
         "type": "string",
         "description": "A role shown by a chat badge (a founder counts as a subscriber).",
@@ -2800,6 +2969,37 @@
           "vip",
           "subscriber"
         ]
+      },
+      "ChatDisplay": {
+        "type": "object",
+        "description": "How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template.",
+        "required": [
+          "style",
+          "avatars",
+          "badges",
+          "time",
+          "textSize"
+        ],
+        "properties": {
+          "avatars": {
+            "type": "boolean"
+          },
+          "badges": {
+            "type": "boolean"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ChatStyle"
+          },
+          "textSize": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Percent of the admin UI's text size, 80-150 in steps of 10 (the Host checks).",
+            "minimum": 0
+          },
+          "time": {
+            "type": "boolean"
+          }
+        }
       },
       "ChatDock": {
         "type": "object",
@@ -2989,9 +3189,27 @@
               }
             ]
           },
+          "sharedFrom": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SharedChannelPayload",
+                "description": "During a shared chat, the other channel the message was sent in."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "text": {
             "type": "string",
             "description": "Raw viewer text; overlays escape it when rendering."
+          },
+          "twitchBadges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TwitchBadgePayload"
+            },
+            "description": "Every badge as Twitch names it, in Twitch's order (the admin window shows their images)."
           },
           "userId": {
             "type": "string"
@@ -3141,6 +3359,15 @@
             "description": "Raw viewer text; overlays escape it when rendering."
           }
         }
+      },
+      "ChatStyle": {
+        "type": "string",
+        "description": "How much room each chat line takes.",
+        "enum": [
+          "compact",
+          "standard",
+          "comfortable"
+        ]
       },
       "ChatTemplate": {
         "type": "string",
@@ -4669,6 +4896,27 @@
           }
         }
       },
+      "SharedChannelPayload": {
+        "type": "object",
+        "description": "Another channel in a shared chat.",
+        "required": [
+          "userId",
+          "userLogin",
+          "userName"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "userLogin": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string",
+            "description": "Raw text."
+          }
+        }
+      },
       "SimulatedAlert": {
         "type": "object",
         "required": [
@@ -5445,6 +5693,29 @@
           },
           "selected": {
             "$ref": "#/components/schemas/ChatTemplate"
+          }
+        }
+      },
+      "TwitchBadgePayload": {
+        "type": "object",
+        "description": "A chat badge as Twitch names it.",
+        "required": [
+          "setId",
+          "id",
+          "info"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The version within the set (e.g. a subscriber badge's tier and months)."
+          },
+          "info": {
+            "type": "string",
+            "description": "Extra info, e.g. the months subscribed; often empty."
+          },
+          "setId": {
+            "type": "string",
+            "description": "E.g. `subscriber`."
           }
         }
       },

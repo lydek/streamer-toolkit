@@ -2,6 +2,7 @@
 
 mod admin;
 mod backup;
+mod chat_display;
 mod chat_dock;
 mod chat_log;
 pub mod db;
@@ -47,7 +48,7 @@ use tokio::net::TcpListener;
 
 // frame-src is added per port by `admin_csp`.
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
-style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:";
+style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static-cdn.jtvnw.net; font-src 'self' data:";
 const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
 /// The only pages the admin window may frame: the chat and alert overlays as template previews, which the admin UI
 /// puts in `sandbox="allow-scripts"` iframes. The release IPC capability covers the whole Host origin, so no other
@@ -234,6 +235,13 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
         twitch: twitch.clone(),
     });
     let viewers = Arc::new(viewers::start(config.db.clone(), profiles.clone()));
+    let chat_display = chat_display::routes(
+        config.data_dir.clone(),
+        config.db.clone(),
+        config.twitch.helix.clone(),
+        http.clone(),
+        twitch.clone(),
+    );
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
@@ -377,6 +385,10 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
             admin::require_token,
         )))
         .merge(chat_routes.layer(middleware::from_fn_with_state(
+            admin.clone(),
+            admin::require_token,
+        )))
+        .merge(chat_display.layer(middleware::from_fn_with_state(
             admin.clone(),
             admin::require_token,
         )))
@@ -1688,6 +1700,132 @@ mod tests {
         let events = log(app).await;
         assert_eq!(events["events"].as_array().unwrap().len(), 2000);
         assert_eq!(events["truncated"], true, "events count too");
+    }
+
+    #[tokio::test]
+    async fn chat_display_settings_and_avatars_need_the_token_and_are_checked() {
+        let dir = std::env::temp_dir().join(format!("st-host-chatdisplay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        config.db = db::memory_migrated().await;
+        sqlx::query(
+            "INSERT INTO viewers (twitch_user_id, login, display_name, avatar_url, first_seen_at, last_seen_at) VALUES              ('7', 'fan', 'Fan', 'https://static-cdn.jtvnw.net/a.png', 'x', 'x'), ('8', 'kai', 'Kai', NULL, 'x', 'x')",
+        )
+        .execute(&config.db)
+        .await
+        .unwrap();
+        let app = router(config).unwrap();
+        let call = |method: Method, uri: &str, body: Option<&'static str>, token: bool| {
+            let mut b = get_req(uri, "127.0.0.1:47810")
+                .method(method)
+                .header(header::ORIGIN, "http://127.0.0.1:47810")
+                .header(header::CONTENT_TYPE, "application/json");
+            if token {
+                b = b.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+            }
+            b.body(body.map_or_else(Body::empty, Body::from)).unwrap()
+        };
+        let json = |res: axum::response::Response| async move {
+            let bytes = axum::body::to_bytes(res.into_body(), 65536).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        };
+        let res = app
+            .clone()
+            .oneshot(call(Method::GET, "/api/admin/chat-display", None, true))
+            .await
+            .unwrap();
+        assert_eq!(json(res).await, serde_json::Value::Null, "never changed");
+        let good =
+            r#"{"style":"compact","avatars":false,"badges":true,"time":true,"textSize":120}"#;
+        let res = app
+            .clone()
+            .oneshot(call(
+                Method::PUT,
+                "/api/admin/chat-display",
+                Some(good),
+                true,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        let res = app
+            .clone()
+            .oneshot(call(Method::GET, "/api/admin/chat-display", None, true))
+            .await
+            .unwrap();
+        assert_eq!(
+            json(res).await,
+            serde_json::from_str::<serde_json::Value>(good).unwrap()
+        );
+        for bad in [
+            r#"{"style":"compact","avatars":false,"badges":true,"time":true,"textSize":125}"#,
+            r#"{"style":"huge","avatars":false,"badges":true,"time":true,"textSize":100}"#,
+        ] {
+            let res = app
+                .clone()
+                .oneshot(call(
+                    Method::PUT,
+                    "/api/admin/chat-display",
+                    Some(bad),
+                    true,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
+
+        let res = app
+            .clone()
+            .oneshot(call(
+                Method::GET,
+                "/api/admin/viewers/avatars?ids=7,8,9",
+                None,
+                true,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(
+            json(res).await,
+            serde_json::json!({"7": "https://static-cdn.jtvnw.net/a.png"})
+        );
+        let res = app
+            .clone()
+            .oneshot(call(
+                Method::GET,
+                "/api/admin/viewers/avatars?ids=7,x%27",
+                None,
+                true,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let res = app
+            .clone()
+            .oneshot(call(Method::GET, "/api/admin/chat/badges", None, true))
+            .await
+            .unwrap();
+        assert_eq!(
+            json(res).await,
+            serde_json::json!([]),
+            "signed out: no badges"
+        );
+
+        for (method, uri) in [
+            (Method::GET, "/api/admin/chat-display"),
+            (Method::GET, "/api/admin/viewers/avatars?ids=7"),
+            (Method::GET, "/api/admin/chat/badges"),
+        ] {
+            let res = app
+                .clone()
+                .oneshot(call(method, uri, None, false))
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

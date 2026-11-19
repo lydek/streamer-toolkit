@@ -48,6 +48,34 @@ pub struct ChatMessagePayload {
     /// The message this one replies to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply: Option<ChatReplyPayload>,
+    /// Every badge as Twitch names it, in Twitch's order (the admin window shows their images).
+    #[serde(default)]
+    pub twitch_badges: Vec<TwitchBadgePayload>,
+    /// During a shared chat, the other channel the message was sent in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_from: Option<SharedChannelPayload>,
+}
+
+/// A chat badge as Twitch names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TwitchBadgePayload {
+    /// E.g. `subscriber`.
+    pub set_id: String,
+    /// The version within the set (e.g. a subscriber badge's tier and months).
+    pub id: String,
+    /// Extra info, e.g. the months subscribed; often empty.
+    pub info: String,
+}
+
+/// Another channel in a shared chat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedChannelPayload {
+    pub user_id: String,
+    pub user_login: String,
+    /// Raw text.
+    pub user_name: String,
 }
 
 /// A role shown by a chat badge (a founder counts as a subscriber).
@@ -247,6 +275,20 @@ pub(crate) fn chat_payload(m: ChatMessage) -> ChatMessagePayload {
             .collect(),
         highlighted: m.highlighted,
         bits: (m.bits > 0).then_some(m.bits),
+        twitch_badges: m
+            .twitch_badges
+            .into_iter()
+            .map(|b| TwitchBadgePayload {
+                set_id: b.set_id,
+                id: b.id,
+                info: b.info,
+            })
+            .collect(),
+        shared_from: m.shared_from.map(|c| SharedChannelPayload {
+            user_id: c.user_id,
+            user_login: c.login,
+            user_name: c.name,
+        }),
         reply: m.reply.map(|r| ChatReplyPayload {
             message_id: r.message_id,
             user_id: r.user_id,
@@ -285,6 +327,8 @@ mod tests {
             highlighted: false,
             bits: 0,
             reply: None,
+            twitch_badges: Vec::new(),
+            shared_from: None,
             sent_at: "2026-11-13T10:00:00Z".into(),
         };
 

@@ -17,6 +17,11 @@
         @click="openTwitch"
       />
     </div>
+    <ChatDisplayMenu class="display" />
+    <p v-if="partners.length" class="shared">
+      {{ t('chat.shared', { channels: partners.join('、') }) }}
+      <Button :label="t('chat.ownOnly')" size="small" text :aria-pressed="ownOnly" @click="ownOnly = !ownOnly" />
+    </p>
     <div class="filters" role="group" :aria-label="t('chatLog.filters')">
       <Button
         v-for="f in LOG_FILTERS"
@@ -33,15 +38,13 @@
     <p v-if="loading" class="muted">{{ t('app.loading') }}</p>
     <p v-else-if="!shown.length" class="muted">{{ t('chatLog.empty') }}</p>
     <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
-    <ol v-else class="plain lines" :aria-label="t('chatLog.lines')">
+    <ol v-else class="plain lines" :aria-label="t('chatLog.lines')" :style="{ fontSize: `${chatDisplay.textSize}%` }">
       <li v-for="(e, i) in shown" :key="e.kind === 'message' ? e.message.id : `e${i}`" :class="e.kind">
-        <time :datetime="e.at">{{ clockText(e.at) }}</time>
-        <template v-if="e.kind === 'message'">
-          <span class="name">{{ e.message.payload.userName }}</span
-          >：<span v-if="e.message.deleted" class="deleted">{{ t('chat.deleted') }}</span
-          ><template v-else>{{ e.message.payload.text }}</template>
+        <ChatLine v-if="e.kind === 'message'" :message="e.message" :broadcaster-id="broadcasterId" />
+        <template v-else>
+          <time v-if="chatDisplay.time" :datetime="e.at">{{ clockText(e.at) }}</time>
+          <span class="event">{{ eventText(e.event) }}</span>
         </template>
-        <span v-else class="event">{{ eventText(e.event) }}</span>
       </li>
     </ol>
   </FullPage>
@@ -69,6 +72,9 @@ import {
   fromAlert,
   merge,
 } from './chatLogView'
+import { chatDisplay, loadBadges, loadChatDisplay, sharedChannels, wantAvatars } from './chatDisplay'
+import ChatDisplayMenu from './ChatDisplayMenu.vue'
+import ChatLine from './ChatLine.vue'
 import FullPage from './FullPage.vue'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
 
@@ -85,6 +91,12 @@ const broadcaster = computed(() => {
   const status = twitchOverview.value?.status
   return status?.state === 'signed_in' ? status.login : undefined
 })
+const broadcasterId = computed(() => {
+  const status = twitchOverview.value?.status
+  return status?.state === 'signed_in' ? status.user_id : undefined
+})
+void loadChatDisplay()
+loadBadges()
 
 // 即時: the stored chat before this page opened, then the live messages and the alerts heard since.
 const live = shallowRef(EMPTY_LOG)
@@ -138,7 +150,16 @@ const entries = computed(() =>
     : merge((past.value?.messages ?? []).map(fromStored), past.value?.events ?? []),
 )
 const truncated = computed(() => periodKey.value !== LIVE && !!past.value?.truncated)
-const shown = computed(() => filterEntries(entries.value, filter.value, query.value, hideBots.value, broadcaster.value))
+const messages = computed(() => entries.value.flatMap((e) => (e.kind === 'message' ? [e.message] : [])))
+watch(messages, (m) => wantAvatars(m))
+// A shared chat: the other channels taking part, and 只看本頻道 to hide their messages.
+const partners = computed(() => sharedChannels(messages.value))
+const ownOnly = ref(false)
+const shown = computed(() =>
+  filterEntries(entries.value, filter.value, query.value, hideBots.value, broadcaster.value).filter(
+    (e) => !(ownOnly.value && e.kind === 'message' && e.message.payload.sharedFrom),
+  ),
+)
 
 function eventText(e: LogEvent): string {
   return t(`chatLog.event.${e.kind}`, {
@@ -169,8 +190,14 @@ async function openTwitch() {
   gap: 0.5rem;
 }
 
-.filters {
+.filters,
+.display {
   margin-top: 0.5rem;
+}
+
+.shared {
+  margin: 0.5rem 0 0;
+  color: var(--p-text-muted-color);
 }
 
 .check {
@@ -180,13 +207,8 @@ async function openTwitch() {
 }
 
 .muted,
-time,
-.deleted {
+time {
   color: var(--p-text-muted-color);
-}
-
-.deleted {
-  font-style: italic;
 }
 
 .lines {
@@ -202,10 +224,6 @@ time,
 time {
   margin-right: 0.5rem;
   font-variant-numeric: tabular-nums;
-}
-
-.name {
-  font-weight: 600;
 }
 
 .event {

@@ -132,6 +132,9 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   await page.route('**/api/admin/stream/summary', get(() => s.streamSummary))
   await page.route('**/api/admin/alerts/recent', get(() => []))
   await page.route('**/api/admin/chat/messages', get(() => []))
+  await page.route('**/api/admin/chat-display', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: null }) : r.fulfill({ status: 204 })))
+  await page.route('**/api/admin/chat/badges', get(() => []))
+  await page.route('**/api/admin/viewers/avatars**', get(() => ({})))
   await page.route('**/api/admin/home-tiles', (r) => {
     if (r.request().method() !== 'PUT') return r.fulfill({ json: s.homeTiles })
     s.homeTiles = r.request().postDataJSON()

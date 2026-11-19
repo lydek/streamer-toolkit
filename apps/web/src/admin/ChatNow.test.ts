@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
 import { describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
@@ -30,7 +31,7 @@ function setup(log: ChatLog, broadcasterId?: string) {
         void Promise.resolve().then(() => wrapper.setProps({ log: current }))
       },
     },
-    global: { plugins: [i18n, PrimeVue] },
+    global: { plugins: [i18n, PrimeVue, ToastService] },
     attachTo: document.body,
   })
   return wrapper
