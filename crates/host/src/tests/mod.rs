@@ -1,0 +1,61 @@
+use super::*;
+use integrations::secrets::SecretStoreError;
+use tower::ServiceExt;
+
+mod backup_routes;
+mod chat_routes;
+mod feature_routes;
+mod guard;
+mod settings_routes;
+mod template_routes;
+
+const TOKEN: &str = "test-admin-token";
+
+struct NoSecrets;
+impl SecretStore for NoSecrets {
+    fn read(&self) -> Result<Option<String>, SecretStoreError> {
+        Ok(None)
+    }
+    fn write(&self, _: &str) -> Result<(), SecretStoreError> {
+        Ok(())
+    }
+    fn delete(&self) -> Result<(), SecretStoreError> {
+        Ok(())
+    }
+}
+
+fn app() -> Router {
+    router(test_config()).unwrap()
+}
+
+fn test_config() -> HostConfig {
+    HostConfig {
+        port: 47810,
+        extra_origins: vec!["http://localhost:5173".into()],
+        admin_token: TOKEN.into(),
+        data_dir: std::env::temp_dir().join(format!("st-host-test-{}", std::process::id())),
+        twitch_secrets: Arc::new(NoSecrets),
+        twitch: TwitchEndpoints {
+            oauth: "http://127.0.0.1:1".into(),
+            helix: "http://127.0.0.1:1".into(),
+            eventsub: "ws://127.0.0.1:1".into(),
+            irc: "ws://127.0.0.1:1".into(),
+        },
+        obs_secrets: Arc::new(NoSecrets),
+        alert_timing: AlertTiming::default(),
+        checkin_timing: CheckinTiming::default(),
+        presentation_gap: PRESENTATION_GAP,
+        db: db::memory(),
+        app_version: "0.0.0-test".into(),
+        latest_release_url: None,
+        restart: Arc::new(|| {}),
+    }
+}
+
+fn get_req(uri: &str, host: &str) -> axum::http::request::Builder {
+    Request::builder().uri(uri).header(header::HOST, host)
+}
+
+async fn status(req: Request) -> StatusCode {
+    app().oneshot(req).await.unwrap().status()
+}
