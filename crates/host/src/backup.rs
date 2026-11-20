@@ -7,7 +7,7 @@
 use std::{
     collections::HashSet,
     fs,
-    io::{self, Cursor, Read, Write},
+    io::{self, Cursor, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -204,13 +204,15 @@ pub(crate) fn routes(state: BackupState) -> Router {
     )
 )]
 pub(crate) async fn export_backup(State(s): State<Arc<BackupState>>) -> Response {
-    match export(&s.db, &s.data_dir, &s.app_version).await {
-        Ok(bytes) => (
+    match export_file(&s.db, &s.data_dir, &s.app_version).await {
+        Ok(file) => (
             [
                 (header::CONTENT_TYPE, "application/octet-stream"),
                 (header::CACHE_CONTROL, "no-store"),
             ],
-            bytes,
+            axum::body::Body::from_stream(tokio_util::io::ReaderStream::new(
+                tokio::fs::File::from_std(file),
+            )),
         )
             .into_response(),
         Err(e) => e.response(),
@@ -280,11 +282,11 @@ pub(crate) async fn confirm_restore(State(s): State<Arc<BackupState>>) -> Respon
 }
 
 /// The backup file's bytes. The snapshot goes to `cache/` and is removed afterwards.
-async fn export(
+async fn export_file(
     pool: &SqlitePool,
     data_dir: &Path,
     app_version: &str,
-) -> Result<Vec<u8>, BackupError> {
+) -> Result<fs::File, BackupError> {
     let cache = data_dir.join("cache");
     std::fs::create_dir_all(&cache).map_err(export_failed)?;
     let snapshot = cache.join(format!("backup-{}.db", uuid::Uuid::now_v7()));
@@ -298,7 +300,7 @@ async fn export_snapshot(
     data_dir: &Path,
     app_version: &str,
     snapshot: &Path,
-) -> Result<Vec<u8>, BackupError> {
+) -> Result<fs::File, BackupError> {
     db::snapshot(pool, snapshot).await.map_err(export_failed)?;
     let (schema_version, records) = describe(snapshot).await.map_err(export_failed)?;
     let manifest = Manifest {
@@ -344,7 +346,7 @@ fn write_archive(
     data_dir: &Path,
     snapshot: &Path,
     mut manifest: Manifest,
-) -> Result<Vec<u8>, BackupError> {
+) -> Result<fs::File, BackupError> {
     let mut files = Vec::new();
     let settings = data_dir.join(SETTINGS);
     if settings.is_file() {
@@ -352,63 +354,129 @@ fn write_archive(
     }
     files.push((db::DB_FILE.to_owned(), snapshot.to_owned()));
     for folder in FOLDERS {
-        collect(&data_dir.join(folder), folder, &mut files).map_err(export_failed)?;
+        collect(&data_dir.join(folder), folder, &mut files)?;
     }
     if files.len() >= MAX_ENTRIES {
         return Err(BackupError::TooLarge);
     }
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-    let mut expanded = 0;
-    for (name, path) in files {
-        let bytes = std::fs::read(&path).map_err(export_failed)?;
-        let size = bytes.len() as u64;
-        expanded += size;
-        if expanded > MAX_EXPANDED_BYTES {
+    let mut file = tempfile::tempfile_in(data_dir.join("cache")).map_err(export_failed)?;
+    let mut output = LimitedWriter {
+        file: &mut file,
+        remaining: MAX_ARCHIVE_BYTES,
+        exceeded: false,
+    };
+    let result = (|| {
+        let mut zip = ZipWriter::new_stream(&mut output);
+        let mut chunk = [0; 32768];
+        let mut expanded = 0;
+        for (name, path) in files {
+            let mut source = fs::File::open(path).map_err(export_failed)?;
+            if source.metadata().map_err(export_failed)?.len() > MAX_EXPANDED_BYTES - expanded {
+                return Err(BackupError::TooLarge);
+            }
+            zip.start_file(name.as_str(), options)
+                .map_err(export_failed)?;
+            let mut size = 0;
+            let mut hash = Sha256::new();
+            loop {
+                let n = source.read(&mut chunk).map_err(export_failed)?;
+                if n == 0 {
+                    break;
+                }
+                expanded += n as u64;
+                if expanded > MAX_EXPANDED_BYTES {
+                    return Err(BackupError::TooLarge);
+                }
+                size += n as u64;
+                hash.update(&chunk[..n]);
+                zip.write_all(&chunk[..n]).map_err(export_failed)?;
+            }
+            manifest.files.push(FileEntry {
+                path: name,
+                size,
+                sha256: hex(&hash.finalize()),
+            });
+        }
+        zip.start_file(MANIFEST, options).map_err(export_failed)?;
+        let text = serde_json::to_vec_pretty(&manifest).map_err(export_failed)?;
+        if text.len() as u64 > MAX_MANIFEST_BYTES {
             return Err(BackupError::TooLarge);
         }
-        zip.start_file(name.as_str(), options)
-            .map_err(export_failed)?;
-        zip.write_all(&bytes).map_err(export_failed)?;
-        manifest.files.push(FileEntry {
-            path: name,
-            size,
-            sha256: sha256(&bytes),
-        });
-    }
-    zip.start_file(MANIFEST, options).map_err(export_failed)?;
-    let text = serde_json::to_vec_pretty(&manifest).map_err(export_failed)?;
-    zip.write_all(&text).map_err(export_failed)?;
-    let bytes = zip.finish().map_err(export_failed)?.into_inner();
-    if bytes.len() > MAX_ARCHIVE_BYTES {
+        zip.write_all(&text).map_err(export_failed)?;
+        zip.finish().map_err(export_failed)?;
+        Ok(())
+    })();
+    if output.exceeded {
         return Err(BackupError::TooLarge);
     }
+    result?;
+    file.rewind().map_err(export_failed)?;
+    Ok(file)
+}
+
+struct LimitedWriter<'a> {
+    file: &'a mut fs::File,
+    remaining: usize,
+    exceeded: bool,
+}
+
+impl Write for LimitedWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.len() > self.remaining {
+            self.exceeded = true;
+            return Err(io::Error::other("backup size limit reached"));
+        }
+        let written = self.file.write(bytes)?;
+        self.remaining -= written;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
+
+#[cfg(test)]
+async fn export(
+    pool: &SqlitePool,
+    data_dir: &Path,
+    app_version: &str,
+) -> Result<Vec<u8>, BackupError> {
+    let mut bytes = Vec::new();
+    export_file(pool, data_dir, app_version)
+        .await?
+        .read_to_end(&mut bytes)
+        .map_err(export_failed)?;
     Ok(bytes)
 }
 
 /// Every regular file under `dir`, named `<prefix>/<relative path>`. Symbolic links and junctions are skipped: they
 /// may point outside the data folder.
-fn collect(dir: &Path, prefix: &str, out: &mut Vec<(String, PathBuf)>) -> io::Result<()> {
+fn collect(dir: &Path, prefix: &str, out: &mut Vec<(String, PathBuf)>) -> Result<(), BackupError> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => return Err(e),
+        Err(e) => return Err(export_failed(e)),
     };
     for entry in entries {
-        let entry = entry?;
+        let entry = entry.map_err(export_failed)?;
         // Does not follow links.
-        let kind = entry.file_type()?;
+        let kind = entry.file_type().map_err(export_failed)?;
         let name = entry
             .file_name()
             .into_string()
-            .map_err(|n| io::Error::other(format!("file name is not Unicode: {n:?}")))?;
+            .map_err(|n| export_failed(format!("file name is not Unicode: {n:?}")))?;
         let path = format!("{prefix}/{name}");
         if kind.is_dir() {
             collect(&entry.path(), &path, out)?;
         } else if kind.is_file() {
             // A name a restore would refuse would make a backup that never restores.
             if !allowed_path(&path) {
-                return Err(io::Error::other(format!("unsupported file name: {path}")));
+                return Err(export_failed(format!("unsupported file name: {path}")));
+            }
+            if out.len() >= MAX_ENTRIES - 1 {
+                return Err(BackupError::TooLarge);
             }
             out.push((path, entry.path()));
         }
@@ -444,6 +512,7 @@ fn allowed_path(path: &str) -> bool {
         }
 }
 
+#[cfg(test)]
 fn sha256(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
@@ -692,13 +761,16 @@ async fn back_up_current(data_dir: &Path, app_version: &str) -> Result<PathBuf, 
         fs::write(&db_file, b"").map_err(restore_failed)?;
     }
     let pool = db::open_file(&db_file).await.map_err(restore_failed)?;
-    let bytes = export(&pool, data_dir, app_version).await;
+    let archive = export_file(&pool, data_dir, app_version).await;
     pool.close().await;
-    let bytes = bytes.map_err(|e| restore_failed(format!("backing up the current data: {e}")))?;
+    let mut archive =
+        archive.map_err(|e| restore_failed(format!("backing up the current data: {e}")))?;
     let dir = data_dir.join(db::BACKUP_DIR);
     fs::create_dir_all(&dir).map_err(restore_failed)?;
     let path = dir.join(format!("before-restore-{}.stbackup", db::stamp()));
-    fs::write(&path, bytes).map_err(restore_failed)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(&dir).map_err(restore_failed)?;
+    io::copy(&mut archive, &mut tmp).map_err(restore_failed)?;
+    tmp.persist(&path).map_err(restore_failed)?;
     tracing::info!(backup = %path.display(), "current data backed up before restoring");
     Ok(path)
 }
@@ -756,6 +828,20 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use super::*;
+
+    #[test]
+    fn output_limit_rejects_writes_before_the_file_grows() {
+        let mut file = tempfile::tempfile().unwrap();
+        let mut limited = LimitedWriter {
+            file: &mut file,
+            remaining: 4,
+            exceeded: false,
+        };
+        limited.write_all(b"1234").unwrap();
+        assert!(limited.write_all(b"5").is_err());
+        assert!(limited.exceeded);
+        assert_eq!(file.metadata().unwrap().len(), 4);
+    }
 
     pub(super) fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("st-backup-{name}-{}", std::process::id()));
