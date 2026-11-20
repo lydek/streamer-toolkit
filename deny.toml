@@ -8,10 +8,6 @@ all-features = true
 # Unmaintained crates are reported only when the workspace depends on them directly.
 unmaintained = "workspace"
 ignore = [
-    # Temporary. Bundled SQLite < 3.54 can leak memory through a crafted database plus `-wal` file pair; the exploit is
-    # local only and needs write access to the data folder. The fix needs libsqlite3-sys >= 0.39, which sqlx 0.9.0
-    # does not allow yet. Remove once a sqlx release does. tracking: #46
-    { id = "RUSTSEC-2026-0459", reason = "local only, needs write access to the data folder; fix needs libsqlite3-sys >= 0.39, not allowed by sqlx 0.9.0 yet; tracking: #46" },
     # Temporary. chrono and chrono-tz are reported unmaintained with no replacement yet; time and time zone handling
     # depend on them. Remove once they are replaced. tracking: #89
     { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no replacement yet; tracking: #89" },
