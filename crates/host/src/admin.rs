@@ -843,6 +843,46 @@ impl checkin::ProfileImages for TwitchProfiles {
                 .map(str::to_owned)
         })
     }
+
+    fn profile_images<'a>(
+        &'a self,
+        ids: &'a [String],
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = toolkit_core::twitch::ProfileBatch> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            use std::time::Duration;
+
+            let query = ids
+                .iter()
+                .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+                .map(|id| format!("id={id}"))
+                .collect::<Vec<_>>()
+                .join("&");
+            if query.is_empty() {
+                return Ok(Default::default());
+            }
+            let auth = self.twitch.read().await.clone();
+            let body = Helix::new(&self.helix, auth, self.http.clone())
+                .get_json(&format!("/users?{query}"))
+                .await
+                .map_err(|err| match err {
+                    HelixError::RateLimited(Some(wait)) => wait,
+                    _ => Duration::from_secs(30),
+                })?;
+            Ok(body["data"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|user| {
+                    Some((
+                        user["id"].as_str()?.to_owned(),
+                        user["profile_image_url"].as_str()?.to_owned(),
+                    ))
+                })
+                .collect())
+        })
+    }
 }
 
 #[derive(Deserialize, ToSchema)]
