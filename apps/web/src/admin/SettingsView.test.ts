@@ -3,9 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '../i18n'
 import SettingsView from './SettingsView.vue'
+import { testRouter } from './testRouter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const { client } = vi.hoisted(() => ({ client: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn() } }))
@@ -25,7 +25,7 @@ const GETS: Record<string, unknown> = {
 }
 
 async function mountSettings() {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: SettingsView }] })
+  const router = testRouter([{ path: '/settings', component: SettingsView }])
   await router.push('/settings')
   const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
   await vi.waitFor(() => expect(wrapper.find('#obs-host').exists()).toBe(true))
@@ -136,7 +136,7 @@ describe('SettingsView', () => {
         ? { error: { code: 'obs.secret_store_failed' }, response: new Response(null, { status: 500 }) }
         : ok(GETS[path]),
     )
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: SettingsView }] })
+    const router = testRouter([{ path: '/settings', component: SettingsView }])
     await router.push('/settings')
     const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
     await vi.waitFor(() => expect(wrapper.find('#module-chat').exists()).toBe(true))

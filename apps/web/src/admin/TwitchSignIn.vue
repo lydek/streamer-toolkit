@@ -3,7 +3,7 @@
   <p v-if="!overview">{{ t('app.loading') }}</p>
 
   <form v-else-if="!overview.client_id || editingClientId" @submit.prevent="saveClientId">
-    <i18n-t keypath="twitch.guide" tag="p">
+    <i18n-t keypath="twitch.guide" tag="p" scope="global">
       <template #url><code>http://localhost</code></template>
     </i18n-t>
     <label for="client-id">{{ t('twitch.clientId') }}</label>
