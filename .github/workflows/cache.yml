@@ -1,0 +1,42 @@
+# Fills the build caches on main so PR runs (ci.yml) restore them instead of starting cold.
+# A PR run can only restore caches saved on its own ref or on main; checks stay PR-only.
+name: Warm cache
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # re-seed after GitHub updates the runner image's Rust, which changes the cache key
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Same toolchain and shared-key as ci.yml, so both workflows use one cache key.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+
+      # The Host embeds apps/web/dist at compile time.
+      - run: pnpm web:build
+
+      # Build what each ci.yml cargo step compiles; no lints or tests are enforced here.
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo clippy --workspace --all-targets --features tauri/custom-protocol
+      - run: cargo test --workspace --no-run

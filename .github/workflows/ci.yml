@@ -28,7 +28,11 @@ jobs:
 
       # Toolchain and components come from rust-toolchain.toml.
       - run: rustup show active-toolchain || rustup toolchain install
+      # Restores the cache cache.yml saves on main; PRs never save (1–1.7 GB each would evict main's).
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny

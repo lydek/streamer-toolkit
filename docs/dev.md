@@ -44,7 +44,7 @@
 
 ## 每次提交前（PR 的 CI 也跑同一套，只跑 Windows）
 順序：先建置前端（`dist/` 不進版控，`rust-embed` 需要它才編得過），再跑 Rust 檢查。
-CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合併的就是 PR 已檢查過的 commit。
+CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合併的就是 PR 已檢查過的 commit。合併進 `main` 後，`cache.yml` 只編譯、不檢查，把 Rust 與 pnpm 快取存在 `main`；PR 從 `main` 還原快取，自己不存（各 PR 的快取會擠掉 `main` 的）。GitHub 更新 runner 映像的 Rust 後快取會對不上，到下次合併前可手動觸發 `cache.yml`。
 格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
 沒有開啟 `tauri/custom-protocol` 的 cargo 指令都以 dev 模式編譯，所以 CI 另跑 `cargo clippy --features tauri/custom-protocol`，檢查只在正式版編譯的程式碼（只用來檢查，不散布產物）。正式發佈一律用 `tauri build`。
 
