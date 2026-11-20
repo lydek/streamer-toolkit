@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 426b1619379a85e9b3afaad5aae06a39c108e2d4610defedf658a34b86d574cb -->
+<!-- source: docs/dev.md source-sha256: f2b1b74289acfd6e7007ecfe1daf280800600d8174c9047ee5c4cc1973112111 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -45,7 +45,7 @@ Principle: another Windows PC can get it running by following this document.
 
 ## Before every commit (PR CI runs the same set, Windows only)
 Order: build the frontend first (`dist/` is not under version control, and `rust-embed` needs it to compile), then run the Rust checks.
-CI runs only on PRs; merging into `main` does not run it again, because rebase-merge lands exactly the commits the PR already checked.
+CI runs only on PRs; merging into `main` does not run it again, because rebase-merge lands exactly the commits the PR already checked. After a merge into `main`, `cache.yml` only compiles, without checks, and saves the Rust and pnpm caches on `main`; PRs restore from `main` and never save their own (per-PR caches would evict main's). When GitHub updates the runner image's Rust, the cache no longer matches; until the next merge, trigger `cache.yml` by hand.
 Formatting, lint, type checks, tests, architecture tests and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
 Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release (for checking only; nothing is distributed). Releases always use `tauri build`.
 
