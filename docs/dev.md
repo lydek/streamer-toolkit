@@ -58,6 +58,13 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 
 步驟：用 PR 把三處版本改成新版本並合併，在 `main` 上打 `v<版本>` tag 並推上去；workflow 完成後到 GitHub Releases 下載草稿的 zip，核對檢查碼，在沒裝開發工具的 Windows 上解壓縮並啟動，確認後才按發佈。
 
+## 檔案長度
+軟門檻，不進 CI。要不要拆看檔案有幾個改動的理由，行數只是提醒。
+- 正式程式碼超過約 800 行、或測試檔超過約 1000 行時，下一個改到它的 issue 先評估要不要拆；要拆就另開 issue，不併進手上的 commit。
+- 照責任拆（例如 `routes.rs`、`repo.rs`），不照行數硬切。
+- 單一函式超過約 100 行（clippy `too_many_lines` 的預設值）時，同樣先評估：把可獨立命名的步驟或重複的準備抽成函式。測試函式走完一整個情境時可以更長，重複的準備步驟仍抽成 helper。
+- Rust 測試太長時搬到 `tests` 子模組（`#[cfg(test)] mod tests;`，內容放 `<模組>/tests.rs`，或依主題放 `tests/<主題>.rs`），仍是 crate 內的單元測試，才能使用私有項目。子模組不要和 crate 根的模組或相依 crate 同名，否則會遮蔽 `use super::*` 帶進來的同名項目。
+
 ## 測試底線
 - 只測我們負責的行為，不測 Twitch／OBS 本身。
 - 層級：domain／use case 單元測試；Repository 與 HTTP 用真 SQLite 做整合測試；Contract 檢查產物是否最新；UI E2E 測 jsdom 測不了的瀏覽器行為。
@@ -135,6 +142,7 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 ## 語言
 - `README.md` 與 `docs/`（含 `docs/modules/`）都雙語：繁體中文為唯一權威版本，英文版是同目錄的 `<name>.en.md`。`docs/archive/` 不翻譯。`AGENTS.md` 只有英文。
 - 平時只寫中文，英文不必同步寫。**commit 文件前**才用 AI 指令產生或更新英文版，人工看過後再 commit。
+- 裝有 Codex CLI 時，可選擇在人工看之前先用它審查譯文。Codex 會把文件內容送到外部模型服務，所以 AI 代理要先問過使用者，得到同意才執行。中文定稿後只跑一次，之後中文意思有變才重跑：`codex exec -C . -s read-only --ephemeral -c model_reasoning_effort="medium" -o <報告檔> "<提示>" < /dev/null`。提示寫明權威檔與譯文路徑、只審未 commit 的差異、檢查新增、遺漏與語意偏移（特別是數字、否定、條件、術語）、不得改檔、用繁體中文回報 `檔案:行` 與可直接貼上的修正。每項先對照中文確認再改。
 - 英文檔第一行記錄 `<!-- source: <中文檔路徑> source-sha256: <hash> -->`，第二行是語言切換連結（`[繁體中文](<name>.md) | **English**`）；中文檔開頭對應放 `**繁體中文** | [English](<name>.en.md)`。英文檔內的文件連結指向對應的 `.en.md`。
 - `node scripts/check-translations.mjs` 會檢查三件事：每份中文檔都有英文版、每份英文版的 source 都指向同名的中文檔（沒有孤兒檔）、英文版的 hash 與中文檔一致；不符就失敗，並印出問題檔案或新 hash。
 - pre-commit 與 pre-push hook 都會執行此檢查，CI 也跑同一個指令；hook 只檢查，不自動翻譯。
