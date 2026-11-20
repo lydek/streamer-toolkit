@@ -1,6 +1,7 @@
 //! Twitch sign-in with the Device Code Flow (public client, no client secret) and single-flight token refresh.
 
 use std::{
+    collections::HashMap,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -152,6 +153,7 @@ struct Inner {
     store: Arc<dyn SecretStore>,
     state: Mutex<State>,
     refresh_lock: tokio::sync::Mutex<()>,
+    helix_resets: Mutex<HashMap<String, tokio::time::Instant>>,
     /// Signed-in user ID; adapters such as EventSub watch it to connect after login and stop after logout.
     account: tokio::sync::watch::Sender<Option<String>>,
 }
@@ -188,6 +190,7 @@ impl TwitchAuth {
                 ..State::default()
             }),
             refresh_lock: tokio::sync::Mutex::new(()),
+            helix_resets: Mutex::default(),
             account,
         }))
     }
@@ -203,6 +206,20 @@ impl TwitchAuth {
 
     pub fn token(&self) -> Option<Token> {
         self.0.state.lock().unwrap().token.clone()
+    }
+
+    pub(super) fn helix_wait(&self, user_id: &str) -> Option<Duration> {
+        let now = tokio::time::Instant::now();
+        let mut resets = self.0.helix_resets.lock().unwrap();
+        resets.retain(|_, until| *until > now);
+        resets.get(user_id).map(|until| *until - now)
+    }
+
+    pub(super) fn pause_helix(&self, user_id: &str, wait: Duration) {
+        let until = tokio::time::Instant::now() + wait;
+        let mut resets = self.0.helix_resets.lock().unwrap();
+        let reset = resets.entry(user_id.into()).or_insert(until);
+        *reset = (*reset).max(until);
     }
 
     pub fn status(&self) -> AuthStatus {
