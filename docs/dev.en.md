@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: f2b1b74289acfd6e7007ecfe1daf280800600d8174c9047ee5c4cc1973112111 -->
+<!-- source: docs/dev.md source-sha256: 73ad0d032ee50dbc2da02ded7d45da89a33c18ef5515cbbdfe93cbd2ba2d41b0 -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -58,6 +58,13 @@ Only the portable zip is released. Pushing a `v*` tag makes `.github/workflows/r
 5. A separate job downloads the built zip and `.sha256` and creates a draft release (`gh release create --draft`). The workflow never publishes; only this job has `contents: write`, and it runs no build code.
 
 Steps: bump the version in all three places through a PR and merge it, then tag `v<version>` on `main` and push the tag; when the workflow is done, download the draft's zip from GitHub Releases, verify the checksum, extract and start it on a Windows machine without developer tools, and only then publish.
+
+## File length
+A soft limit, not checked in CI. Whether to split a file depends on how many reasons it has to change; the line count is only a reminder.
+- When production code passes about 800 lines, or a test file about 1000 lines, consider a split first the next time an issue changes that file; if it should be split, open a separate issue instead of folding the split into the current commit.
+- Split by responsibility (for example `routes.rs`, `repo.rs`), not at an arbitrary line count.
+- When a single function passes about 100 lines (the default of clippy's `too_many_lines`), consider a split the same way: extract steps that can be named on their own, or repeated setup, into functions. A test function that walks through a whole scenario may be longer, but repeated setup steps still go into helpers.
+- When Rust tests get too long, move them into a `tests` submodule (`#[cfg(test)] mod tests;`, with the contents in `<module>/tests.rs`, or by topic in `tests/<topic>.rs`). They stay in-crate unit tests so they can use private items. Do not give a submodule the same name as a crate-root module or a dependency crate; it would shadow the item of that name brought in by `use super::*`.
 
 ## Testing baseline
 - Test only the behavior we own, not Twitch/OBS themselves.
@@ -136,6 +143,7 @@ Steps: bump the version in all three places through a PR and merge it, then tag 
 ## Language
 - `README.md` and `docs/` (including `docs/modules/`) are bilingual: Traditional Chinese is the only authoritative version, and the English version is `<name>.en.md` in the same folder. `docs/archive/` is not translated. `AGENTS.md` is English only.
 - Write Chinese only while working; English need not keep pace. **Before committing docs**, generate or update the English versions using an AI-assisted command, then have a human review them before committing.
+- If Codex CLI is installed, you may optionally have it review the translation before the human review. Codex sends the document contents to an external model service, so an AI agent must ask the user first and run it only with their consent. Run it only once, after the Chinese is final, and again only if the Chinese meaning changes: `codex exec -C . -s read-only --ephemeral -c model_reasoning_effort="medium" -o <report file> "<prompt>" < /dev/null`. The prompt names the authoritative file and the translation path, limits the review to the uncommitted diff, asks for additions, omissions and meaning shifts (especially numbers, negation, conditions and terms), forbids editing files, and asks for a report in Traditional Chinese with `file:line` and a paste-ready fix. Check each finding against the Chinese before applying it.
 - Line 1 of an English file records `<!-- source: <path to Chinese file> source-sha256: <hash> -->`, line 2 is the language switch (`[繁體中文](<name>.md) | **English**`); the Chinese file starts with `**繁體中文** | [English](<name>.en.md)`. Document links inside English files point to the matching `.en.md`.
 - `node scripts/check-translations.mjs` checks three things: every Chinese file has an English version, every English file's source points to its same-name Chinese file (no orphans), and each English hash matches its Chinese file; otherwise it fails and prints the problem file or the new hash.
 - The pre-commit and pre-push hooks both run this check, and CI runs the same command; the hook only checks and never translates.
