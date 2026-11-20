@@ -4,7 +4,10 @@
 use std::{collections::HashSet, future::Future, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
-use tokio::sync::{Semaphore, mpsc, oneshot};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::{Instant, timeout_at},
+};
 use toolkit_core::{
     events::{Alert, ChannelPointsRedemption, ChatMessage, Source},
     twitch::{ProfileImages, is_twitch_image},
@@ -12,9 +15,10 @@ use toolkit_core::{
 
 use crate::domain::Sighting;
 
-const LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
-/// Avatar lookups running at once.
-const LOOKUPS_AT_ONCE: usize = 4;
+const AVATAR_BATCH: usize = 100;
+const AVATAR_WINDOW: Duration = Duration::from_millis(100);
+const SIGHTING_BATCH: usize = 200;
+const SIGHTING_WINDOW: Duration = Duration::from_millis(75);
 
 #[derive(Debug, thiserror::Error)]
 #[error("viewers.storage_failed: {0}")]
@@ -33,9 +37,8 @@ pub(crate) trait ViewerRepository: Send + Sync + 'static {
     /// Adds the viewer or updates their name, roles (when known) and last seen.
     fn record(
         &self,
-        s: &Sighting,
-        at: DateTime<Utc>,
-    ) -> impl Future<Output = Result<Recorded, RepositoryError>> + Send;
+        sightings: &[(Sighting, DateTime<Utc>)],
+    ) -> impl Future<Output = Result<Vec<Recorded>, RepositoryError>> + Send;
     fn set_avatar(
         &self,
         user_id: &str,
@@ -54,44 +57,75 @@ impl ViewerService {
     /// Spawns the worker; needs a Tokio runtime.
     pub(crate) fn start<R: ViewerRepository>(repo: R, profiles: Arc<dyn ProfileImages>) -> Self {
         let repo = Arc::new(repo);
+        // shortcut: unbounded queues; a slow database or a rate-limited Helix lets them grow, so bound them (with
+        // avatars scheduled from the database) if a busy channel ever shows memory growing.
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
+        let (avatars, mut requests) = mpsc::unbounded_channel::<String>();
+        let avatar_repo = repo.clone();
         tokio::spawn(async move {
-            // shortcut: one Helix lookup per viewer without an avatar, tried once per run; batch them (Get Users
-            // takes 100 IDs) if a busy chat ever gets near the rate limit.
-            let mut tried = HashSet::new();
-            let lookups = Arc::new(Semaphore::new(LOOKUPS_AT_ONCE));
-            while let Some((sighting, at, first)) = rx.recv().await {
-                let recorded = repo.record(&sighting, at).await;
-                if let Some(first) = first {
-                    let _ = first.send(recorded.as_ref().is_ok_and(|r| r.new));
-                }
-                match recorded {
-                    Ok(Recorded {
-                        no_avatar: true, ..
-                    }) if tried.insert(sighting.user_id.clone()) => {
-                        let (repo, profiles, lookups) =
-                            (repo.clone(), profiles.clone(), lookups.clone());
-                        tokio::spawn(async move {
-                            let Ok(_turn) = lookups.acquire().await else {
-                                return;
-                            };
-                            let found = tokio::time::timeout(
-                                LOOKUP_TIMEOUT,
-                                profiles.profile_image(&sighting.user_id),
-                            )
-                            .await
-                            .ok()
-                            .flatten()
-                            .filter(|u| is_twitch_image(u));
-                            if let Some(url) = found
-                                && let Err(e) = repo.set_avatar(&sighting.user_id, &url).await
-                            {
-                                tracing::warn!(error = %e, "viewer avatar not stored");
-                            }
-                        });
+            while let Some(first) = requests.recv().await {
+                let mut ids = vec![first];
+                let deadline = Instant::now() + AVATAR_WINDOW;
+                while ids.len() < AVATAR_BATCH {
+                    match timeout_at(deadline, requests.recv()).await {
+                        Ok(Some(id)) => ids.push(id),
+                        _ => break,
                     }
-                    Ok(_) => {}
-                    Err(e) => tracing::error!(error = %e, "viewer not stored"),
+                }
+                for attempt in 0..3 {
+                    match tokio::time::timeout(
+                        Duration::from_secs(35),
+                        profiles.profile_images(&ids),
+                    )
+                    .await
+                    {
+                        Ok(Ok(images)) => {
+                            for id in &ids {
+                                if let Some(url) = images.get(id).filter(|u| is_twitch_image(u))
+                                    && let Err(e) = avatar_repo.set_avatar(id, url).await
+                                {
+                                    tracing::warn!(error = %e, "viewer avatar not stored");
+                                }
+                            }
+                            break;
+                        }
+                        Ok(Err(wait)) if attempt < 2 => tokio::time::sleep(wait).await,
+                        _ => break,
+                    }
+                }
+            }
+        });
+        tokio::spawn(async move {
+            let mut tried = HashSet::new();
+            while let Some(first) = rx.recv().await {
+                let mut jobs = vec![first];
+                let deadline = Instant::now() + SIGHTING_WINDOW;
+                while jobs.len() < SIGHTING_BATCH {
+                    match timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(job)) => jobs.push(job),
+                        _ => break,
+                    }
+                }
+                let (sightings, answers): (Vec<_>, Vec<_>) = jobs
+                    .into_iter()
+                    .map(|(s, at, answer)| ((s, at), answer))
+                    .unzip();
+                match repo.record(&sightings).await {
+                    Ok(results) => {
+                        for (((sighting, _), answer), recorded) in
+                            sightings.into_iter().zip(answers).zip(results)
+                        {
+                            if let Some(answer) = answer {
+                                let _ = answer.send(recorded.new);
+                            }
+                            if recorded.no_avatar && tried.insert(sighting.user_id.clone()) {
+                                let _ = avatars.send(sighting.user_id);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, count = sightings.len(), "viewer sightings not stored")
+                    }
                 }
             }
         });

@@ -1,7 +1,7 @@
 //! Viewers in SQLite (`viewers`).
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use sqlx::{SqlitePool, migrate::Migrator};
+use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{Recorded, RepositoryError, ViewerRepository},
@@ -25,33 +25,17 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 impl ViewerRepository for SqliteViewers {
-    async fn record(&self, s: &Sighting, at: DateTime<Utc>) -> Result<Recorded, RepositoryError> {
-        let at = at.to_rfc3339_opts(SecondsFormat::Micros, true);
-        let role = |f: fn(&crate::domain::Roles) -> bool| s.roles.as_ref().map(f);
-        // A NULL role (not shown by this event) keeps the stored one; a new viewer starts without roles.
-        // A new row's first sighting is this one; an existing row keeps its earlier first sighting.
-        let (no_avatar, new): (bool, bool) = sqlx::query_as(
-            "INSERT INTO viewers (twitch_user_id, login, display_name, broadcaster, moderator, vip, subscriber, \
-             first_seen_at, last_seen_at) \
-             VALUES (?1, ?2, ?3, COALESCE(?4, 0), COALESCE(?5, 0), COALESCE(?6, 0), COALESCE(?7, 0), ?8, ?8) \
-             ON CONFLICT (twitch_user_id) DO UPDATE SET login = excluded.login, \
-             display_name = excluded.display_name, last_seen_at = excluded.last_seen_at, \
-             broadcaster = COALESCE(?4, broadcaster), moderator = COALESCE(?5, moderator), \
-             vip = COALESCE(?6, vip), subscriber = COALESCE(?7, subscriber) \
-             RETURNING avatar_url IS NULL, first_seen_at = ?8",
-        )
-        .bind(&s.user_id)
-        .bind(&s.login)
-        .bind(&s.name)
-        .bind(role(|r| r.broadcaster))
-        .bind(role(|r| r.moderator))
-        .bind(role(|r| r.vip))
-        .bind(role(|r| r.subscriber))
-        .bind(at)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(storage)?;
-        Ok(Recorded { no_avatar, new })
+    async fn record(
+        &self,
+        sightings: &[(Sighting, DateTime<Utc>)],
+    ) -> Result<Vec<Recorded>, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let mut results = Vec::with_capacity(sightings.len());
+        for (sighting, at) in sightings {
+            results.push(record_sighting(&mut tx, sighting, *at).await?);
+        }
+        tx.commit().await.map_err(storage)?;
+        Ok(results)
     }
 
     async fn set_avatar(&self, user_id: &str, url: &str) -> Result<(), RepositoryError> {
@@ -63,6 +47,49 @@ impl ViewerRepository for SqliteViewers {
             .map_err(storage)?;
         Ok(())
     }
+}
+
+async fn record_sighting(
+    conn: &mut SqliteConnection,
+    s: &Sighting,
+    at: DateTime<Utc>,
+) -> Result<Recorded, RepositoryError> {
+    let at = at.to_rfc3339_opts(SecondsFormat::Micros, true);
+    let role = |f: fn(&crate::domain::Roles) -> bool| s.roles.as_ref().map(f);
+    // A NULL role (not shown by this event) keeps the stored one; a new viewer starts without roles.
+    // A new row's first sighting is this one; an existing row keeps its earlier first sighting.
+    // The caller holds a transaction. Two sightings can have the same timestamp.
+    let existed: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM viewers WHERE twitch_user_id = ?)")
+            .bind(&s.user_id)
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(storage)?;
+    let no_avatar: bool = sqlx::query_scalar(
+            "INSERT INTO viewers (twitch_user_id, login, display_name, broadcaster, moderator, vip, subscriber, \
+             first_seen_at, last_seen_at) \
+             VALUES (?1, ?2, ?3, COALESCE(?4, 0), COALESCE(?5, 0), COALESCE(?6, 0), COALESCE(?7, 0), ?8, ?8) \
+             ON CONFLICT (twitch_user_id) DO UPDATE SET login = excluded.login, \
+             display_name = excluded.display_name, last_seen_at = excluded.last_seen_at, \
+             broadcaster = COALESCE(?4, broadcaster), moderator = COALESCE(?5, moderator), \
+             vip = COALESCE(?6, vip), subscriber = COALESCE(?7, subscriber) \
+             RETURNING avatar_url IS NULL",
+        )
+        .bind(&s.user_id)
+        .bind(&s.login)
+        .bind(&s.name)
+        .bind(role(|r| r.broadcaster))
+        .bind(role(|r| r.moderator))
+        .bind(role(|r| r.vip))
+        .bind(role(|r| r.subscriber))
+        .bind(at)
+        .fetch_one(conn)
+        .await
+        .map_err(storage)?;
+    Ok(Recorded {
+        no_avatar,
+        new: !existed,
+    })
 }
 
 /// The stored avatars of `ids` (Twitch user IDs); viewers without one are left out.
@@ -98,7 +125,7 @@ mod tests {
     };
     use toolkit_core::{
         events::{Alert, AlertKind, ChatBadge, ChatMessage, Source},
-        twitch::ProfileImages,
+        twitch::{ProfileBatch, ProfileImages},
     };
 
     async fn pool() -> SqlitePool {
@@ -172,6 +199,62 @@ mod tests {
 
     const AVATAR: &str =
         "https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png";
+
+    #[derive(Default)]
+    struct BatchProfiles(Mutex<Vec<Vec<String>>>);
+
+    impl ProfileImages for BatchProfiles {
+        fn profile_image<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>> {
+            panic!("viewer lookups must be batched")
+        }
+
+        fn profile_images<'a>(
+            &'a self,
+            ids: &'a [String],
+        ) -> Pin<Box<dyn Future<Output = ProfileBatch> + Send + 'a>> {
+            Box::pin(async move {
+                let mut calls = self.0.lock().unwrap();
+                calls.push(ids.to_vec());
+                if calls.len() == 1 {
+                    return Err(Duration::from_millis(10));
+                }
+                Ok(ids.iter().map(|id| (id.clone(), AVATAR.into())).collect())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn avatar_lookups_batch_distinct_viewers_and_retry_after_a_temporary_failure() {
+        let pool = pool().await;
+        let profiles = Arc::new(BatchProfiles::default());
+        let viewers = start(pool.clone(), profiles.clone());
+        for id in ["7", "7", "8"] {
+            let mut message = chat("viewer", "Viewer", vec![]);
+            message.user_id = id.into();
+            viewers.receive_chat(&message, Source::Twitch);
+        }
+        settle(&pool, |rows| {
+            rows.len() == 2 && rows.iter().all(|r| r.2.is_some())
+        })
+        .await;
+        assert_eq!(*profiles.0.lock().unwrap(), [["7", "8"], ["7", "8"]]);
+    }
+
+    #[tokio::test]
+    async fn identical_timestamps_only_mark_one_sighting_new() {
+        let repo = SqliteViewers::new(pool().await);
+        let at = Utc::now();
+        let sighting = Sighting::from_chat(&chat("fan", "Fan", vec![]));
+        let results = repo
+            .record(&[(sighting.clone(), at), (sighting, at)])
+            .await
+            .unwrap();
+        assert!(results[0].new);
+        assert!(!results[1].new);
+    }
 
     #[tokio::test]
     async fn only_a_viewers_first_sighting_counts_as_new() {
@@ -283,7 +366,13 @@ mod tests {
         viewers.receive_chat(&chat("sim", "Sim", vec![]), Source::Simulation);
         viewers.receive_chat(&chat("fan", "Fan", vec![]), Source::Twitch);
         let now = settle(&pool, |r| r.len() == 1).await;
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while profiles.asked.lock().unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
         assert_eq!(
             rows(&pool).await[0].2,
             None,
