@@ -6,6 +6,7 @@ import { effectScope, h, nextTick, ref } from 'vue'
 import { i18n } from '../i18n'
 import AppDrawer from './AppDrawer.vue'
 import { drawerId, focusTarget, onDrawerSubmit, useDrawer, useDrawerSetting } from './drawer'
+import { testRouter } from './testRouter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
@@ -188,7 +189,7 @@ describe('AppDrawer (side by side)', () => {
     const wrapper = mount(AppDrawer, {
       props: { id: 'chat', title: 'Chat' },
       slots: { now: () => h('p', 'now') },
-      global: { plugins: [i18n, PrimeVue] },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
       attachTo: document.body,
     })
     const aside = wrapper.get('aside').element as HTMLElement

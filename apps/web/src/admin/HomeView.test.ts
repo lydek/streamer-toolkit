@@ -6,6 +6,7 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import { onDrawerSubmit, useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
+import { testRouter } from './testRouter'
 
 const { toastAdd } = vi.hoisted(() => ({ toastAdd: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -22,7 +23,7 @@ let put: ReturnType<typeof vi.fn>
 const drawer = useDrawer()
 
 async function home() {
-  const wrapper = mount(HomeView, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
+  const wrapper = mount(HomeView, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
