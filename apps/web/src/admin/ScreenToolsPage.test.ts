@@ -49,6 +49,7 @@ const snapshot = (payload: Schemas['BreakPayload'], w = warnings) => ({
     'counter.marathon': [],
     'screen.break': [{ id: 'b', type: 'screen.break', version: 1, seq: 1, occurredAt: '', source: 'system', payload }],
     'screen.warnings': [{ id: 'w', type: 'screen.warnings', version: 1, seq: 1, occurredAt: '', source: 'system', payload: w }],
+    'screen.appearance': [],
     'chat.text_size': [],
   },
 })
@@ -128,4 +129,15 @@ it('saves a warning switch with the other warning settings, and asks for a new m
 
   const gone = await page(card, { ...warnings, micMissing: true })
   expect(gone.text()).toContain('OBS 裡已經沒有「Mic」，請重新選擇麥克風。')
+})
+
+it('saves the overlay theme with the text size', async () => {
+  const wrapper = await page()
+  socket.onmessage!({
+    data: JSON.stringify({ id: 'a', type: 'screen.appearance', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { theme: 'dark', textSize: 120 } }),
+  })
+  await flushPromises()
+  await wrapper.findAll('[aria-labelledby="overlay-theme-label"] button').find((b) => b.text() === '奶油')!.trigger('click')
+  await flushPromises()
+  expect(put).toHaveBeenCalledWith('/api/admin/screen-tools/appearance', { body: { theme: 'cream', textSize: 120 } })
 })

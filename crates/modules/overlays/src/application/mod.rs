@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 
 use crate::domain::{
     BreakCard, BreakSettings, Countdown,
+    appearance::Appearance,
     warnings::{Conditions, WarningSettings, Warnings},
 };
 
@@ -39,12 +40,29 @@ pub trait OverlayRepository: Send + Sync + 'static {
         &self,
         settings: &WarningSettings,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    /// `None` before anything was saved.
+    fn appearance(
+        &self,
+    ) -> impl Future<Output = Result<Option<Appearance>, RepositoryError>> + Send;
+    fn save_appearance(
+        &self,
+        appearance: Appearance,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 
 /// Announces the card after every change and once at start.
 pub type PublishBreak = Box<dyn Fn(&BreakCard) + Send + Sync>;
 /// Announces the warnings whenever their settings or state change, and once at start.
 pub type PublishWarnings = Box<dyn Fn(&WarningSettings, &Warnings) + Send + Sync>;
+/// Announces the built-in overlays' look after every change and once at start.
+pub type PublishAppearance = Box<dyn Fn(Appearance) + Send + Sync>;
+
+/// The announcers, one per event.
+pub struct Publishers {
+    pub(crate) break_card: PublishBreak,
+    pub(crate) warnings: PublishWarnings,
+    pub(crate) appearance: PublishAppearance,
+}
 
 #[derive(Default)]
 struct WarningState {
@@ -57,17 +75,19 @@ pub struct OverlayService<R> {
     repo: R,
     publish: PublishBreak,
     publish_warnings: PublishWarnings,
+    publish_appearance: PublishAppearance,
     /// One change at a time: each reads, changes and saves a single row.
     lock: tokio::sync::Mutex<()>,
     warnings: Mutex<WarningState>,
 }
 
 impl<R: OverlayRepository> OverlayService<R> {
-    pub(crate) fn new(repo: R, publish: PublishBreak, publish_warnings: PublishWarnings) -> Self {
+    pub(crate) fn new(repo: R, publishers: Publishers) -> Self {
         Self {
             repo,
-            publish,
-            publish_warnings,
+            publish: publishers.break_card,
+            publish_warnings: publishers.warnings,
+            publish_appearance: publishers.appearance,
             lock: tokio::sync::Mutex::new(()),
             warnings: Mutex::default(),
         }
@@ -83,7 +103,22 @@ impl<R: OverlayRepository> OverlayService<R> {
         (self.publish)(&card);
         let settings = self.repo.warning_settings().await?.unwrap_or_default();
         self.apply_warning_settings(settings, Utc::now());
+        (self.publish_appearance)(self.appearance().await?);
         Ok(())
+    }
+
+    pub async fn appearance(&self) -> Result<Appearance, RepositoryError> {
+        Ok(self.repo.appearance().await?.unwrap_or_default())
+    }
+
+    pub async fn set_appearance(&self, appearance: Appearance) -> Result<Appearance, OverlayError> {
+        if !appearance.valid() {
+            return Err(OverlayError::Invalid);
+        }
+        let _one = self.lock.lock().await;
+        self.repo.save_appearance(appearance).await?;
+        (self.publish_appearance)(appearance);
+        Ok(appearance)
     }
 
     /// The warning settings and state as of the last conditions.

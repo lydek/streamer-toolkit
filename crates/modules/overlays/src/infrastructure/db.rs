@@ -1,11 +1,15 @@
-//! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`).
+//! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`, `overlays_appearance`).
 
 use chrono::{DateTime, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{OverlayRepository, RepositoryError},
-    domain::{BreakCard, BreakSettings, CountdownMode, warnings::WarningSettings},
+    domain::{
+        BreakCard, BreakSettings, CountdownMode,
+        appearance::{Appearance, Theme},
+        warnings::WarningSettings,
+    },
 };
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -108,6 +112,34 @@ impl OverlayRepository for SqliteOverlays {
         .bind(s.mic)
         .bind(i64::from(s.mic_seconds))
         .bind(&s.mic_input)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn appearance(&self) -> Result<Option<Appearance>, RepositoryError> {
+        let row: Option<(String, i64)> =
+            sqlx::query_as("SELECT theme, text_size FROM overlays_appearance")
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(storage)?;
+        row.map(|(theme, text_size)| {
+            Ok(Appearance {
+                theme: Theme::parse(&theme).ok_or_else(|| storage("unknown theme"))?,
+                text_size: u16::try_from(text_size).map_err(storage)?,
+            })
+        })
+        .transpose()
+    }
+
+    async fn save_appearance(&self, a: Appearance) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO overlays_appearance (id, theme, text_size) VALUES (1, ?, ?)
+             ON CONFLICT (id) DO UPDATE SET theme = excluded.theme, text_size = excluded.text_size",
+        )
+        .bind(a.theme.as_str())
+        .bind(i64::from(a.text_size))
         .execute(&self.pool)
         .await
         .map_err(storage)?;

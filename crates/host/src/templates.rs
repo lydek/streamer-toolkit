@@ -671,6 +671,11 @@ pub(crate) mod tests {
         }
     }
 
+    /// Built-in templates take the screen tools' overlay theme and text size (apps/web/src/overlay/appearance.ts).
+    fn follows_appearance(css: &str) -> bool {
+        css.contains("var(--ov-fg") && css.contains("var(--ov-scale")
+    }
+
     #[test]
     fn every_built_in_template_is_usable_and_listed() {
         let mut folders: Vec<String> = BuiltIn::iter()
@@ -691,7 +696,8 @@ pub(crate) mod tests {
             assert_eq!(t.id(), id);
             let html = String::from_utf8(built_in(t, "template.html").unwrap()).unwrap();
             assert!(has_markers(&html), "{id}");
-            assert!(built_in(t, "style.css").is_some(), "{id}");
+            let css = String::from_utf8(built_in(t, "style.css").unwrap()).unwrap();
+            assert!(follows_appearance(&css), "{id}");
         }
         assert_eq!(ChatTemplate::from_id("nope"), ChatTemplate::Default);
         assert_eq!(ChatTemplate::from_id("custom"), ChatTemplate::Custom);
@@ -764,7 +770,8 @@ pub(crate) mod tests {
                 html.contains("data-alert-stage") && html.contains("<template data-alert>"),
                 "{t:?}"
             );
-            assert!(t.file("style.css").is_some(), "{t:?}");
+            let css = String::from_utf8(t.file("style.css").unwrap()).unwrap();
+            assert!(follows_appearance(&css), "{t:?}");
         }
         assert_eq!(AlertTemplate::from_id("nope"), AlertTemplate::Default);
     }

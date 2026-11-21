@@ -4,6 +4,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { onBeforeUnmount, ref } from 'vue'
 import { type Incoming, stopsStage } from '../chat/chat'
 import type { AlertPayload } from './alerts'
@@ -89,7 +90,11 @@ function show(p: AlertPayload, ms: number) {
   }, ms)
 }
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     // The template may have changed while disconnected. Alerts are never in snapshots, so none replays.
     lastSeq = msg.seq

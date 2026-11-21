@@ -1,9 +1,11 @@
-//! Adapters: the admin API (behind the admin token, added by the host), the `screen.break` and `screen.warnings`
-//! events and storage.
+//! Adapters: the admin API (behind the admin token, added by the host), the `screen.break`, `screen.warnings` and
+//! `screen.appearance` events and storage.
 
+mod appearance;
 pub mod db;
 mod warnings;
 
+pub use appearance::AppearanceEvent;
 pub use warnings::WarningsEvent;
 
 use std::sync::Arc;
@@ -25,7 +27,7 @@ use toolkit_core::{
 use utoipa::{OpenApi, ToSchema};
 
 use crate::{
-    application::{OverlayError, OverlayService, RepositoryError},
+    application::{OverlayError, OverlayService, Publishers, RepositoryError},
     domain::{BreakCard, BreakSettings, Countdown, CountdownMode},
 };
 
@@ -119,7 +121,8 @@ pub enum BreakType {
 pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> Arc<Overlays> {
     bus.retain(BREAK, 1);
     bus.retain(warnings::WARNINGS, 1);
-    let warnings_bus = bus.clone();
+    bus.retain(appearance::APPEARANCE, 1);
+    let (warnings_bus, appearance_bus) = (bus.clone(), bus.clone());
     let event = |event_type, version, payload| Event {
         id: uuid::Uuid::now_v7().to_string(),
         event_type,
@@ -130,25 +133,36 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> Arc<Overlays> {
     };
     let service = Arc::new(OverlayService::new(
         db::SqliteOverlays::new(pool),
-        Box::new(move |card| {
-            let payload =
-                serde_json::to_value(BreakPayload::from(card)).expect("break card serializes");
-            bus.publish(event(BREAK, BREAK_VERSION, payload));
-        }),
-        Box::new(move |settings, now| {
-            let payload = serde_json::to_value(warnings::WarningsPayload::new(settings, now))
-                .expect("warnings serialize");
-            warnings_bus.publish(event(
-                warnings::WARNINGS,
-                warnings::WARNINGS_VERSION,
-                payload,
-            ));
-        }),
+        Publishers {
+            break_card: Box::new(move |card| {
+                let payload =
+                    serde_json::to_value(BreakPayload::from(card)).expect("break card serializes");
+                bus.publish(event(BREAK, BREAK_VERSION, payload));
+            }),
+            warnings: Box::new(move |settings, now| {
+                let payload = serde_json::to_value(warnings::WarningsPayload::new(settings, now))
+                    .expect("warnings serialize");
+                warnings_bus.publish(event(
+                    warnings::WARNINGS,
+                    warnings::WARNINGS_VERSION,
+                    payload,
+                ));
+            }),
+            appearance: Box::new(move |a| {
+                let payload = serde_json::to_value(appearance::AppearancePayload::from(a))
+                    .expect("appearance serializes");
+                appearance_bus.publish(event(
+                    appearance::APPEARANCE,
+                    appearance::APPEARANCE_VERSION,
+                    payload,
+                ));
+            }),
+        },
     ));
     let first = service.clone();
     tokio::spawn(async move {
         if let Err(e) = first.announce().await {
-            tracing::error!(code = "overlays.storage_failed", error = %e.0, "break card not loaded");
+            tracing::error!(code = "overlays.storage_failed", error = %e.0, "screen tools not loaded");
         }
     });
     service
@@ -207,6 +221,7 @@ pub fn routes(service: Arc<Overlays>) -> Router {
         .route("/api/admin/screen-tools/break/show", post(show_break))
         .route("/api/admin/screen-tools/break/hide", post(hide_break))
         .merge(warnings::routes())
+        .merge(appearance::routes())
         .with_state(service)
 }
 
@@ -311,9 +326,11 @@ pub(crate) async fn hide_break(State(s): State<Arc<Overlays>>) -> Response {
         show_break,
         hide_break,
         warnings::get_warnings,
-        warnings::set_warnings
+        warnings::set_warnings,
+        appearance::get_appearance,
+        appearance::set_appearance
     ),
-    components(schemas(BreakEvent, WarningsEvent))
+    components(schemas(BreakEvent, WarningsEvent, AppearanceEvent))
 )]
 struct OverlayApi;
 

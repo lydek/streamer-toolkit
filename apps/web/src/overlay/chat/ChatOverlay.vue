@@ -10,6 +10,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type ChatEvent, type ChatState, type Incoming, apply, applyTextSize } from './chat'
@@ -60,7 +61,11 @@ async function applyTemplate() {
   statusStyle.value = textStyle(template)
 }
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   // On every snapshot too: the template may have changed while disconnected.
   if (msg.type === 'snapshot' || (msg.type === 'template.changed' && msg.payload.overlay === 'chat')) {
     void applyTemplate()

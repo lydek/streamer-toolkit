@@ -3284,6 +3284,84 @@
         }
       }
     },
+    "/api/admin/screen-tools/appearance": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The built-in overlays' look now (also kept current by `screen.appearance`).",
+        "operationId": "get_appearance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearancePayload"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the look; open built-in overlays change at once.",
+        "operationId": "set_appearance",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppearancePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearancePayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`overlays.invalid`: text size out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/screen-tools/break": {
       "get": {
         "tags": [
@@ -4986,6 +5064,71 @@
           "subscriber",
           "vip",
           "moderator"
+        ]
+      },
+      "AppearanceEvent": {
+        "type": "object",
+        "description": "A `screen.appearance` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps\nonly the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AppearancePayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AppearanceType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AppearancePayload": {
+        "type": "object",
+        "description": "The built-in overlays' theme and text size; also the body of `PUT /api/admin/screen-tools/appearance`.",
+        "required": [
+          "theme",
+          "textSize"
+        ],
+        "properties": {
+          "textSize": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Percent of each overlay's own text size: 50–200 in steps of 10.",
+            "minimum": 0
+          },
+          "theme": {
+            "$ref": "#/components/schemas/OverlayTheme"
+          }
+        }
+      },
+      "AppearanceType": {
+        "type": "string",
+        "enum": [
+          "screen.appearance"
         ]
       },
       "AuthStatus": {
@@ -7619,6 +7762,15 @@
           }
         }
       },
+      "OverlayTheme": {
+        "type": "string",
+        "description": "A theme for the built-in overlays; custom templates never use it.",
+        "enum": [
+          "dark",
+          "cream",
+          "contrast"
+        ]
+      },
       "Overview": {
         "type": "object",
         "required": [
@@ -8760,6 +8912,7 @@
           "counter.marathon",
           "screen.break",
           "screen.warnings",
+          "screen.appearance",
           "chat.text_size"
         ],
         "properties": {
@@ -8824,6 +8977,13 @@
               "$ref": "#/components/schemas/PresentationQueueEvent"
             },
             "description": "At most one: the latest presentation queue status."
+          },
+          "screen.appearance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppearanceEvent"
+            },
+            "description": "At most one: the built-in overlays' theme and text size."
           },
           "screen.break": {
             "type": "array",

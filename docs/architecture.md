@@ -19,7 +19,7 @@ crates/
     sound/         # 音效管理（薄）
     bgm/           # 背景音樂：音樂庫、歌單、播放器與場景對應（薄）
     counter/       # 計數器：全域計數、每人計數與訂閱馬拉松計時器（薄）
-    overlays/      # 畫面工具：休息中／準備中卡片與警語（薄；模組 ID `screen-tools`）
+    overlays/      # 畫面工具：休息中／準備中卡片、警語與內建 Overlay 的外觀（薄；模組 ID `screen-tools`）
     stream/        # 直播狀態與場次（薄）
     activity/      # 活動紀錄：追隨、訂閱、小奇點、揪團（薄）
     viewers/       # 觀眾名冊（薄）
@@ -193,6 +193,9 @@ apps/
   - 警語（`/overlay/warnings/`，`?kind=warnings`）：出問題時在直播畫面上用小字提醒，觀眾也看得到。設定存在 `overlays_warnings`（一筆：三個開關、麥克風靜音幾秒才提醒、要看的 OBS 音訊輸入名稱）；預設開「聊天室 Overlay 沒連上」與「麥克風靜音超過 30 秒」，Twitch 中斷預設關。管理 API：`GET`／`PUT /api/admin/screen-tools/warnings`（秒數 1–3600）。
     - Host 每 0.5 秒把看到的狀態交給模組：有沒有開著的聊天室 Overlay（`?kind=chat` 的連線數）、Twitch EventSub 是否連上、OBS 的音訊輸入（OBS 沒連上時為未知）。模組只在狀態或設定改變時發布 `screen.warnings`（設定加上狀態），快照只保留最新一則。
     - 麥克風：從 OBS 的輸入清單選（清單本來就只列有靜音狀態的輸入，也就是有音訊的輸入）；沒選就不檢查。模組記下第一次看到靜音的時間，Overlay 在滿設定的秒數後顯示，取消靜音就消失；換一個輸入重新計時。OBS 連著但清單裡沒有選的輸入時標記 `micMissing`，畫面工具頁提示重新選擇，此時不檢查靜音。
+  - 疊加層外觀：內建 Overlay 的主題（`dark` 深色、`cream` 奶油、`contrast` 高對比）與文字大小（50–200%，每 10%），和管理介面的主題分開。存在 `overlays_appearance`（一筆）；管理 API `GET`／`PUT /api/admin/screen-tools/appearance`；每次變動與啟動時發布 `screen.appearance`，快照只保留最新一則，已開的 Overlay 立刻換，不用重新整理。
+    - 套用方式：Overlay 頁收到後在頁面根節點設 CSS 變數（`--ov-fg` 文字、`--ov-bg` 底色、`--ov-accent` 強調色、`--ov-shadow` 文字陰影、`--ov-scale` 文字倍率）；深色、100% 不設任何變數，就是內建 Overlay 原本的樣子。內建 Overlay（休息卡片、警語、計數器、馬拉松計時器、集點卡）與聊天室、特效的內建樣板讀這些變數，原本的值當備援；使用者自訂樣板不讀，所以不受影響。Host 的測試檢查每個內建樣板的 CSS 都有讀主題與文字倍率。
+    - 之後新增的內建 Overlay（例如排行榜）也要呼叫 `apps/web/src/overlay/appearance.ts` 的 `followAppearance`，並讀同一組變數。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。

@@ -14,6 +14,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { components } from '../../api/schema'
@@ -32,7 +33,11 @@ let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     lastSeq = msg.seq
     counters.value = msg.payload['counter.values'].at(-1)?.payload.counters ?? []
@@ -77,15 +82,15 @@ body {
   margin: 0;
   padding: 0.5rem;
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-  color: #fff;
-  text-shadow: 0 2px 4px rgb(0 0 0 / 80%);
+  color: var(--ov-fg, #fff);
+  text-shadow: var(--ov-shadow, 0 2px 4px rgb(0 0 0 / 80%));
 }
 
 li {
   display: flex;
   gap: 0.75rem;
   align-items: baseline;
-  font-size: 2rem;
+  font-size: calc(2rem * var(--ov-scale, 1));
 }
 
 .value {

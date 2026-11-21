@@ -306,6 +306,9 @@ struct SnapshotPayload {
     /// At most one: the on-stream warnings.
     #[serde(rename = "screen.warnings")]
     screen_warnings: Vec<overlays::WarningsEvent>,
+    /// At most one: the built-in overlays' theme and text size.
+    #[serde(rename = "screen.appearance")]
+    screen_appearance: Vec<overlays::AppearanceEvent>,
     /// At most one: the chat overlay's text size.
     #[serde(rename = "chat.text_size")]
     chat_text_size: Vec<crate::templates::ChatTextSizeEvent>,
@@ -403,6 +406,15 @@ mod tests {
         bus.retain("chat.text_size", 1);
         bus.retain("screen.break", 1);
         bus.retain("screen.warnings", 1);
+        bus.retain("screen.appearance", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "a".into(),
+            event_type: "screen.appearance",
+            version: 1,
+            occurred_at: "2026-11-22T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({ "theme": "cream", "textSize": 120 }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "w".into(),
             event_type: "screen.warnings",
@@ -550,6 +562,9 @@ mod tests {
         let warnings = &wire["payload"]["screen.warnings"][0];
         assert_required("WarningsEvent", warnings);
         assert_required("WarningsPayload", &warnings["payload"]);
+        let appearance = &wire["payload"]["screen.appearance"][0];
+        assert_required("AppearanceEvent", appearance);
+        assert_required("AppearancePayload", &appearance["payload"]);
         let size = &wire["payload"]["chat.text_size"][0];
         assert_required("ChatTextSizeEvent", size);
         assert_required("ChatTextSizePayload", &size["payload"]);

@@ -7,24 +7,26 @@
 
 .text .alert {
   max-width: 90vw;
-  color: #fff;
+  color: var(--ov-fg, #fff);
   text-align: center;
   /* An outline that reads on any scene. */
-  text-shadow:
+  text-shadow: var(
+    --ov-shadow,
     0 0 3px #000,
     0 0 3px #000,
-    0 3px 6px #000;
+    0 3px 6px #000
+  );
   animation: rise var(--duration, 6000ms) ease-out both;
 }
 
 .text .title {
   margin: 0;
-  font-size: max(1.75rem, 3.2vw);
+  font-size: calc(max(1.75rem, 3.2vw) * var(--ov-scale, 1));
   font-weight: 900;
 }
 
 .text .alert[data-kind='cheer'] .title {
-  color: #ffd166;
+  color: var(--ov-accent, #ffd166);
 }
 
 .text .alert[data-kind='raid'] .title {
@@ -33,7 +35,7 @@
 
 .text .message {
   margin: 0.3em 0 0;
-  font-size: max(1.1rem, 1.6vw);
+  font-size: calc(max(1.1rem, 1.6vw) * var(--ov-scale, 1));
   overflow-wrap: anywhere;
 }
 

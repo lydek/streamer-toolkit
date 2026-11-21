@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 0469cbaac145ddf65e88e7b7ac96ae347d66b314f9c88beb54833cfebd072517 -->
+<!-- source: docs/architecture.md source-sha256: 9c323298c39e6aa47f9da53d1f054263d837633dde28986a83f52d373b6c0fc7 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -20,7 +20,7 @@ crates/
     sound/         # Sound management (thin)
     bgm/           # Background music: the music library, playlists, the player and scene rules (thin)
     counter/       # Counters: global counts, per-viewer counts and the sub marathon timer (thin)
-    overlays/      # Screen tools: the break / starting-soon card and on-stream warnings (thin; module ID `screen-tools`)
+    overlays/      # Screen tools: the break / starting-soon card, on-stream warnings and the built-in overlays' look (thin; module ID `screen-tools`)
     stream/        # Live state and stream sessions (thin)
     activity/      # Activity records: follows, subs, Bits, raids (thin)
     viewers/       # Viewer directory (thin)
@@ -194,6 +194,9 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
   - Warnings (`/overlay/warnings/`, `?kind=warnings`): small text on the stream when something is wrong; viewers see it too. Settings are stored in `overlays_warnings` (one row: three switches, how many seconds the mic may stay muted before a warning, and the name of the OBS audio input to watch); "chat overlay not connected" and "mic muted for more than 30 seconds" are on by default, "Twitch disconnected" is off. Admin API: `GET`/`PUT /api/admin/screen-tools/warnings` (seconds 1–3600).
     - Every 0.5 seconds the Host hands the module what it sees: whether a chat overlay is open (the `?kind=chat` socket count), whether Twitch EventSub is connected, and OBS's audio inputs (unknown while OBS is not connected). The module publishes `screen.warnings` (the settings plus the state) only when the state or the settings change, and the snapshot keeps only the latest one.
     - Mic: picked from OBS's input list (which already lists only inputs with a mute state, that is, inputs with audio); with none picked, nothing is checked. The module records when it first saw the input muted, the overlay shows the warning once the set seconds have passed, and it clears on unmute; picking another input starts the wait again. When OBS is connected but the picked input is not in the list, `micMissing` is set, the screen tools page asks for a new pick, and the mute is not checked meanwhile.
+  - Overlay appearance: the built-in overlays' theme (`dark`, `cream`, `contrast` for high contrast) and text size (50–200 % in steps of 10 %), chosen apart from the admin UI's theme. Stored in `overlays_appearance` (one row); admin API `GET`/`PUT /api/admin/screen-tools/appearance`; every change and every start publishes `screen.appearance`, the snapshot keeps only the latest one, and open overlays change at once without a reload.
+    - How it applies: on receiving it, an overlay page sets CSS variables on its root (`--ov-fg` text, `--ov-bg` background, `--ov-accent` accent, `--ov-shadow` text shadow, `--ov-scale` text scale); dark at 100 % sets none, which is the built-in overlays' own look. The built-in overlays (break card, warnings, counters, marathon timer, stamp card) and the built-in chat and alert templates read these variables with their own values as the fallback; custom templates do not read them, so they stay as written. A Host test checks that every built-in template's CSS reads the theme and the text scale.
+    - Built-in overlays added later (the leaderboard, for one) must also call `followAppearance` from `apps/web/src/overlay/appearance.ts` and read the same variables.
 - **Host header**: accept only `127.0.0.1:<port>` and `localhost:<port>`, to block DNS rebinding.
 - **Origin**: every WebSocket connection (overlays included) and every state-changing request checks Origin, accepting only `http://127.0.0.1:<port>` and `http://localhost:<port>` (current port); dev mode also accepts the Vite dev server origin (passed in by `apps/desktop` as runtime configuration). WebSocket connections without an Origin or with `Origin: null` are always rejected.
 - **CORS**: none on `/api`, `/ws` and `/admin`. Only the build `assets/` directory (chunks shared by the admin UI and overlays) and the template paths (`/templates`, built-in templates included) send `Access-Control-Allow-Origin: *` (without credentials; the content is public code and templates), because the preview iframe's origin is `null` and Vite's module scripts, CSS and fonts must load through CORS.

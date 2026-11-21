@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 
+pub mod appearance;
 pub mod warnings;
 
 /// The longest text on the card.
