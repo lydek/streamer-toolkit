@@ -480,6 +480,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     middleware::from_fn_with_state(admin.clone(), admin::require_token),
                 ),
             )
+            .merge(checkin::image_routes(checkin.clone()))
             .merge(checkin::routes(config.db.clone(), checkin).layer(
                 middleware::from_fn_with_state(admin.clone(), admin::require_token),
             ))

@@ -897,6 +897,34 @@
       "deleteNote": "這個計數和每位觀眾的數字都會移除。"
     }
   },
+  "cardStyle": {
+    "preset": "內建樣式",
+    "presets": {
+      "simple": "簡約",
+      "journal": "手帳"
+    },
+    "background": "背景",
+    "stamp": "印章",
+    "color": "顏色",
+    "image": "圖片（PNG、JPG、GIF、WebP，最多 5 MB）",
+    "removeImage": "移除圖片",
+    "perRow": "每排幾格",
+    "title": "標題",
+    "description": "說明文字",
+    "variables": "可用 #觀眾# #章數# #次數# #格數#",
+    "animation": "進場動畫",
+    "animations": {
+      "slide": "滑入",
+      "fade": "淡入",
+      "pop": "彈出",
+      "none": "沒有動畫"
+    },
+    "showRepeat": "今天已經打過卡也顯示卡片",
+    "test": "在 OBS 試播",
+    "save": "儲存",
+    "saved": "已儲存卡片樣式。",
+    "uploadFailed": "{file}：{reason}"
+  },
   "screenTools": {
     "break": {
       "heading": "休息中／準備中卡片",
@@ -1227,6 +1255,9 @@
       "storage_failed": "無法讀取或寫入打卡紀錄。",
       "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。",
       "invalid_deduction": "扣除的格數要大於 0，原因最多 100 字。",
+      "invalid_style": "卡片樣式不正確：每排 1 到 20 格，文字最多 100 字，圖片要先上傳。",
+      "unsupported_image": "只能上傳 PNG、JPG、GIF 或 WebP，而且副檔名要和檔案內容一致。",
+      "image_too_large": "圖片超過 5 MB。",
       "not_enough_stamps": "可用印章不夠，沒有扣除。"
     },
     "redemption": {

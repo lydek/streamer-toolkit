@@ -46,7 +46,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music and media. Live use goes
+         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes
          *     on while it is made; database writes wait only for the snapshot.
          */
         get: operations["export_backup"];
@@ -208,6 +208,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/checkin/card-style": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["card_style"];
+        /** Saves the style; the next card on the overlay shows it. */
+        put: operations["set_card_style"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/card-style/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 在 OBS 試播: shows a sample card in the saved style through the presentation queue (`source=simulation`);
+         *     nothing is recorded.
+         */
+        post: operations["test_card_style"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/card/hide": {
         parameters: {
             query?: never;
@@ -236,6 +273,23 @@ export interface paths {
         get: operations["list_deductions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copies a PNG, JPG, GIF or WebP image (at most 5 MB, no SVG) in for the style. The body is the file itself. */
+        post: operations["import_card_image"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2021,6 +2075,55 @@ export interface components {
         };
         /** @enum {string} */
         BreakType: "screen.break";
+        /** @description A stored card image. */
+        CardImage: {
+            /** @description The name to put in the style. */
+            name: string;
+            /** @description `/checkin/{name}`, readable without a token. */
+            url: string;
+        };
+        /** @description How the card looks; image URLs are `/checkin/{name}`, readable without a token. */
+        CardLook: {
+            /** @description `fade`, `slide`, `pop` or `none`. */
+            animation: string;
+            backgroundColor: string;
+            backgroundUrl: string | null;
+            /** Format: int32 */
+            perRow: number;
+            /** @description `simple` or `journal`. */
+            preset: string;
+            stampColor: string;
+            stampUrl: string | null;
+        };
+        /**
+         * @description The stamp card's look. `title` and `description` may hold `#觀眾#`, `#章數#`, `#次數#` and `#格數#`; they are
+         *     broadcaster text, shown as text.
+         */
+        CardStyleBody: {
+            /** @description `fade`, `slide`, `pop` or `none`. */
+            animation: string;
+            /** @description `#RRGGBB`. */
+            background_color: string;
+            /** @description A name `POST /api/admin/checkin/images` gave; `null`: the color only. */
+            background_image?: string | null;
+            /** @description At most 100 characters after trimming. */
+            description: string;
+            /**
+             * Format: int32
+             * @description 1–20.
+             */
+            per_row: number;
+            /** @description `simple` or `journal`. */
+            preset: string;
+            /** @description A repeat check-in on the same business day shows the card too; nothing is recorded. */
+            show_repeat: boolean;
+            /** @description `#RRGGBB`. */
+            stamp_color: string;
+            /** @description A name `POST /api/admin/checkin/images` gave; `null`: a plain stamp in the color. */
+            stamp_image?: string | null;
+            /** @description At most 100 characters after trimming. */
+            title: string;
+        };
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
          * @enum {string}
@@ -2340,6 +2443,8 @@ export interface components {
         CheckinStampedPayload: {
             /** @description Twitch profile image (`https://static-cdn.jtvnw.net/` only); `null` when unknown. */
             avatarUrl: string | null;
+            /** @description The style's description with its variables filled in (raw text: render it as text). */
+            description: string;
             /**
              * Format: int64
              * @description How long to show the card.
@@ -2355,6 +2460,9 @@ export interface components {
              * @description Stamps on the current card, out of `slots`.
              */
             stamps: number;
+            style: components["schemas"]["CardLook"];
+            /** @description The style's title with its variables filled in (raw text: render it as text). */
+            title: string;
             /** Format: int64 */
             total: number;
             /** @description Raw viewer text; overlays escape it when rendering. */
@@ -4202,6 +4310,84 @@ export interface operations {
             };
         };
     };
+    card_style: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardStyleBody"];
+                };
+            };
+        };
+    };
+    set_card_style: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardStyleBody"];
+            };
+        };
+        responses: {
+            /** @description The style as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardStyleBody"];
+                };
+            };
+            /** @description `checkin.invalid_style`: out of range, or an image the folder does not have */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    test_card_style: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     hide_card: {
         parameters: {
             query?: never;
@@ -4237,6 +4423,60 @@ export interface operations {
                 };
             };
             /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    import_card_image: {
+        parameters: {
+            query: {
+                /** @description The original file name: its extension must match the content. */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The image file */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardImage"];
+                };
+            };
+            /** @description `checkin.unsupported_image`: not a PNG, JPG, GIF or WebP file (by extension and content) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.image_too_large`: larger than 5 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

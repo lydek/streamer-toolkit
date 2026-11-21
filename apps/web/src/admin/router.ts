@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AlertsPage from './AlertsPage.vue'
+import CardStylePage from './CardStylePage.vue'
 import ChatLogPage from './ChatLogPage.vue'
 import ChatPage from './ChatPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
@@ -28,6 +29,7 @@ export const router = createRouter({
     { path: '/alerts', component: AlertsPage },
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
+    { path: '/card-style', component: CardStylePage },
     { path: '/sounds', component: SoundsPage },
     { path: '/scenes', component: ScenesPage },
     { path: '/music', component: MusicPage },

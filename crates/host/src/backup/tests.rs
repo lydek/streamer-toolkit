@@ -49,6 +49,10 @@ pub(super) async fn sample_folder(name: &str) -> (PathBuf, SqlitePool) {
         "media/0190a1b2-0000-7000-8000-000000000003.gif",
         "GIF89a media",
     );
+    write(
+        "checkin/0190a1b2-0000-7000-8000-000000000004.png",
+        "PNG card",
+    );
     write("logs/streamer-toolkit.2026-11-17.log", "log line");
     write("cache/thing", "cached");
     write("WebView2/Default/Cookies", "cookies");
@@ -91,7 +95,7 @@ fn entries(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
 }
 
 #[tokio::test]
-async fn export_takes_settings_database_templates_sounds_music_and_media_only() {
+async fn export_takes_settings_database_templates_sounds_music_media_and_card_images_only() {
     let (dir, pool) = sample_folder("export").await;
     let bytes = export(&pool, &dir, "1.2.3").await.unwrap();
     let entries = entries(&bytes);
@@ -100,6 +104,7 @@ async fn export_takes_settings_database_templates_sounds_music_and_media_only() 
     assert_eq!(
         names,
         [
+            "checkin/0190a1b2-0000-7000-8000-000000000004.png",
             MANIFEST,
             "media/0190a1b2-0000-7000-8000-000000000003.gif",
             "music/0190a1b2-0000-7000-8000-000000000002.ogg",
@@ -122,7 +127,7 @@ async fn export_takes_settings_database_templates_sounds_music_and_media_only() 
         (manifest.records.redemptions, manifest.records.checkins),
         (2, 0)
     );
-    assert_eq!(manifest.files.len(), 6);
+    assert_eq!(manifest.files.len(), 7);
     for file in &manifest.files {
         let (_, content) = entries.iter().find(|(n, _)| *n == file.path).unwrap();
         assert_eq!(file.size, content.len() as u64);
@@ -165,6 +170,7 @@ fn only_plain_paths_in_known_places_are_allowed() {
         "sounds/a.mp3",
         "music/a.ogg",
         "media/a.gif",
+        "checkin/a.png",
         "templates/chat/圖片/貓.png",
     ] {
         assert!(allowed_path(ok), "{ok}");
@@ -304,6 +310,7 @@ async fn export_then_restore_brings_back_the_same_settings_and_rows() {
     fs::write(dir.join("sounds/new.mp3"), "new").unwrap();
     fs::remove_dir_all(dir.join("music")).unwrap();
     fs::remove_dir_all(dir.join("media")).unwrap();
+    fs::remove_dir_all(dir.join("checkin")).unwrap();
     let changed = state_of(&dir).await;
     assert_ne!(changed, before);
 
