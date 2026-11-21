@@ -5,8 +5,8 @@ use utoipa::OpenApi;
 
 use crate::{
     admin, backup, card_packs, chat_display, chat_dock, chat_log, diagnostics, event_feed,
-    home_tiles, leaderboard, obs, overlay, overlay_test, performance, queue, rehearsal,
-    stream_summary, tab_bar, templates, text_size, update,
+    home_tiles, image_sizes, leaderboard, obs, overlay, overlay_test, performance, queue,
+    rehearsal, stream_summary, tab_bar, templates, text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -61,6 +61,7 @@ use crate::{
         diagnostics::connections,
         diagnostics::logs,
         diagnostics::report,
+        image_sizes::make_sizes,
         performance::performance,
         leaderboard::leaderboard,
         leaderboard::bots,
@@ -100,6 +101,8 @@ use crate::{
         toolkit_core::settings::ChatStyle,
         chat_log::ChatPeriod,
         chat_log::ChatLogBody,
+        image_sizes::ImageKind,
+        image_sizes::Fit,
         templates::TemplateChangedEvent,
         templates::ChatTextSizeEvent,
         checkin::CheckinChangedEvent,

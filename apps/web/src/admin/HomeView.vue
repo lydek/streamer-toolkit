@@ -333,6 +333,12 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="image-sizes" :title="moduleName('image-sizes')" full-page="/image-sizes">
+      <template #now>
+        <p>{{ t('imageSizes.tile') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
@@ -583,6 +589,7 @@ const lines = computed<Record<string, Line>>(() => {
           ? counterTile(live.value.counters)
           : { state: 'loading' },
     rehearsal: { state: 'ready', text: t('rehearsal.tile') },
+    'image-sizes': { state: 'ready', text: t('imageSizes.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }

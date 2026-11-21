@@ -887,6 +887,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/image-sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resizes a PNG, JPEG, GIF or WebP picture (at most 10 MB and 4096 px a side; the body is the file itself) to the
+         *     sizes of `kind`, as JSON with previews or, with `zip=true`, as one zip of PNG files.
+         */
+        post: operations["make_sizes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/leaderboard": {
         parameters: {
             query?: never;
@@ -2919,6 +2939,11 @@ export interface components {
             sound: string | null;
             triggered: components["schemas"]["Triggered"];
         };
+        /**
+         * @description How a picture that is not square becomes square.
+         * @enum {string}
+         */
+        Fit: "pad" | "crop";
         /** @description Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window. */
         GeneralSettings: {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
@@ -2929,6 +2954,8 @@ export interface components {
              */
             settings_unreadable?: boolean;
         };
+        /** @enum {string} */
+        ImageKind: "badge" | "points";
         /** @description An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering. */
         ImportSkip: {
             key: string;
@@ -3752,6 +3779,18 @@ export interface components {
              */
             stamps: number;
             userName?: string;
+        };
+        SizedImage: {
+            bytes: number;
+            /** @description A `data:image/png;base64,…` URL to preview it. */
+            data_url: string;
+            /** Format: int32 */
+            px: number;
+            /** @description A badge still above 25 KB after reducing its colors. */
+            too_large: boolean;
+        };
+        SizedImages: {
+            images: components["schemas"]["SizedImage"][];
         };
         Skipped: {
             /** @description Whether an item was playing. */
@@ -6384,6 +6423,54 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    make_sizes: {
+        parameters: {
+            query: {
+                kind: components["schemas"]["ImageKind"];
+                fit: components["schemas"]["Fit"];
+                /** @description `zip`: every size in one zip file; otherwise JSON with a preview of each. */
+                zip?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The picture */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Or, with `zip=true`, an `application/zip` file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizedImages"];
+                };
+            };
+            /** @description `image_sizes.unsupported` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `image_sizes.too_large`: more than 10 MB or 4096 px a side */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
