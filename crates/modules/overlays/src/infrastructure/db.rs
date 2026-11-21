@@ -1,4 +1,4 @@
-//! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`, `overlays_appearance`).
+//! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`, `overlays_appearance`, `overlays_media`).
 
 use chrono::{DateTime, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
@@ -8,6 +8,7 @@ use crate::{
     domain::{
         BreakCard, BreakSettings, CountdownMode,
         appearance::{Appearance, Theme},
+        media::{MediaEntry, MediaFormat},
         warnings::WarningSettings,
     },
 };
@@ -145,6 +146,76 @@ impl OverlayRepository for SqliteOverlays {
         .map_err(storage)?;
         Ok(())
     }
+
+    async fn media(&self) -> Result<Vec<MediaEntry>, RepositoryError> {
+        let rows: Vec<MediaRow> =
+            sqlx::query_as("SELECT id, title, format, duration_ms FROM overlays_media ORDER BY id")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(storage)?;
+        rows.into_iter().map(media_entry).collect()
+    }
+
+    async fn media_entry(&self, id: &str) -> Result<Option<MediaEntry>, RepositoryError> {
+        let row: Option<MediaRow> = sqlx::query_as(
+            "SELECT id, title, format, duration_ms FROM overlays_media WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        row.map(media_entry).transpose()
+    }
+
+    async fn insert_media(&self, e: &MediaEntry) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO overlays_media (id, title, format, duration_ms) VALUES (?, ?, ?, ?)",
+        )
+        .bind(&e.id)
+        .bind(&e.title)
+        .bind(e.format.extension())
+        .bind(e.duration_ms.map(i64::from))
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn update_media(&self, e: &MediaEntry) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE overlays_media SET title = ?, duration_ms = ? WHERE id = ?")
+            .bind(&e.title)
+            .bind(e.duration_ms.map(i64::from))
+            .bind(&e.id)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn delete_media(&self, id: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM overlays_media WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(())
+    }
+}
+
+/// id, title, format, duration_ms.
+type MediaRow = (String, String, String, Option<i64>);
+
+fn media_entry((id, title, format, duration_ms): MediaRow) -> Result<MediaEntry, RepositoryError> {
+    Ok(MediaEntry {
+        id,
+        title,
+        format: MediaFormat::from_extension(&format)
+            .ok_or_else(|| storage("unknown media format"))?,
+        duration_ms: duration_ms
+            .map(u32::try_from)
+            .transpose()
+            .map_err(storage)?,
+    })
 }
 
 pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {

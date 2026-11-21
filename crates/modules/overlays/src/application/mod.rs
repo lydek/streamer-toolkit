@@ -1,15 +1,20 @@
 //! Screen tool use cases: the break card's settings, showing and hiding it, and the on-stream warnings. Every change
 //! is announced with the whole card, or all the warnings.
 
-use std::{future::Future, sync::Mutex};
+use std::{future::Future, path::PathBuf, sync::Mutex};
 
 use chrono::{DateTime, Utc};
 
 use crate::domain::{
     BreakCard, BreakSettings, Countdown,
     appearance::Appearance,
+    media::MediaEntry,
     warnings::{Conditions, WarningSettings, Warnings},
 };
+
+mod media;
+
+pub use media::MediaError;
 
 #[derive(Debug, thiserror::Error)]
 #[error("overlays.storage_failed: {0}")]
@@ -48,6 +53,23 @@ pub trait OverlayRepository: Send + Sync + 'static {
         &self,
         appearance: Appearance,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+
+    /// In import order.
+    fn media(&self) -> impl Future<Output = Result<Vec<MediaEntry>, RepositoryError>> + Send;
+    fn media_entry(
+        &self,
+        id: &str,
+    ) -> impl Future<Output = Result<Option<MediaEntry>, RepositoryError>> + Send;
+    fn insert_media(
+        &self,
+        entry: &MediaEntry,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    /// Title and length.
+    fn update_media(
+        &self,
+        entry: &MediaEntry,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    fn delete_media(&self, id: &str) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 
 /// Announces the card after every change and once at start.
@@ -73,6 +95,8 @@ struct WarningState {
 
 pub struct OverlayService<R> {
     repo: R,
+    /// The data folder's `media/`.
+    media_dir: PathBuf,
     publish: PublishBreak,
     publish_warnings: PublishWarnings,
     publish_appearance: PublishAppearance,
@@ -82,9 +106,10 @@ pub struct OverlayService<R> {
 }
 
 impl<R: OverlayRepository> OverlayService<R> {
-    pub(crate) fn new(repo: R, publishers: Publishers) -> Self {
+    pub(crate) fn new(repo: R, media_dir: PathBuf, publishers: Publishers) -> Self {
         Self {
             repo,
+            media_dir,
             publish: publishers.break_card,
             publish_warnings: publishers.warnings,
             publish_appearance: publishers.appearance,
