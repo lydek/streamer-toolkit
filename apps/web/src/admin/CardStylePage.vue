@@ -5,16 +5,36 @@
     <div v-else class="split">
       <form class="stack" @submit.prevent="save">
         <div class="field">
-          <span id="cs-preset">{{ t('cardStyle.preset') }}</span>
-          <SelectButton
+          <label for="cs-preset">{{ t('cardStyle.preset') }}</label>
+          <Select
             :model-value="form.preset"
-            :options="PRESETS"
-            :option-label="(p: string) => t(`cardStyle.presets.${p}`)"
-            :allow-empty="false"
-            aria-labelledby="cs-preset"
+            input-id="cs-preset"
+            :options="presetOptions"
+            option-label="label"
+            option-value="value"
             @update:model-value="pickPreset"
           />
         </div>
+
+        <fieldset class="group">
+          <legend>{{ t('cardStyle.packs.heading') }}</legend>
+          <div class="row">
+            <label for="cs-pack">{{ t('cardStyle.packs.upload') }}</label>
+            <input id="cs-pack" type="file" accept=".zip,application/zip" :disabled="busy" @change="uploadPack" />
+          </div>
+          <ul v-if="packs.length" class="plain packs">
+            <li v-for="p in packs" :key="p.id">
+              <span>{{ p.name }}</span>
+              <Button
+                icon="pi pi-trash"
+                text
+                severity="danger"
+                :aria-label="t('cardStyle.packs.delete', { name: p.name })"
+                @click="deletePack(p)"
+              />
+            </li>
+          </ul>
+        </fieldset>
 
         <fieldset class="group">
           <legend>{{ t('cardStyle.background') }}</legend>
@@ -91,14 +111,13 @@ import Checkbox from 'primevue/checkbox'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
-import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import CardPreview from './CardPreview.vue'
-import { importCardImage, IMAGE_ACCEPT, PRESET_COLORS } from './cardStyle'
+import { importCardImage, IMAGE_ACCEPT, PRESET_COLORS, uploadCardPack } from './cardStyle'
 import { onDrawerSubmit } from './drawer'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast } from './home'
@@ -115,18 +134,26 @@ const failed = ref('')
 const uploadError = ref('')
 const busy = ref(false)
 const slots = ref(10)
+const packs = ref<Schemas['CardPack'][]>([])
+// The built-in presets, then each installed pack.
+const presetOptions = computed(() => [
+  ...PRESETS.map((p) => ({ value: p as string, label: t(`cardStyle.presets.${p}`) })),
+  ...packs.value.map((p) => ({ value: `pack:${p.id}`, label: p.name })),
+])
 // The style as saved, to know whether the form has changes.
 let saved = ''
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved)
-const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
+const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code, e.params) : String(e))
 
 async function load() {
   try {
-    const [style, settings] = await Promise.all([
+    const [style, settings, installed] = await Promise.all([
       api(client.GET('/api/admin/checkin/card-style')),
       api(client.GET('/api/admin/checkin/settings')),
+      api(client.GET('/api/admin/checkin/packs')),
     ])
     slots.value = settings.card_slots
+    packs.value = installed
     saved = JSON.stringify(style)
     form.value = style
   } catch (e) {
@@ -135,15 +162,43 @@ async function load() {
 }
 
 /** A preset brings its own colors, unless the colors were changed from the other preset's. */
-function pickPreset(preset: Preset) {
+function pickPreset(preset: string) {
   if (!form.value) return
   const before = PRESET_COLORS[form.value.preset as Preset]
+  const after = PRESET_COLORS[preset as Preset]
   const untouched =
     before && form.value.background_color === before.background && form.value.stamp_color === before.stamp
   form.value.preset = preset
-  if (untouched) {
-    form.value.background_color = PRESET_COLORS[preset].background
-    form.value.stamp_color = PRESET_COLORS[preset].stamp
+  if (untouched && after) {
+    form.value.background_color = after.background
+    form.value.stamp_color = after.stamp
+  }
+}
+
+/** Installs a pack; a refused zip says which file (and where in index.html). */
+async function uploadPack(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadError.value = ''
+  try {
+    const pack = await uploadCardPack(file)
+    packs.value = [...packs.value, pack].sort((a, b) => a.name.localeCompare(b.name))
+    toast.add(successToast(t('cardStyle.packs.installed', { name: pack.name })))
+  } catch (err) {
+    uploadError.value = t('cardStyle.uploadFailed', { file: file.name, reason: message(err) })
+  }
+  input.value = ''
+}
+
+async function deletePack(p: Schemas['CardPack']) {
+  try {
+    await api(client.DELETE('/api/admin/checkin/packs/{id}', { params: { path: { id: p.id } } }))
+    packs.value = packs.value.filter((x) => x.id !== p.id)
+    // The style falls back to the simple one on screen; pick it here too so saving stays valid.
+    if (form.value?.preset === `pack:${p.id}`) pickPreset('simple')
+  } catch (err) {
+    toast.add(errorToast(message(err)))
   }
 }
 
@@ -240,6 +295,12 @@ void load()
 }
 
 .check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.packs li {
   display: flex;
   align-items: center;
   gap: 0.5rem;

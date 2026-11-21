@@ -2,6 +2,7 @@
 
 mod admin;
 mod backup;
+mod card_packs;
 mod chat_display;
 mod chat_dock;
 mod chat_log;
@@ -419,6 +420,8 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let chat_dock = chat_dock::routes(config.data_dir.clone());
     let tab_bar = tab_bar::routes(config.data_dir.clone());
     let text_size = text_size::routes(config.data_dir.clone());
+    let card_packs = card_packs::routes(config.data_dir.clone());
+    let card_pack_files = card_packs::file_routes(config.data_dir.clone());
     let updates = update::start(
         config.data_dir.clone(),
         config.app_version.clone(),
@@ -528,6 +531,11 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin.clone(),
                 admin::require_token,
             )))
+            .merge(card_packs.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(card_pack_files)
             .merge(queue_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

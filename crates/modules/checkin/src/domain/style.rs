@@ -60,15 +60,22 @@ impl ImageFormat {
     /// A stored image's file name: a UUID and one of the extensions; anything else is never served.
     pub(crate) fn of_file(name: &str) -> Option<Self> {
         let (stem, ext) = name.split_once('.')?;
-        let uuid = stem.len() == 36
-            && stem
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || b == b'-');
-        if !uuid {
+        if !uuid(stem) {
             return None;
         }
         Self::ALL.into_iter().find(|f| f.extension() == ext)
     }
+}
+
+fn uuid(s: &str) -> bool {
+    s.len() == 36
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || b == b'-')
+}
+
+/// The animation pack a `pack:<id>` preset names; `None` for a built-in preset.
+pub(crate) fn pack_of(preset: &str) -> Option<&str> {
+    preset.strip_prefix("pack:").filter(|id| uuid(id))
 }
 
 fn color(s: &str) -> bool {
@@ -85,7 +92,7 @@ pub(crate) fn checked(mut s: CardStyle) -> Option<CardStyle> {
         i.as_deref()
             .is_none_or(|n| ImageFormat::of_file(n).is_some())
     };
-    (PRESETS.contains(&s.preset.as_str())
+    ((PRESETS.contains(&s.preset.as_str()) || pack_of(&s.preset).is_some())
         && ANIMATIONS.contains(&s.animation.as_str())
         && color(&s.background_color)
         && color(&s.stamp_color)
@@ -150,6 +157,7 @@ mod tests {
             checked(s).is_none()
         };
         assert!(bad(|s| s.preset = "fancy".into()));
+        assert!(bad(|s| s.preset = "pack:../x".into()));
         assert!(bad(|s| s.animation = "spin".into()));
         assert!(bad(|s| s.background_color = "red".into()));
         assert!(bad(|s| s.stamp_color = "#12345".into()));
@@ -159,6 +167,7 @@ mod tests {
         assert!(bad(|s| s.background_image = Some("../x.png".into())));
         let ok = CardStyle {
             stamp_image: Some(format!("{UUID}.webp")),
+            preset: format!("pack:{UUID}"),
             ..CardStyle::default()
         };
         assert!(checked(ok).is_some());

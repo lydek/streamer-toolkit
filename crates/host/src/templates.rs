@@ -275,7 +275,7 @@ fn built_in(t: ChatTemplate, path: &str) -> Option<Vec<u8>> {
 }
 
 /// Checks `path` against the allowlist and its segments, then answers with what `read` finds.
-fn file_response(path: &str, read: impl FnOnce(&str) -> Option<Vec<u8>>) -> Response {
+pub(crate) fn file_response(path: &str, read: impl FnOnce(&str) -> Option<Vec<u8>>) -> Response {
     let Some(content_type) = allowed_type(path) else {
         // Scripts and anything else outside the allowlist are never served.
         return StatusCode::NOT_FOUND.into_response();
@@ -534,7 +534,7 @@ fn plain_segment(s: &str) -> bool {
 
 /// Reads `rel` only if it resolves to a file inside `base`; `canonicalize` resolves `..`, symlinks and
 /// junctions, and Windows device names resolve outside `base`.
-fn read_inside(base: &Path, rel: &str) -> Option<Vec<u8>> {
+pub(crate) fn read_inside(base: &Path, rel: &str) -> Option<Vec<u8>> {
     let base = base.canonicalize().ok()?;
     let path = base.join(rel).canonicalize().ok()?;
     if !path.starts_with(&base) || !path.is_file() {

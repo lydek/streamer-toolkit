@@ -792,3 +792,25 @@ async fn a_test_card_records_nothing() {
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].source, Source::Simulation);
 }
+
+#[tokio::test]
+async fn a_pack_preset_needs_the_pack_installed() {
+    let a = api("card-pack").await;
+    let uri = "/api/admin/checkin/card-style";
+    let (_, mut style) = call(&a.app, "GET", uri, None).await;
+    let id = "0190a1b2-0000-7000-8000-000000000001";
+    style["preset"] = format!("pack:{id}").into();
+    let (status, body) = call(&a.app, "PUT", uri, Some(style.clone())).await;
+    assert_eq!(
+        (status, &body["code"]),
+        (400, &"checkin.invalid_style".into())
+    );
+    let pack = a.dir.join("templates").join("checkin").join(id);
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::write(pack.join("index.html"), "<div data-card-stage></div>").unwrap();
+    let (status, body) = call(&a.app, "PUT", uri, Some(style)).await;
+    assert_eq!(
+        (status, &body["preset"]),
+        (200, &format!("pack:{id}").into())
+    );
+}

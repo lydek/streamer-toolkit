@@ -924,6 +924,12 @@
     "save": "儲存",
     "saved": "已儲存卡片樣式。",
     "uploadFailed": "{file}：{reason}",
+    "packs": {
+      "heading": "動畫包",
+      "upload": "上傳動畫包（zip，最多 10 MB）",
+      "delete": "刪除動畫包「{name}」",
+      "installed": "已安裝動畫包「{name}」。"
+    },
     "preview": "預覽",
     "previews": {
       "stamped": "打卡成功 +1",
@@ -1215,6 +1221,13 @@
       "not_found": "找不到這個檔案。",
       "invalid": "名稱不能空白，長度要在 10 分鐘以內。",
       "save_failed": "無法儲存影片或 GIF。"
+    },
+    "card_pack": {
+      "invalid": "動畫包格式不正確：{detail}",
+      "script": "動畫包不能有程式碼：{detail}",
+      "too_large": "動畫包太大：{detail}",
+      "not_found": "找不到這個動畫包。",
+      "save_failed": "無法安裝或刪除動畫包。"
     },
     "overlays": {
       "invalid": "畫面工具的設定不正確：文字最多 100 字，倒數 1 到 1440 分鐘或 24 小時內的時間。",
