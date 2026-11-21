@@ -12,10 +12,10 @@ jobs:
   e2e:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -34,7 +34,7 @@ jobs:
       - name: Playwright version
         id: playwright
         run: '"version=$((pnpm --filter web exec playwright --version) -replace ''\s'', ''-'')" >> $env:GITHUB_OUTPUT'
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/AppData/Local/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -44,7 +44,7 @@ jobs:
         run: pnpm web:e2e
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: apps/web/test-results

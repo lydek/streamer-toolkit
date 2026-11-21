@@ -27,7 +27,7 @@ jobs:
     outputs:
       zip: ${{ steps.zip.outputs.zip }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           # The whole history, to check the tag is on main.
@@ -39,8 +39,8 @@ jobs:
       - name: Tag matches the app version
         run: node scripts/check-version.mjs "$env:TAG"
 
-      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -82,7 +82,7 @@ jobs:
           [IO.File]::WriteAllText("$PWD/out/$zip.sha256", "$hash  $zip`n")
           "zip=$zip" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release
           path: |
@@ -97,7 +97,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release
           path: out
