@@ -717,7 +717,7 @@
     "createdAt": "備份時間：",
     "appVersion": "程式版本：{version}",
     "records": "兌換紀錄 {redemptions} 筆、打卡紀錄 {checkins} 筆",
-    "files": "樣板 {templates} 個、音效 {sounds} 個、背景音樂 {music} 首",
+    "files": "樣板 {templates} 個、音效 {sounds} 個、背景音樂 {music} 首、影片與 GIF {media} 個",
     "restoreNote": "目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
     "restore": "還原並重新啟動",
     "restarting": "正在重新啟動……"
@@ -914,6 +914,23 @@
         "contrast": "高對比"
       },
       "textSize": "文字大小"
+    },
+    "media": {
+      "heading": "兌換時播影片或 GIF",
+      "file": "匯入 GIF、WebM 或 MP4（每個最多 50 MB）",
+      "empty": "還沒有影片或 GIF。",
+      "title": "檔案",
+      "length": "長度",
+      "actions": "操作",
+      "seconds": "「{title}」播幾秒",
+      "secondsUnit": "秒",
+      "reading": "讀取長度中",
+      "missing": "檔案不見了",
+      "delete": "刪除「{title}」",
+      "confirmDelete": "確定刪除",
+      "cancel": "取消",
+      "imported": "已匯入 {n} 個檔案。",
+      "importFailed": "{file}：{reason}"
     }
   },
   "music": {
@@ -1112,6 +1129,13 @@
     },
     "text_size": {
       "invalid": "文字大小不正確。"
+    },
+    "media": {
+      "unsupported_type": "只能匯入 GIF、WebM 或 MP4，而且副檔名要和檔案內容一致。",
+      "too_large": "檔案超過 50 MB。",
+      "not_found": "找不到這個檔案。",
+      "invalid": "名稱不能空白，長度要在 10 分鐘以內。",
+      "save_failed": "無法儲存影片或 GIF。"
     },
     "overlays": {
       "invalid": "畫面工具的設定不正確：文字最多 100 字，倒數 1 到 1440 分鐘或 24 小時內的時間。",

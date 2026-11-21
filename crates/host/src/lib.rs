@@ -358,7 +358,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             }
         }
     });
-    let screen_tools = overlays::start(config.db.clone(), bus.clone());
+    let screen_tools = overlays::start(config.db.clone(), bus.clone(), &config.data_dir);
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
         modules.clone(),
@@ -489,11 +489,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 )),
             )
             .merge(
-                overlays::routes(screen_tools).layer(middleware::from_fn_with_state(
+                overlays::routes(screen_tools.clone()).layer(middleware::from_fn_with_state(
                     admin.clone(),
                     admin::require_token,
                 )),
             )
+            .merge(overlays::media_file_routes(screen_tools))
             .merge(overlay_test_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

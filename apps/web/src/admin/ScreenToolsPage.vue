@@ -20,6 +20,11 @@
       <h2 id="appearance-heading">{{ t('screenTools.appearance.heading') }}</h2>
       <AppearanceSettings :appearance="live.appearance" />
     </section>
+
+    <section class="stack" aria-labelledby="media-heading">
+      <h2 id="media-heading">{{ t('screenTools.media.heading') }}</h2>
+      <MediaLibrary @error="report" @imported="(n) => toast.add(successToast(t('screenTools.media.imported', { n })))" />
+    </section>
   </FullPage>
 </template>
 
@@ -33,6 +38,7 @@ import { ApiError } from './api'
 import AppearanceSettings from './AppearanceSettings.vue'
 import BreakCardSettings from './BreakCardSettings.vue'
 import FullPage from './FullPage.vue'
+import MediaLibrary from './MediaLibrary.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import WarningSettings from './WarningSettings.vue'
 

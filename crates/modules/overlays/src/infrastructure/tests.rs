@@ -5,6 +5,7 @@ use std::time::Duration;
 use tower::ServiceExt;
 
 struct Rig {
+    dir: std::path::PathBuf,
     pool: SqlitePool,
     bus: Arc<EventBus>,
     service: Arc<Overlays>,
@@ -15,13 +16,25 @@ async fn rig() -> Rig {
     restart(db::tests::pool().await).await
 }
 
+/// A data folder of its own for each service started (removed with the process's temp files).
+fn data_dir() -> std::path::PathBuf {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!("st-overlays-{}-{n}", std::process::id()))
+}
+
 /// The service again on the same data, as after restarting the app.
 async fn restart(pool: SqlitePool) -> Rig {
+    restart_in(pool, data_dir()).await
+}
+
+async fn restart_in(pool: SqlitePool, dir: std::path::PathBuf) -> Rig {
     let bus = Arc::new(EventBus::default());
-    let service = start(pool.clone(), bus.clone());
+    let service = start(pool.clone(), bus.clone(), &dir);
     // Let it announce the stored card.
     tokio::time::sleep(Duration::from_millis(50)).await;
     Rig {
+        dir,
         pool,
         bus,
         app: routes(service.clone()),
@@ -325,4 +338,143 @@ async fn the_appearance_is_saved_announced_and_checked() {
     assert_eq!(appearance(&again.bus)["payload"]["theme"], "cream");
     let (_, body) = send(&again.app, "GET", url, None).await;
     assert_eq!(body["textSize"], 130);
+}
+
+async fn upload(app: &Router, name: &str, bytes: &[u8]) -> (StatusCode, Value) {
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/admin/screen-tools/media?name={name}"))
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(bytes.to_vec()))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+const MEDIA_URL: &str = "/api/admin/screen-tools/media";
+const GIF: &[u8] = b"GIF89a  ";
+const MP4: &[u8] = b"   ftypmp42    ";
+
+#[tokio::test]
+async fn media_import_checks_the_type_and_keeps_the_file() {
+    let r = rig().await;
+    let (status, gif) = upload(&r.app, "cat%20dance.gif", GIF).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(gif["title"], "cat dance");
+    assert_eq!(gif["format"], "gif");
+    assert_eq!(gif["duration_ms"], 5000, "a GIF starts at 5 seconds");
+    assert_eq!(gif["missing"], false);
+    let id = gif["id"].as_str().unwrap();
+    assert_eq!(
+        std::fs::read(r.dir.join("media").join(format!("{id}.gif"))).unwrap(),
+        GIF
+    );
+
+    let (status, video) = upload(&r.app, "scare.mp4", MP4).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        video["duration_ms"],
+        Value::Null,
+        "a video waits for its read length"
+    );
+
+    for (name, bytes) in [("fake.gif", MP4), ("fake.mp4", GIF), ("clip.mov", MP4)] {
+        let (status, body) = upload(&r.app, name, bytes).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{name}");
+        assert_eq!(body["code"], "media.unsupported_type");
+    }
+    let big = vec![b'G'; crate::domain::media::MAX_BYTES + 1];
+    let (status, body) = upload(&r.app, "big.gif", &big).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body["code"], "media.too_large");
+
+    let (_, list) = send(&r.app, "GET", MEDIA_URL, None).await;
+    assert_eq!(
+        list.as_array().unwrap().len(),
+        2,
+        "refused files leave nothing behind"
+    );
+    assert_eq!(std::fs::read_dir(r.dir.join("media")).unwrap().count(), 2);
+}
+
+#[tokio::test]
+async fn media_lengths_are_edited_and_files_served_and_deleted() {
+    let r = rig().await;
+    let (_, video) = upload(&r.app, "scare.mp4", MP4).await;
+    let id = video["id"].as_str().unwrap().to_owned();
+    let url = format!("{MEDIA_URL}/{id}");
+    let (status, video) = send(
+        &r.app,
+        "PUT",
+        &url,
+        Some(json!({"title": "驚嚇", "duration_ms": 3200})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(video["title"], "驚嚇");
+    assert_eq!(video["duration_ms"], 3200);
+    for bad in [
+        json!({"title": " ", "duration_ms": null}),
+        json!({"title": "x", "duration_ms": 0}),
+    ] {
+        let (status, body) = send(&r.app, "PUT", &url, Some(bad)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "media.invalid");
+    }
+
+    let files = media_file_routes(r.service.clone());
+    let res = files
+        .clone()
+        .oneshot(
+            Request::get(format!("/media/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[axum::http::header::CONTENT_TYPE], "video/mp4");
+    assert_eq!(
+        res.headers()[axum::http::header::X_CONTENT_TYPE_OPTIONS],
+        "nosniff"
+    );
+
+    let (status, _) = send(&r.app, "DELETE", &url, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(
+        std::fs::read_dir(r.dir.join("media"))
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    let res = files
+        .oneshot(
+            Request::get(format!("/media/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let (status, body) = send(&r.app, "DELETE", &url, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "media.not_found");
+}
+
+#[tokio::test]
+async fn a_media_file_gone_from_the_folder_is_marked_missing() {
+    let r = rig().await;
+    let (_, gif) = upload(&r.app, "a.gif", GIF).await;
+    std::fs::remove_dir_all(r.dir.join("media")).unwrap();
+    let again = restart_in(r.pool.clone(), r.dir.clone()).await;
+    let (_, list) = send(&again.app, "GET", MEDIA_URL, None).await;
+    assert_eq!(list[0]["id"], gif["id"]);
+    assert_eq!(list[0]["missing"], true);
 }

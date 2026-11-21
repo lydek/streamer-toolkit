@@ -86,6 +86,7 @@ const PREVIEW = {
   templates: 1,
   sounds: 5,
   music: 3,
+  media: 1,
 }
 
 test('restore previews the chosen file, then confirms it to restart', async ({ page }) => {

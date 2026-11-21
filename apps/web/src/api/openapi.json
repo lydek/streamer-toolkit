@@ -70,7 +70,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds and music. Live use goes\non while it is made; database writes wait only for the snapshot.",
+        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music and media. Live use goes\non while it is made; database writes wait only for the snapshot.",
         "operationId": "export_backup",
         "responses": {
           "200": {
@@ -3508,6 +3508,218 @@
           },
           "500": {
             "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/media": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The media library in import order.",
+        "operationId": "list_media",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MediaItem"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`: the library cannot be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Copies a GIF, WebM or MP4 file (at most 50 MB) into the media library. The body is the file itself.",
+        "operationId": "import_media",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The original file name: its extension must match the content; the rest becomes the title.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The media file",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`media.unsupported_type`: not a GIF, WebM or MP4 file (by extension and content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`media.too_large`: larger than 50 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/media/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Renames an item and sets how long it shows.",
+        "operationId": "update_media",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`media.invalid`: an empty title or a length out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`media.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_media",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`media.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7412,6 +7624,67 @@
           "counter.marathon"
         ]
       },
+      "MediaItem": {
+        "type": "object",
+        "description": "One media item. `title` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "title",
+          "format",
+          "url",
+          "missing"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How long it shows; `null` until the admin window has read a video's length.",
+            "minimum": 0
+          },
+          "format": {
+            "type": "string",
+            "description": "`gif`, `webm` or `mp4`."
+          },
+          "id": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "boolean",
+            "description": "The file is no longer in the data folder."
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "`/media/{id}`, readable without a token."
+          }
+        }
+      },
+      "MediaUpdate": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "1 ms to 10 minutes; `null` keeps the length it has.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
+          }
+        }
+      },
       "ModuleBody": {
         "type": "object",
         "required": [
@@ -8559,7 +8832,8 @@
           "checkins",
           "templates",
           "sounds",
-          "music"
+          "music",
+          "media"
         ],
         "properties": {
           "app_version": {
@@ -8573,6 +8847,10 @@
           "created_at": {
             "type": "string",
             "description": "When the backup was made (RFC 3339, UTC)."
+          },
+          "media": {
+            "type": "integer",
+            "minimum": 0
           },
           "music": {
             "type": "integer",

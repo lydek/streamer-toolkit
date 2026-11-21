@@ -1,14 +1,17 @@
 //! Adapters: the admin API (behind the admin token, added by the host), the `screen.break`, `screen.warnings` and
-//! `screen.appearance` events and storage.
+//! `screen.appearance` events, the media library's files and storage.
 
 mod appearance;
 pub mod db;
+mod media;
 mod warnings;
+
+pub use media::file_routes as media_file_routes;
 
 pub use appearance::AppearanceEvent;
 pub use warnings::WarningsEvent;
 
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -118,7 +121,8 @@ pub enum BreakType {
 /// Starts the screen tools in `pool`, which must already have [`db::MIGRATOR`] applied, announcing the break card
 /// as `screen.break` and the warnings as `screen.warnings` on `bus` now and after every change. The host feeds the
 /// warnings what it sees ([`OverlayService::see`]). Needs a Tokio runtime.
-pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> Arc<Overlays> {
+/// Media files live in `data_dir`'s `media/`.
+pub fn start(pool: SqlitePool, bus: Arc<EventBus>, data_dir: &Path) -> Arc<Overlays> {
     bus.retain(BREAK, 1);
     bus.retain(warnings::WARNINGS, 1);
     bus.retain(appearance::APPEARANCE, 1);
@@ -133,6 +137,7 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> Arc<Overlays> {
     };
     let service = Arc::new(OverlayService::new(
         db::SqliteOverlays::new(pool),
+        data_dir.join("media"),
         Publishers {
             break_card: Box::new(move |card| {
                 let payload =
@@ -222,6 +227,7 @@ pub fn routes(service: Arc<Overlays>) -> Router {
         .route("/api/admin/screen-tools/break/hide", post(hide_break))
         .merge(warnings::routes())
         .merge(appearance::routes())
+        .merge(media::routes())
         .with_state(service)
 }
 
@@ -328,7 +334,11 @@ pub(crate) async fn hide_break(State(s): State<Arc<Overlays>>) -> Response {
         warnings::get_warnings,
         warnings::set_warnings,
         appearance::get_appearance,
-        appearance::set_appearance
+        appearance::set_appearance,
+        media::list_media,
+        media::import_media,
+        media::update_media,
+        media::delete_media
     ),
     components(schemas(BreakEvent, WarningsEvent, AppearanceEvent))
 )]

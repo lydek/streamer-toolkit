@@ -166,6 +166,36 @@ async fn sound_library_needs_the_token_but_sound_files_do_not() {
 }
 
 #[tokio::test]
+async fn media_library_needs_the_token_but_media_files_do_not() {
+    let mut config = test_config();
+    config.db = db::memory_migrated().await;
+    let app = router(config).unwrap();
+    for (token, expected) in [
+        (None, StatusCode::UNAUTHORIZED),
+        (Some(TOKEN), StatusCode::OK),
+    ] {
+        let b = get_req("/api/admin/screen-tools/media", "127.0.0.1:47810");
+        let b = match token {
+            Some(t) => b.header(header::AUTHORIZATION, format!("Bearer {t}")),
+            None => b,
+        };
+        let res = app.clone().oneshot(b.body(Body::empty()).unwrap()).await;
+        assert_eq!(res.unwrap().status(), expected);
+    }
+    // The file route is public (the alerts overlay has no token) and answers unknown IDs with 404, not 401.
+    let file = get_req(
+        "/media/0190a5b0-0000-7000-8000-000000000000",
+        "127.0.0.1:47810",
+    )
+    .body(Body::empty())
+    .unwrap();
+    assert_eq!(
+        app.oneshot(file).await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn music_library_needs_the_token_but_music_files_do_not() {
     for (token, expected) in [
         (None, StatusCode::UNAUTHORIZED),

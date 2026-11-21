@@ -46,7 +46,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds and music. Live use goes
+         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music and media. Live use goes
          *     on while it is made; database writes wait only for the snapshot.
          */
         get: operations["export_backup"];
@@ -1113,6 +1113,41 @@ export interface paths {
         /** Shows the card and starts its countdown from now. */
         post: operations["show_break"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The media library in import order. */
+        get: operations["list_media"];
+        put?: never;
+        /** Copies a GIF, WebM or MP4 file (at most 50 MB) into the media library. The body is the file itself. */
+        post: operations["import_media"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renames an item and sets how long it shows. */
+        put: operations["update_media"];
+        post?: never;
+        delete: operations["delete_media"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2534,6 +2569,31 @@ export interface components {
         MarathonTestType: "marathon.test";
         /** @enum {string} */
         MarathonType: "counter.marathon";
+        /** @description One media item. `title` is broadcaster text: render it as text. */
+        MediaItem: {
+            /**
+             * Format: int32
+             * @description How long it shows; `null` until the admin window has read a video's length.
+             */
+            duration_ms?: number | null;
+            /** @description `gif`, `webm` or `mp4`. */
+            format: string;
+            id: string;
+            /** @description The file is no longer in the data folder. */
+            missing: boolean;
+            title: string;
+            /** @description `/media/{id}`, readable without a token. */
+            url: string;
+        };
+        MediaUpdate: {
+            /**
+             * Format: int32
+             * @description 1 ms to 10 minutes; `null` keeps the length it has.
+             */
+            duration_ms?: number | null;
+            /** @description 1–100 characters after trimming. */
+            title: string;
+        };
         ModuleBody: {
             /**
              * @description With `enabled: false`: skip the module's outbox events instead of keeping them for later ("close"; the
@@ -2914,6 +2974,7 @@ export interface components {
             checkins: number;
             /** @description When the backup was made (RFC 3339, UTC). */
             created_at: string;
+            media: number;
             music: number;
             /** Format: int64 */
             redemptions: number;
@@ -6391,6 +6452,177 @@ export interface operations {
                 };
             };
             /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_media: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItem"][];
+                };
+            };
+            /** @description `media.save_failed`: the library cannot be read */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    import_media: {
+        parameters: {
+            query: {
+                /** @description The original file name: its extension must match the content; the rest becomes the title. */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The media file */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItem"];
+                };
+            };
+            /** @description `media.unsupported_type`: not a GIF, WebM or MP4 file (by extension and content) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.too_large`: larger than 50 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_media: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItem"];
+                };
+            };
+            /** @description `media.invalid`: an empty title or a length out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_media: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `media.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;
