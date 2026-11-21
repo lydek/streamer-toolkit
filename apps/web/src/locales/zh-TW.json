@@ -352,6 +352,28 @@
     "savedForever": "紀錄改成永久保存。",
     "deleted": "已刪除超過 {days} 天的紀錄，之後保存 {days} 天。"
   },
+  "record": {
+    "export": "匯出本場紀錄",
+    "exported": "已匯出本場紀錄。",
+    "at": "時間",
+    "kind": "事件種類",
+    "viewer": "觀眾",
+    "detail": "數量或內容",
+    "kinds": {
+      "follow": "追隨",
+      "subscribe": "訂閱",
+      "resubscribe": "續訂",
+      "cheer": "小奇點",
+      "raid": "揪團",
+      "redemption": "兌換"
+    },
+    "tier": "Tier {tier}",
+    "gifted": "送禮訂閱 · Tier {tier}",
+    "months": "{n} 個月",
+    "bits": "{n} 小奇點",
+    "raiders": "{n} 人",
+    "withText": "{head}：{text}"
+  },
   "stage": {
     "title": "直播階段",
     "before": "開播前",

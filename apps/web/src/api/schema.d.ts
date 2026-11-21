@@ -1183,6 +1183,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/stream/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The latest stream's follows, subs and resubs (each gifted sub included), cheers, raids and redemptions, one row
+         *     each, as its stats count them; `null` before the first stream. Simulated events are never stored, so never
+         *     here.
+         */
+        get: operations["stream_record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/stream/summary": {
         parameters: {
             query?: never;
@@ -2443,11 +2464,46 @@ export interface components {
             payload: components["schemas"]["AlertPayload"];
             source: components["schemas"]["Source"];
         };
+        /**
+         * @description One row of the stream's record: what the stats count, one row each.
+         * @enum {string}
+         */
+        RecordKind: "follow" | "subscribe" | "resubscribe" | "cheer" | "raid" | "redemption";
         /** @description Keep records for this many days (1–3650), or forever; older ones are deleted on their own. */
         RecordRetention: {
             /** Format: int32 */
             days: number;
         } | "forever";
+        /** @description One row; names, messages, reward titles and inputs are raw viewer text. */
+        RecordRow: {
+            /** @description RFC 3339, UTC. */
+            at: string;
+            /** Format: int32 */
+            bits: number | null;
+            /** @description A sub handed out by a gift. */
+            gifted: boolean;
+            /** @description What the viewer typed for the reward; `null` when nothing. */
+            input: string | null;
+            kind: components["schemas"]["RecordKind"];
+            /** @description A resub's or cheer's message. */
+            message: string | null;
+            /** Format: int32 */
+            months: number | null;
+            /** @description A redemption's reward title. */
+            reward: string | null;
+            /**
+             * Format: int32
+             * @description 1, 2 or 3, for a sub or resub.
+             */
+            tier: number | null;
+            /** @description `null` for an anonymous sub or cheer. */
+            viewer: string | null;
+            /**
+             * Format: int32
+             * @description Raiders.
+             */
+            viewers: number | null;
+        };
         /**
          * @description A `redemption.changed` event exactly as `/ws/overlay` sends it: a record was created or changed status. It
          *     carries only the record ID, so viewer text stays off the overlay channel; the admin UI reloads the list.
@@ -2747,6 +2803,13 @@ export interface components {
             payload: components["schemas"]["ChatMessagePayload"];
             /** @description RFC 3339. */
             sentAt: string;
+        };
+        /** @description The latest stream session and what its stats count, row by row, to export. */
+        StreamRecord: {
+            endedAt: string | null;
+            /** @description Oldest first. */
+            rows: components["schemas"]["RecordRow"][];
+            startedAt: string;
         };
         /** @enum {string} */
         StreamStateName: "unknown" | "offline" | "live";
@@ -6053,6 +6116,33 @@ export interface operations {
             };
             /** @description `sound.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    stream_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamRecord"] | null;
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

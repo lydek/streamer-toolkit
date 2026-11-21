@@ -1,15 +1,8 @@
 import { ApiError, api, client } from './api'
+import { saveFile } from './save'
 
 /** The Host's restore limit (crates/host/src/backup.rs); checked here first so a larger file is never sent. */
 export const BACKUP_MAX_BYTES = 512 * 1024 * 1024
-
-/** Chromium's File System Access API; not in TypeScript's DOM types. */
-interface SavePicker {
-  showSaveFilePicker?: (options: {
-    suggestedName: string
-    types: { description: string; accept: Record<string, string[]> }[]
-  }) => Promise<FileSystemFileHandle>
-}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -18,35 +11,15 @@ export const backupFileName = (d = new Date()) =>
   `streamer-toolkit-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.stbackup`
 
 /**
- * Asks where to save first (the save dialog needs the click's user activation), then streams the backup there.
- * Resolves `false` when the dialog is cancelled. Without the save dialog API the browser downloads the file.
+ * Asks where to save first, then streams the backup there. Resolves `false` when the dialog is cancelled; without
+ * the save dialog API the browser downloads the file.
  */
-export async function saveBackup(): Promise<boolean> {
-  const picker = (window as SavePicker).showSaveFilePicker
-  const name = backupFileName()
-  let file: FileSystemFileHandle | undefined
-  if (picker) {
-    try {
-      file = await picker({
-        suggestedName: name,
-        types: [{ description: 'Streamer Toolkit', accept: { 'application/octet-stream': ['.stbackup'] } }],
-      })
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return false
-      throw e
-    }
-  }
-  const backup = await api(client.GET('/api/admin/backup', { parseAs: 'stream' }))
-  if (!backup) throw new Error('empty backup')
-  if (file) {
-    await backup.pipeTo(await file.createWritable())
-    return true
-  }
-  const url = URL.createObjectURL(await new Response(backup).blob())
-  Object.assign(document.createElement('a'), { href: url, download: name }).click()
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  return true
-}
+export const saveBackup = () =>
+  saveFile(backupFileName(), { description: 'Streamer Toolkit', mime: 'application/octet-stream', extension: '.stbackup' }, async () => {
+    const backup = await api(client.GET('/api/admin/backup', { parseAs: 'stream' }))
+    if (!backup) throw new Error('empty backup')
+    return backup
+  })
 
 /** Uploads a backup file as-is; the Host checks it and stages it for a restore. */
 export function previewRestore(file: File) {

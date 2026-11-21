@@ -52,6 +52,7 @@ use crate::{
         queue::clear_queue,
         queue::stop_queue,
         stream_summary::stream_summary,
+        stream_summary::stream_record,
         event_feed::event_feed,
         text_size::text_size,
         text_size::set_text_size,
