@@ -48,6 +48,15 @@ describe('focusTarget', () => {
     tile('obs').setAttribute('disabled', '')
     expect(focusTarget(document, 'chat', null)).toBe(document.querySelector('[data-drawer-arrange]'))
   })
+
+  it('counts a tile that opens in place, or the 收合 of its block, as a tile', () => {
+    tile('chat').remove()
+    tile('obs').remove()
+    const queue = document.createElement('button')
+    queue.dataset.expand = 'queue'
+    document.body.prepend(queue)
+    expect(focusTarget(document, 'chat', null)).toBe(queue)
+  })
 })
 
 describe('useDrawer', () => {

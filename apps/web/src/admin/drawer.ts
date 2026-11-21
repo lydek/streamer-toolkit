@@ -11,8 +11,9 @@ import { ApiError } from './api'
  *
  * - `open(id, opener)` / `close()` submit changed settings first and resolve `false` (drawer stays as it was)
  *   when one fails, so its error stays visible. The router guard calls `close()` on every navigation.
- * - Focus returns to the opener on close, else to `[data-drawer-tile="<id>"]`, the first `[data-drawer-tile]`,
- *   then `[data-drawer-arrange]` ("Arrange tiles"). Tiles and that button carry these attributes.
+ * - Focus returns to the opener on close, else to `[data-drawer-tile="<id>"]`, the first home tile
+ *   (`[data-drawer-tile]`, or `[data-expand]`: a tile that opens in place, or its block's 收合), then
+ *   `[data-drawer-arrange]` (「編輯首頁」). Tiles and that button carry these attributes.
  * - Settings inside a drawer or on a full page (FullPage.vue shows `error` there) use `useDrawerSetting`; PrimeVue overlays inside it (Select, DatePicker…) need
  *   `appendTo="self"`, because a modal `<dialog>` is in the top layer and covers anything appended to `body`.
  */
@@ -46,9 +47,9 @@ function usable(el: Element | null | undefined): el is HTMLElement {
   return !!el && el.isConnected && !(el as HTMLButtonElement).disabled && !el.closest('[hidden], [inert]')
 }
 
-/** Where focus goes when drawer `id` closes: the opener, its tile, the first tile, then "Arrange tiles". */
+/** Where focus goes when drawer `id` closes: the opener, its tile, the first tile, then 「編輯首頁」. */
 export function focusTarget(root: ParentNode, id: string, from: HTMLElement | null): HTMLElement | null {
-  const tiles = [...root.querySelectorAll('[data-drawer-tile]')].filter(usable)
+  const tiles = [...root.querySelectorAll('[data-drawer-tile], [data-expand]')].filter(usable)
   const candidates = [
     from,
     tiles.find((el) => el.getAttribute('data-drawer-tile') === id),

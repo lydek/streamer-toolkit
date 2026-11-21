@@ -7,6 +7,16 @@
       <header class="top">
         <!-- The app bar shows the name; the status lights and settings live there too. -->
         <h1 class="sr-only">{{ t('app.name') }}</h1>
+        <div v-if="!arranging" class="stage-switch">
+          <h2 id="stage-heading" class="sr-only">{{ t('stage.title') }}</h2>
+          <SelectButton
+            v-model="shownStage"
+            :options="STAGES"
+            :option-label="(s: Stage) => t(`stage.${s}`)"
+            :allow-empty="false"
+            aria-labelledby="stage-heading"
+          />
+        </div>
         <div class="lights">
           <Button v-if="arranging" ref="doneButton" :label="t('arrange.done')" icon="pi pi-check" @click="leaveArrange" />
           <Button
@@ -24,17 +34,6 @@
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
       <UpdateNotice @dismissed="keepFocus(firstTile)" />
 
-      <div v-if="!arranging" class="stage-switch">
-        <h2 id="stage-heading" class="sr-only">{{ t('stage.title') }}</h2>
-        <SelectButton
-          v-model="shownStage"
-          :options="STAGES"
-          :option-label="(s: Stage) => t(`stage.${s}`)"
-          :allow-empty="false"
-          aria-labelledby="stage-heading"
-        />
-      </div>
-
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
         <ArrangeTiles
@@ -50,7 +49,7 @@
           <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="enterArrange" />
         </div>
         <ul v-else class="plain tiles">
-          <li v-for="tile in tiles" :key="tile.id" :class="tile.size && `size-${tile.size}`">
+          <li v-for="tile in tiles" :key="tile.id" :class="sizeOf(tile) && `size-${sizeOf(tile)}`">
             <!-- Later slices add pending items; the block shows only when it has some. -->
             <section v-if="tile.id === 'pending'" class="block" aria-labelledby="pending-heading">
               <h2 id="pending-heading">{{ t('home.blocks.pending') }}</h2>
@@ -61,8 +60,47 @@
               </ul>
             </section>
             <StageCard v-else-if="tile.id === 'checklist'" part="checklist" :stage="stage" />
-            <StageCard v-else-if="tile.id === 'stats' || tile.id === 'summary'" part="session" :stage="stage" />
-            <QueueArea v-else-if="tile.id === 'queue'" :status="live.queue" />
+            <StageCard v-else-if="tile.id === 'summary'" part="session" :stage="stage" />
+            <!-- 本場直播, 事件流 and 呈現佇列: a small tile that opens in place into its block, and back. -->
+            <HomeTile
+              v-else-if="tile.id in EXPANDS && !opened.has(tile.id)"
+              :id="tile.id"
+              :name="moduleName(tile.id)"
+              :icon="tile.icon"
+              :tint="tile.tint"
+              :line="lines[tile.id] ?? { state: 'loading' }"
+              :expanded="false"
+              :controls="`block-${tile.id}`"
+              :data-expand="tile.id"
+              @click="openBlock(tile.id)"
+            />
+            <StageCard v-else-if="tile.id === 'stats'" id="block-stats" part="session" :stage="stage">
+              <template #actions><BlockClose :name="moduleName('stats')" expand-id="stats" @close="closeBlock('stats')" /></template>
+            </StageCard>
+            <QueueArea v-else-if="tile.id === 'queue'" id="block-queue" :status="live.queue">
+              <template #actions><BlockClose :name="moduleName('queue')" expand-id="queue" @close="closeBlock('queue')" /></template>
+            </QueueArea>
+            <section v-else-if="tile.id === 'feed'" id="block-feed" class="block" aria-labelledby="feed-heading">
+              <div class="block-head">
+                <h2 id="feed-heading">{{ moduleName('feed') }}</h2>
+                <BlockClose :name="moduleName('feed')" expand-id="feed" @close="closeBlock('feed')" />
+              </div>
+              <p v-if="feed.state === 'failed'" role="alert">{{ t('feed.loadFailed') }}</p>
+              <p v-else-if="feed.state === 'loading'">{{ t('app.loading') }}</p>
+              <template v-else-if="feed.state === 'ready'">
+                <p v-if="!feed.items.length">{{ t('feed.empty') }}</p>
+                <ol v-else class="plain feed-list">
+                  <li v-for="(item, i) in feed.items" :key="i">
+                    <time :datetime="item.at">{{ formatTime(item.at) }}</time>
+                    <span class="feed-text">
+                      {{ feedText(item) }}
+                      <span v-if="item.simulated" class="tag">{{ t('feed.test') }}</span>
+                    </span>
+                    <span v-if="item.result" class="feed-result">{{ feedResult(item) }}</span>
+                  </li>
+                </ol>
+              </template>
+            </section>
             <HomeTile
               v-else
               :id="tile.id"
@@ -204,26 +242,6 @@
       </template>
     </AppDrawer>
 
-    <AppDrawer id="feed" :title="moduleName('feed')">
-      <template #now>
-        <p v-if="feed.state === 'failed'" role="alert">{{ t('feed.loadFailed') }}</p>
-        <p v-else-if="feed.state === 'loading'">{{ t('app.loading') }}</p>
-        <template v-else-if="feed.state === 'ready'">
-          <p v-if="!feed.items.length">{{ t('feed.empty') }}</p>
-          <ol v-else class="plain feed-list">
-            <li v-for="(item, i) in feed.items" :key="i">
-              <time :datetime="item.at">{{ formatTime(item.at) }}</time>
-              <span class="feed-text">
-                {{ feedText(item) }}
-                <span v-if="item.simulated" class="tag">{{ t('feed.test') }}</span>
-              </span>
-              <span v-if="item.result" class="feed-result">{{ feedResult(item) }}</span>
-            </li>
-          </ol>
-        </template>
-      </template>
-    </AppDrawer>
-
     <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('sound')" />
@@ -294,6 +312,8 @@ import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import QueueArea from './QueueArea.vue'
 import StageCard from './StageCard.vue'
+import BlockClose from './BlockClose.vue'
+import { subjectText } from './queue'
 import { STAGES, useStage } from './stage'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -312,8 +332,10 @@ import {
   errorToast,
   obsLight,
   successToast,
+  EXPANDS,
   homeTiles,
   type Stage,
+  type Tile,
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
@@ -451,6 +473,20 @@ const hiddenNow = computed(() => {
   if (dock.docked) hidden.add('chat')
   return hidden
 })
+// Which of the small tiles are open into their block; this window only, never saved.
+const opened = ref(new Set<string>())
+const sizeOf = (tile: Tile) => (tile.id in EXPANDS ? (opened.value.has(tile.id) ? EXPANDS[tile.id] : undefined) : tile.size)
+/** Opens a small tile into its block (or closes it) and keeps focus on the same place: the block's 收合, or the tile. */
+async function setOpened(id: string, open: boolean) {
+  const next = new Set(opened.value)
+  if (open) next.add(id)
+  else next.delete(id)
+  opened.value = next
+  await nextTick()
+  tilesEl.value?.querySelector<HTMLElement>(`[data-expand="${id}"]`)?.focus()
+}
+const openBlock = (id: string) => setOpened(id, true)
+const closeBlock = (id: string) => setOpened(id, false)
 const tiles = computed(() =>
   homeTiles(
     modules.value ?? [],
@@ -467,9 +503,9 @@ const lines = computed<Record<string, Line>>(() => {
   return {
     pending: block,
     checklist: block,
-    stats: block,
     summary: block,
-    queue: block,
+    stats: statsLine(),
+    queue: queueLine(live.value.queue),
     chat:
       status === 'open'
         ? { state: 'ready', text: lastChat ? `${lastChat.payload.userName}：${lastChat.payload.text}` : t('home.chatEmpty') }
@@ -532,6 +568,21 @@ function bgmLine(p: Schemas['BgmPlayerPayload']): Line {
 const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
+
+/** The small 本場直播 tile: how long it has run, with redemptions and subs. */
+function statsLine(): Line {
+  if (stage.failed.value) return { state: 'failed' }
+  const s = stage.session.value
+  if (!s) return { state: 'ready', text: t(stage.notLive.value ? 'stage.notLive' : 'stage.waiting') }
+  return { state: 'ready', num: stage.when.value, text: t('home.statsLine', { redemptions: s.redemptions, subs: s.subs }) }
+}
+
+/** The small 呈現佇列 tile: how many wait, and what plays. */
+function queueLine(q: Schemas['QueueStatus'] | undefined): Line {
+  if (!q) return { state: 'loading' }
+  const text = q.current ? `${t('queue.playing')}：${subjectText(q.current.subject)}` : t('home.queueIdle')
+  return { state: 'ready', num: count(q.waiting.length), unit: t('home.units.queue'), text }
+}
 
 function recentLine(r: typeof recent.value): Line {
   if (r.state !== 'ready') return { state: r.state }
@@ -628,7 +679,7 @@ async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bg
 
 // The section itself shows no focus ring, so it only takes focus while it has nothing focusable (loading, failed).
 const firstTile = () =>
-  tilesEl.value?.querySelector<HTMLElement>('[data-drawer-tile], [data-drawer-arrange]') ?? tilesEl.value
+  tilesEl.value?.querySelector<HTMLElement>('[data-drawer-tile], [data-expand], [data-drawer-arrange]') ?? tilesEl.value
 const focusTiles = () => firstTile()?.focus()
 
 /** Closes an open drawer first (submitting its changes); a failed submit keeps the drawer and the normal home. */
@@ -747,7 +798,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 0.5rem 1rem;
 }
 
@@ -786,6 +837,10 @@ onBeforeUnmount(() => {
   grid-column: span 4;
 }
 
+.tiles > li.size-l {
+  grid-column: span 8;
+}
+
 .tiles > li.size-w {
   grid-column: 1 / -1;
 }
@@ -795,9 +850,17 @@ onBeforeUnmount(() => {
     grid-column: span 6;
   }
 
-  .tiles > li.size-m {
+  .tiles > li.size-m,
+  .tiles > li.size-l {
     grid-column: 1 / -1;
   }
+}
+
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 /* QueueArea's root takes this page's scoped styles, so the queue block gets the same card. */

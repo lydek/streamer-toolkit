@@ -63,12 +63,17 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
     if (!s) return undefined
     return (shown.value === 'live') === !s.endedAt ? s : undefined
   })
+  // How long a live session has run, or when an ended one ran.
+  const when = computed(() => {
+    const s = session.value
+    if (!s) return ''
+    return s.endedAt ? sessionRange(s.startedAt, s.endedAt) : clockText(now.value - Date.parse(s.startedAt))
+  })
   const line = computed(() => {
     const s = session.value
     if (!s) return ''
     const peak = s.peakViewers == null ? '' : ` · ${t('stage.peak', { n: s.peakViewers })}`
-    const when = s.endedAt ? sessionRange(s.startedAt, s.endedAt) : clockText(now.value - Date.parse(s.startedAt))
-    return when + peak
+    return when.value + peak
   })
   const stats = computed(() => {
     const s = session.value
@@ -113,7 +118,7 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
   // 直播中 picked while Twitch says the stream is not live.
   const notLive = computed(() => shown.value === 'live' && source.live().stream?.state !== 'live')
 
-  return { shown, failed, notLive, checks, copyNotice, copyOverlayUrl, session, line, stats, exporting, exportNotice, exportIt }
+  return { shown, failed, notLive, checks, copyNotice, copyOverlayUrl, session, when, line, stats, exporting, exportNotice, exportIt }
 }
 
 export type StageState = ReturnType<typeof useStage>
