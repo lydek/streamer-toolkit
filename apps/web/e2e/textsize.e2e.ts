@@ -49,7 +49,7 @@ test('at 150% no page scrolls sideways at 1280px', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await mockAdmin(page)
   await mockTextSize(page, 150)
-  for (const path of ['/', '/chat', '/alerts', '/checkin', '/redemptions', '/sounds', '/songs', '/settings/general', '/settings/features']) {
+  for (const path of ['/', '/chat', '/alerts', '/checkin', '/redemptions', '/sounds', '/music', '/settings/general', '/settings/features']) {
     await page.goto(`/admin${path}`)
     await expect.poll(() => rootSize(page)).toBe('150%')
     expect(await scrollsSideways(page), path).toBe(false)
