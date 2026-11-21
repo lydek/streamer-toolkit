@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
+import { useDock } from './dock'
 import { onDrawerSubmit, useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
 import { testRouter } from './testRouter'
@@ -52,6 +53,18 @@ afterEach(async () => {
   await drawer.close()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('HomeView chat tile', () => {
+  it('steps aside while the chat panel is docked beside the page', async () => {
+    const dock = useDock()
+    dock.docked = true
+    await home()
+    expect(document.querySelector('[data-drawer-tile="chat"]')).toBeNull()
+    dock.docked = false
+    await flushPromises()
+    expect(document.querySelector('[data-drawer-tile="chat"]')).not.toBeNull()
+  })
 })
 
 describe('HomeView skip link', () => {

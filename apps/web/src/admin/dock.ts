@@ -9,15 +9,16 @@ export const DOCK_DEFAULT = 340
 /**
  * The docked chat panel, shared by the app bar's chat button and the panel. `open` and `width` are the docked
  * state on wide windows, kept in settings.json; `sheet` is the slide-in panel on narrow windows, never saved.
- * Never changed: closed (not everyone needs it).
+ * Never saved: open (docs/decisions.md). Closed until the saved state has loaded, so a saved "closed" never flashes
+ * open. `docked`: the panel is beside the pages right now (ChatDock.vue sets it), so home hides its chat tile.
  */
-const state = reactive({ open: false, width: DOCK_DEFAULT, sheet: false })
+const state = reactive({ open: false, width: DOCK_DEFAULT, sheet: false, docked: false })
 let loading: Promise<void> | undefined
 
 export function useDock() {
   loading ??= api(client.GET('/api/admin/chat-dock'))
     .then((saved) => {
-      if (saved) Object.assign(state, { open: saved.open, width: clampWidth(saved.width) })
+      Object.assign(state, saved ? { open: saved.open, width: clampWidth(saved.width) } : { open: true })
     })
     .catch(() => {
       loading = undefined
