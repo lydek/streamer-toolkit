@@ -23,7 +23,7 @@
           <span class="tags">
             <span v-if="f.needs" class="tag">{{ t(`features.needs.${f.needs}`) }}</span>
             <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
-            <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.soon') }}</span>
+            <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
           </span>
           <Button
             v-if="withSettings?.includes(f.id)"

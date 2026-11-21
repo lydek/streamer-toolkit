@@ -6,6 +6,8 @@ const tabs = (page: Page) => page.getByRole('navigation', { name: zh.nav.label }
 const tab = (page: Page, group: string) => tabs(page).getByRole('link', { name: zh.nav.groups[group] })
 const subTab = (page: Page, name: string) => page.getByRole('navigation', { name: zh.nav.sub }).getByRole('link', { name })
 const more = (page: Page) => tabs(page).getByRole('button', { name: zh.nav.more })
+/** A group tab with no built page to open: grey, not a link. */
+const greyTab = (page: Page, group: string) => tabs(page).locator('[data-group-tab][aria-disabled="true"]', { hasText: zh.nav.groups[group] })
 
 test('every group and sub-page is one click away, and the current one is marked', async ({ page }) => {
   await openAdmin(page)
@@ -13,7 +15,7 @@ test('every group and sub-page is one click away, and the current one is marked'
   await expect(tab(page, 'home')).toHaveAttribute('aria-current', 'true')
   await expect(subTab(page, zh.nav.groups.home)).toHaveAttribute('aria-current', 'page')
 
-  // A group goes to its first built page (tabs.test.ts covers skipping coming-soon ones).
+  // A group goes to its first built page (tabs.test.ts covers skipping unbuilt ones).
   await tab(page, 'chat').click()
   await expect(page).toHaveURL(/\/admin\/chat-log$/)
   await expect(tab(page, 'chat')).toHaveAttribute('aria-current', 'true')
@@ -67,13 +69,15 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
   await page.evaluate(() => (document.documentElement.style.fontSize = '32px'))
   await expect(more(page)).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
-  const visible = await tabs(page).getByRole('link').count()
+  const visible = await tabs(page).locator('[data-group-tab]:visible').count()
   await more(page).click()
   // The last item of "More" is always 「編輯分頁」.
   const items = page.locator('#tabs-more').getByRole('menuitem').filter({ hasNotText: zh.nav.edit })
   expect(visible + (await items.count())).toBe(Object.keys(zh.nav.groups).length)
-  await items.last().click()
-  await expect(page).toHaveURL(/\/admin\/viewers$/)
+  // A group with no built page (viewers) is in "More" too, but greyed; a usable one opens.
+  await expect(items.filter({ hasText: zh.nav.groups.viewers })).toHaveAttribute('aria-disabled', 'true')
+  await expect(items.filter({ hasText: zh.nav.groups.viewers })).toHaveAttribute('title', zh.home.unbuilt)
+  await page.locator('#tabs-more [role="menuitem"]:not([aria-disabled="true"])').filter({ hasNotText: zh.nav.edit }).last().click()
   await expect(more(page)).toHaveClass(/current/)
 })
 
@@ -168,18 +172,19 @@ test('below 600px the tabs are a bottom bar, and a warning replaces the status l
   await expect(problem(page)).toBeVisible()
   await expect(problem(page)).toHaveAccessibleName(zh.nav.problem.replace('{names}', 'Twitch'))
 
-  // The first four groups are in the bar; the rest are in "More".
-  for (const [group, url] of [['song', /\/admin\/songs$/], ['chat', /\/admin\/chat-log$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
+  // The first four groups are in the bar (點歌 grey, nothing built yet); the rest are in "More".
+  await expect(greyTab(page, 'song')).toBeVisible()
+  for (const [group, url] of [['chat', /\/admin\/chat-log$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
     await tab(page, group).click()
     await expect(page).toHaveURL(url)
     expect(await scrollsSideways(page), group).toBe(false)
   }
-  for (const [group, url] of [['media', /\/admin\/sounds$/], ['viewers', /\/admin\/viewers$/]] as const) {
-    await more(page).click()
-    await page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups[group] }).click()
-    await expect(page).toHaveURL(url)
-    expect(await scrollsSideways(page), group).toBe(false)
-  }
+  await more(page).click()
+  await page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups.media }).click()
+  await expect(page).toHaveURL(/\/admin\/sounds$/)
+  expect(await scrollsSideways(page), 'media').toBe(false)
+  await more(page).click()
+  await expect(page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups.viewers })).toHaveAttribute('aria-disabled', 'true')
 })
 
 test('a narrower bar keeps the lights that have a problem', async ({ page }) => {
@@ -224,21 +229,17 @@ test('sub-tabs stay one row, faded at the edge while more are off to the right',
   expect(rows).toBe(1)
 })
 
-test('an unbuilt page says it is not available yet and calls no API beyond the app bar status', async ({ page }) => {
+test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home', async ({ page }) => {
   await openAdmin(page)
-  const calls: string[] = []
-  page.on('request', (r) => {
-    const path = new URL(r.url()).pathname
-    if (/^\/(api|templates|sounds)\//.test(path) && path !== '/api/admin/twitch') calls.push(path)
-  })
-  await tab(page, 'song').click()
-  await expect(page).toHaveURL(/\/admin\/songs$/)
-  await expect(page.getByRole('heading', { level: 1, name: zh.pages.songs.name })).toBeVisible()
-  await expect(page.getByText(zh.pages.soon)).toBeVisible()
-  await subTab(page, zh.pages.songList.name).click()
-  await expect(page.getByText(zh.pages.songList.desc)).toBeVisible()
-  await page.waitForTimeout(500)
-  expect(calls).toEqual([])
+  const song = greyTab(page, 'song')
+  await expect(song).toHaveAttribute('title', zh.home.unbuilt)
+  await expect(tabs(page).getByRole('link', { name: zh.nav.groups.song })).toHaveCount(0)
+  // Sub-tabs of a page not built yet are grey too.
+  const sub = page.getByRole('navigation', { name: zh.nav.sub })
+  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.pages.rehearsal.name })).toBeVisible()
+  await expect(sub.getByRole('link', { name: zh.pages.rehearsal.name })).toHaveCount(0)
+  await page.goto('/admin/songs')
+  await expect(page).toHaveURL(/\/admin\/$/)
 })
 
 test('a grey tile for a feature not built yet is no link or button, and the skip link passes it', async ({ page }) => {

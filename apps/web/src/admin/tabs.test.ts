@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { GROUPS, firstPage, fittingTabs, groupOf } from './tabs'
+import { FEATURES } from './features'
+import { UNBUILT_TILES } from './home'
+import { GROUPS, SOON_PAGES, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 import { router } from './router'
 
 describe('groupOf', () => {
@@ -46,5 +48,35 @@ describe('firstPage', () => {
     // Hidden alerts, then the coming-soon polls page, are skipped.
     const interact = GROUPS.find((g) => g.id === 'interact')!
     expect(firstPage(interact, new Set(['/alerts']))).toBe('/checkin')
+  })
+})
+
+describe('groupUsable', () => {
+  const interact = GROUPS.find((g) => g.id === 'interact')!
+  const song = GROUPS.find((g) => g.id === 'song')!
+
+  it('greys a group with no built page, and one whose built pages are all turned off', () => {
+    expect(groupUsable(song)).toBe(false)
+    expect(groupUsable(interact)).toBe(true)
+    const built = interact.pages.filter((p) => !p.soon).map((p) => p.path)
+    expect(groupUsable(interact, new Set(built))).toBe(false)
+  })
+})
+
+describe('what counts as built', () => {
+  it('agrees between the tabs, the features and the grey home tiles', () => {
+    const soon = new Set(SOON_PAGES.map((p) => p.path))
+    for (const f of FEATURES) {
+      if (f.fixed) continue
+      // A feature without a module is not built: all its pages are grey. A built one has a page to open.
+      if (!f.module) expect(f.pages.every((p) => soon.has(p)), f.id).toBe(true)
+      else expect(f.pages.some((p) => !soon.has(p)), f.id).toBe(true)
+    }
+    const tilePages = SOON_PAGES.filter((p) => p.soon!.tile).map((p) => p.path.slice(1))
+    expect(UNBUILT_TILES.map((t) => t.id)).toEqual(tilePages)
+  })
+
+  it('sends a page not built yet home', () => {
+    for (const p of SOON_PAGES) expect(router.resolve(p.path).matched[0]?.redirect, p.path).toBe('/')
   })
 })

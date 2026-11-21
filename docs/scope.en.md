@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 0ba3795119e73c47833bcd664da94ad6728507e1d810998e49eab41884b8b05f -->
+<!-- source: docs/scope.md source-sha256: 54fbd492729c8ef51cd522bd741459fa64ee2d43f04d1e2793106a5217f56585 -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -34,7 +34,7 @@ Each phase depends only on earlier phases; the order within a phase follows stre
 
 | # | Contents |
 |---|---|
-| 0 | Every screen in place: group tabs across the top, every page (unbuilt ones show "not available yet"), the feature on/off page, the persistent chat panel, customizable tabs, text size |
+| 0 | Every screen in place: group tabs across the top, every page (unbuilt ones are grey and inert in the tabs, home tiles and feature list), the feature on/off page, the persistent chat panel, customizable tabs, text size |
 | 1 | Shared foundations: extended Twitch event fields, OBS control and events, the presentation queue, stream status and sessions, the activity log, viewer identity, overlay connection tracking |
 | 2 | Features that only need the shared foundations: scenes and background music, home statistics, the event feed, chat history and display, counters, screen tools, the card editor, rehearsal and more |
 | 3 | Requesting permissions per feature, and features that write to Twitch: chat bot, channel point reward management, stream info, polls and predictions and more |

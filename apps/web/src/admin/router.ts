@@ -13,7 +13,6 @@ import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
 import SoundsPage from './SoundsPage.vue'
-import ComingSoon from './ComingSoon.vue'
 import { SOON_PAGES } from './tabs'
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
@@ -33,7 +32,8 @@ export const router = createRouter({
     { path: '/music', component: MusicPage },
     { path: '/counters', component: CountersPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
-    ...SOON_PAGES.map((p) => ({ path: p.path, component: ComingSoon, props: { id: p.soon!.id } })),
+    // A page not built yet has a grey tab; its URL leads home.
+    ...SOON_PAGES.map((p) => ({ path: p.path, redirect: '/' })),
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

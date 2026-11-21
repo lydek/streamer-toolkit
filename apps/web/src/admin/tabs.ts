@@ -100,13 +100,17 @@ export const GROUPS: TabGroup[] = [
   },
 ]
 
-/** Every coming-soon page, for the router and the home tiles. */
+/** Every page not built yet: grey in the tabs, its URL leads home, and `tile` ones are grey home tiles. */
 export const SOON_PAGES = GROUPS.flatMap((g) => g.pages).filter((p) => p.soon)
 
 /** The group a route path belongs to, or undefined (settings, not found). */
 export function groupOf(path: string): TabGroup | undefined {
   return GROUPS.find((g) => g.pages.some((p) => p.path === path))
 }
+
+/** A group can be opened while it has a page that is built and not turned off; otherwise its tab is grey. */
+export const groupUsable = (g: TabGroup, hidden: Set<string> = new Set()) =>
+  g.pages.some((p) => !p.soon && !hidden.has(p.path))
 
 /**
  * Where a group tab goes before any of its pages was visited: its first built page, else its first page; pages in

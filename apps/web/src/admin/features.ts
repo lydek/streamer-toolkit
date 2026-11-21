@@ -4,7 +4,7 @@ import { type Schemas, api, client } from './api'
 /*
  * Every feature of the design, for the feature page in settings (docs/scope.md 階段 0). A feature owns one or more
  * pages (tabs.ts paths); a built feature is a Host module (`module`) and can be turned on and off; the rest show
- * 「即將推出」. Dependencies live here, per feature; there is no rules engine.
+ * 「還沒有這個功能」. Dependencies live here, per feature; there is no rules engine.
  */
 
 export interface Feature {

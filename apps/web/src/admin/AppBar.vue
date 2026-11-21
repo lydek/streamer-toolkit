@@ -81,17 +81,23 @@
     </div>
     <Teleport to="#bottom-tabs" defer :disabled="tabBar.position !== 'bottom'">
     <nav ref="tabsEl" class="tabs" :class="{ bottom: tabBar.position === 'bottom' }" :aria-label="t('nav.label')">
-      <a
-        v-for="(g, i) in pinned"
-        :key="g.id"
-        :href="router.resolve(target(g)).href"
-        :hidden="i >= shown"
-        :aria-current="groupCurrent(g)"
-        data-group-tab
-        @click.prevent="router.push(target(g))"
-      >
-        <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
-      </a>
+      <template v-for="(g, i) in pinned" :key="g.id">
+        <a
+          v-if="groupUsable(g, hidden)"
+          :href="router.resolve(target(g)).href"
+          :hidden="i >= shown"
+          :aria-current="groupCurrent(g)"
+          data-group-tab
+          @click.prevent="router.push(target(g))"
+        >
+          <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
+        </a>
+        <!-- No built page to open (none built yet, or every built one turned off): grey, not focusable. -->
+        <span v-else class="off" :hidden="i >= shown" aria-disabled="true" :title="t('home.unbuilt')" data-group-tab>
+          <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
+          <span class="sr-only">{{ t('home.unbuilt') }}</span>
+        </span>
+      </template>
       <button
         ref="moreEl"
         type="button"
@@ -109,7 +115,7 @@
       <button ref="editEl" :hidden="!measuring && needMore" type="button" class="more" @click="editor?.open()">
         <i class="pi pi-pencil" aria-hidden="true"></i>{{ t('nav.edit') }}
       </button>
-      <Menu id="tabs-more" ref="moreMenu" :model="moreItems" popup @show="moreOpen = true" @hide="moreOpen = false" />
+      <Menu id="tabs-more" ref="moreMenu" :model="moreItems" :pt="morePt" popup @show="moreOpen = true" @hide="moreOpen = false" />
     </nav>
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
@@ -121,7 +127,12 @@
       :aria-label="t('nav.sub')"
       @scroll.passive="checkSubEnd"
     >
-      <RouterLink v-for="p in subPages" :key="p.path" :to="p.path">{{ t(p.label) }}</RouterLink>
+      <template v-for="p in subPages" :key="p.path">
+        <span v-if="p.soon" class="off" aria-disabled="true" :title="t('home.unbuilt')">
+          {{ t(p.label) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+        </span>
+        <RouterLink v-else :to="p.path">{{ t(p.label) }}</RouterLink>
+      </template>
     </nav>
   </header>
 </template>
@@ -143,7 +154,7 @@ import { saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
-import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf } from './tabs'
+import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -270,11 +281,17 @@ const moreItems = computed<MenuItem[]>(() => [
     label: t(`nav.groups.${g.id}`),
     icon: g.icon,
     class: g === group.value ? 'current' : undefined,
+    disabled: !groupUsable(g, hidden.value),
     command: () => void router.push(target(g)),
   })),
   { separator: true },
   { label: t('nav.edit'), icon: 'pi pi-pencil', command: () => editor.value?.open() },
 ])
+
+// Grey items also say why when hovered, like the grey tabs.
+const morePt = {
+  item: ({ context }: { context: { disabled: boolean } }) => (context.disabled ? { title: t('home.unbuilt') } : {}),
+}
 
 // Below 600px the tabs are a bottom bar with room for the first PHONE_TABS groups; the rest go into "More".
 const PHONE_TABS = 4
@@ -484,6 +501,7 @@ onBeforeUnmount(() => {
 }
 
 .tabs > a,
+.tabs > .off,
 .tabs > .more {
   flex: none;
   display: inline-flex;
@@ -511,6 +529,14 @@ onBeforeUnmount(() => {
   color: var(--p-text-color);
 }
 
+/* Not built yet (or every built page turned off): grey and inert. surface-500 is 4.1:1 on surface-950; WCAG 1.4.3
+   exempts inactive controls, and the state is also in words (title, sr-only text). */
+.tabs > .off,
+.sub-tabs .off {
+  color: var(--p-surface-500);
+  cursor: not-allowed;
+}
+
 .tabs > [hidden] {
   display: none;
 }
@@ -525,6 +551,7 @@ onBeforeUnmount(() => {
 }
 
 .tabs.bottom > a,
+.tabs.bottom > .off,
 .tabs.bottom > .more {
   border-top: 2px solid transparent;
   border-bottom: 0;
@@ -548,7 +575,8 @@ onBeforeUnmount(() => {
   mask-image: none;
 }
 
-.sub-tabs a {
+.sub-tabs a,
+.sub-tabs .off {
   flex: none;
   padding: 0.25rem 0.75rem;
   /* surface-500: 4.1:1 on surface-950 (WCAG 1.4.11). */
