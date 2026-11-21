@@ -7,6 +7,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import type { Incoming } from '../chat/chat'
 import { type BreakCard, breakLeftMs, countdownText } from './breakCard'
@@ -24,7 +25,11 @@ let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     lastSeq = msg.seq
     card.value = msg.payload['screen.break'].at(-1)?.payload
@@ -66,15 +71,15 @@ body {
   gap: 0.25rem;
   padding: 1rem 1.75rem;
   border-radius: 0.75rem;
-  background: rgb(0 0 0 / 70%);
-  color: #fff;
+  background: var(--ov-bg, rgb(0 0 0 / 70%));
+  color: var(--ov-fg, #fff);
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-  font-size: 1.5rem;
+  font-size: calc(1.5rem * var(--ov-scale, 1));
 }
 
 .num,
 .end {
-  font-size: 2rem;
+  font-size: calc(2rem * var(--ov-scale, 1));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

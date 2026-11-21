@@ -904,6 +904,16 @@
       "noInput": "還沒選麥克風，不會檢查靜音。",
       "inputMissing": "OBS 裡已經沒有「{name}」，請重新選擇麥克風。",
       "twitch": "Twitch 連線中斷"
+    },
+    "appearance": {
+      "heading": "疊加層外觀",
+      "theme": "主題",
+      "themes": {
+        "dark": "深色",
+        "cream": "奶油",
+        "contrast": "高對比"
+      },
+      "textSize": "文字大小"
     }
   },
   "music": {

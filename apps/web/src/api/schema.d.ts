@@ -1049,6 +1049,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/screen-tools/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The built-in overlays' look now (also kept current by `screen.appearance`). */
+        get: operations["get_appearance"];
+        /** Saves the look; open built-in overlays change at once. */
+        put: operations["set_appearance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/screen-tools/break": {
         parameters: {
             query?: never;
@@ -1685,6 +1703,32 @@ export interface components {
          * @enum {string}
          */
         Allowed: "everyone" | "subscriber" | "vip" | "moderator";
+        /**
+         * @description A `screen.appearance` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps
+         *     only the latest one.
+         */
+        AppearanceEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["AppearancePayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["AppearanceType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The built-in overlays' theme and text size; also the body of `PUT /api/admin/screen-tools/appearance`. */
+        AppearancePayload: {
+            /**
+             * Format: int32
+             * @description Percent of each overlay's own text size: 50–200 in steps of 10.
+             */
+            textSize: number;
+            theme: components["schemas"]["OverlayTheme"];
+        };
+        /** @enum {string} */
+        AppearanceType: "screen.appearance";
         /** @description What the admin UI may see; never contains tokens. */
         AuthStatus: {
             /** @enum {string} */
@@ -2598,6 +2642,11 @@ export interface components {
         OverlayTest: {
             overlay: components["schemas"]["TestOverlay"];
         };
+        /**
+         * @description A theme for the built-in overlays; custom templates never use it.
+         * @enum {string}
+         */
+        OverlayTheme: "dark" | "cream" | "contrast";
         Overview: {
             /**
              * Format: int64
@@ -3005,6 +3054,8 @@ export interface components {
             "obs.status": components["schemas"]["ObsStatusEvent"][];
             /** @description At most one: the latest presentation queue status. */
             "presentation.queue": components["schemas"]["PresentationQueueEvent"][];
+            /** @description At most one: the built-in overlays' theme and text size. */
+            "screen.appearance": components["schemas"]["AppearanceEvent"][];
             /** @description At most one: the break card. */
             "screen.break": components["schemas"]["BreakEvent"][];
             /** @description At most one: the on-stream warnings. */
@@ -6133,6 +6184,75 @@ export interface operations {
                 };
             };
             /** @description `redemption.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_appearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearancePayload"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_appearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppearancePayload"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearancePayload"];
+                };
+            };
+            /** @description `overlays.invalid`: text size out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

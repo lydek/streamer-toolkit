@@ -3,9 +3,9 @@
   margin: 0;
   padding: 0;
   /* Sized for a 1080p canvas, a little smaller than the other templates; the admin UI may set another size. */
-  font: var(--chat-text-size, 20px) / 1.4 sans-serif;
-  color: #fff;
-  text-shadow: 0 1px 2px #000;
+  font: calc(var(--chat-text-size, 20px) * var(--ov-scale, 1)) / 1.4 sans-serif;
+  color: var(--ov-fg, #fff);
+  text-shadow: var(--ov-shadow, 0 1px 2px #000);
 }
 
 .message {
@@ -21,5 +21,5 @@
 
 .name::after {
   content: ': ';
-  color: #fff;
+  color: var(--ov-fg, #fff);
 }

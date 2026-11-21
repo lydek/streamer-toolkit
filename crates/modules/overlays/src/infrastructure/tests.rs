@@ -283,3 +283,46 @@ fn the_warnings_event_type_matches_what_the_bus_sends() {
     let typed: WarningsEvent = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(typed).unwrap(), wire);
 }
+
+#[tokio::test]
+async fn the_appearance_is_saved_announced_and_checked() {
+    let r = rig().await;
+    let appearance = |bus: &EventBus| {
+        let (snapshot, _) = bus.subscribe();
+        let v: Value = serde_json::from_str(&snapshot).unwrap();
+        v["payload"]["screen.appearance"][0].clone()
+    };
+    assert_eq!(
+        appearance(&r.bus)["payload"],
+        json!({"theme": "dark", "textSize": 100})
+    );
+
+    let url = "/api/admin/screen-tools/appearance";
+    let (status, body) = send(
+        &r.app,
+        "PUT",
+        url,
+        Some(json!({"theme": "cream", "textSize": 130})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({"theme": "cream", "textSize": 130}));
+    let wire = appearance(&r.bus);
+    assert_eq!(wire["payload"], body);
+    let typed: AppearanceEvent = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(serde_json::to_value(typed).unwrap(), wire);
+
+    for bad in [
+        json!({"theme": "cream", "textSize": 105}),
+        json!({"theme": "light", "textSize": 100}),
+    ] {
+        let (status, body) = send(&r.app, "PUT", url, Some(bad)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "overlays.invalid");
+    }
+
+    let again = restart(r.pool.clone()).await;
+    assert_eq!(appearance(&again.bus)["payload"]["theme"], "cream");
+    let (_, body) = send(&again.app, "GET", url, None).await;
+    assert_eq!(body["textSize"], 130);
+}

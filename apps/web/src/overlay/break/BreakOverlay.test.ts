@@ -79,3 +79,17 @@ it('shows nothing while hidden and skips replays', async () => {
   await send(event(4, {}))
   expect(wrapper.find('[data-break]').exists()).toBe(false)
 })
+
+it('takes the theme and text size from 畫面工具 at once', async () => {
+  mount(BreakOverlay)
+  const appearance = (seq: number, theme: string, textSize: number) => ({
+    id: `a${seq}`, type: 'screen.appearance', version: 1, seq, occurredAt: '', source: 'system', payload: { theme, textSize },
+  })
+  await send({ type: 'snapshot', version: 1, seq: 1, payload: { 'screen.break': [], 'screen.appearance': [appearance(1, 'contrast', 150)] } })
+  const root = document.documentElement.style
+  expect(root.getPropertyValue('--ov-bg')).toBe('#000')
+  expect(root.getPropertyValue('--ov-scale')).toBe('1.5')
+  await send(appearance(2, 'dark', 100))
+  expect(root.getPropertyValue('--ov-bg')).toBe('')
+  expect(root.getPropertyValue('--ov-scale')).toBe('')
+})

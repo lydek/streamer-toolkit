@@ -5,6 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Incoming } from '../chat/chat'
@@ -22,7 +23,11 @@ let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     lastSeq = msg.seq
     latest.value = msg.payload['screen.warnings'].at(-1)?.payload
@@ -66,13 +71,13 @@ body {
   padding: 0.5rem;
   list-style: none;
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--ov-scale, 1));
 }
 
 .warnings li {
   padding: 0.125rem 0.5rem;
   border-radius: 4px;
-  background: rgb(0 0 0 / 70%);
-  color: #ffd54f;
+  background: var(--ov-bg, rgb(0 0 0 / 70%));
+  color: var(--ov-accent, #ffd54f);
 }
 </style>

@@ -5,6 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { clockText } from '../../admin/home'
 import type { Incoming } from '../chat/chat'
@@ -28,7 +29,11 @@ let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     lastSeq = msg.seq
     latest.value = msg.payload['counter.marathon'].at(-1)
@@ -72,11 +77,11 @@ body {
 .timer {
   padding: 0.5rem;
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-  font-size: 3rem;
+  font-size: calc(3rem * var(--ov-scale, 1));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #fff;
-  text-shadow: 0 2px 4px rgb(0 0 0 / 80%);
+  color: var(--ov-fg, #fff);
+  text-shadow: var(--ov-shadow, 0 2px 4px rgb(0 0 0 / 80%));
 }
 
 .paused {

@@ -23,6 +23,7 @@
 </template>
 
 <script setup lang="ts">
+import { followAppearance } from '../appearance'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { components } from '../../api/schema'
@@ -53,7 +54,11 @@ function show(p: Stamped) {
   if (p.sound) playSound(p.sound.url, p.sound.volume)
 }
 
+// Theme and text size from 畫面工具 (built-in look only).
+const appearance = followAppearance()
+
 function receive(msg: Incoming) {
+  appearance(msg)
   if (msg.type === 'snapshot') {
     // Cards are never in snapshots, so none replays after a reconnect.
     lastSeq = msg.seq
@@ -106,10 +111,10 @@ body {
   margin: 1rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  background: rgb(24 22 36 / 0.92);
-  color: #fff;
+  background: var(--ov-bg, rgb(24 22 36 / 0.92));
+  color: var(--ov-fg, #fff);
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+  text-shadow: var(--ov-shadow, 0 1px 2px rgb(0 0 0 / 0.6));
   animation:
     enter 300ms ease-out,
     leave 300ms ease-in calc(var(--duration) - 300ms) forwards;
@@ -130,7 +135,7 @@ body {
 }
 
 .name {
-  font-size: 1.5rem;
+  font-size: calc(1.5rem * var(--ov-scale, 1));
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -148,12 +153,12 @@ body {
 .slots li {
   width: 1.5rem;
   height: 1.5rem;
-  border: 2px solid #d8b7ff;
+  border: 2px solid var(--ov-accent, #d8b7ff);
   border-radius: 50%;
 }
 
 .slots li.stamped {
-  background: #d8b7ff;
+  background: var(--ov-accent, #d8b7ff);
 }
 
 .slots li.latest {
@@ -161,7 +166,7 @@ body {
 }
 
 .count {
-  font-size: 1.125rem;
+  font-size: calc(1.125rem * var(--ov-scale, 1));
 }
 
 .total {
@@ -183,7 +188,7 @@ body {
 }
 
 .banner {
-  font-size: 1.25rem;
+  font-size: calc(1.25rem * var(--ov-scale, 1));
   font-weight: 700;
   color: #ffd76a;
 }

@@ -8,7 +8,7 @@
   gap: 0.5em;
   font-family: sans-serif;
   /* Sized for a 1080p canvas (the browser's 16 px reads small on stream); the admin UI may set another size. */
-  font-size: var(--chat-text-size, 24px);
+  font-size: calc(var(--chat-text-size, 24px) * var(--ov-scale, 1));
 }
 
 .message {
@@ -18,8 +18,8 @@
   padding: 0.4em 0.8em;
   border-radius: 1em;
   border-left: 4px solid var(--user-color, #fff);
-  background: rgb(0 0 0 / 70%);
-  color: #fff;
+  background: var(--ov-bg, rgb(0 0 0 / 70%));
+  color: var(--ov-fg, #fff);
 }
 
 .name {
