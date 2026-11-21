@@ -5,7 +5,7 @@ import Menu from 'primevue/menu'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
-import { counterLine } from './counters'
+import { counterTile } from './counters'
 import CountersPage from './CountersPage.vue'
 import { testRouter } from './testRouter'
 
@@ -261,9 +261,15 @@ describe('CountersPage marathon timer', () => {
   })
 })
 
-describe('counterLine', () => {
-  it('shows the first counter, or that there is none', () => {
-    expect(counterLine([{ id: 'a', name: '死亡次數', value: 12 }, { id: 'b', name: '被抓包', value: 3 }])).toBe('死亡次數：12')
-    expect(counterLine([])).toBe(t('counter.empty'))
+describe('counterTile', () => {
+  it('shows the first counter big, the others on the line, or that there is none', () => {
+    expect(counterTile([{ id: 'a', name: '死亡次數', value: 1200 }, { id: 'b', name: '被抓包', value: 3 }])).toEqual({
+      state: 'ready',
+      num: '1,200',
+      unit: '死亡次數',
+      text: '被抓包：3',
+    })
+    expect(counterTile([{ id: 'a', name: '死亡次數', value: 12 }])).toEqual({ state: 'ready', num: '12', unit: '死亡次數', text: '' })
+    expect(counterTile([])).toEqual({ state: 'ready', text: t('counter.empty') })
   })
 })

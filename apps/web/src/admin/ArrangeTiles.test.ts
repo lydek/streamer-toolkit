@@ -6,7 +6,7 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
-const extra: Tile[] = [{ id: 'badge', group: 'features', icon: '' }]
+const extra: Tile[] = [{ id: 'badge', group: 'features', icon: '', tint: 'blue' }]
 const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', badge: '徽章' }
 
 // What the page's save does: shows `next` at once, puts the previous order back on failure (`outcome` false),

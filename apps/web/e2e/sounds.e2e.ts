@@ -91,9 +91,7 @@ test('the tile counts sounds; its drawer lists them as text', async ({ page }) =
   await library(page, [sound('s1', HTML)])
   await page.goto('/admin/')
   const tile = page.locator('[data-drawer-tile="sound"]')
-  await expect(page.getByRole('list', { name: zh.home.groups.features }).locator(tile)).toContainText(
-    fill(zh.sound.count, { n: 1 }),
-  )
+  await expect(page.getByRole('list', { name: zh.home.groups.features }).locator(tile)).toContainText(`1${zh.home.units.sound}`)
   await tile.click()
   const drawer = page.locator('#drawer-sound')
   await expect(drawer.getByText(HTML)).toBeVisible()

@@ -1,5 +1,6 @@
 import { i18n } from '../i18n'
 import type { Schemas } from './api'
+import type { Line } from './home'
 
 export type FeedItem = Schemas['FeedItem']
 
@@ -30,9 +31,20 @@ export function feedResult(item: FeedItem): string {
 }
 
 /** The home tile's line: how many, and the latest. */
-export function feedLine(items: FeedItem[]): string {
+/** The Host lists at most this many feed items. */
+const FEED_MAX = 50
+
+/** The home tile: how many items are listed ("50+" when the list is full) and the latest. */
+export function feedTile(items: FeedItem[]): Line {
   const { t } = i18n.global
-  return items.length ? t('feed.line', { n: items.length, latest: feedText(items[0]) }) : t('feed.empty')
+  if (!items.length) return { state: 'ready', text: t('feed.empty') }
+  const n = items.length
+  return {
+    state: 'ready',
+    num: n >= FEED_MAX ? `${FEED_MAX}+` : String(n),
+    unit: t('home.units.feed'),
+    text: t('home.latest', { text: feedText(items[0]) }),
+  }
 }
 
 /** The live messages after which the feed may have changed. */

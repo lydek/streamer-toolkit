@@ -454,6 +454,14 @@
     "arrange": "整理功能磚",
     "connections": "連線與 OBS 來源",
     "chatEmpty": "還沒有訊息",
+    "latest": "最新：{text}",
+    "sceneCount": "{n} 個場景",
+    "units": {
+      "checkin": "人今天打卡",
+      "sound": "個音效",
+      "feed": "件",
+      "redemption": "筆最近兌換"
+    },
     "status": {
       "connected": "已連線",
       "failed": "無法取得狀態",
@@ -789,7 +797,6 @@
     "playedInObs": "已送到 OBS 播放。"
   },
   "feed": {
-    "line": "{n} 件 · {latest}",
     "empty": "還沒有事件",
     "loadFailed": "無法載入事件流。",
     "redemption": "{name} 兌換了「{reward}」",
@@ -898,7 +905,8 @@
       "offAir": "Overlay 沒有連線",
       "stopped": "已停止",
       "playing": "播放中：{title}",
-      "paused": "已暫停：{title}"
+      "paused": "已暫停：{title}",
+      "pausedShort": "已暫停"
     },
     "rules": {
       "heading": "場景對應",

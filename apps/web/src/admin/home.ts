@@ -12,7 +12,8 @@ export interface Light {
 }
 
 /** One tile status line: never blank, never a stale value while loading or failed. */
-export type Line = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; text: string }
+/** What a tile shows; `num` is its big value (a count or a short word) with `unit` after it, `text` the line under it. */
+export type Line = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; text: string; num?: string; unit?: string }
 
 /** The Twitch light, from `GET /api/admin/twitch` (`failed`: the last request failed). */
 export function twitchLight(overview: Schemas['Overview'] | undefined, failed: boolean): Light {
@@ -228,21 +229,23 @@ export interface Tile {
   id: string
   group: Group
   icon: string
+  /** The icon's color (prototype tints). */
+  tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue'
   /** Not a module's: shown whatever modules are on. */
   always?: boolean
 }
 
 /** Default home tiles, one per module (and the event feed); a disabled module shows no tile. */
 export const TILES: Tile[] = [
-  { id: 'chat', group: 'live', icon: 'pi pi-comments' },
-  { id: 'alerts', group: 'live', icon: 'pi pi-bell' },
-  { id: 'feed', group: 'live', icon: 'pi pi-list', always: true },
-  { id: 'redemption', group: 'features', icon: 'pi pi-gift' },
-  { id: 'checkin', group: 'features', icon: 'pi pi-check-square' },
-  { id: 'sound', group: 'features', icon: 'pi pi-volume-up' },
-  { id: 'scene', group: 'features', icon: 'pi pi-images' },
-  { id: 'bgm', group: 'features', icon: 'pi pi-headphones' },
-  { id: 'counter', group: 'features', icon: 'pi pi-hashtag' },
+  { id: 'chat', group: 'live', icon: 'pi pi-comments', tint: 'blue' },
+  { id: 'alerts', group: 'live', icon: 'pi pi-bell', tint: 'yellow' },
+  { id: 'feed', group: 'live', icon: 'pi pi-bolt', tint: 'yellow', always: true },
+  { id: 'redemption', group: 'features', icon: 'pi pi-gift', tint: 'red' },
+  { id: 'checkin', group: 'features', icon: 'pi pi-check-square', tint: 'green' },
+  { id: 'sound', group: 'features', icon: 'pi pi-volume-up', tint: 'primary' },
+  { id: 'scene', group: 'features', icon: 'pi pi-images', tint: 'blue' },
+  { id: 'bgm', group: 'features', icon: 'pi pi-headphones', tint: 'yellow' },
+  { id: 'counter', group: 'features', icon: 'pi pi-hashtag', tint: 'red' },
 ]
 
 /** Non-empty groups in display order. */

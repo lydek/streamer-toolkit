@@ -58,6 +58,7 @@
                 :id="tile.id"
                 :name="moduleName(tile.id)"
                 :icon="tile.icon"
+                :tint="tile.tint"
                 :line="lines[tile.id] ?? { state: 'loading' }"
                 :attention="attention[tile.id]"
                 :expanded="drawer.current.value === tile.id"
@@ -311,8 +312,8 @@ import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
-import { counterLine, stepCounter } from './counters'
-import { type FeedItem, changesFeed, feedLine, feedResult, feedText } from './feed'
+import { counterTile, stepCounter } from './counters'
+import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
 import MusicPlayer from './MusicPlayer.vue'
 import { playerLine } from './music'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
@@ -448,31 +449,56 @@ const lines = computed<Record<string, Line>>(() => {
         ? { state: 'ready', text: lastAlert ? alertTitle(lastAlert.payload) : t('alerts.empty') }
         : { state: status },
     redemption: recentLine(recent.value),
-    checkin:
-      checkinToday.value.state === 'ready'
-        ? { state: 'ready', text: t('checkin.today', { n: checkinToday.value.today.count }) }
-        : { state: checkinToday.value.state },
+    checkin: checkinLine(checkinToday.value),
     sound:
       sounds.value.state === 'ready'
-        ? {
-            state: 'ready',
-            text: sounds.value.items.length ? t('sound.count', { n: sounds.value.items.length }) : t('sound.empty'),
-          }
+        ? sounds.value.items.length
+          ? {
+              state: 'ready',
+              num: count(sounds.value.items.length),
+              unit: t('home.units.sound'),
+              text: sounds.value.items.map((s) => s.label).join('、'),
+            }
+          : { state: 'ready', text: t('sound.empty') }
         : { state: sounds.value.state },
-    scene:
-      status === 'open'
-        ? { state: 'ready', text: live.value.obsState?.scene ?? t('scene.notConnected') }
-        : { state: status },
-    bgm: status !== 'open' ? { state: status } : live.value.bgm ? { state: 'ready', text: playerLine(live.value.bgm.payload) } : { state: 'loading' },
-    feed: feed.value.state === 'ready' ? { state: 'ready', text: feedLine(feed.value.items) } : { state: feed.value.state },
+    scene: status === 'open' ? sceneLine(live.value.obsState) : { state: status },
+    bgm: status !== 'open' ? { state: status } : live.value.bgm ? bgmLine(live.value.bgm.payload) : { state: 'loading' },
+    feed: feed.value.state === 'ready' ? feedTile(feed.value.items) : { state: feed.value.state },
     counter:
       status !== 'open'
         ? { state: status }
         : live.value.counters
-          ? { state: 'ready', text: counterLine(live.value.counters) }
+          ? counterTile(live.value.counters)
           : { state: 'loading' },
   }
 })
+const count = (n: number) => n.toLocaleString('zh-TW')
+
+function checkinLine(c: typeof checkinToday.value): Line {
+  if (c.state !== 'ready') return { state: c.state }
+  const last = c.today.recent[0]
+  return {
+    state: 'ready',
+    num: count(c.today.count),
+    unit: t('home.units.checkin'),
+    text: last ? t('home.latest', { text: last.user_name }) : t('checkin.page.empty'),
+  }
+}
+
+function sceneLine(obs: (typeof live.value)['obsState']): Line {
+  if (!obs?.scene) return { state: 'ready', text: t('scene.notConnected') }
+  return { state: 'ready', num: obs.scene, text: t('home.sceneCount', { n: obs.scenes.length }) }
+}
+
+function bgmLine(p: Schemas['BgmPlayerPayload']): Line {
+  if (!p.track || p.state === 'stopped' || !p.onAir) return { state: 'ready', text: playerLine(p) }
+  const name = playlists.value.find((l) => l.id === p.playlist)?.name
+  const order = t(p.shuffle ? 'music.rules.shuffle' : 'music.rules.inOrder')
+  const text = [p.state === 'paused' ? t('music.player.pausedShort') : null, name, order].filter(Boolean).join(' · ')
+  return { state: 'ready', num: p.track.title, text }
+}
+
+
 const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
@@ -480,7 +506,13 @@ const attention = computed<Record<string, boolean>>(() => ({ chat: templateError
 function recentLine(r: typeof recent.value): Line {
   if (r.state !== 'ready') return { state: r.state }
   const last = r.items[0]
-  return { state: 'ready', text: last ? `${last.user_name}：${last.reward_title}` : t('redemption.empty') }
+  if (!last) return { state: 'ready', text: t('redemption.empty') }
+  return {
+    state: 'ready',
+    num: count(r.items.length),
+    unit: t('home.units.redemption'),
+    text: `${last.user_name}：${last.reward_title}`,
+  }
 }
 
 const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names.${id}`) : id)
