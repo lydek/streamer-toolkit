@@ -67,3 +67,31 @@ describe('StageCard export', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === t('record.export'))).toBe(false)
   })
 })
+
+describe('StageCard checks', () => {
+  it('copies the OBS URL of an overlay that is not in OBS yet', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/overlays'
+            ? { chat: 0, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, other: 0 }
+            : null,
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const wrapper = mount(StageCard, {
+      props: { live: { status: 'open', lastSeq: 1 }, modules: [{ id: 'chat', enabled: true, closed: false }] },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const row = wrapper.findAll('.checks li').find((li) => li.text().includes(t('stage.checks.overlay.chat.bad')))!
+    // Twitch and OBS still lead to where they are fixed.
+    expect(wrapper.findAll('.checks a').length).toBe(3)
+    await row.get('button').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith(`${location.origin}/overlay/chat/`)
+    expect(wrapper.get('[role="status"]').text()).toBe(t('stage.checks.copied'))
+  })
+})

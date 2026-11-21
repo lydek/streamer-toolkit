@@ -18,9 +18,20 @@
         <li v-for="c in checks" :key="c.id" :class="{ bad: !c.ok }">
           <i :class="c.ok ? 'pi pi-check-circle' : 'pi pi-exclamation-triangle'" aria-hidden="true"></i>
           <span>{{ t(`stage.checks.${c.id}.${c.ok ? 'ok' : 'bad'}`) }}</span>
-          <RouterLink v-if="!c.ok" :to="c.fix" class="fix">{{ t('stage.checks.fix') }}</RouterLink>
+          <!-- An overlay is fixed by adding its URL to OBS as a browser source: copy it right here. -->
+          <Button
+            v-if="!c.ok && c.id.startsWith('overlay.')"
+            :label="t('chat.copyObsUrl')"
+            icon="pi pi-copy"
+            text
+            size="small"
+            class="fix"
+            @click="copyOverlayUrl(c.id.slice('overlay.'.length))"
+          />
+          <RouterLink v-else-if="!c.ok" :to="c.fix" class="fix">{{ t('stage.checks.fix') }}</RouterLink>
         </li>
       </ul>
+      <p v-if="copyNotice" :role="copyNotice.error ? 'alert' : 'status'">{{ copyNotice.text }}</p>
     </template>
     <p v-else-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="shown === 'live' && live.stream?.state !== 'live'" class="muted">{{ t('stage.notLive') }}</p>
@@ -116,6 +127,18 @@ const line = computed(() => {
   const when = s.endedAt ? sessionRange(s.startedAt, s.endedAt) : clockText(now.value - Date.parse(s.startedAt))
   return when + peak
 })
+const copyNotice = ref<{ text: string; error: boolean }>()
+async function copyOverlayUrl(kind: string) {
+  try {
+    // The admin window loads the Host URL, so its origin is what OBS needs.
+    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
+    await navigator.clipboard.writeText(`${location.origin}/overlay/${kind}/`)
+    copyNotice.value = { text: t('stage.checks.copied'), error: false }
+  } catch {
+    copyNotice.value = { text: t('chat.copyFailed'), error: true }
+  }
+}
+
 const exporting = ref(false)
 const exportNotice = ref<{ text: string; error: boolean }>()
 async function exportIt() {
