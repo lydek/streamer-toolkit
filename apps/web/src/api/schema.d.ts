@@ -776,6 +776,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/diagnostics/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Checks the connections now (one Helix call when signed in). */
+        get: operations["connections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/diagnostics/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest 200 log lines at or above a level, newest first. */
+        get: operations["logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/diagnostics/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A report to share when asking for help: versions, connections, modules turned off and the latest warnings and
+         *     errors as time, level and code only.
+         */
+        get: operations["report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/feed": {
         parameters: {
             query?: never;
@@ -2655,6 +2709,22 @@ export interface components {
             /** @description The module whose command has it. */
             module: string;
         };
+        /** @description What the connection checks found just now. */
+        Connections: {
+            eventsub_connected: boolean;
+            /**
+             * Format: int64
+             * @description Subscriptions Twitch holds for this app and account; `null` when it could not be read.
+             */
+            eventsub_subscriptions?: number | null;
+            obs_connected: boolean;
+            /**
+             * Format: int64
+             * @description Round trip of one Helix call; `null` when signed out or it failed.
+             */
+            twitch_latency_ms?: number | null;
+            twitch_signed_in: boolean;
+        };
         /** @description A counter with its command. `name` is broadcaster text: render it as text. */
         CounterBody: {
             /** @description Who may use the command; the broadcaster always may. */
@@ -2756,6 +2826,17 @@ export interface components {
             expires_in_secs: number;
             user_code: string;
             verification_uri: string;
+        };
+        /** @description The diagnostic report (匯出診斷報告). */
+        DiagnosticReport: {
+            app_version: string;
+            connections: components["schemas"]["Connections"];
+            /** @description Modules turned off. */
+            disabled_modules: string[];
+            /** @description RFC 3339, UTC. */
+            generated_at: string;
+            /** @description Newest first. */
+            log: components["schemas"]["ReportLine"][];
         };
         DismissBody: {
             /** @description The version in the notice, `major.minor.patch`. */
@@ -2907,6 +2988,16 @@ export interface components {
         };
         /** @enum {string} */
         LogEventKind: "follow" | "subscribe" | "resubscribe" | "gift" | "cheer" | "raid" | "redemption";
+        /** @description One log line. `message` stays on this page; the report never carries it. */
+        LogLine: {
+            /** @description RFC 3339, as written. */
+            at: string;
+            /** @description The error code (`<area>.<reason>`) when the line has one. */
+            code?: string | null;
+            /** @description `ERROR`, `WARN`, `INFO`, `DEBUG` or `TRACE`. */
+            level: string;
+            message: string;
+        };
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
         };
@@ -3474,6 +3565,12 @@ export interface components {
         };
         /** @enum {string} */
         RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
+        /** @description A log line in the report: no message text, so no names, IDs or secrets. */
+        ReportLine: {
+            at: string;
+            code?: string | null;
+            level: string;
+        };
         /** @description What a backup holds, shown before the broadcaster confirms a restore. */
         RestorePreview: {
             /** @description The version of the app that made it. */
@@ -6035,6 +6132,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connections"];
+                };
+            };
+        };
+    };
+    logs: {
+        parameters: {
+            query?: {
+                /** @description The least severe level to list: `error`, `warn` or `info` (default `info`). */
+                level?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogLine"][];
+                };
+            };
+        };
+    };
+    report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticReport"];
                 };
             };
         };

@@ -109,6 +109,11 @@
           <p class="soon"><i class="pi pi-hourglass" aria-hidden="true"></i>{{ t('pages.soon') }}</p>
         </section>
 
+        <section v-show="section === 'debug'" aria-labelledby="debug">
+          <h2 id="debug" tabindex="-1">{{ t('settings.menu.debug') }}</h2>
+          <TroubleshootPanel v-if="section === 'debug'" />
+        </section>
+
         <section v-show="section === 'backup'" aria-labelledby="backup">
           <h2 id="backup" tabindex="-1">{{ t('settings.backup') }}</h2>
           <RecordRetention />
@@ -144,6 +149,7 @@ import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import BackupRestore from './BackupRestore.vue'
+import TroubleshootPanel from './TroubleshootPanel.vue'
 import RecordRetention from './RecordRetention.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
@@ -164,7 +170,7 @@ const route = useRoute()
 
 const SECTIONS = ['general', 'connections', 'features', 'profiles', 'hotkeys', 'debug', 'backup', 'about'] as const
 /** Sections of later phases: they say so and call nothing. */
-const SOON = ['profiles', 'hotkeys', 'debug'] as const
+const SOON = ['profiles', 'hotkeys'] as const
 const section = computed(() => (route.params.section as string | undefined) ?? 'general')
 // Switching sections moves focus to the new section's heading, like entering a page; a hash naming a heading in the
 // shown section (a status light's #obs) wins, also when only the hash changes.

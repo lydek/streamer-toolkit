@@ -2331,6 +2331,80 @@
         }
       }
     },
+    "/api/admin/diagnostics/connections": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Checks the connections now (one Helix call when signed in).",
+        "operationId": "connections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connections"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/diagnostics/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest 200 log lines at or above a level, newest first.",
+        "operationId": "logs",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "description": "The least severe level to list: `error`, `warn` or `info` (default `info`).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogLine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/diagnostics/report": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "A report to share when asking for help: versions, connections, modules turned off and the latest warnings and\nerrors as time, level and code only.",
+        "operationId": "report",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/feed": {
       "get": {
         "tags": [
@@ -7803,6 +7877,44 @@
           }
         }
       },
+      "Connections": {
+        "type": "object",
+        "description": "What the connection checks found just now.",
+        "required": [
+          "twitch_signed_in",
+          "eventsub_connected",
+          "obs_connected"
+        ],
+        "properties": {
+          "eventsub_connected": {
+            "type": "boolean"
+          },
+          "eventsub_subscriptions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Subscriptions Twitch holds for this app and account; `null` when it could not be read.",
+            "minimum": 0
+          },
+          "obs_connected": {
+            "type": "boolean"
+          },
+          "twitch_latency_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Round trip of one Helix call; `null` when signed out or it failed.",
+            "minimum": 0
+          },
+          "twitch_signed_in": {
+            "type": "boolean"
+          }
+        }
+      },
       "CounterBody": {
         "type": "object",
         "description": "A counter with its command. `name` is broadcaster text: render it as text.",
@@ -8067,6 +8179,43 @@
           },
           "verification_uri": {
             "type": "string"
+          }
+        }
+      },
+      "DiagnosticReport": {
+        "type": "object",
+        "description": "The diagnostic report (匯出診斷報告).",
+        "required": [
+          "app_version",
+          "generated_at",
+          "connections",
+          "disabled_modules",
+          "log"
+        ],
+        "properties": {
+          "app_version": {
+            "type": "string"
+          },
+          "connections": {
+            "$ref": "#/components/schemas/Connections"
+          },
+          "disabled_modules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Modules turned off."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "log": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportLine"
+            },
+            "description": "Newest first."
           }
         }
       },
@@ -8542,6 +8691,35 @@
           "raid",
           "redemption"
         ]
+      },
+      "LogLine": {
+        "type": "object",
+        "description": "One log line. `message` stays on this page; the report never carries it.",
+        "required": [
+          "at",
+          "level",
+          "message"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339, as written."
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The error code (`<area>.<reason>`) when the line has one."
+          },
+          "level": {
+            "type": "string",
+            "description": "`ERROR`, `WARN`, `INFO`, `DEBUG` or `TRACE`."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "ManualCheckIn": {
         "type": "object",
@@ -10168,6 +10346,28 @@
           "canceled",
           "unknown"
         ]
+      },
+      "ReportLine": {
+        "type": "object",
+        "description": "A log line in the report: no message text, so no names, IDs or secrets.",
+        "required": [
+          "at",
+          "level"
+        ],
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "type": "string"
+          }
+        }
       },
       "RestorePreview": {
         "type": "object",

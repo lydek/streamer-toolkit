@@ -156,6 +156,7 @@ fn main() {
             open_twitch_activate,
             open_download_page,
             open_twitch_chat,
+            open_logs_folder,
             close_hint
         ])
         .build(context)
@@ -283,6 +284,15 @@ async fn retry_with_port(app: AppHandle, port: u16) -> Result<(), &'static str> 
 }
 
 /// The admin window fetches the token once and keeps it in memory (never localStorage).
+/// 開啟記錄檔資料夾: only this data folder's `logs/`; it takes no path, so the page cannot name another folder.
+#[tauri::command]
+fn open_logs_folder(app: AppHandle, state: State<'_, AppState>) -> Result<(), &'static str> {
+    let logs = state.data_dir.join("logs");
+    app.opener()
+        .open_path(logs.to_string_lossy(), None::<&str>)
+        .map_err(|_| "admin.open_failed")
+}
+
 #[tauri::command]
 fn get_admin_token(state: State<'_, AppState>) -> String {
     state.admin_token.expose_secret().to_owned()
@@ -479,6 +489,7 @@ fn open_admin_window(app: &AppHandle, port: u16) -> tauri::Result<()> {
                 .permission("allow-open-twitch-activate")
                 .permission("allow-open-download-page")
                 .permission("allow-open-twitch-chat")
+                .permission("allow-open-logs-folder")
                 .permission("allow-close-hint")
                 // Receives the close hint event; no core:default or core:window:*, the capability covers the whole Host origin.
                 .permission("core:event:allow-listen")
