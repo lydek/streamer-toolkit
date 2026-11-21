@@ -3284,6 +3284,163 @@
         }
       }
     },
+    "/api/admin/screen-tools/break": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The break card now (also kept current by `screen.break`).",
+        "operationId": "get_break",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPayload"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the settings; a shown card keeps its countdown and shows the new texts.",
+        "operationId": "set_break_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`overlays.invalid`: out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/break/hide": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "hide_break",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPayload"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/break/show": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Shows the card and starts its countdown from now.",
+        "operationId": "show_break",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowBreakBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`overlays.invalid`: neither or both given, or out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/simulate/alert": {
       "post": {
         "tags": [
@@ -5040,6 +5197,136 @@
         "type": "string",
         "enum": [
           "bgm.test"
+        ]
+      },
+      "BreakEvent": {
+        "type": "object",
+        "description": "A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only\nthe latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BreakPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/BreakType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "BreakMode": {
+        "type": "string",
+        "enum": [
+          "minutes",
+          "until"
+        ]
+      },
+      "BreakPayload": {
+        "type": "object",
+        "description": "The break card. `text` and `endText` are broadcaster text: render them as text.",
+        "required": [
+          "shown",
+          "text",
+          "endText",
+          "mode",
+          "minutes",
+          "untilTime"
+        ],
+        "properties": {
+          "endText": {
+            "type": "string",
+            "description": "Shown instead of the countdown once `endsAt` has passed; the card stays until hidden."
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UTC, RFC 3339; set while shown."
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "mode": {
+            "$ref": "#/components/schemas/BreakMode"
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "untilTime": {
+            "type": "string",
+            "description": "`HH:MM`, local time."
+          }
+        }
+      },
+      "BreakSettingsBody": {
+        "type": "object",
+        "description": "The break card's settings.",
+        "required": [
+          "text",
+          "end_text",
+          "mode",
+          "minutes",
+          "until_time"
+        ],
+        "properties": {
+          "end_text": {
+            "type": "string",
+            "description": "At most 100 characters after trimming; may be empty."
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1–1440.",
+            "minimum": 0
+          },
+          "mode": {
+            "$ref": "#/components/schemas/BreakMode"
+          },
+          "text": {
+            "type": "string",
+            "description": "At most 100 characters after trimming; may be empty."
+          },
+          "until_time": {
+            "type": "string",
+            "description": "`HH:MM`."
+          }
+        }
+      },
+      "BreakType": {
+        "type": "string",
+        "enum": [
+          "screen.break"
         ]
       },
       "ChatBadgeName": {
@@ -7207,6 +7494,7 @@
           "bgm",
           "counter",
           "marathon",
+          "break",
           "other"
         ],
         "properties": {
@@ -7215,6 +7503,10 @@
             "minimum": 0
           },
           "bgm": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "break": {
             "type": "integer",
             "minimum": 0
           },
@@ -8236,6 +8528,26 @@
           }
         }
       },
+      "ShowBreakBody": {
+        "type": "object",
+        "description": "Shows the card: give `minutes` (1–1440) or `until` (UTC, RFC 3339, within the next 24 hours).",
+        "properties": {
+          "minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "SimulatedAlert": {
         "type": "object",
         "required": [
@@ -8374,6 +8686,7 @@
           "bgm.player",
           "counter.values",
           "counter.marathon",
+          "screen.break",
           "chat.text_size"
         ],
         "properties": {
@@ -8438,6 +8751,13 @@
               "$ref": "#/components/schemas/PresentationQueueEvent"
             },
             "description": "At most one: the latest presentation queue status."
+          },
+          "screen.break": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakEvent"
+            },
+            "description": "At most one: the break card."
           },
           "stream.status": {
             "type": "array",

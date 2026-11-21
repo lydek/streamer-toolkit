@@ -23,6 +23,7 @@ export type Incoming =
   | components['schemas']['BgmPlayerEvent']
   | components['schemas']['CounterValuesEvent']
   | components['schemas']['MarathonEvent']
+  | components['schemas']['BreakEvent']
   | components['schemas']['CounterTestEvent']
   | components['schemas']['MarathonTestEvent']
   | components['schemas']['BgmTestEvent']

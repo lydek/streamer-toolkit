@@ -19,6 +19,7 @@ crates/
     sound/         # 音效管理（薄）
     bgm/           # 背景音樂：音樂庫、歌單、播放器與場景對應（薄）
     counter/       # 計數器：全域計數、每人計數與訂閱馬拉松計時器（薄）
+    overlays/      # 畫面工具：休息中／準備中卡片（薄；模組 ID `screen-tools`）
     stream/        # 直播狀態與場次（薄）
     activity/      # 活動紀錄：追隨、訂閱、小奇點、揪團（薄）
     viewers/       # 觀眾名冊（薄）
@@ -94,7 +95,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -186,6 +187,9 @@ apps/
     - 一個對應都沒有時，切場景與 OBS 斷線都不影響播放器，讓沒有用場景對應的人照樣手動播放。
     - 刪除：`GET /api/admin/music` 的歌單與歌都帶 `used_by`（播它的、或歌單裡有它的場景對應名稱），刪除前的確認框列出。刪除歌單時，用到它的對應改成沒有歌單並停用，頁面顯示「歌單不見了」，不會換成別的歌單；刪除歌曲只列出，不停用對應。
   - bgm 模組停用時隱藏背景音樂頁與首頁磚；`play` 回 409 `music.off`，正在播的播完這首就停止，切場景也不影響播放器。
+- **畫面工具**（overlays 模組，模組 ID 與頁面路徑都是 `screen-tools`，首頁磚沿用還沒做時的 ID）：
+  - 休息中／準備中卡片（`/overlay/break/`，`?kind=break`）：存在 `overlays_break_card`（一筆：文字、倒數結束後的文字、倒數方式 `minutes`／`until`、分鐘、到幾點 `HH:MM`、是否顯示、倒數結束的時間）。管理 API：`GET`／`PUT /api/admin/screen-tools/break`（文字最多 100 字、分鐘 1–1440）、`POST /api/admin/screen-tools/break/show`（`minutes` 或 `until` 擇一；`until` 是 24 小時內的 UTC 時間，「到幾點」由管理視窗換算成下一次到那個時間的時刻）、`POST /api/admin/screen-tools/break/hide`。
+  - 顯示時存下倒數結束的時間，重新啟動工具或重新載入 Overlay 都顯示同一個時間；每次變動與啟動時發布 `screen.break`（整張卡片），快照只保留最新一則。Overlay 自己往下算，到 0 換成結束文字，卡片留著直到手動隱藏；倒數結束不會自動切場景。
 - **Host 標頭**：只接受 `127.0.0.1:<port>` 與 `localhost:<port>`，擋 DNS rebinding。
 - **Origin**：所有 WebSocket 連線（含 Overlay）與會改變狀態的請求都檢查 Origin，只接受 `http://127.0.0.1:<port>` 與 `http://localhost:<port>`（目前的 port）；dev 模式另外接受 Vite dev server 的 origin（由 `apps/desktop` 以執行期設定傳入）。沒有 Origin 或 `Origin: null` 的 WebSocket 連線一律拒絕。
 - **CORS**：`/api`、`/ws`、`/admin` 不開。只有建置產物的 `assets/` 目錄（管理 UI 與 Overlay 共用 chunk）與樣板路徑（`/templates`，含內建樣板）送 `Access-Control-Allow-Origin: *`（不帶憑證，內容都是公開程式碼與樣板），因為預覽 iframe 的 origin 是 `null`，Vite 產出的 module script、CSS 與字型都要經 CORS 才能載入。

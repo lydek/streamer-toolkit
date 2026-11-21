@@ -654,6 +654,7 @@
       "scene": "OBS 場景",
       "bgm": "背景音樂",
       "counter": "計數器",
+      "screen-tools": "畫面工具",
       "feed": "事件流"
     }
   },
@@ -872,6 +873,27 @@
       "deleteNote": "這個計數和每位觀眾的數字都會移除。"
     }
   },
+  "screenTools": {
+    "break": {
+      "heading": "休息中／準備中卡片",
+      "text": "文字",
+      "countdown": "倒數",
+      "modes": {
+        "minutes": "幾分鐘",
+        "until": "到幾點"
+      },
+      "minutes": "分鐘",
+      "until": "到幾點",
+      "endText": "倒數結束後顯示",
+      "show": "顯示並開始倒數",
+      "hide": "隱藏",
+      "preview": "預覽",
+      "shown": "休息卡片顯示中",
+      "shownShort": "顯示中",
+      "hidden": "休息卡片沒有顯示",
+      "forMinutes": "{n} 分鐘"
+    }
+  },
   "music": {
     "library": "音樂庫",
     "file": "匯入音樂檔",
@@ -1063,6 +1085,10 @@
     },
     "text_size": {
       "invalid": "文字大小不正確。"
+    },
+    "overlays": {
+      "invalid": "畫面工具的設定不正確：文字最多 100 字，倒數 1 到 1440 分鐘或 24 小時內的時間。",
+      "storage_failed": "無法讀取或儲存畫面工具的設定。"
     },
     "activity": {
       "invalid_retention": "保存天數要在 1 到 3650 之間。",

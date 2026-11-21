@@ -44,7 +44,7 @@ export const FEATURES: Feature[] = [
   { id: 'music', group: 'media', icon: 'pi pi-headphones', pages: ['/music'], module: 'bgm' },
   { id: 'sound', group: 'media', icon: 'pi pi-volume-up', pages: ['/sounds'], module: 'sound' },
   { id: 'tts', group: 'media', icon: 'pi pi-comment', pages: ['/tts'], needs: 'speech' },
-  { id: 'screenTools', group: 'media', icon: 'pi pi-desktop', pages: ['/screen-tools'] },
+  { id: 'screenTools', group: 'media', icon: 'pi pi-desktop', pages: ['/screen-tools'], module: 'screen-tools' },
   { id: 'avatar', group: 'media', icon: 'pi pi-face-smile', pages: ['/avatar'], needs: 'program' },
   { id: 'shoutouts', group: 'media', icon: 'pi pi-video', pages: ['/shoutouts'], scopes: ['moderator:manage:shoutouts'] },
   { id: 'imageSizes', group: 'media', icon: 'pi pi-image', pages: ['/image-sizes'] },

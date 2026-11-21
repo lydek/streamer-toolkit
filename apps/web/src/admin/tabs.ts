@@ -81,7 +81,7 @@ export const GROUPS: TabGroup[] = [
       { path: '/music', label: 'modules.names.bgm' },
       { path: '/sounds', label: 'modules.names.sound' },
       soon('/tts', 'tts', 'pi pi-comment', true),
-      soon('/screen-tools', 'screenTools', 'pi pi-desktop', true),
+      { path: '/screen-tools', label: 'modules.names.screen-tools' },
       soon('/avatar', 'avatar', 'pi pi-face-smile', true),
       soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
       soon('/image-sizes', 'imageSizes', 'pi pi-image', true),

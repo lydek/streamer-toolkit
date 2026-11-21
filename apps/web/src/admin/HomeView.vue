@@ -282,6 +282,34 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="screen-tools" :title="moduleName('screen-tools')" full-page="/screen-tools">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('break')" />
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <p v-if="!live.breakCard">{{ t('app.loading') }}</p>
+        <template v-else>
+          <p>{{ t(live.breakCard.shown ? 'screenTools.break.shown' : 'screenTools.break.hidden') }}</p>
+          <div class="break-quick">
+            <Button
+              v-for="m in [5, 10, 15]"
+              :key="m"
+              :label="t('screenTools.break.forMinutes', { n: m })"
+              severity="secondary"
+              @click="showBreak({ minutes: m }).catch(drawerFailed)"
+            />
+            <Button
+              :label="t('screenTools.break.hide')"
+              text
+              :disabled="!live.breakCard.shown"
+              @click="hideBreak().catch(drawerFailed)"
+            />
+          </div>
+        </template>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
@@ -338,6 +366,7 @@ import RedemptionList from './RedemptionList.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
 import { counterTile, stepCounter } from './counters'
+import { hideBreak, showBreak } from './screenTools'
 import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
 import MusicPlayer from './MusicPlayer.vue'
 import { playerLine } from './music'
@@ -527,6 +556,12 @@ const lines = computed<Record<string, Line>>(() => {
         : live.value.counters
           ? counterTile(live.value.counters)
           : { state: 'loading' },
+    'screen-tools':
+      status !== 'open'
+        ? { state: status }
+        : live.value.breakCard
+          ? breakLine(live.value.breakCard)
+          : { state: 'loading' },
   }
 })
 const count = (n: number) => n.toLocaleString('zh-TW')
@@ -555,6 +590,11 @@ function bgmLine(p: Schemas['BgmPlayerPayload']): Line {
   return { state: 'ready', num: p.track.title, text }
 }
 
+/** The 畫面工具 tile: whether the break card is on screen. */
+function breakLine(card: Schemas['BreakPayload']): Line {
+  if (!card.shown) return { state: 'ready', text: t('screenTools.break.hidden') }
+  return { state: 'ready', num: t('screenTools.break.shownShort'), text: card.text || t('screenTools.break.heading') }
+}
 
 const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
@@ -664,7 +704,7 @@ const sendAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm' | 'counter') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm' | 'counter' | 'break') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.
@@ -769,6 +809,12 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   font-size: 0.85em;
   background: var(--p-content-hover-background);
+}
+
+.break-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .counter-list li {

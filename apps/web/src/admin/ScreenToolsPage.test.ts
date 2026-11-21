@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { i18n } from '../i18n'
+import { type Schemas, client } from './api'
+import ScreenToolsPage from './ScreenToolsPage.vue'
+import { testRouter } from './testRouter'
+
+vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
+
+const ok = (data?: unknown) => Promise.resolve({ data, response: new Response(null, { status: 200 }) })
+let socket: { onmessage?: (e: { data: string }) => void }
+let post: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>
+
+const card: Schemas['BreakPayload'] = {
+  shown: false,
+  text: '休息一下',
+  endText: '馬上回來',
+  endsAt: null,
+  mode: 'minutes',
+  minutes: 10,
+  untilTime: '20:00',
+}
+const snapshot = (payload: Schemas['BreakPayload']) => ({
+  type: 'snapshot',
+  version: 1,
+  seq: 1,
+  payload: {
+    'chat.removed': [],
+    'chat.message': [],
+    'obs.status': [],
+    'obs.state': [],
+    'presentation.queue': [],
+    'stream.status': [],
+    'bgm.player': [],
+    'counter.values': [],
+    'counter.marathon': [],
+    'screen.break': [{ id: 'b', type: 'screen.break', version: 1, seq: 1, occurredAt: '', source: 'system', payload }],
+    'chat.text_size': [],
+  },
+})
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'WebSocket',
+    class {
+      onmessage?: (e: { data: string }) => void
+      constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        socket = this
+      }
+      close() {}
+    },
+  )
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
+  post = vi.fn(() => ok(card))
+  put = vi.fn((_: string, init: { body: Schemas['BreakSettingsBody'] }) => ok(init.body))
+  vi.spyOn(client, 'POST').mockImplementation(post as never)
+  vi.spyOn(client, 'PUT').mockImplementation(put as never)
+})
+enableAutoUnmount(afterEach)
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+async function page(payload = card) {
+  const wrapper = mount(ScreenToolsPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+  socket.onmessage!({ data: JSON.stringify(snapshot(payload)) })
+  await flushPromises()
+  return wrapper
+}
+
+it('saves the text with the other settings and shows the card for its minutes', async () => {
+  const wrapper = await page()
+  expect(wrapper.text()).toContain('休息卡片沒有顯示')
+  const text = wrapper.get('#break-text')
+  await text.setValue('準備中')
+  await text.trigger('blur')
+  await flushPromises()
+  expect(put).toHaveBeenCalledWith('/api/admin/screen-tools/break', {
+    body: { text: '準備中', end_text: '馬上回來', mode: 'minutes', minutes: 10, until_time: '20:00' },
+  })
+
+  await wrapper.findAll('button').find((b) => b.text() === '顯示並開始倒數')!.trigger('click')
+  await flushPromises()
+  expect(post).toHaveBeenCalledWith('/api/admin/screen-tools/break/show', { body: { minutes: 10 } })
+})
+
+it('counts to the next time of day in the until mode, and hides a shown card', async () => {
+  const wrapper = await page({ ...card, mode: 'until', shown: true, endsAt: new Date(Date.now() + 60_000).toISOString() })
+  expect(wrapper.text()).toContain('休息卡片顯示中')
+  expect(wrapper.find('#break-until').exists()).toBe(true)
+
+  await wrapper.findAll('button').find((b) => b.text() === '顯示並開始倒數')!.trigger('click')
+  await flushPromises()
+  const body = post.mock.calls[0][1].body as { until: string }
+  const until = new Date(body.until)
+  expect([until.getHours(), until.getMinutes()]).toEqual([20, 0])
+  expect(until.getTime()).toBeGreaterThan(Date.now())
+
+  await wrapper.findAll('button').find((b) => b.text() === '隱藏')!.trigger('click')
+  await flushPromises()
+  expect(post).toHaveBeenCalledWith('/api/admin/screen-tools/break/hide')
+})

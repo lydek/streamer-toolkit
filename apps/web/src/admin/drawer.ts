@@ -106,11 +106,14 @@ export function onDrawerSubmit(submit: Submit): () => void {
   return remove
 }
 
+/** Settings sent together in one PUT share a queue, so each save starts after the previous one updated its `saved`. */
+export const settingQueue = () => ({ chain: Promise.resolve(true) })
+
 /**
  * An immediately applied drawer setting (no Save button): bind `value`, call `commit()` on toggle, or on Enter
  * and blur for text. A failed save restores the saved value and shows the error at the top of the drawer.
  */
-export function useDrawerSetting<T>(saved: Ref<T>, save: (value: T) => Promise<unknown>) {
+export function useDrawerSetting<T>(saved: Ref<T>, save: (value: T) => Promise<unknown>, queue = settingQueue()) {
   const value = ref(saved.value) as Ref<T>
   watch(saved, (v) => (value.value = v))
   // The error this setting showed, so another setting's success does not hide it (and this one's does).
@@ -135,8 +138,7 @@ export function useDrawerSetting<T>(saved: Ref<T>, save: (value: T) => Promise<u
     }
   }
   // Chained, so blur followed at once by Esc saves once: the second call sees the value already saved.
-  let chain = Promise.resolve(true)
-  const commit = () => (chain = chain.then(apply))
+  const commit = () => (queue.chain = queue.chain.then(apply))
   onDrawerSubmit(async () => {
     const ok = await commit()
     const failed = unreported

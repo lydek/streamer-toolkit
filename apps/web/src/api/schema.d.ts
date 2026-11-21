@@ -1049,6 +1049,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/screen-tools/break": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The break card now (also kept current by `screen.break`). */
+        get: operations["get_break"];
+        /** Saves the settings; a shown card keeps its countdown and shows the new texts. */
+        put: operations["set_break_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/break/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["hide_break"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/break/show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shows the card and starts its countdown from now. */
+        post: operations["show_break"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/alert": {
         parameters: {
             query?: never;
@@ -1707,6 +1758,54 @@ export interface components {
         };
         /** @enum {string} */
         BgmTestType: "bgm.test";
+        /**
+         * @description A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only
+         *     the latest one.
+         */
+        BreakEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["BreakPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["BreakType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @enum {string} */
+        BreakMode: "minutes" | "until";
+        /** @description The break card. `text` and `endText` are broadcaster text: render them as text. */
+        BreakPayload: {
+            /** @description Shown instead of the countdown once `endsAt` has passed; the card stays until hidden. */
+            endText: string;
+            /** @description UTC, RFC 3339; set while shown. */
+            endsAt?: string | null;
+            /** Format: int32 */
+            minutes: number;
+            mode: components["schemas"]["BreakMode"];
+            shown: boolean;
+            text: string;
+            /** @description `HH:MM`, local time. */
+            untilTime: string;
+        };
+        /** @description The break card's settings. */
+        BreakSettingsBody: {
+            /** @description At most 100 characters after trimming; may be empty. */
+            end_text: string;
+            /**
+             * Format: int32
+             * @description 1–1440.
+             */
+            minutes: number;
+            mode: components["schemas"]["BreakMode"];
+            /** @description At most 100 characters after trimming; may be empty. */
+            text: string;
+            /** @description `HH:MM`. */
+            until_time: string;
+        };
+        /** @enum {string} */
+        BreakType: "screen.break";
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
          * @enum {string}
@@ -2470,6 +2569,7 @@ export interface components {
         OverlayCounts: {
             alerts: number;
             bgm: number;
+            break: number;
             chat: number;
             checkin: number;
             counter: number;
@@ -2817,6 +2917,12 @@ export interface components {
             /** @description Raw text. */
             userName: string;
         };
+        /** @description Shows the card: give `minutes` (1–1440) or `until` (UTC, RFC 3339, within the next 24 hours). */
+        ShowBreakBody: {
+            /** Format: int32 */
+            minutes?: number | null;
+            until?: string | null;
+        };
         SimulatedAlert: {
             /**
              * Format: int32
@@ -2881,6 +2987,8 @@ export interface components {
             "obs.status": components["schemas"]["ObsStatusEvent"][];
             /** @description At most one: the latest presentation queue status. */
             "presentation.queue": components["schemas"]["PresentationQueueEvent"][];
+            /** @description At most one: the break card. */
+            "screen.break": components["schemas"]["BreakEvent"][];
             /** @description At most one: the latest live state. */
             "stream.status": components["schemas"]["StreamStatusEvent"][];
         };
@@ -5955,6 +6063,144 @@ export interface operations {
                 };
             };
             /** @description `redemption.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_break: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakPayload"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_break_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BreakSettingsBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakPayload"];
+                };
+            };
+            /** @description `overlays.invalid`: out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    hide_break: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakPayload"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    show_break: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowBreakBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakPayload"];
+                };
+            };
+            /** @description `overlays.invalid`: neither or both given, or out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

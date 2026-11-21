@@ -37,6 +37,7 @@ fn modules() -> Vec<&'static Migrator> {
         &redemption::MIGRATOR,
         &checkin::MIGRATOR,
         &counter::MIGRATOR,
+        &overlays::MIGRATOR,
         &stream::MIGRATOR,
         &activity::MIGRATOR,
         &viewers::MIGRATOR,

@@ -452,7 +452,7 @@ async fn overlay_counts_need_the_token() {
     let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
-        serde_json::json!({"chat": 0, "alerts": 0, "checkin": 0, "sound": 0, "bgm": 0, "counter": 0, "marathon": 0, "other": 0})
+        serde_json::json!({"chat": 0, "alerts": 0, "checkin": 0, "sound": 0, "bgm": 0, "counter": 0, "marathon": 0, "break": 0, "other": 0})
     );
     let unauthorized = get_req("/api/admin/overlays", "127.0.0.1:47810")
         .body(Body::empty())
