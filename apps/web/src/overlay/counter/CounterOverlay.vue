@@ -5,17 +5,28 @@
       <span class="name">{{ c.name }}</span>
       <span class="value">{{ c.value }}</span>
     </li>
+    <!-- A test value from 模擬事件, kept apart from the real counters (docs/architecture.md). -->
+    <li v-if="test !== undefined" class="test" data-counter-test>
+      <span class="name">{{ t('overlay.counter.test') }}</span>
+      <span class="value">{{ test }}</span>
+    </li>
   </ul>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, shallowRef } from 'vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { components } from '../../api/schema'
 import type { Incoming } from '../chat/chat'
 
 // `/overlay/counter/`: every counter's name and value, kept current by `counter.values`.
 const RETRY_MS = 2000
+// How long a `counter.test` value stays; another one starts the time again.
+const TEST_MS = 3000
+const { t } = useI18n()
 const counters = shallowRef<components['schemas']['CounterValue'][]>([])
+const test = ref<number>()
+let hideTest: ReturnType<typeof setTimeout> | undefined
 let lastSeq = 0
 let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
@@ -28,6 +39,10 @@ function receive(msg: Incoming) {
   } else if (msg.type === 'counter.values' && msg.seq > lastSeq) {
     lastSeq = msg.seq
     counters.value = msg.payload.counters
+  } else if (msg.type === 'counter.test') {
+    test.value = msg.payload.value
+    clearTimeout(hideTest)
+    hideTest = setTimeout(() => (test.value = undefined), TEST_MS)
   }
 }
 
@@ -43,6 +58,7 @@ connect()
 onBeforeUnmount(() => {
   stopped = true
   clearTimeout(retry)
+  clearTimeout(hideTest)
   ws?.close()
 })
 </script>
@@ -75,5 +91,10 @@ li {
 .value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.test {
+  color: #ffd54f;
+  font-style: italic;
 }
 </style>

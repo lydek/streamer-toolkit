@@ -4,8 +4,8 @@
 use utoipa::OpenApi;
 
 use crate::{
-    admin, backup, chat_display, chat_dock, chat_log, event_feed, home_tiles, obs, overlay, queue,
-    stream_summary, tab_bar, templates, text_size, update,
+    admin, backup, chat_display, chat_dock, chat_log, event_feed, home_tiles, obs, overlay,
+    overlay_test, queue, stream_summary, tab_bar, templates, text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -32,6 +32,7 @@ use crate::{
         admin::simulate::simulate_chat,
         admin::simulate::simulate_alert,
         admin::simulate::simulate_checkin,
+        overlay_test::test_overlay,
         backup::export_backup,
         backup::preview_restore,
         backup::confirm_restore,
@@ -79,6 +80,8 @@ use crate::{
         queue::PresentationQueueEvent,
         queue::PresentationStoppedEvent,
         queue::PresentationSkippedEvent,
+        overlay_test::CounterTestEvent,
+        overlay_test::MarathonTestEvent,
         stream_summary::StreamSummary,
         chat_display::BadgeImage,
         toolkit_core::settings::ChatDisplay,

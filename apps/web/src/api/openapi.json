@@ -3356,6 +3356,48 @@
         }
       }
     },
+    "/api/admin/simulate/overlay-test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Shows a fixed test value on the counter or marathon timer overlay for a few seconds (`counter.test`,\n`marathon.test`); no counter or timer changes.",
+        "operationId": "test_overlay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlayTest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`simulate.invalid_overlay`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`simulate.feature_off`: counters are turned off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds": {
       "get": {
         "tags": [
@@ -6001,6 +6043,64 @@
           }
         }
       },
+      "CounterTestEvent": {
+        "type": "object",
+        "description": "A `counter.test` event exactly as `/ws/overlay` sends it: the counter overlay shows an extra test row for a few\nseconds. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CounterTestPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CounterTestType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CounterTestPayload": {
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CounterTestType": {
+        "type": "string",
+        "enum": [
+          "counter.test"
+        ]
+      },
       "CounterValue": {
         "type": "object",
         "description": "One counter on the overlay. `name` is broadcaster text: render it as text.",
@@ -6657,6 +6757,65 @@
           }
         }
       },
+      "MarathonTestEvent": {
+        "type": "object",
+        "description": "A `marathon.test` event exactly as `/ws/overlay` sends it: the marathon overlay shows a fixed time for a few\nseconds. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MarathonTestPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MarathonTestType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "MarathonTestPayload": {
+        "type": "object",
+        "required": [
+          "remainingMs"
+        ],
+        "properties": {
+          "remainingMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "MarathonTestType": {
+        "type": "string",
+        "enum": [
+          "marathon.test"
+        ]
+      },
       "MarathonType": {
         "type": "string",
         "enum": [
@@ -6989,6 +7148,17 @@
           "sound": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "OverlayTest": {
+        "type": "object",
+        "required": [
+          "overlay"
+        ],
+        "properties": {
+          "overlay": {
+            "$ref": "#/components/schemas/TestOverlay"
           }
         }
       },
@@ -8906,6 +9076,14 @@
             "minimum": 0
           }
         }
+      },
+      "TestOverlay": {
+        "type": "string",
+        "description": "Which overlay gets a test value.",
+        "enum": [
+          "counter",
+          "marathon"
+        ]
       },
       "TextSizeChoice": {
         "type": "object",

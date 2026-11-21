@@ -39,7 +39,7 @@ beforeEach(() => {
   calls.get.mockImplementation((path: string) => Promise.resolve(answers[path]))
   calls.post.mockReset()
   calls.post.mockResolvedValue(undefined)
-  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin'])
+  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin', 'counter'])
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -71,6 +71,11 @@ describe('SimulateDialog', () => {
     // 集滿 uses the card's own slot count.
     await press('checkin', '集滿')
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/checkin', { body: { stamps: 7 } })
+    // The Host picks the test values; the dialog only names the overlay.
+    await press('counter', '顯示測試值')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'counter' } })
+    await press('marathon', '顯示測試值')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'marathon' } })
     wrapper.unmount()
   })
 
@@ -95,6 +100,11 @@ describe('SimulateDialog', () => {
     const wrapper = await opened()
     expect(row('sound').textContent).toContain('功能已關閉')
     expect([...row('sound').querySelectorAll('button')].every((b) => b.disabled)).toBe(true)
+    // Both the counter and the marathon timer rows follow the counter feature.
+    for (const id of ['counter', 'marathon']) {
+      expect(row(id).textContent).toContain('功能已關閉')
+      expect(row(id).querySelector('button')!.disabled).toBe(true)
+    }
     await press('chat', '送一則訊息')
     expect(wrapper.get('[role="status"]').text()).toContain('boom')
     wrapper.unmount()
