@@ -14,12 +14,15 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use toolkit_core::settings::CheckinSettings;
+use toolkit_core::{
+    commands::{Allowed, CommandError},
+    settings::CheckinSettings,
+};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     application::{self, CheckinService, ConfigError, ManualError, Outcome, settings_of},
-    domain::{ImportEntry, ImportedViewer, SkipReason},
+    domain::{ImportEntry, ImportedViewer, Rules, SkipReason},
     infrastructure::db,
 };
 
@@ -39,8 +42,10 @@ pub(crate) struct HttpState {
 /// The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CheckinSettingsBody {
-    /// One word, at most 25 characters.
+    /// One word, at most 25 characters; no other feature's command may have it (ignoring case).
     pub command: String,
+    /// Who may check in with the command; the broadcaster always may.
+    pub allowed: Allowed,
     /// IANA time zone, e.g. `Asia/Taipei`.
     pub time_zone: String,
     /// Local hour a new business day starts, 0–23.
@@ -51,9 +56,11 @@ pub struct CheckinSettingsBody {
     pub reward_id: Option<String>,
 }
 
-impl From<CheckinSettings> for CheckinSettingsBody {
-    fn from(s: CheckinSettings) -> Self {
+impl CheckinSettingsBody {
+    fn of(rules: &Rules) -> Self {
+        let s = settings_of(rules);
         Self {
+            allowed: rules.allowed,
             command: s.command,
             time_zone: s.time_zone,
             reset_hour: s.reset_hour,
@@ -67,6 +74,16 @@ impl From<CheckinSettings> for CheckinSettingsBody {
 #[derive(Serialize, ToSchema)]
 pub struct ErrorBody {
     code: String,
+}
+
+/// `commands.taken`: which feature's command already has the name.
+#[derive(Serialize, ToSchema)]
+pub struct CommandTakenBody {
+    code: String,
+    /// The module whose command has it.
+    module: String,
+    /// That command's name as saved.
+    name: String,
 }
 
 fn error(status: StatusCode, code: &str) -> Response {
@@ -444,7 +461,7 @@ pub(crate) async fn manual_check_in(
     responses((status = 200, body = CheckinSettingsBody))
 )]
 pub(crate) async fn checkin_settings(State(s): State<Arc<HttpState>>) -> Json<CheckinSettingsBody> {
-    Json(settings_of(&s.service.config().rules()).into())
+    Json(CheckinSettingsBody::of(&s.service.config().rules()))
 }
 
 #[utoipa::path(
@@ -455,6 +472,7 @@ pub(crate) async fn checkin_settings(State(s): State<Arc<HttpState>>) -> Json<Ch
     responses(
         (status = 200, description = "The settings as saved", body = CheckinSettingsBody),
         (status = 400, description = "`checkin.invalid_settings`", body = ErrorBody),
+        (status = 409, description = "`commands.taken`: another feature's command has the name", body = CommandTakenBody),
         (status = 500, description = "`settings.save_failed`", body = ErrorBody),
     )
 )]
@@ -469,10 +487,19 @@ pub(crate) async fn set_checkin_settings(
         card_slots: body.card_slots,
         reward_id: body.reward_id.filter(|id| !id.trim().is_empty()),
     };
-    match s.service.config().update(&next) {
-        Ok(rules) => Json(CheckinSettingsBody::from(settings_of(&rules))).into_response(),
+    match s.service.config().update(&next, body.allowed) {
+        Ok(rules) => Json(CheckinSettingsBody::of(&rules)).into_response(),
         Err(e @ ConfigError::Invalid(_)) => error(StatusCode::BAD_REQUEST, &e.to_string()),
-        Err(e @ ConfigError::SaveFailed(_)) => {
+        Err(ConfigError::Command(CommandError::Taken { module, name })) => (
+            StatusCode::CONFLICT,
+            Json(CommandTakenBody {
+                code: "commands.taken".into(),
+                module: module.into(),
+                name,
+            }),
+        )
+            .into_response(),
+        Err(ConfigError::Command(e @ CommandError::SaveFailed(_))) => {
             error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
         }
     }

@@ -500,7 +500,10 @@ pub(crate) mod tests {
     pub(crate) fn service(pool: &SqlitePool, name: &str) -> (CheckinService, Arc<Modules>) {
         let dir = data_dir(name);
         let modules = Arc::new(Modules::load(dir.clone()));
-        let config = Arc::new(Config::load(dir));
+        let config = Arc::new(Config::load(
+            dir.clone(),
+            crate::application::test_commands(&dir),
+        ));
         let service = CheckinService::start(
             SqliteCheckins::new(pool.clone()),
             modules.clone(),
@@ -518,6 +521,42 @@ pub(crate) mod tests {
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn only_those_allowed_check_in_and_the_broadcaster_always_may() {
+        use toolkit_core::{commands::Allowed, events::ChatBadge};
+        let pool = pool().await;
+        let (service, _) = service(&pool, "allowed");
+        service
+            .config()
+            .update(
+                &toolkit_core::settings::CheckinSettings::default(),
+                Allowed::Vip,
+            )
+            .unwrap();
+        let with = |id: &str, badges: &[ChatBadge]| ChatMessage {
+            broadcaster_id: "100".into(),
+            badges: badges.to_vec(),
+            ..chat(id, "!打卡", "2026-11-16T01:00:00Z")
+        };
+        for m in [
+            with("1", &[]),
+            with("2", &[ChatBadge::Subscriber]),
+            with("3", &[ChatBadge::Vip]),
+            with("4", &[ChatBadge::Moderator]),
+            with("100", &[]),
+        ] {
+            service.receive_chat(&m, Source::Twitch);
+        }
+        wait_for_count(&pool, 3).await;
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT twitch_user_id FROM checkin_viewers ORDER BY twitch_user_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["100", "3", "4"]);
     }
 
     #[tokio::test]

@@ -888,8 +888,20 @@
       "closed": "已斷線，正在重新連線……"
     }
   },
+  "commands": {
+    "allowed": {
+      "label": "誰能用",
+      "everyone": "所有人",
+      "subscriber": "訂閱者",
+      "vip": "VIP",
+      "moderator": "管理員"
+    }
+  },
   "errors": {
     "unknown": "發生錯誤（{code}）",
+    "commands": {
+      "taken": "已被{feature}的「!{name}」使用。"
+    },
     "admin": {
       "invalid_client_id": "Client ID 格式不正確（只能是英文字母與數字）。",
       "open_failed": "無法開啟瀏覽器。",

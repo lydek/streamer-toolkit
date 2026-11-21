@@ -12,6 +12,16 @@
         @blur="commitCommand"
       />
     </div>
+    <label id="checkin-allowed-label">{{ t('commands.allowed.label') }}</label>
+    <Select
+      v-model="allowed.value.value"
+      input-id="checkin-allowed"
+      :options="allowedOptions"
+      option-label="label"
+      option-value="value"
+      aria-labelledby="checkin-allowed-label"
+      @update:model-value="allowed.commit()"
+    />
     <label id="checkin-reward-label">{{ t('settings.checkin.reward') }}</label>
     <Select
       v-model="reward.value.value"
@@ -71,7 +81,14 @@ const emit = defineEmits<{ error: [unknown] }>()
 
 const loaded = ref(false)
 const loadFailed = ref(false)
-let saved: Schemas['CheckinSettingsBody'] = { command: '', time_zone: '', reset_hour: 0, card_slots: 0, reward_id: null }
+let saved: Schemas['CheckinSettingsBody'] = {
+  command: '',
+  allowed: 'everyone',
+  time_zone: '',
+  reset_hour: 0,
+  card_slots: 0,
+  reward_id: null,
+}
 let queue: Promise<unknown> = Promise.resolve()
 function put(patch: Partial<Schemas['CheckinSettingsBody']>) {
   const run = queue.then(async () => {
@@ -88,6 +105,11 @@ function commitCommand() {
   command.value.value = command.value.value.trim().replace(/^!/, '')
   void command.commit()
 }
+const allowedSaved = ref<Schemas['Allowed']>('everyone')
+const allowed = useDrawerSetting(allowedSaved, (v) => put({ allowed: v }))
+const allowedOptions = computed(() =>
+  (['everyone', 'subscriber', 'vip', 'moderator'] as const).map((value) => ({ value, label: t(`commands.allowed.${value}`) })),
+)
 // '' = no reward (chat only); the Host takes null for it.
 const rewardSaved = ref('')
 const reward = useDrawerSetting(rewardSaved, (v) => put({ reward_id: v || null }))
@@ -128,6 +150,7 @@ onMounted(async () => {
   try {
     saved = await api(client.GET('/api/admin/checkin/settings'))
     commandSaved.value = saved.command
+    allowedSaved.value = saved.allowed
     zoneSaved.value = saved.time_zone
     hourSaved.value = saved.reset_hour
     slotsSaved.value = String(saved.card_slots)

@@ -9,7 +9,7 @@ DDD＋Clean Architecture，以 Modular Monolith 落地：單一程式、每個�
 
 ```text
 crates/
-  core/            # 共用核心（package 名稱 `toolkit-core`，避開 Rust 內建的 `core`）：設定、模組註冊與啟用開關、內部整合事件、事件 envelope、記憶體事件廣播、outbox（含自己的 migration）
+  core/            # 共用核心（package 名稱 `toolkit-core`，避開 Rust 內建的 `core`）：設定、模組註冊與啟用開關、聊天指令表、內部整合事件、事件 envelope、記憶體事件廣播、outbox（含自己的 migration）
   integrations/    # Twitch（EventSub）、OBS（obws）Adapter：外部事件轉內部事件，處理 OAuth、重連、退避、限流
   modules/
     chat/          # 聊天室顯示（薄）
@@ -141,6 +141,10 @@ apps/
   - 樣板：只有內建樣板 `default`、`banner`、`text`（原始檔在 `apps/web/src/overlay/alerts/templates/<id>/`，只用 HTML／CSS，同時內嵌進執行檔）；沒有資料夾樣板。選擇記在 `settings.json` 的 `alert_template`（預設 `default`，無法辨識的值當成 `default`），管理 UI 用 `GET`／`PUT /api/admin/templates/alerts`（`{ "selected": "<id>" }`；其餘值回 400 `template.unknown`，存檔失敗回 500 `settings.save_failed`）讀取與切換，存檔後發布 `template.changed`（`overlay` 為 `alerts`），Overlay 立即換掉。`GET /templates/alerts/{*path}` 提供目前選擇的樣板，`GET /templates/built-in/alerts/{id}/{*path}` 提供任一款給預覽（未知的 ID 回 404）；類型白名單、路徑檢查與標頭都和聊天室樣板相同。綁定方式：`data-alert-stage` 元素（目前播放的特效放在裡面）與 `<template data-alert>`（一則特效的標記）；`data-field="title"` 填「誰做了什麼」，`data-field="message"` 填觀眾留言（沒有留言就移除）；最上層元素加上 `data-kind`（事件種類）與 CSS 變數 `--duration`，時間到就移除。文字一律以 `textContent` 寫入；Overlay 一樣以 `DOMParser` 解析並移除會執行的內容，相對路徑指向樣板目錄。
   - 音效：預設音效 `chime.wav` 由 `scripts/generate-chime.mjs` 只用 Node 內建模組合成（不下載外部音檔，記在 `assets/CREDITS.md`），打包進建置產物。每種事件可在特效完整頁各自選內建音效（預設）、音效庫的一個音效或靜音（見「音效庫」）；payload 的 `sound` 告訴 Overlay 要播哪一個（`built_in` 帶 `volume`、`silent`，或 `file` 帶 `url` 與 `volume`），每則特效開始時播放一次。OBS 瀏覽器來源允許自動播放；要在 OBS 混音器調整音量，勾選來源的「透過 OBS 控制音訊」。
 - **集點卡 Overlay**（`/overlay/checkin/`）：每次打卡成功（重複的不算）就把卡片排進同一條呈現佇列，輪到時送出一則 `checkin.stamped`：觀眾名稱、頭像網址、目前的格數與總格數、累計次數、是否剛好集滿、顯示時間（5 秒，之後隔 1 秒才送下一則），不放進快照。頭像向 Twitch（Helix Get Users）查一次後存起來，只接受 `https://static-cdn.jtvnw.net/` 的網址，Overlay 也再檢查一次。名稱以 Vue 的文字插值顯示。打卡設定可為一般打卡與集滿各選音效庫的一個音效（預設靜音），payload 的 `sound`（`url`、`volume`；靜音為 `null`）隨卡片播放一次。只有一款內建樣式（純 CSS，沒有外部素材），集滿時有不同的效果。模擬器（`POST /api/admin/simulate/checkin`，`source=simulation`）只送到 Overlay，不寫入紀錄。
+- **聊天指令**（`core` 的 `commands`，Host 組合）：各功能的聊天指令存在同一張表，`settings.json` 的 `chat_commands`（以指令的 key 對應名稱與「誰能用」；沒存過的用宣告的預設名稱、所有人可用）。每個模組宣告自己的指令（key、所屬模組、預設名稱），Host 把所有宣告組合成一張表交給各模組；模組只透過這張表存取自己的指令，不讀別的模組的資料。
+  - 撞名：存檔時名稱和其他功能的指令相同（英文不分大小寫）就拒絕，不存任何東西；管理 API 回 409 `commands.taken`，並帶 `module`（用到它的模組）與 `name`（它存的名稱），管理 UI 寫成：已被打卡簽到的「!打卡」使用。
+  - 誰能用：所有人、訂閱者、VIP、管理員，所有功能用同一個判斷（看 Twitch 聊天徽章顯示的身分）。每一級也包含上面的級別（訂閱者 < VIP < 管理員），實況主本人永遠可以用所有指令。
+  - 目前只有打卡指令（key `checkin`）。舊版存在 `checkin.command` 的指令，在啟動時搬進表一次，之後不再寫入原位置。
 - **音效庫**（sound 模組）：管理 API `GET`／`POST /api/admin/sounds`、`PUT`／`DELETE /api/admin/sounds/{id}`。
   - 匯入：body 就是檔案本身，`?name=` 帶原始檔名；上限 10 MB（`DefaultBodyLimit`，超過回 413 `sound.too_large`）。副檔名與檔案開頭的 magic bytes 必須是同一種格式：MP3（`ID3` 或 MPEG frame sync）、WAV（`RIFF`…`WAVE`）或 OGG（`OggS`），否則回 400 `sound.unsupported_type`。
   - 檔案複製到資料夾的 `sounds/`，以 UUID v7 命名；原始檔名只當名稱（以文字顯示），不當路徑。名稱、音量（0–100%）與格式記在 `settings.json` 的 `sound.library`。刪除時先從 `settings.json` 移除，再刪檔案。

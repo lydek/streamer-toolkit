@@ -3,6 +3,7 @@
 
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
+use toolkit_core::commands::Allowed;
 use uuid::Uuid;
 
 /// Twitch's numeric user ID: the key that identifies a viewer across name changes.
@@ -158,10 +159,11 @@ impl RewardId {
     }
 }
 
-/// The check-in rules in force: command, reward, business day and card size.
+/// The check-in rules in force: command and who may use it, reward, business day and card size.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Rules {
     pub(crate) command: Command,
+    pub(crate) allowed: Allowed,
     pub(crate) reward: Option<RewardId>,
     pub(crate) day: BusinessDay,
     pub(crate) slots: CardSlots,

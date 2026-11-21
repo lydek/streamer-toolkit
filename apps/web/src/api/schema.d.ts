@@ -1266,6 +1266,12 @@ export interface components {
         };
         /** @enum {string} */
         AlertType: "alert";
+        /**
+         * @description Who may use a chat command. Each level also lets in the ones above it (subscriber, then VIP, then moderator),
+         *     and the broadcaster may always use every command.
+         * @enum {string}
+         */
+        Allowed: "everyone" | "subscriber" | "vip" | "moderator";
         /** @description What the admin UI may see; never contains tokens. */
         AuthStatus: {
             /** @enum {string} */
@@ -1556,12 +1562,14 @@ export interface components {
         };
         /** @description The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped. */
         CheckinSettingsBody: {
+            /** @description Who may check in with the command; the broadcaster always may. */
+            allowed: components["schemas"]["Allowed"];
             /**
              * Format: int32
              * @description Stamp card slots, 1–100.
              */
             card_slots: number;
-            /** @description One word, at most 25 characters. */
+            /** @description One word, at most 25 characters; no other feature's command may have it (ignoring case). */
             command: string;
             /**
              * Format: int32
@@ -1657,6 +1665,14 @@ export interface components {
         };
         ClientIdBody: {
             client_id: string;
+        };
+        /** @description `commands.taken`: which feature's command already has the name. */
+        CommandTakenBody: {
+            code: string;
+            /** @description The module whose command has it. */
+            module: string;
+            /** @description That command's name as saved. */
+            name: string;
         };
         DeviceLogin: {
             /** Format: int64 */
@@ -3203,6 +3219,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `commands.taken`: another feature's command has the name */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandTakenBody"];
                 };
             };
             /** @description `settings.save_failed` */

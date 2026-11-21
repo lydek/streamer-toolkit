@@ -55,6 +55,7 @@ fn start_quiet(
         sounds(&dir),
         Timing::default(),
         presenter(),
+        crate::application::test_commands(&dir),
     )
 }
 

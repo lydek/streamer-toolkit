@@ -259,7 +259,7 @@ async function loadLicenses(e: Event) {
   }
 }
 
-const report = (e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+const report = (e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)))
 
 async function run(action: () => Promise<unknown>) {
   busy.value = true
