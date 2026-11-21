@@ -19,8 +19,8 @@ use toolkit_core::{
 };
 
 use crate::domain::{
-    BusinessDay, CardSlots, CheckIn, Command, ImportedViewer, InvalidSettings, RewardId, Rules,
-    Trigger, TwitchUserId, Viewer,
+    BusinessDay, CardSlots, CheckIn, Command, Deduction, ImportedViewer, InvalidSettings, RewardId,
+    Rules, Trigger, TwitchUserId, Viewer,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +37,20 @@ pub(crate) enum Outcome {
     },
     /// The viewer already checked in on that business day; nothing was written.
     Repeat,
+}
+
+/// What became of a deduction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Deducted {
+    /// Recorded; the stamps still available after it.
+    Done {
+        available: u64,
+    },
+    /// More than is available; nothing was written.
+    NotEnough {
+        available: u64,
+    },
+    UnknownViewer,
 }
 
 /// Storage port; the SQLite implementation lives in `infrastructure::db`.
@@ -88,6 +102,14 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
         viewer: &Viewer,
         check_in: &CheckIn,
     ) -> impl Future<Output = Result<Outcome, RepositoryError>> + Send;
+
+    /// In one transaction: works out what the viewer has available and records `deduction` only if it fits.
+    fn deduct(
+        &self,
+        viewer_id: &str,
+        deduction: &Deduction,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Deducted, RepositoryError>> + Send;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -374,6 +396,11 @@ enum Job {
         day: Option<NaiveDate>,
         reply: oneshot::Sender<Result<Outcome, ManualError>>,
     },
+    Deduct {
+        viewer_id: String,
+        deduction: Deduction,
+        reply: oneshot::Sender<Result<Deducted, RepositoryError>>,
+    },
 }
 
 pub struct CheckinService {
@@ -482,6 +509,13 @@ impl CheckinService {
                         }
                         let _ = reply.send(result.map(|(_, outcome)| outcome));
                     }
+                    Job::Deduct {
+                        viewer_id,
+                        deduction,
+                        reply,
+                    } => {
+                        let _ = reply.send(repo.deduct(&viewer_id, &deduction, Utc::now()).await);
+                    }
                 }
             }
         });
@@ -585,6 +619,23 @@ impl CheckinService {
             reply,
         };
         let stopped = || ManualError::Storage(RepositoryError("check-in worker stopped".into()));
+        self.tx.send(job).map_err(|_| stopped())?;
+        answer.await.map_err(|_| stopped())?
+    }
+
+    /// Spends a viewer's stamps; handled in turn with the check-ins, so two at once never go below 0.
+    pub(crate) async fn deduct(
+        &self,
+        viewer_id: &str,
+        deduction: Deduction,
+    ) -> Result<Deducted, RepositoryError> {
+        let (reply, answer) = oneshot::channel();
+        let job = Job::Deduct {
+            viewer_id: viewer_id.to_owned(),
+            deduction,
+            reply,
+        };
+        let stopped = || RepositoryError("check-in worker stopped".into());
         self.tx.send(job).map_err(|_| stopped())?;
         answer.await.map_err(|_| stopped())?
     }

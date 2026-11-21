@@ -741,6 +741,19 @@
       "registered": "已登記 {name}（{date}）。",
       "already": "{name} 在 {date} 已經打過卡了，沒有重複計算。"
     },
+    "deduct": {
+      "available": "可用印章 {n}",
+      "open": "扣印章",
+      "for": "扣 {name} 的印章",
+      "amount": "扣幾格",
+      "reason": "原因（選填）",
+      "confirm": "確定扣除",
+      "cancel": "取消",
+      "done": "已扣 {name} {n} 格，還有 {left} 格可用。",
+      "log": "異動紀錄",
+      "logEmpty": "還沒有扣過印章。",
+      "logLine": "{name} 扣 {n} 格"
+    },
     "import": {
       "heading": "匯入舊打卡資料",
       "file": "選擇 JSON 檔",
@@ -1207,7 +1220,9 @@
       "invalid_date": "日期不正確：只能登記今天或過去的營運日。",
       "viewer_not_found": "找不到這位觀眾。",
       "storage_failed": "無法讀取或寫入打卡紀錄。",
-      "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。"
+      "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。",
+      "invalid_deduction": "扣除的格數要大於 0，原因最多 100 字。",
+      "not_enough_stamps": "可用印章不夠，沒有扣除。"
     },
     "redemption": {
       "invalid_filter": "篩選條件不正確。",

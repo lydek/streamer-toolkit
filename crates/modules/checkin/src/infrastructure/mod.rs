@@ -238,6 +238,8 @@ impl Subscriber for RedemptionCheckins {
         http::list_viewers,
         http::today,
         http::manual_check_in,
+        http::deduct_stamps,
+        http::list_deductions,
         http::preview_import,
         http::apply_import
     ),
