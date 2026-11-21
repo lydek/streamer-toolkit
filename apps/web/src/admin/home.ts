@@ -230,10 +230,18 @@ export interface Tile {
   tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue'
   /** Not a module's: shown whatever modules are on. */
   always?: boolean
+  /** Wider than a tile in the 12-column grid: `m` a third of a row, `w` a whole row. */
+  size?: 'm' | 'w'
 }
 
-/** Default home tiles, one per module (and the event feed); a disabled module shows no tile. */
+/** Default home order: the stage blocks, then one tile per module (and the event feed); a disabled module shows no tile. */
 export const TILES: Tile[] = [
+  // The stage blocks, shown on home itself (no drawer); the Host puts them first in lists saved before they joined.
+  { id: 'pending', icon: 'pi pi-exclamation-circle', tint: 'primary', always: true, size: 'w' },
+  { id: 'checklist', icon: 'pi pi-verified', tint: 'green', always: true, size: 'w' },
+  { id: 'stats', icon: 'pi pi-chart-bar', tint: 'blue', always: true, size: 'w' },
+  { id: 'summary', icon: 'pi pi-flag', tint: 'yellow', always: true, size: 'w' },
+  { id: 'queue', icon: 'pi pi-list', tint: 'red', always: true, size: 'm' },
   { id: 'chat', icon: 'pi pi-comments', tint: 'blue' },
   { id: 'alerts', icon: 'pi pi-bell', tint: 'yellow' },
   { id: 'feed', icon: 'pi pi-bolt', tint: 'yellow', always: true },

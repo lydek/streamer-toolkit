@@ -322,17 +322,38 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
         serde_json::from_slice::<serde_json::Value>(&body).unwrap()
     };
 
-    // A list saved while home grouped its tiles comes back once in the order it was shown: 「直播中」 first.
+    // A list saved while home grouped its tiles comes back once in the order it was shown: 「直播中」 first, and
+    // the stage blocks, which always showed above the tiles, before them.
+    let blocks = ["pending", "checklist", "stats", "summary", "queue"];
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("settings.json"),
         r#"{"home_tiles":["checkin","chat","sound","feed"]}"#,
     )
     .unwrap();
-    assert_eq!(
-        get(app_for(&dir)).await,
-        serde_json::json!(["chat", "feed", "checkin", "sound"])
-    );
+    let mut expected: Vec<&str> = blocks.to_vec();
+    expected.extend(["chat", "feed", "checkin", "sound"]);
+    assert_eq!(get(app_for(&dir)).await, serde_json::json!(expected));
+    // A one-grid list (version 1), even an emptied one, only gets the blocks.
+    std::fs::write(
+        dir.join("settings.json"),
+        r#"{"home_tiles":[],"home_tiles_version":1}"#,
+    )
+    .unwrap();
+    assert_eq!(get(app_for(&dir)).await, serde_json::json!(blocks));
+    // A full old list stays within what PUT takes, so it can be saved back as read.
+    let full: Vec<String> = (0..50).map(|n| format!("t{n}")).collect();
+    std::fs::write(
+        dir.join("settings.json"),
+        serde_json::json!({ "home_tiles": full, "home_tiles_version": 1 }).to_string(),
+    )
+    .unwrap();
+    let read = get(app_for(&dir)).await;
+    assert_eq!(read.as_array().unwrap().len(), 50);
+    assert_eq!(read[0], "pending");
+    assert_eq!(read[49], "t44");
+    let res = app_for(&dir).oneshot(put(&read.to_string())).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
     let res = app_for(&dir)
         .oneshot(put(r#"["checkin","chat"]"#))
         .await

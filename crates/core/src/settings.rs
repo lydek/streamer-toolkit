@@ -28,10 +28,10 @@ pub struct Settings {
     /// is written); `Some([])`: the broadcaster removed every tile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_tiles: Option<Vec<String>>,
-    /// `home_tiles` is in one flat order. A list saved while home showed its tiles in two groups is put in the
-    /// order it was shown once, the first time it is read (`crates/host/src/home_tiles.rs`).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub home_tiles_flat: bool,
+    /// Which home `home_tiles` was saved for (0: tiles in two groups, 1: one grid, 2: one grid with the stage
+    /// blocks). An older list is brought up to date once, the first time it is read (`crates/host/src/home_tiles.rs`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub home_tiles_version: u8,
     /// The admin UI's docked chat panel. `None`: never changed, the admin UI shows its defaults (closed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_dock: Option<ChatDock>,
@@ -293,7 +293,7 @@ impl Default for Settings {
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,
-            home_tiles_flat: false,
+            home_tiles_version: 0,
             chat_dock: None,
             chat_display: None,
             tab_bar: None,
@@ -388,6 +388,10 @@ pub fn save(config_dir: &Path, settings: &Settings) -> io::Result<()> {
     let tmp = path.with_extension("json.tmp");
     write_synced(&tmp, &serde_json::to_vec_pretty(settings)?)?;
     fs::rename(tmp, path)
+}
+
+fn is_zero(n: &u8) -> bool {
+    *n == 0
 }
 
 /// Reads, applies `change`, and saves in one step. Serialized so two callers never lose each other's change. A

@@ -49,12 +49,12 @@ afterEach(() => {
 
 describe('ArrangeTiles', () => {
   it('moves past any neighbour, keeps focus on the move button (or the other one at the edge) and announces', async () => {
-    const wrapper = arrange(null)
+    const wrapper = arrange(['chat', 'alerts', 'feed'])
     expect(button('chat', 'earlier').disabled).toBe(true)
     button('chat', 'later').focus()
     button('chat', 'later').click()
     await flushPromises()
-    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
+    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'feed'])
     expect(document.activeElement).toBe(button('chat', 'later'))
     expect(live()).toBe('聊天室移到第 2 個')
     // At the edge the move button is disabled, so focus goes to the other one.

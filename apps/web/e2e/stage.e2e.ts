@@ -65,7 +65,8 @@ async function open(
   return { state, push: (s: Schemas['StreamStatusPayload']) => push(s) }
 }
 
-const stage = (page: Page) => page.getByRole('region', { name: zh.stage.title })
+// The stage switch sits above the home grid; each stage's content is a block in the grid.
+const stage = (page: Page) => page.getByRole('main')
 const pressed = (page: Page, name: string) => stage(page).getByRole('button', { name, exact: true })
 
 test("while live it shows how long, the peak and this stream's numbers", async ({ page }) => {

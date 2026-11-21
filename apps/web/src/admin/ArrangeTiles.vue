@@ -8,7 +8,7 @@
         v-for="(tile, i) in arranged"
         :key="tile.id"
         class="item"
-        :class="{ over: over === tile.id }"
+        :class="[{ over: over === tile.id }, tile.size && `size-${tile.size}`]"
         :data-tile="tile.id"
         draggable="true"
         @dragstart="onDragstart($event, tile.id)"
@@ -229,17 +229,39 @@ function onDrop(target: string) {
   padding: 0;
 }
 
+/* The home's 12-column grid (HomeView.vue): a tile takes 3 columns, `size-m` 4, `size-w` the whole row. */
 .grid {
   display: grid;
-  /* 12.5rem = 200px at the default font size. */
-  grid-template-columns: repeat(auto-fill, minmax(min(12.5rem, 100%), 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.grid > li {
+  grid-column: span 3;
+}
+
+.grid > li.size-m {
+  grid-column: span 4;
+}
+
+.grid > li.size-w {
+  grid-column: 1 / -1;
+}
+
+@container view (max-width: 60rem) {
+  .grid > li {
+    grid-column: span 6;
+  }
+
+  .grid > li.size-m {
+    grid-column: 1 / -1;
+  }
 }
 
 /* A page narrower than 36rem (a window below about 600px): one column. */
 @container view (max-width: 36rem) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
+  .grid > li {
+    grid-column: 1 / -1;
   }
 }
 
