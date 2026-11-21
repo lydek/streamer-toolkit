@@ -8,7 +8,8 @@ import BackupRestore from './BackupRestore.vue'
 import CheckinImport from './CheckinImport.vue'
 
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
-const { client } = vi.hoisted(() => ({ client: { POST: vi.fn() } }))
+// GET: the backup page's sizes, which these tests do not look at.
+const { client } = vi.hoisted(() => ({ client: { POST: vi.fn(), GET: vi.fn(() => new Promise(() => {})) } }))
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), client }))
 const { previewRestore } = vi.hoisted(() => ({ previewRestore: vi.fn() }))
 vi.mock('./backup', async (original) => ({ ...(await original<typeof import('./backup')>()), previewRestore }))

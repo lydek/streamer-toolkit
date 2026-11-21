@@ -1,5 +1,5 @@
 import { errorMessage } from '../i18n'
-import { ApiError, api, client } from './api'
+import { ApiError, type Schemas, api, client } from './api'
 import { saveFile } from './save'
 
 /** What one restore upload request carries; the Host takes parts of up to 16 MB. */
@@ -21,17 +21,24 @@ export function backupError(e: unknown) {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** e.g. `streamer-toolkit-20261117-0930.stbackup`, in local time. */
-export const backupFileName = (d = new Date()) =>
-  `streamer-toolkit-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.stbackup`
+/** What to back up: both kinds, or only the data (settings and records) or only the media. */
+export type BackupChoice = 'all' | Schemas['Content']
+
+/**
+ * e.g. `streamer-toolkit-20261117-0930.stbackup` for both kinds, `…-0930-data.stbackup` or `…-0930-media.stbackup`
+ * for one, in local time, so exports of different kinds never share a name.
+ */
+export const backupFileName = (choice: BackupChoice = 'all', d = new Date()) =>
+  `streamer-toolkit-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${choice === 'all' ? '' : `-${choice}`}.stbackup`
 
 /**
  * Asks where to save first, then streams the backup there. Resolves `false` when the dialog is cancelled; without
  * the save dialog API the browser downloads the file.
  */
-export const saveBackup = () =>
-  saveFile(backupFileName(), { description: 'Streamer Toolkit', mime: 'application/octet-stream', extension: '.stbackup' }, async () => {
-    const backup = await api(client.GET('/api/admin/backup', { parseAs: 'stream' }))
+export const saveBackup = (choice: BackupChoice = 'all') =>
+  saveFile(backupFileName(choice), { description: 'Streamer Toolkit', mime: 'application/octet-stream', extension: '.stbackup' }, async () => {
+    const query = choice === 'all' ? {} : { contents: choice }
+    const backup = await api(client.GET('/api/admin/backup', { params: { query }, parseAs: 'stream' }))
     if (!backup) throw new Error('empty backup')
     return backup
   })
@@ -72,6 +79,9 @@ export async function previewRestore(file: File, onProgress: (p: RestoreProgress
     throw e
   }
 }
+
+/** How large the data and the media are now. */
+export const backupSizes = () => api(client.GET('/api/admin/backup/sizes'))
 
 /** Restores the staged backup: the app restarts and applies it before the database opens. */
 export const confirmRestore = () => api(client.POST('/api/admin/backup/restore'))

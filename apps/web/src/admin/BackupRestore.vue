@@ -1,5 +1,16 @@
 <template>
   <div class="stack">
+    <p v-if="sizes">{{ t('backup.sizes', { data: formatSize(sizes.data), media: formatSize(sizes.media) }) }}</p>
+    <div class="field">
+      <span id="backup-choice">{{ t('backup.choice') }}</span>
+      <SelectButton
+        v-model="choice"
+        :options="CHOICES"
+        :option-label="(c: BackupChoice) => t(`backup.choices.${c}`)"
+        :allow-empty="false"
+        aria-labelledby="backup-choice"
+      />
+    </div>
     <Button :label="t('backup.export')" icon="pi pi-download" :disabled="busy" @click="exportBackup" />
     <label for="restore-file">{{ t('backup.restoreFile') }}</label>
     <input id="restore-file" ref="input" type="file" accept=".stbackup" :disabled="busy" @change="choose" />
@@ -15,10 +26,15 @@
           {{ t('backup.createdAt') }}<time :datetime="preview.created_at">{{ formatTime(preview.created_at) }}</time>
         </li>
         <li>{{ t('backup.appVersion', { version: preview.app_version }) }}</li>
-        <li>{{ t('backup.records', { redemptions: preview.redemptions, checkins: preview.checkins }) }}</li>
-        <li>{{ t('backup.files', { templates: preview.templates, sounds: preview.sounds, music: preview.music, media: preview.media }) }}</li>
+        <li>{{ t('backup.contains', { kinds: preview.contents.map((c) => t(`backup.choices.${c}`)).join('、') }) }}</li>
+        <li v-if="preview.contents.includes('data')">
+          {{ t('backup.records', { redemptions: preview.redemptions, checkins: preview.checkins }) }}
+        </li>
+        <li v-if="preview.contents.includes('media')">
+          {{ t('backup.files', { templates: preview.templates, sounds: preview.sounds, music: preview.music, media: preview.media }) }}
+        </li>
       </ul>
-      <p>{{ t('backup.restoreNote') }}</p>
+      <p>{{ t(preview.contents.length === 1 ? `backup.restoreOnly.${preview.contents[0]}` : 'backup.restoreNote') }}</p>
       <Button :label="t('backup.restore')" icon="pi pi-replay" :disabled="busy" @click="restore" />
     </template>
     <p v-if="restarting" role="status">{{ t('backup.restarting') }}</p>
@@ -28,11 +44,22 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import ProgressBar from 'primevue/progressbar'
+import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas } from './api'
-import { type RestoreProgress, backupError, confirmRestore, formatSize, previewRestore, saveBackup, sizeUnit } from './backup'
+import {
+  type BackupChoice,
+  type RestoreProgress,
+  backupError,
+  backupSizes,
+  confirmRestore,
+  formatSize,
+  previewRestore,
+  saveBackup,
+  sizeUnit,
+} from './backup'
 import { errorToast, successToast } from './home'
 
 const { t, locale } = useI18n()
@@ -42,6 +69,9 @@ const input = ref<HTMLInputElement>()
 const preview = shallowRef<Schemas['RestorePreview']>()
 const error = ref('')
 const restarting = ref(false)
+const CHOICES: BackupChoice[] = ['all', 'data', 'media']
+const choice = ref<BackupChoice>('all')
+const sizes = shallowRef<Schemas['BackupSizes']>()
 const progress = shallowRef<RestoreProgress>()
 let controller: AbortController | undefined
 
@@ -55,13 +85,15 @@ const progressText = computed(() => {
   return t('backup.uploading', { sent: formatSize(p.sent, unit).split(' ')[0], total: formatSize(p.total, unit) })
 })
 onBeforeUnmount(() => controller?.abort())
+// Only a hint for choosing: without it the page works the same.
+backupSizes().then((s) => (sizes.value = s), () => {})
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleString(locale.value, { dateStyle: 'medium', timeStyle: 'short' })
 
 async function exportBackup() {
   busy.value = true
   try {
-    if (await saveBackup()) toast.add(successToast(t('backup.exported')))
+    if (await saveBackup(choice.value)) toast.add(successToast(t('backup.exported')))
   } catch (e) {
     toast.add(errorToast(message(e)))
   } finally {
@@ -109,6 +141,12 @@ async function restore() {
 </script>
 
 <style scoped>
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .progress {
   display: grid;
   gap: 0.25rem;

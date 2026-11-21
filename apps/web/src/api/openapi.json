@@ -70,8 +70,19 @@
         "tags": [
           "admin"
         ],
-        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes\non while it is made; database writes wait only for the snapshot.",
+        "summary": "A `.stbackup` file of this data folder: its data (settings and the database), its media (custom templates, sounds,\nmusic, videos and GIFs, card images) or both. Live use goes on while it is made; database writes wait only for the\nsnapshot.",
         "operationId": "export_backup",
+        "parameters": [
+          {
+            "name": "contents",
+            "in": "query",
+            "description": "Only this kind; both when absent.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Content"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The backup file",
@@ -121,7 +132,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Restores the staged backup: the app restarts, backs up the current data to `backups/`, then puts the backup\nin place before the database opens.",
+        "summary": "Restores the staged backup: the app restarts, backs up the current data of the kinds it holds to `backups/`,\nthen puts the backup in place before the database opens.",
         "operationId": "confirm_restore",
         "responses": {
           "202": {
@@ -416,6 +427,36 @@
           },
           "500": {
             "description": "`backup.restore_failed`: could not be staged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/backup/sizes": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "How large the data and the media are now, for choosing what to back up.",
+        "operationId": "sizes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSizes"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.export_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6562,6 +6603,26 @@
         ],
         "description": "What the admin UI may see; never contains tokens."
       },
+      "BackupSizes": {
+        "type": "object",
+        "description": "How large the data and the media in this folder are now, in bytes.",
+        "required": [
+          "data",
+          "media"
+        ],
+        "properties": {
+          "data": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "media": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "BadgeImage": {
         "type": "object",
         "description": "One Twitch chat badge version and its image.",
@@ -8246,6 +8307,14 @@
             "type": "boolean"
           }
         }
+      },
+      "Content": {
+        "type": "string",
+        "description": "What a backup holds.",
+        "enum": [
+          "data",
+          "media"
+        ]
       },
       "CounterBody": {
         "type": "object",
@@ -10809,7 +10878,8 @@
           "templates",
           "sounds",
           "music",
-          "media"
+          "media",
+          "contents"
         ],
         "properties": {
           "app_version": {
@@ -10819,6 +10889,13 @@
           "checkins": {
             "type": "integer",
             "format": "int64"
+          },
+          "contents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Content"
+            },
+            "description": "The kinds it holds: a restore replaces only these."
           },
           "created_at": {
             "type": "string",
