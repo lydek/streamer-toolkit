@@ -333,8 +333,18 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
     }
     let mut inputs = Vec::new();
     for input in client.inputs().list(None).await? {
+        let muted = match client.inputs().muted(InputId::Uuid(input.id.uuid)).await {
+            Ok(muted) => muted,
+            // An input without audio (an image, a display capture) has no mute state: OBS answers with an error,
+            // which must not end the connection. Only inputs that can be muted are listed.
+            Err(ObwsError::Api {
+                code: StatusCode::InvalidResourceState,
+                ..
+            }) => continue,
+            Err(e) => return Err(e),
+        };
         inputs.push(Input {
-            muted: client.inputs().muted(InputId::Uuid(input.id.uuid)).await?,
+            muted,
             name: input.id.name,
         });
     }
@@ -482,6 +492,8 @@ mod tests {
 
     const LIVE: &str = "00000000-0000-0000-0000-000000000001";
     const MIC: &str = "00000000-0000-0000-0000-000000000002";
+    /// An image: OBS answers its mute state with an error, as for every input without audio.
+    const LOGO: &str = "00000000-0000-0000-0000-000000000003";
 
     impl FakeObs {
         fn event(&self, kind: &'static str, data: Value) {
@@ -507,7 +519,9 @@ mod tests {
                 "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
                 t if t.starts_with("Set") => Value::Null,
                 "GetInputList" => json!({"inputs": [{"inputName": "Mic", "inputUuid": MIC,
-                    "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}]}),
+                    "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}, {
+                    "inputName": "Logo", "inputUuid": LOGO,
+                    "inputKind": "image_source", "unversionedInputKind": "image_source"}]}),
                 "GetInputMute" => json!({"inputMuted": false}),
                 "GetStreamStatus" => json!({"outputActive": false, "outputReconnecting": false,
                     "outputTimecode": "00:00:00.000", "outputDuration": 0, "outputCongestion": 0.0,
@@ -573,6 +587,9 @@ mod tests {
                             }
                             let status = if data["sceneName"] == "Missing" {
                                 json!({"result": false, "code": 600})
+                            } else if request_type == "GetInputMute" && data["inputUuid"] == LOGO {
+                                // InvalidResourceState: the input does not support audio.
+                                json!({"result": false, "code": 604, "comment": "The specified input does not support audio."})
                             } else {
                                 json!({"result": true, "code": 100})
                             };
@@ -721,6 +738,7 @@ mod tests {
                         },
                     ],
                 }],
+                // The image has no audio, so no mute state; reading it never ends the connection.
                 inputs: vec![Input {
                     name: "Mic".into(),
                     muted: false,
@@ -729,6 +747,7 @@ mod tests {
                 recording: true,
             }
         );
+        assert_eq!(*status.borrow(), ObsStatus::CONNECTED);
 
         let scene = |name: &str| json!({"sceneName": name, "sceneUuid": LIVE});
         fake.event("CurrentProgramSceneChanged", scene("BRB"));
