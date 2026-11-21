@@ -10,7 +10,7 @@ pub use infrastructure::{
     ChatFirstEvent, ChatMessageEvent, ChatMessagePayload, ChatRemovedEvent,
     db::{
         ChatRecords, MIGRATOR, StoredMessage, count_between, messages_between, recent_messages,
-        session_chat_counts,
+        session_chat_counts, top_chatters,
     },
     http::{StoredChatMessage, routes},
     openapi, start,

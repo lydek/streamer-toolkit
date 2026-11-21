@@ -89,6 +89,8 @@ const toast = useToast()
 const filter = ref<LogFilter>('all')
 const query = ref('')
 const hideBots = ref(false)
+// The Host's chat bot list, shared with the leaderboard.
+const bots = shallowRef<ReadonlySet<string>>(new Set())
 const failed = ref('')
 
 const broadcaster = computed(() => {
@@ -100,6 +102,9 @@ const broadcasterId = computed(() => {
   return status?.state === 'signed_in' ? status.user_id : undefined
 })
 void loadChatDisplay().catch(() => {})
+void api(client.GET('/api/admin/chat/bots'))
+  .then((list) => (bots.value = new Set(list)))
+  .catch(() => {})
 watch(broadcasterId, loadBadges, { immediate: true })
 
 // 即時: the stored chat before this page opened, then the live messages and the alerts heard since.
@@ -236,7 +241,7 @@ watch(messages, (m) => wantAvatars(m))
 const partners = computed(() => sharedChannels(messages.value))
 const ownOnly = ref(false)
 const shown = computed(() =>
-  filterEntries(entries.value, filter.value, query.value, hideBots.value, broadcaster.value).filter(
+  filterEntries(entries.value, filter.value, query.value, hideBots.value ? bots.value : new Set(), broadcaster.value).filter(
     (e) => !(ownOnly.value && e.kind === 'message' && e.message.payload.sharedFrom),
   ),
 )

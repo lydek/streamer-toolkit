@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -39,6 +39,7 @@ pub(crate) enum OverlayKind {
     Marathon,
     Break,
     Warnings,
+    Leaderboard,
 }
 
 impl OverlayKind {
@@ -54,6 +55,7 @@ impl OverlayKind {
             "marathon" => Some(Self::Marathon),
             "break" => Some(Self::Break),
             "warnings" => Some(Self::Warnings),
+            "leaderboard" => Some(Self::Leaderboard),
             _ => None,
         }
     }
@@ -80,6 +82,7 @@ pub(crate) struct OverlayConnections {
     marathon: AtomicUsize,
     break_card: AtomicUsize,
     warnings: AtomicUsize,
+    leaderboard: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -97,6 +100,7 @@ impl Default for OverlayConnections {
             marathon: AtomicUsize::default(),
             break_card: AtomicUsize::default(),
             warnings: AtomicUsize::default(),
+            leaderboard: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -115,6 +119,7 @@ impl OverlayConnections {
             Some(OverlayKind::Marathon) => &self.marathon,
             Some(OverlayKind::Break) => &self.break_card,
             Some(OverlayKind::Warnings) => &self.warnings,
+            Some(OverlayKind::Leaderboard) => &self.leaderboard,
             None => &self.other,
         }
     }
@@ -152,6 +157,7 @@ impl OverlayConnections {
             marathon: load(&self.marathon),
             break_card: load(&self.break_card),
             warnings: load(&self.warnings),
+            leaderboard: load(&self.leaderboard),
             other: load(&self.other),
         }
     }
@@ -207,6 +213,7 @@ pub(crate) struct OverlayCounts {
     #[serde(rename = "break")]
     break_card: usize,
     warnings: usize,
+    leaderboard: usize,
     other: usize,
 }
 
@@ -309,6 +316,9 @@ struct SnapshotPayload {
     /// At most one: the built-in overlays' theme and text size.
     #[serde(rename = "screen.appearance")]
     screen_appearance: Vec<overlays::AppearanceEvent>,
+    /// At most one: the latest leaderboard.
+    #[serde(rename = "leaderboard.update")]
+    leaderboard_update: Vec<crate::leaderboard::LeaderboardEvent>,
     /// At most one: the chat overlay's text size.
     #[serde(rename = "chat.text_size")]
     chat_text_size: Vec<crate::templates::ChatTextSizeEvent>,
@@ -340,6 +350,7 @@ mod tests {
                 marathon: 0,
                 break_card: 0,
                 warnings: 0,
+                leaderboard: 0,
                 other: 2
             }
         );
@@ -362,6 +373,7 @@ mod tests {
                 marathon: 0,
                 break_card: 0,
                 warnings: 0,
+                leaderboard: 0,
                 other: 0
             }
         );
@@ -407,6 +419,17 @@ mod tests {
         bus.retain("screen.break", 1);
         bus.retain("screen.warnings", 1);
         bus.retain("screen.appearance", 1);
+        bus.retain("leaderboard.update", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "l".into(),
+            event_type: "leaderboard.update",
+            version: 1,
+            occurred_at: "2026-11-22T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({ "boards": [
+                { "board": "bits", "period": "stream", "entries": [{ "name": "小魚", "value": 500 }] }
+            ]}),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "a".into(),
             event_type: "screen.appearance",
@@ -565,6 +588,11 @@ mod tests {
         let appearance = &wire["payload"]["screen.appearance"][0];
         assert_required("AppearanceEvent", appearance);
         assert_required("AppearancePayload", &appearance["payload"]);
+        let board = &wire["payload"]["leaderboard.update"][0];
+        assert_required("LeaderboardEvent", board);
+        assert_required("LeaderboardPayload", &board["payload"]);
+        assert_required("Board", &board["payload"]["boards"][0]);
+        assert_required("BoardEntry", &board["payload"]["boards"][0]["entries"][0]);
         let size = &wire["payload"]["chat.text_size"][0];
         assert_required("ChatTextSizeEvent", size);
         assert_required("ChatTextSizePayload", &size["payload"]);

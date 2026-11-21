@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use tokio::sync::{mpsc, oneshot};
 use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
@@ -703,6 +703,14 @@ impl CheckinService {
         let stopped = || RepositoryError("check-in worker stopped".into());
         self.tx.send(job).map_err(|_| stopped())?;
         answer.await.map_err(|_| stopped())?
+    }
+
+    /// When this month started, by the business day: its first day's start in the check-in time zone and reset hour.
+    pub fn month_start(&self, now: DateTime<Utc>) -> DateTime<Utc> {
+        let rules = self.config.rules();
+        let today = rules.day.day_of(now);
+        let first = today.with_day(1).expect("every month has a first day");
+        rules.day.window(first).0
     }
 
     /// Takes the card on the screen away at once.

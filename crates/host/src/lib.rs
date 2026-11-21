@@ -9,6 +9,7 @@ mod chat_log;
 pub mod db;
 mod event_feed;
 mod home_tiles;
+mod leaderboard;
 mod obs;
 mod openapi;
 mod overlay;
@@ -397,6 +398,13 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let chat_routes = chat::routes(config.db.clone()).merge(chat_log::routes(config.db.clone()));
     let launched_at = chrono::Utc::now();
     let stream_summary = stream_summary::routes(config.db.clone(), launched_at);
+    let ranks = leaderboard::LeaderboardState {
+        pool: config.db.clone(),
+        checkin: checkin.clone(),
+        launched_at,
+    };
+    leaderboard::start(ranks.clone(), bus.clone());
+    let leaderboard_routes = leaderboard::routes(ranks);
     let feed = event_feed::routes(event_feed::FeedState {
         pool: config.db.clone(),
         launched_at,
@@ -538,6 +546,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(card_pack_files)
+            .merge(leaderboard_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(
                 rehearsal::routes(rehearsal::RehearsalState {
                     admin: admin.clone(),

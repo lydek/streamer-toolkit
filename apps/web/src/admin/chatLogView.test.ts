@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { LoggedChat } from './chatLog'
 import { type Entry, type LogEvent, filterEntries, merge } from './chatLogView'
 
+// The Host's list (crates/host/src/leaderboard.rs), in part.
+const BOTS: ReadonlySet<string> = new Set(['nightbot', 'streamelements'])
+const NONE: ReadonlySet<string> = new Set()
+
 const msg = (id: string, at: string, over: Partial<LoggedChat['payload']> = {}): LoggedChat => ({
   id,
   type: 'chat.message',
@@ -34,7 +38,7 @@ describe('chat log view', () => {
   })
 
   it('each filter keeps its own kind of line', () => {
-    const only = (f: Parameters<typeof filterEntries>[1]) => ids(filterEntries(entries, f, '', false, 'me'))
+    const only = (f: Parameters<typeof filterEntries>[1]) => ids(filterEntries(entries, f, '', NONE, 'me'))
     expect(only('mentions')).toEqual(['mention'])
     expect(only('commands')).toEqual(['command'])
     expect(only('first')).toEqual(['first'])
@@ -47,10 +51,10 @@ describe('chat log view', () => {
   })
 
   it('search and hiding bots narrow any filter', () => {
-    expect(ids(filterEntries(entries, 'all', 'SING', false))).toEqual(['mention'])
-    expect(ids(filterEntries(entries, 'all', '', true))).not.toContain('bot')
-    expect(ids(filterEntries(entries, 'all', 'kai', true))).toEqual(['redemption', 'raid', 'cheer'])
+    expect(ids(filterEntries(entries, 'all', 'SING', NONE))).toEqual(['mention'])
+    expect(ids(filterEntries(entries, 'all', '', BOTS))).not.toContain('bot')
+    expect(ids(filterEntries(entries, 'all', 'kai', BOTS))).toEqual(['redemption', 'raid', 'cheer'])
     // No login, no mentions.
-    expect(ids(filterEntries(entries, 'mentions', '', false))).toEqual([])
+    expect(ids(filterEntries(entries, 'mentions', '', NONE))).toEqual([])
   })
 })

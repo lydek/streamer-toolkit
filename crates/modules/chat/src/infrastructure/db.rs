@@ -212,6 +212,33 @@ fn push_time_range(
 }
 
 /// How many messages were sent from `from` until `until` (open ends when `None`), and when the first was.
+/// The top `limit` chatters from `from` until `until` (open ends when `None`), most messages first: name and count.
+/// Logins in `exclude` (lowercase) are left out; simulated messages are never stored.
+pub async fn top_chatters(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    exclude: &[&str],
+    limit: u32,
+) -> Result<Vec<(String, u64)>, sqlx::Error> {
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT LOWER(COALESCE(json_extract(MAX(payload), '$.userLogin'), '')), \
+         COALESCE(json_extract(MAX(payload), '$.userName'), ''), COUNT(*) AS n \
+         FROM chat_messages WHERE (?1 IS NULL OR sent_at >= ?1) AND (?2 IS NULL OR sent_at < ?2) \
+         GROUP BY user_id ORDER BY n DESC, MIN(sent_at)",
+    )
+    .bind(from.map(time_text))
+    .bind(until.map(time_text))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter(|(login, _, _)| !exclude.contains(&login.as_str()))
+        .take(limit as usize)
+        .map(|(_, name, n)| (name, u64::try_from(n).unwrap_or(0)))
+        .collect())
+}
+
 pub async fn count_between(
     pool: &SqlitePool,
     from: Option<DateTime<Utc>>,

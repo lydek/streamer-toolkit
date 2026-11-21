@@ -5,9 +5,6 @@ import type { LoggedChat } from './chatLog'
 export const LOG_FILTERS = ['all', 'mentions', 'commands', 'first', 'mods', 'subscribers', 'highlights', 'redemptions', 'alerts'] as const
 export type LogFilter = (typeof LOG_FILTERS)[number]
 
-// shortcut: a fixed list of common chat bots; a broadcaster's own list waits for viewer roles (phase 7).
-export const BOTS = new Set(['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'sery_bot'])
-
 export type LogEvent = Schemas['LogEvent']
 
 /** One line of the chat log, placed by its time. */
@@ -61,14 +58,23 @@ function eventMatches(e: LogEvent, filter: LogFilter): boolean {
   }
 }
 
-/** The entries `filter`, the search text and 隱藏機器人 leave; `login` is the broadcaster's, for 提到我. */
-export function filterEntries(entries: Entry[], filter: LogFilter, query: string, hideBots: boolean, login?: string): Entry[] {
+/**
+ * The entries `filter`, the search text and 隱藏機器人 leave; `bots` holds the logins to hide (the Host's list, empty
+ * when nothing is hidden), `login` is the broadcaster's, for 提到我.
+ */
+export function filterEntries(
+  entries: Entry[],
+  filter: LogFilter,
+  query: string,
+  bots: ReadonlySet<string>,
+  login?: string,
+): Entry[] {
   const q = query.trim().toLowerCase()
   const mention = login ? new RegExp(`@${login}\\b`, 'i') : undefined
   return entries.filter((e) => {
     if (e.kind === 'message') {
       const p = e.message.payload
-      if (hideBots && BOTS.has(p.userLogin.toLowerCase())) return false
+      if (bots.has(p.userLogin.toLowerCase())) return false
       if (q && !`${p.userName} ${p.text}`.toLowerCase().includes(q)) return false
       return messageMatches(e.message, filter, mention)
     }

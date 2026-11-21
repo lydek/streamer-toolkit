@@ -897,6 +897,18 @@
       "deleteNote": "這個計數和每位觀眾的數字都會移除。"
     }
   },
+  "leaderboard": {
+    "period": "期間",
+    "periods": {
+      "stream": "本場",
+      "month": "本月",
+      "all": "全部"
+    },
+    "board": "排名",
+    "empty": "還沒有紀錄。",
+    "allKept": "「全部」只算保存期限內的紀錄。",
+    "allCheckins": "打卡的「全部」是打卡頁的累計次數（含匯入的次數）。"
+  },
   "rehearsal": {
     "speed": "速度",
     "speeds": {
@@ -1194,6 +1206,12 @@
     "counter": {
       "test": "測試"
     },
+    "leaderboard": {
+      "bits": "小奇點",
+      "gifts": "送禮訂閱",
+      "chat": "聊天最活躍",
+      "checkins": "打卡"
+    },
     "warnings": {
       "chatOverlay": "聊天室沒有連上",
       "mic": "麥克風靜音中",
@@ -1244,6 +1262,9 @@
       "not_found": "找不到這個檔案。",
       "invalid": "名稱不能空白，長度要在 10 分鐘以內。",
       "save_failed": "無法儲存影片或 GIF。"
+    },
+    "leaderboard": {
+      "storage_failed": "讀不到排行榜的資料。"
     },
     "rehearsal": {
       "invalid": "劇本格式不正確。",

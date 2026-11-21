@@ -154,6 +154,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat/bots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chat bots the leaderboard leaves out and the chat log can hide (lowercase logins). */
+        get: operations["bots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chat/log": {
         parameters: {
             query?: never;
@@ -809,6 +826,22 @@ export interface paths {
          *     `null` restores that stage's defaults; `[]` keeps it empty. The other stages are left as they are.
          */
         put: operations["set_home_tiles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["leaderboard"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2098,6 +2131,20 @@ export interface components {
         };
         /** @enum {string} */
         BgmTestType: "bgm.test";
+        Board: {
+            board: components["schemas"]["BoardKind"];
+            /** @description Most first, at most 10. */
+            entries: components["schemas"]["BoardEntry"][];
+            period: components["schemas"]["Period"];
+        };
+        /** @description One viewer on a board. `name` is viewer text: render it as text. */
+        BoardEntry: {
+            name: string;
+            /** Format: int64 */
+            value: number;
+        };
+        /** @enum {string} */
+        BoardKind: "bits" | "gifts" | "chat" | "checkins";
         /**
          * @description A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only
          *     the latest one.
@@ -2816,6 +2863,27 @@ export interface components {
             scene: string;
         };
         /**
+         * @description A `leaderboard.update` event exactly as `/ws/overlay` sends it when the boards change (checked every 30 s); the
+         *     snapshot keeps only the latest one.
+         */
+        LeaderboardEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["LeaderboardPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["LeaderboardType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description Every board for every period. */
+        LeaderboardPayload: {
+            boards: components["schemas"]["Board"][];
+        };
+        /** @enum {string} */
+        LeaderboardType: "leaderboard.update";
+        /**
          * @description A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind
          *     does not have are left out; names and texts are raw viewer text.
          */
@@ -3125,6 +3193,7 @@ export interface components {
             chat: number;
             checkin: number;
             counter: number;
+            leaderboard: number;
             marathon: number;
             other: number;
             sound: number;
@@ -3162,6 +3231,8 @@ export interface components {
             code: string;
             detail: string;
         };
+        /** @enum {string} */
+        Period: "stream" | "month" | "all";
         /** @enum {string} */
         PeriodKind: "stream" | "offline";
         /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */
@@ -3568,6 +3639,8 @@ export interface components {
             "counter.marathon": components["schemas"]["MarathonEvent"][];
             /** @description At most one: every counter's latest value. */
             "counter.values": components["schemas"]["CounterValuesEvent"][];
+            /** @description At most one: the latest leaderboard. */
+            "leaderboard.update": components["schemas"]["LeaderboardEvent"][];
             /** @description At most one: the latest streaming-software state. */
             "obs.state": components["schemas"]["ObsStateEvent"][];
             /** @description At most one: the latest status. */
@@ -4318,6 +4391,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BadgeImage"][];
+                };
+            };
+        };
+    };
+    bots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
         };
@@ -6084,6 +6176,34 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    leaderboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardPayload"];
+                };
+            };
+            /** @description `leaderboard.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

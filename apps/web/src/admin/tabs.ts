@@ -93,7 +93,7 @@ export const GROUPS: TabGroup[] = [
     pages: [
       soon('/viewers', 'viewers', 'pi pi-users', true),
       soon('/roles', 'roles', 'pi pi-tags'),
-      soon('/leaderboard', 'leaderboard', 'pi pi-trophy'),
+      { path: '/leaderboard', label: 'pages.leaderboard.name' },
       soon('/credits', 'credits', 'pi pi-list', true),
       soon('/raids', 'raids', 'pi pi-send', true),
     ],

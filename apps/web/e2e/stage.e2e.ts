@@ -57,6 +57,7 @@ async function open(
           'screen.break': [],
           'screen.warnings': [],
           'screen.appearance': [],
+          'leaderboard.update': [],
           'chat.text_size': [],
         },
       }),

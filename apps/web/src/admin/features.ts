@@ -50,7 +50,7 @@ export const FEATURES: Feature[] = [
   { id: 'imageSizes', group: 'media', icon: 'pi pi-image', pages: ['/image-sizes'] },
   { id: 'viewers', group: 'viewers', icon: 'pi pi-users', pages: ['/viewers'], scopes: ['moderation:read', 'channel:read:vips'] },
   { id: 'roles', group: 'viewers', icon: 'pi pi-tags', pages: ['/roles'], requires: ['viewers'] },
-  { id: 'leaderboard', group: 'viewers', icon: 'pi pi-trophy', pages: ['/leaderboard'], requires: ['viewers'] },
+  { id: 'leaderboard', group: 'viewers', icon: 'pi pi-trophy', pages: ['/leaderboard'], fixed: true },
   { id: 'credits', group: 'viewers', icon: 'pi pi-list', pages: ['/credits'] },
   { id: 'raids', group: 'viewers', icon: 'pi pi-send', pages: ['/raids'], scopes: ['channel:manage:raids'] },
 ]

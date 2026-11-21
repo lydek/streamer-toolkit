@@ -132,6 +132,35 @@ pub(crate) async fn list_viewers(
     Ok((items, u64::try_from(total).unwrap_or(0)))
 }
 
+/// The top `limit` viewers by check-ins, most first: name and count. With `from`, the check-ins from then until
+/// `until`; without, the lifetime total (imported baselines included), as the check-in page shows it. Logins in
+/// `exclude` (lowercase) are left out.
+pub async fn top_checkins(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    exclude: &[&str],
+    limit: u32,
+) -> Result<Vec<(String, u64)>, sqlx::Error> {
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT LOWER(v.user_login), v.user_name, \
+         CASE WHEN ?1 IS NULL THEN v.baseline_total ELSE 0 END + \
+         (SELECT COUNT(*) FROM checkin_records r WHERE r.viewer_id = v.id \
+          AND (?1 IS NULL OR r.occurred_at >= ?1) AND (?2 IS NULL OR r.occurred_at < ?2)) AS n \
+         FROM checkin_viewers v ORDER BY n DESC, v.user_login",
+    )
+    .bind(from.map(time_text))
+    .bind(until.map(time_text))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter(|(login, _, n)| *n > 0 && !exclude.contains(&login.as_str()))
+        .take(limit as usize)
+        .map(|(_, name, n)| (name, u64::try_from(n).unwrap_or(0)))
+        .collect())
+}
+
 /// How many viewers checked in on `day`, and the latest `recent` of them (viewer ID, name, time).
 pub(crate) async fn day_summary(
     pool: &SqlitePool,
