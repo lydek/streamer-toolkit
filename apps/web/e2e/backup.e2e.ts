@@ -1,5 +1,5 @@
 // Backup on the settings page, with the admin API and IPC mocked. The save dialog is faked: a real one is native.
-import { type Page, expect, test } from '@playwright/test'
+import { type Page, type Route, expect, test } from '@playwright/test'
 import { openAdmin, scrollsSideways, zh } from './fixtures'
 
 declare global {
@@ -87,16 +87,28 @@ const PREVIEW = {
   sounds: 5,
   music: 3,
   media: 1,
+  contents: ['data', 'media'],
+}
+
+/** Mocks the parted restore upload; `check` answers the last step. Returns the size of each part that arrived. */
+async function mockUpload(page: Page, check: (r: Route) => Promise<void>) {
+  const parts: number[] = []
+  await page.route('**/api/admin/backup/restore/upload', (r) => r.fulfill({ json: { id: 'u1' } }))
+  await page.route('**/api/admin/backup/restore/upload/u1?offset=*', (r) => {
+    const size = r.request().postDataBuffer()?.length ?? 0
+    parts.push(size)
+    return r.fulfill({ json: { received: parts.reduce((a, b) => a + b, 0) } })
+  })
+  await page.route('**/api/admin/backup/restore/upload/u1/check', check)
+  // A failed check cancels the upload.
+  await page.route('**/api/admin/backup/restore/upload/u1', (r) => r.fulfill({ status: 204 }))
+  return parts
 }
 
 test('restore previews the chosen file, then confirms it to restart', async ({ page }) => {
   await openSettings(page)
-  const uploads: number[] = []
   let confirms = 0
-  await page.route('**/api/admin/backup/restore/preview', (r) => {
-    uploads.push(r.request().postDataBuffer()?.length ?? 0)
-    return r.fulfill({ json: PREVIEW })
-  })
+  const uploads = await mockUpload(page, (r) => r.fulfill({ json: PREVIEW }))
   await page.route('**/api/admin/backup/restore', (r) => {
     confirms++
     return r.fulfill({ status: 202 })
@@ -108,7 +120,7 @@ test('restore previews the chosen file, then confirms it to restart', async ({ p
   })
   await expect(page.getByText(zh.backup.appVersion.replace('{version}', '0.1.0'))).toBeVisible()
   await expect(page.getByText('兌換紀錄 12 筆、打卡紀錄 34 筆')).toBeVisible()
-  await expect(page.getByText('樣板 1 個、音效 5 個、背景音樂 3 首')).toBeVisible()
+  await expect(page.getByText('樣板 1 個、音效 5 個、背景音樂 3 首、影片與 GIF 1 個')).toBeVisible()
   expect(uploads).toEqual([BACKUP.length])
   expect(confirms).toBe(0)
   for (const width of [640, 320]) {
@@ -124,7 +136,7 @@ test('restore previews the chosen file, then confirms it to restart', async ({ p
 for (const code of ['backup.invalid', 'backup.newer_version']) {
   test(`a refused backup (${code}) shows why and offers no restore`, async ({ page }) => {
     await openSettings(page)
-    await page.route('**/api/admin/backup/restore/preview', (r) => r.fulfill({ status: 400, json: { code } }))
+    await mockUpload(page, (r) => r.fulfill({ status: 400, json: { code } }))
     await page.getByLabel(zh.backup.restoreFile).setInputFiles({
       name: 'bad.stbackup',
       mimeType: 'application/octet-stream',

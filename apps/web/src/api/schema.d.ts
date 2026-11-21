@@ -78,7 +78,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/backup/restore/preview": {
+    "/api/admin/backup/restore/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -88,10 +88,48 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Checks a backup file (at most 512 MB) and stages it for a restore; nothing in use changes. The body is the
-         *     file itself. A later preview replaces the staged one.
+         * Starts a restore upload of a file of `size` bytes, replacing any earlier upload. Refused before anything is written
+         *     when the file is above the cap or the disk has less than twice its size free (the upload, then its unpacked copy).
          */
-        post: operations["preview_restore"];
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup/restore/upload/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Adds the next part (the body, at most 16 MB) at `offset`, which must be the bytes received so far. */
+        put: operations["part"];
+        post?: never;
+        /** Cancels the upload and removes what arrived; one already gone is fine. */
+        delete: operations["cancel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup/restore/upload/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Checks the complete upload and stages it for a restore (as the one-request preview did); nothing in use changes.
+         *     The uploaded file is removed either way.
+         */
+        post: operations["check"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4178,6 +4216,23 @@ export interface components {
             /** @description The running version. */
             current: string;
         };
+        UploadProgress: {
+            /**
+             * Format: int64
+             * @description Bytes received so far.
+             */
+            received: number;
+        };
+        UploadStart: {
+            /**
+             * Format: int64
+             * @description The backup file's size in bytes.
+             */
+            size: number;
+        };
+        UploadStarted: {
+            id: string;
+        };
         /** @description One viewer's count. `login` and `display_name` are viewer text: render them as text. */
         ViewerCountBody: {
             display_name: string;
@@ -4343,7 +4398,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description `backup.too_large`: more than a restore accepts */
+            /** @description `backup.too_large`: more than a restore accepts (20 GB unpacked, 100,000 files) */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4354,6 +4409,15 @@ export interface operations {
             };
             /** @description `backup.export_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.no_space`, with `needed` (bytes): not enough free disk space */
+            507: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4399,14 +4463,79 @@ export interface operations {
             };
         };
     };
-    preview_restore: {
+    start: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description The backup file */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadStart"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadStarted"];
+                };
+            };
+            /** @description `backup.invalid`: empty */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.too_large` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.restore_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.no_space`, with `needed` (bytes) */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    part: {
+        parameters: {
+            query: {
+                /** @description Where this part starts: the bytes received so far. */
+                offset: number;
+            };
+            header?: never;
+            path: {
+                /** @description From the upload's start */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The next part */
         requestBody: {
             content: {
                 "application/octet-stream": string;
@@ -4418,11 +4547,117 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["UploadProgress"];
+                };
+            };
+            /** @description `backup.invalid`: past the size given at the start */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.upload_gone`: cancelled, replaced or never started */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.upload_offset`, with `received`: not where the upload stands */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.too_large`: a part above 16 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.restore_failed`: could not be written; the upload is dropped */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description From the upload's start */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description From the upload's start */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["RestorePreview"];
                 };
             };
             /** @description `backup.invalid`: damaged or not a backup; `backup.newer_version`: made by a newer version */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.upload_gone` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `backup.upload_offset`, with `received`: not all of it has arrived */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
