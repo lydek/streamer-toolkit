@@ -139,7 +139,7 @@
     <AppDrawer id="chat" :title="moduleName('chat')" full-page="/chat">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('chat')" />
-        <form @submit.prevent="simulateChat">
+        <form @submit.prevent="sendChat">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-user">{{ t('simulate.userName') }}</label>
           <InputText id="sim-user" v-model="simUser" autocomplete="off" maxlength="25" />
@@ -157,7 +157,7 @@
     <AppDrawer id="alerts" :title="moduleName('alerts')" full-page="/alerts">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('alerts')" />
-        <form @submit.prevent="simulateAlert">
+        <form @submit.prevent="sendAlert">
           <p>{{ t('simulate.hint') }}</p>
           <span id="sim-kind">{{ t('simulate.kind') }}</span>
           <SelectButton
@@ -201,7 +201,7 @@
     <AppDrawer id="checkin" :title="moduleName('checkin')" full-page="/checkin">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('checkin')" />
-        <form @submit.prevent="simulateCheckin">
+        <form @submit.prevent="sendCheckin">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-checkin-user">{{ t('simulate.userName') }}</label>
           <InputText id="sim-checkin-user" v-model="simCheckin.userName" autocomplete="off" maxlength="25" />
@@ -302,6 +302,7 @@ import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import QueueArea from './QueueArea.vue'
 import StageCard from './StageCard.vue'
+import { simulateAlert, simulateChat, simulateCheckin } from './simulate'
 import BlockClose from './BlockClose.vue'
 import { subjectText } from './queue'
 import { STAGES, useStage } from './stage'
@@ -642,24 +643,24 @@ async function run(action: () => Promise<unknown>) {
   }
 }
 
-const simulateChat = () =>
+const sendChat = () =>
   run(async () => {
-    await api(client.POST('/api/admin/simulate/chat', { body: { userName: simUser.value, text: simText.value } }))
+    await simulateChat({ userName: simUser.value, text: simText.value })
     simText.value = ''
     notify(t('simulate.sent'), false)
   })
 
-const simulateCheckin = () =>
+const sendCheckin = () =>
   run(async () => {
     const { userName, stamps } = simCheckin
-    await api(client.POST('/api/admin/simulate/checkin', { body: { userName, stamps: stamps ?? 0 } }))
+    await simulateCheckin({ userName, stamps: stamps ?? 0 })
     notify(t('simulate.checkinSent'), false)
   })
 
-const simulateAlert = () =>
+const sendAlert = () =>
   run(async () => {
     const { kind, userName, amount, message } = simAlert
-    await api(client.POST('/api/admin/simulate/alert', { body: { kind, userName, amount, message } }))
+    await simulateAlert({ kind, userName, amount, message })
     notify(t('simulate.alertSent'), false)
   })
 
