@@ -1,9 +1,9 @@
 <template>
   <!-- One stage block on home: 開播前檢查 (`checklist`), or the session (`session`: 本場直播 while live, 本場摘要
        after). The stage itself and its data are shared through `stage` (stage.ts). -->
-  <section v-if="part === 'checklist'" class="stage" aria-labelledby="checklist-heading">
+  <section v-if="part === 'checklist'" class="stage" :aria-labelledby="headingId">
     <div class="head">
-      <h2 id="checklist-heading">{{ t('home.blocks.checklist') }}</h2>
+      <h2 :id="headingId">{{ t('home.blocks.checklist') }}</h2>
       <span class="ready">{{ t('stage.checks.ready', { ok: checks.filter((c) => c.ok).length, all: checks.length }) }}</span>
     </div>
     <ul class="plain checks">
@@ -26,9 +26,9 @@
     </ul>
     <p v-if="copyNotice" :role="copyNotice.error ? 'alert' : 'status'">{{ copyNotice.text }}</p>
   </section>
-  <section v-else class="stage" aria-labelledby="session-heading">
+  <section v-else class="stage" :aria-labelledby="headingId">
     <div class="head">
-      <h2 id="session-heading">{{ t(shown === 'live' ? 'home.blocks.stats' : 'home.blocks.summary') }}</h2>
+      <h2 :id="headingId">{{ t(shown === 'live' ? 'home.blocks.stats' : 'home.blocks.summary') }}</h2>
       <slot name="actions" />
     </div>
     <p v-if="failed" role="alert">{{ failed }}</p>
@@ -52,11 +52,14 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { StageState } from './stage'
 
 const props = defineProps<{ part: 'checklist' | 'session'; stage: StageState }>()
 const { t } = useI18n()
+// A stage may hold both 本場直播 and 本場摘要 (both `session`), so each block names its own heading.
+const headingId = useId()
 // The state object never changes for a block, so its refs are unpacked once for the template.
 const { shown, failed, notLive, checks, copyNotice, copyOverlayUrl, session, line, stats, exporting, exportNotice, exportIt } =
   props.stage

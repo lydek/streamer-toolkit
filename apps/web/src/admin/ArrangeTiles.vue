@@ -83,7 +83,7 @@ import Button from 'primevue/button'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
-import { type Line, arrangedTiles, availableTiles, dropTile, moveTile, tilePosition } from './home'
+import { type Line, TILES, type Tile, arrangedTiles, availableTiles, dropTile, moveTile, tilePosition } from './home'
 import TileFace from './TileFace.vue'
 
 /*
@@ -102,6 +102,8 @@ const props = defineProps<{
   name: (id: string) => string
   /** What each tile shows on home. */
   lines: Record<string, Line>
+  /** The home before it is arranged (`saved` null). */
+  defaults?: Tile[]
 }>()
 
 const { t } = useI18n()
@@ -110,7 +112,7 @@ const announcement = ref('')
 const dragged = ref<string | null>(null)
 const over = ref<string | null>(null)
 
-const arranged = computed(() => arrangedTiles(props.saved))
+const arranged = computed(() => arrangedTiles(props.saved, TILES, props.defaults ?? TILES))
 const available = computed(() => availableTiles(arranged.value))
 const disabled = (id: string) => props.modules.some((m) => m.id === id && !m.enabled)
 const lineOf = (id: string): Line =>

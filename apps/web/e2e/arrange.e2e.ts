@@ -82,7 +82,7 @@ test('arrange mode never scrolls sideways at 1280px, 640px and 320px', async ({ 
 
 test('a failed save puts the tile back and shows the error', async ({ page }) => {
   const state = await openAdmin(page)
-  await page.route('**/api/admin/home-tiles', (r) =>
+  await page.route('**/api/admin/home-tiles**', (r) =>
     r.request().method() === 'PUT' ? r.fulfill({ status: 500, json: { code: 'settings.save_failed' } }) : r.fallback(),
   )
   await pencil(page).click()

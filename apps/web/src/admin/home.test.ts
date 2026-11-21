@@ -17,6 +17,9 @@ import {
   dropTile,
   errorToast,
   homeTiles,
+  STAGE_DEFAULTS,
+  stageDefaults,
+  TILES,
   moveTile,
   obsLight,
   successToast,
@@ -264,6 +267,17 @@ describe('useThrottled', () => {
     vi.advanceTimersByTime(3000)
     expect(shown.value).toBe(4)
     scope.stop()
+  })
+})
+
+describe('stageDefaults', () => {
+  it('gives each stage its own home from known tiles, and the defaults stand in until saved', () => {
+    for (const stage of ['before', 'live', 'after'] as const) {
+      expect(stageDefaults(stage).map((t) => t.id)).toEqual(STAGE_DEFAULTS[stage])
+    }
+    expect(stageDefaults('before')[0].id).toBe('checklist')
+    expect(arrangedTiles(null, TILES, stageDefaults('after')).map((t) => t.id)).toEqual(STAGE_DEFAULTS.after)
+    expect(arrangedTiles([], TILES, stageDefaults('after'))).toEqual([])
   })
 })
 

@@ -324,7 +324,8 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
 
     // A list saved while home grouped its tiles comes back once in the order it was shown: 「直播中」 first, and
     // the stage blocks, which always showed above the tiles, before them.
-    let blocks = ["pending", "checklist", "stats", "summary", "queue"];
+    // That list was the only home, so it is the 直播中 one and gets the 直播中 blocks.
+    let blocks = ["pending", "stats", "queue"];
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("settings.json"),
@@ -341,6 +342,16 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
     )
     .unwrap();
     assert_eq!(get(app_for(&dir)).await, serde_json::json!(blocks));
+    // A version 2 list (one home for all stages) drops the 開播前 and 下播後 blocks it put first.
+    std::fs::write(
+        dir.join("settings.json"),
+        r#"{"home_tiles":["pending","checklist","stats","summary","queue","chat"],"home_tiles_version":2}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!(["pending", "stats", "queue", "chat"])
+    );
     // A full old list stays within what PUT takes, so it can be saved back as read.
     let full: Vec<String> = (0..50).map(|n| format!("t{n}")).collect();
     std::fs::write(
@@ -351,7 +362,7 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
     let read = get(app_for(&dir)).await;
     assert_eq!(read.as_array().unwrap().len(), 50);
     assert_eq!(read[0], "pending");
-    assert_eq!(read[49], "t44");
+    assert_eq!(read[49], "t46");
     let res = app_for(&dir).oneshot(put(&read.to_string())).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
     let res = app_for(&dir)
@@ -400,6 +411,69 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
         serde_json::Value::Null,
         "bad bodies change nothing"
     );
+
+    // Each stage keeps its own order; `live` is the default and the list from before the stages.
+    let stage = |method: Method, stage: &str, body: &str| {
+        get_req(
+            &format!("/api/admin/home-tiles?stage={stage}"),
+            "127.0.0.1:47810",
+        )
+        .method(method)
+        .header(header::ORIGIN, "http://127.0.0.1:47810")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_owned()))
+        .unwrap()
+    };
+    let read = |app: Router, name: &'static str| async move {
+        let res = app.oneshot(stage(Method::GET, name, "")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+    };
+    let res = app
+        .clone()
+        .oneshot(stage(Method::PUT, "before", r#"["checklist","scene"]"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = app
+        .clone()
+        .oneshot(stage(Method::PUT, "after", "[]"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        read(app_for(&dir), "before").await,
+        serde_json::json!(["checklist", "scene"])
+    );
+    assert_eq!(
+        read(app_for(&dir), "after").await,
+        serde_json::json!([]),
+        "emptied, not never saved"
+    );
+    assert_eq!(
+        read(app_for(&dir), "live").await,
+        serde_json::Value::Null,
+        "the other stages are untouched"
+    );
+    assert_eq!(get(app.clone()).await, serde_json::Value::Null);
+    let res = app
+        .clone()
+        .oneshot(stage(Method::PUT, "before", "null"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(read(app_for(&dir), "before").await, serde_json::Value::Null);
+    for method in [Method::GET, Method::PUT] {
+        let res = app
+            .clone()
+            .oneshot(stage(method, "soon", "[]"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
     let unauthorized = get_req("/api/admin/home-tiles", "127.0.0.1:47810")
         .body(Body::empty())
         .unwrap();
