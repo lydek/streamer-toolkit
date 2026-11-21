@@ -15,6 +15,7 @@ mod obs;
 mod openapi;
 mod overlay;
 mod overlay_test;
+mod performance;
 mod queue;
 mod rehearsal;
 mod stream_summary;
@@ -439,6 +440,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         http.clone(),
         config.latest_release_url,
     );
+    let performance_routes = performance::routes(performance::start(obs.clone()));
     let diagnostics_state = diagnostics::DiagnosticsState {
         data_dir: config.data_dir.clone(),
         app_version: config.app_version.clone(),
@@ -563,6 +565,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(card_pack_files)
+            .merge(performance_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(diagnostics_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

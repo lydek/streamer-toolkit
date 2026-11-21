@@ -15,7 +15,9 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
     ok(
-      path === '/api/admin/diagnostics/connections'
+      path === '/api/admin/performance'
+        ? null
+        : path === '/api/admin/diagnostics/connections'
         ? { twitch_signed_in: true, twitch_latency_ms: 87, eventsub_connected: true, eventsub_subscriptions: 9, obs_connected: false }
         : [{ at: '2026-11-22T09:00:00Z', level: 'WARN', code: 'obs.unreachable', message: 'OBS is not running' }],
     )) as never)

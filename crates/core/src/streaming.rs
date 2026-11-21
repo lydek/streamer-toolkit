@@ -63,6 +63,23 @@ pub enum StreamingError {
 
 /// The streaming software as features see it. Commands join when a feature needs them; the state follows the
 /// program's own events, so a command's effect shows up there rather than in its result.
+/// Counters the streaming software reports. Frame counts are totals since it started (or the stream did), so rates
+/// come from two readings.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct StreamingStats {
+    /// The streaming software's own CPU use, in percent.
+    pub cpu_percent: f64,
+    /// Frames the renderer skipped (too slow), of all it rendered.
+    pub render_skipped: u32,
+    pub render_total: u32,
+    pub streaming: bool,
+    /// Frames the stream output dropped (network), of all it sent; 0 while not streaming.
+    pub stream_skipped: u32,
+    pub stream_total: u32,
+    /// Bytes the stream output sent.
+    pub stream_bytes: u64,
+}
+
 pub trait StreamingSoftware: Send + Sync {
     /// The latest state.
     fn state(&self) -> StreamingState;
@@ -82,4 +99,6 @@ pub trait StreamingSoftware: Send + Sync {
         item: i64,
         locked: bool,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Its counters now.
+    fn stats(&self) -> impl Future<Output = Result<StreamingStats, StreamingError>> + Send;
 }

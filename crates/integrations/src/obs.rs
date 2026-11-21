@@ -28,7 +28,9 @@ use obws::{
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
-use toolkit_core::streaming::{Input, Scene, SceneItem, StreamingError, StreamingState};
+use toolkit_core::streaming::{
+    Input, Scene, SceneItem, StreamingError, StreamingState, StreamingStats,
+};
 
 use crate::secrets::SecretStore;
 
@@ -120,6 +122,22 @@ impl ObsControl {
             })
             .await
             .map_err(command_error)
+    }
+
+    /// CPU and render counters (`GetStats`), and the stream output's (`GetStreamStatus`).
+    pub async fn stats(&self) -> Result<StreamingStats, StreamingError> {
+        let client = self.client()?;
+        let general = client.general().stats().await.map_err(command_error)?;
+        let stream = client.streaming().status().await.map_err(command_error)?;
+        Ok(StreamingStats {
+            cpu_percent: general.cpu_usage,
+            render_skipped: general.render_skipped_frames,
+            render_total: general.render_total_frames,
+            streaming: stream.active,
+            stream_skipped: stream.skipped_frames,
+            stream_total: stream.total_frames,
+            stream_bytes: stream.bytes,
+        })
     }
 
     pub async fn set_item_locked(

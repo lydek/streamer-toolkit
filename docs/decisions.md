@@ -74,6 +74,7 @@
 | 記錄檔 | `tracing`＋`tracing-subscriber`（JSON）＋`tracing-appender`（按日輪替，保留 14 天）；寫在資料夾的 `logs/`，`RUST_LOG` 可調整等級；輸出層遮蔽只當備援 |
 | 內嵌前端 | `rust-embed`（啟用 `debug-embed`） |
 | 備份檔 | `zip`（只開 deflate：`flate2`＋`zlib-rs`）＋`sha2`；格式見 architecture.md §6「備份檔」 |
+| 效能監看 | `sysinfo`（MIT，只開 `system`）：本機與本工具程序的 CPU、記憶體 |
 | OpenAPI | `utoipa` |
 | 前端 API 型別 | `openapi-typescript`＋`openapi-fetch`；WS 事件型別也放進 OpenAPI components |
 | 架構測試 | 自寫 Rust 測試：`cargo_metadata` 檢查 crate 相依性，掃描 `domain/` 內任何 `sqlx`／`axum` 字樣（含 derive 與完整路徑） |
