@@ -398,9 +398,12 @@ describe('HomeTile', () => {
     expect(counted.get('.line').text()).toBe('最新：<b>小魚</b>')
     expect(counted.find('b').exists()).toBe(false)
     expect(tile({ state: 'ready', num: '遊戲畫面', text: '6 個場景' }).get('.num').classes()).toContain('word')
+    // A small tile keeps all three rows, so every tile is the same height: an empty line, a dash for no number.
     const bare = tile({ state: 'ready', num: '12', unit: '死亡次數', text: '' })
-    expect(bare.find('.line').exists()).toBe(false)
-    expect(tile({ state: 'ready', text: '還沒有音效' }).find('.num').exists()).toBe(false)
+    expect(bare.get('.line').text()).toBe('')
+    const dash = tile({ state: 'ready', text: '還沒有音效' }).get('.num')
+    expect(dash.text()).toBe('—')
+    expect(dash.attributes('aria-hidden')).toBe('true')
   })
 })
 

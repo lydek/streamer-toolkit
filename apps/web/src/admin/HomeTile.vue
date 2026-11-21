@@ -1,10 +1,10 @@
 <template>
   <!-- A feature not built yet: the same tile, grey, as a plain block that does nothing (no drawer, not focusable). -->
   <div v-if="unbuilt" class="tile off" :title="t('home.unbuilt')">
-    <TileFace :name="name" :icon="icon" :tint="tint" :line="{ state: 'ready', text: t('home.unbuilt') }" />
+    <TileFace :name="name" :icon="icon" :tint="tint" :line="{ state: 'ready', text: t('home.unbuilt') }" rows />
   </div>
   <button v-else type="button" class="tile" :aria-expanded="expanded" :aria-controls="controls ?? drawerId(id)" :data-drawer-tile="controls ? undefined : id">
-    <TileFace :name="name" :icon="icon" :tint="tint" :line="shown" />
+    <TileFace :name="name" :icon="icon" :tint="tint" :line="shown" rows />
     <template v-if="attention || shown.state === 'failed'">
       <span class="dot" aria-hidden="true"></span>
       <span class="sr-only">{{ t('home.attention') }}</span>
@@ -39,6 +39,8 @@ const shown = useThrottled(() => props.line)
 <style scoped>
 .tile {
   position: relative;
+  /* Every small tile the same height (rem, so it grows with the text size); a wrapped name may make one taller. */
+  min-block-size: 7.25rem;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-content: start;

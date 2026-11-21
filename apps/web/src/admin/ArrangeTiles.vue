@@ -17,7 +17,7 @@
         @drop.prevent="onDrop(tile.id)"
         @dragend="dragged = over = null"
       >
-        <TileFace :name="name(tile.id)" :icon="tile.icon" :tint="tile.tint" :line="lineOf(tile.id)" />
+        <TileFace :name="name(tile.id)" :icon="tile.icon" :tint="tile.tint" :line="lineOf(tile.id)" :rows="!tile.size" />
         <Button
           data-action="remove"
           class="hide"

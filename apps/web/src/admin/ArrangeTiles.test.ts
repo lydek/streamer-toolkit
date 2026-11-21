@@ -120,6 +120,12 @@ describe('ArrangeTiles', () => {
     expect(document.activeElement).toBe(button('alerts', 'earlier'))
   })
 
+  it('gives small tiles all three rows and wide blocks none of the dash', () => {
+    arrange(['chat', 'checklist'])
+    expect(document.querySelector('[data-tile="chat"] .num')?.textContent).toBe('—')
+    expect(document.querySelector('[data-tile="checklist"] .num')).toBeNull()
+  })
+
   it('restores the defaults by saving null', async () => {
     const wrapper = arrange([])
     ;[...document.querySelectorAll('button')].find((b) => b.textContent?.includes('還原預設'))!.click()
