@@ -18,6 +18,7 @@ crates/
     checkin/       # 打卡簽到（複雜）：訂閱 RedemptionRecorded 與聊天指令事件
     sound/         # 音效管理（薄）
     bgm/           # 背景音樂：音樂庫、歌單、播放器與場景對應（薄）
+    counter/       # 計數器：全域計數與聊天指令（薄）
     stream/        # 直播狀態與場次（薄）
     activity/      # 活動紀錄：追隨、訂閱、小奇點、揪團（薄）
     viewers/       # 觀眾名冊（薄）
@@ -57,6 +58,7 @@ apps/
 | 個人徽章（之後的階段） | 薄 | 初版只有「觀眾／身分組 → 徽章」；出現多規則優先順序時升級 |
 | 事件特效 | 薄 | 佇列、優先順序、重播屬於播放邏輯，放在 application 層 |
 | 聊天室顯示、音效管理、SO 剪輯、設定 | 薄 | CRUD 或渲染，沒有資料規則 |
+| 計數器 | 薄 | 加減與每場歸零；「每場只歸零一次」靠存下的場次 ID，沒有其他規則 |
 
 ## 4. 模組之間
 - **同步查詢**：呼叫對方公開的 application service trait；不得引用對方內部型別。
@@ -92,7 +94,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -141,10 +143,10 @@ apps/
   - 樣板：只有內建樣板 `default`、`banner`、`text`（原始檔在 `apps/web/src/overlay/alerts/templates/<id>/`，只用 HTML／CSS，同時內嵌進執行檔）；沒有資料夾樣板。選擇記在 `settings.json` 的 `alert_template`（預設 `default`，無法辨識的值當成 `default`），管理 UI 用 `GET`／`PUT /api/admin/templates/alerts`（`{ "selected": "<id>" }`；其餘值回 400 `template.unknown`，存檔失敗回 500 `settings.save_failed`）讀取與切換，存檔後發布 `template.changed`（`overlay` 為 `alerts`），Overlay 立即換掉。`GET /templates/alerts/{*path}` 提供目前選擇的樣板，`GET /templates/built-in/alerts/{id}/{*path}` 提供任一款給預覽（未知的 ID 回 404）；類型白名單、路徑檢查與標頭都和聊天室樣板相同。綁定方式：`data-alert-stage` 元素（目前播放的特效放在裡面）與 `<template data-alert>`（一則特效的標記）；`data-field="title"` 填「誰做了什麼」，`data-field="message"` 填觀眾留言（沒有留言就移除）；最上層元素加上 `data-kind`（事件種類）與 CSS 變數 `--duration`，時間到就移除。文字一律以 `textContent` 寫入；Overlay 一樣以 `DOMParser` 解析並移除會執行的內容，相對路徑指向樣板目錄。
   - 音效：預設音效 `chime.wav` 由 `scripts/generate-chime.mjs` 只用 Node 內建模組合成（不下載外部音檔，記在 `assets/CREDITS.md`），打包進建置產物。每種事件可在特效完整頁各自選內建音效（預設）、音效庫的一個音效或靜音（見「音效庫」）；payload 的 `sound` 告訴 Overlay 要播哪一個（`built_in` 帶 `volume`、`silent`，或 `file` 帶 `url` 與 `volume`），每則特效開始時播放一次。OBS 瀏覽器來源允許自動播放；要在 OBS 混音器調整音量，勾選來源的「透過 OBS 控制音訊」。
 - **集點卡 Overlay**（`/overlay/checkin/`）：每次打卡成功（重複的不算）就把卡片排進同一條呈現佇列，輪到時送出一則 `checkin.stamped`：觀眾名稱、頭像網址、目前的格數與總格數、累計次數、是否剛好集滿、顯示時間（5 秒，之後隔 1 秒才送下一則），不放進快照。頭像向 Twitch（Helix Get Users）查一次後存起來，只接受 `https://static-cdn.jtvnw.net/` 的網址，Overlay 也再檢查一次。名稱以 Vue 的文字插值顯示。打卡設定可為一般打卡與集滿各選音效庫的一個音效（預設靜音），payload 的 `sound`（`url`、`volume`；靜音為 `null`）隨卡片播放一次。只有一款內建樣式（純 CSS，沒有外部素材），集滿時有不同的效果。模擬器（`POST /api/admin/simulate/checkin`，`source=simulation`）只送到 Overlay，不寫入紀錄。
-- **聊天指令**（`core` 的 `commands`，Host 組合）：各功能的聊天指令存在同一張表，`settings.json` 的 `chat_commands`（以指令的 key 對應名稱與「誰能用」；沒存過的用宣告的預設名稱、所有人可用）。每個模組宣告自己的指令（key、所屬模組、預設名稱），Host 把所有宣告組合成一張表交給各模組；模組只透過這張表存取自己的指令，不讀別的模組的資料。
-  - 撞名：存檔時名稱和其他功能的指令相同（英文不分大小寫）就拒絕，不存任何東西；管理 API 回 409 `commands.taken`，並帶 `module`（用到它的模組）與 `name`（它存的名稱），管理 UI 寫成：已被打卡簽到的「!打卡」使用。
+- **聊天指令**（`core` 的 `commands`，Host 組合）：各功能的聊天指令存在同一張表，`settings.json` 的 `chat_commands`。每筆以指令的 key 對應名稱、「誰能用」、所屬模組，以及實況主取的稱呼（`label`，例如計數器的名稱）；沒存過的用宣告的預設名稱、所有人可用。固定的指令由模組宣告（key、所屬模組、預設名稱），Host 把所有宣告組合成一張表交給各模組；實況主新增的指令（例如計數器的，key `counter.<ID>`）直接存進表，刪除時一併移除。模組只透過這張表存取自己的指令，不讀別的模組的資料。
+  - 撞名：存檔時名稱和表裡其他指令（存過的，以及宣告了但沒存過的）相同（英文不分大小寫）就拒絕，不存任何東西；管理 API 回 409 `commands.taken`，並帶 `module`（用到它的模組）與 `label`（它的稱呼，沒有稱呼時是 `!<名稱>`），管理 UI 寫成：已被計數器的「死亡次數」使用。
   - 誰能用：所有人、訂閱者、VIP、管理員，所有功能用同一個判斷（看 Twitch 聊天徽章顯示的身分）。每一級也包含上面的級別（訂閱者 < VIP < 管理員），實況主本人永遠可以用所有指令。
-  - 目前只有打卡指令（key `checkin`）。舊版存在 `checkin.command` 的指令，在啟動時搬進表一次，之後不再寫入原位置。
+  - 固定的指令目前只有打卡（key `checkin`）。舊版存在 `checkin.command` 的指令，在啟動時搬進表一次，之後不再寫入原位置；更早存的項目沒有所屬模組時，載入時依宣告補上。
 - **音效庫**（sound 模組）：管理 API `GET`／`POST /api/admin/sounds`、`PUT`／`DELETE /api/admin/sounds/{id}`。
   - 匯入：body 就是檔案本身，`?name=` 帶原始檔名；上限 10 MB（`DefaultBodyLimit`，超過回 413 `sound.too_large`）。副檔名與檔案開頭的 magic bytes 必須是同一種格式：MP3（`ID3` 或 MPEG frame sync）、WAV（`RIFF`…`WAVE`）或 OGG（`OggS`），否則回 400 `sound.unsupported_type`。
   - 檔案複製到資料夾的 `sounds/`，以 UUID v7 命名；原始檔名只當名稱（以文字顯示），不當路徑。名稱、音量（0–100%）與格式記在 `settings.json` 的 `sound.library`。刪除時先從 `settings.json` 移除，再刪檔案。
@@ -153,6 +155,10 @@ apps/
   - 刪除音效時，用到它的 slot 一併回到預設；`GET /api/admin/sounds` 的每個音效帶 `used_by`（用到它的 slot），管理 UI 刪除前先列出。
   - 總音量：`PUT /api/admin/sounds/volume`（`{ "volume": 0–100 }`，記在 `settings.json` 的 `sound.volume`，預設 100%；`GET /api/admin/sounds` 帶 `volume`）。sound 模組查詢 slot 時把它乘上音效自己的音量，所以兌換、特效（含內建音效）與打卡音效都套用，「在 OBS 播放」也一樣；sound 模組停用時仍套用。在背景音樂播放器調整。
 - **兌換音效 Overlay**（`/overlay/sound/`）：音效完整頁可把頻道點數獎勵（清單同打卡設定，Helix Get Custom Reward）對應到音效庫的音效。新的兌換（`RedemptionChange::Added`）由 Host 在交給 redemption 模組的同一處，也交給 sound 模組（記憶體，不經 outbox：晚播不如不播，重啟前的兌換不補播），sound 模組把它排進共用的呈現佇列（與特效、集點卡同一條），佔用的時間是音效的長度；輪到時發布 `sound.play`（`url`、`volume`），不放進快照。音效長度存在音效庫的項目（`duration_ms`）：管理視窗匯入後用 `<audio>` 讀取長度，以 `PUT /api/admin/sounds/{id}/duration` 存起來（1 毫秒到 6 小時）；管理視窗開啟時也會補量還沒有長度的音效。還沒量到長度時以 5 秒計。Overlay 依收到的順序一次播一個，播完（或播放失敗）才播下一個；等待超過 100 個時丟掉最舊的。「在 OBS 播放」（`POST /api/admin/sounds/{id}/play`）不經過佇列，立刻送到 Overlay（`source=simulation`），不寫入兌換紀錄。OBS 加這個網址為瀏覽器來源，勾選「透過 OBS 控制音訊」。
+- **計數器**（counter 模組，`/overlay/counter/`）：全域計數存在 `counter_counters`（名稱、目前數字、是否每場歸零、上次歸零的場次 ID），聊天指令與誰能用存在共用的聊天指令表（key `counter.<ID>`，`label` 是計數器名稱）。管理 API：`GET`／`POST /api/admin/counters`、`PUT`／`DELETE /api/admin/counters/{id}`、`POST /api/admin/counters/{id}/add`（`delta` 只能是 1 或 -1）、`POST /api/admin/counters/{id}/reset`。名稱 1–100 字；指令只能是一個詞（最多 25 字，可省略，`!` 會去掉）；最多 100 個。數字不會小於 0。
+  - 聊天：訊息的第一個詞是某個計數器的 `!<指令>`（英文不分大小寫），而且傳送者能用，就加一。模擬事件（`source=simulation`）不算；模組停用時指令直接丟棄，加一、歸零按鈕與每場歸零照常。
+  - 每場歸零：每次收到直播中的 `stream.status`（開播、每分鐘的檢查、重新啟動後都會再送），向 stream 模組的公開 service 取得目前場次 ID（`session_after_pending()`），每場歸零的計數器如果還沒為這一場歸零過，就歸零並記下這一場；所以每場只歸零一次，重新啟動或開播後才啟動工具（由每分鐘的檢查補上場次）都一樣。新增計數器，或把它改成每場歸零時，先記下目前的場次（直播中就是這一場），不會馬上歸零；還沒有任何場次時記成沒有，第一場開播時歸零。
+  - 每次變動都發布 `counter.values`（所有計數器的 ID、名稱與數字，依新增順序），快照只保留最新一則。Overlay 列出每個計數器的名稱與數字（名稱以文字顯示）；計數器頁、首頁的計數器磚（顯示第一個計數器）與抽屜（可以加一）也依它更新數字。
 - **背景音樂庫**（bgm 模組）：和音效庫分開。管理 API `GET`／`POST /api/admin/music`、`PUT`／`DELETE /api/admin/music/{id}`（`PUT` 改曲名）。
   - 匯入與檔案比照音效庫：上限 50 MB（超過回 413 `music.too_large`），副檔名與 magic bytes 不一致回 400 `music.unsupported_type`（兩個模組共用 `core` 的 `audio` 檢查）；檔案複製到資料夾的 `music/`，以 UUID v7 命名。曲名、格式、長度與歌單記在 `settings.json` 的 `bgm`。刪除時先從 `settings.json`（含所有歌單）移除，再刪檔案。
   - `GET /music/{id}` 與 `/sounds/{id}` 相同：唯讀、不需要 token、只提供音樂庫裡有的 ID、`Content-Type` 依格式固定、`nosniff`、`no-store`，不送 `Access-Control-Allow-Origin`。另外支援單一的 byte range（回 206；格式不對或超出檔案回 416），Overlay 才能從歌曲中間開始播。

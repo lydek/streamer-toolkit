@@ -376,6 +376,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/counters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_counters"];
+        put?: never;
+        /** Adds a counter at 0. A per-stream one counts the stream on now as already reset. */
+        post: operations["create_counter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Changes a counter's settings; its value stays. Becoming per-stream counts the stream on now as already reset. */
+        put: operations["update_counter"];
+        post?: never;
+        /** Deletes a counter and its chat command. */
+        delete: operations["delete_counter"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/{id}/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds or takes one. */
+        post: operations["add_to_counter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/{id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Puts a counter back to 0. */
+        post: operations["reset_counter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -1666,14 +1735,74 @@ export interface components {
         ClientIdBody: {
             client_id: string;
         };
-        /** @description `commands.taken`: which feature's command already has the name. */
+        /** @description The admin API's answer to `commands.taken` (409): which command already has the name. */
         CommandTakenBody: {
+            /** @description `commands.taken`. */
             code: string;
+            /** @description How to name that command: what the broadcaster calls it (e.g. a counter's name), or `!<name>`. */
+            label: string;
             /** @description The module whose command has it. */
             module: string;
-            /** @description That command's name as saved. */
-            name: string;
         };
+        /** @description A counter with its command. `name` is broadcaster text: render it as text. */
+        CounterBody: {
+            /** @description Who may use the command; the broadcaster always may. */
+            allowed: components["schemas"]["Allowed"];
+            /** @description The chat command without its `!`; empty: none. */
+            command: string;
+            id: string;
+            name: string;
+            /** @description Back to 0 when the next stream starts. */
+            per_stream: boolean;
+            /** Format: int64 */
+            value: number;
+        };
+        CounterInput: {
+            allowed: components["schemas"]["Allowed"];
+            /**
+             * @description One word of at most 25 characters, with or without its `!`; empty: no chat command. No other command may
+             *     have it (ignoring case).
+             */
+            command: string;
+            /** @description 1–100 characters after trimming. */
+            name: string;
+            per_stream: boolean;
+        };
+        CounterStep: {
+            /**
+             * Format: int64
+             * @description `1` or `-1`; a counter never goes below 0.
+             */
+            delta: number;
+        };
+        /** @description One counter on the overlay. `name` is broadcaster text: render it as text. */
+        CounterValue: {
+            id: string;
+            name: string;
+            /** Format: int64 */
+            value: number;
+        };
+        /**
+         * @description A `counter.values` event exactly as `/ws/overlay` sends it after any change; the snapshot keeps only the
+         *     latest one.
+         */
+        CounterValuesEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["CounterValuesPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["CounterValuesType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The `payload` of a `counter.values` event: every counter, in creation order. */
+        CounterValuesPayload: {
+            counters: components["schemas"]["CounterValue"][];
+        };
+        /** @enum {string} */
+        CounterValuesType: "counter.values";
         DeviceLogin: {
             /** Format: int64 */
             expires_in_secs: number;
@@ -1870,6 +1999,7 @@ export interface components {
             bgm: number;
             chat: number;
             checkin: number;
+            counter: number;
             other: number;
             sound: number;
         };
@@ -2227,6 +2357,8 @@ export interface components {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
             /** @description The latest removals, oldest first: what was taken down before this snapshot. */
             "chat.removed": components["schemas"]["ChatRemovedEvent"][];
+            /** @description At most one: every counter's latest value. */
+            "counter.values": components["schemas"]["CounterValuesEvent"][];
             /** @description At most one: the latest streaming-software state. */
             "obs.state": components["schemas"]["ObsStateEvent"][];
             /** @description At most one: the latest status. */
@@ -3357,6 +3489,269 @@ export interface operations {
                 };
             };
             /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_counters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CounterBody"][];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_counter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CounterInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CounterBody"];
+                };
+            };
+            /** @description `counter.invalid`: an empty name, a command that is not one word, or more than 100 counters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `commands.taken`: another command has the name */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandTakenBody"];
+                };
+            };
+            /** @description `counter.storage_failed` or `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_counter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CounterInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CounterBody"];
+                };
+            };
+            /** @description `counter.invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `commands.taken`: another command has the name */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandTakenBody"];
+                };
+            };
+            /** @description `counter.storage_failed` or `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_counter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `counter.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_to_counter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CounterStep"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `counter.invalid`: not 1 or -1 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reset_counter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `counter.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

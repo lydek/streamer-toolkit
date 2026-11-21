@@ -226,7 +226,7 @@ describe('SettingsView', () => {
   it('chooses who may check in, and says which feature already has a command name', async () => {
     client.PUT.mockImplementation(async (_: string, init: { body: { command: string } }) =>
       init.body.command === 'deaths'
-        ? { error: { code: 'commands.taken', module: 'checkin', name: 'Deaths' }, response: new Response(null, { status: 409 }) }
+        ? { error: { code: 'commands.taken', module: 'counter', label: '死亡次數' }, response: new Response(null, { status: 409 }) }
         : ok(init.body),
     )
     const wrapper = await mountSettings()
@@ -239,7 +239,7 @@ describe('SettingsView', () => {
     await wrapper.get('#checkin-command').setValue('deaths')
     await wrapper.get('#checkin-command').trigger('blur')
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain(i18n.global.t('errors.commands.taken', { feature: i18n.global.t('modules.names.checkin'), name: 'Deaths' })),
+      expect(wrapper.text()).toContain('已被計數器的「死亡次數」使用。'),
     )
     expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('打卡')
     wrapper.unmount()

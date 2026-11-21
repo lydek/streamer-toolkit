@@ -5,6 +5,7 @@ import ChatPage from './ChatPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
 import HomeView from './HomeView.vue'
+import CountersPage from './CountersPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
@@ -30,6 +31,7 @@ export const router = createRouter({
     { path: '/sounds', component: SoundsPage },
     { path: '/scenes', component: ScenesPage },
     { path: '/music', component: MusicPage },
+    { path: '/counters', component: CountersPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     ...SOON_PAGES.map((p) => ({ path: p.path, component: ComingSoon, props: { id: p.soon!.id } })),
     { path: '/:path(.*)*', component: NotFoundView },

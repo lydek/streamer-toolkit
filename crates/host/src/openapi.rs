@@ -95,6 +95,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     let mut doc = ApiDoc::openapi();
     doc.merge(redemption::openapi());
     doc.merge(checkin::openapi());
+    doc.merge(counter::openapi());
     doc.merge(sound::openapi());
     doc.merge(bgm::openapi());
     doc.merge(stream::openapi());

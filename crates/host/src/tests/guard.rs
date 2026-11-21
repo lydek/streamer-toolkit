@@ -190,6 +190,7 @@ async fn overlay_gets_overlay_csp_and_assets_get_cors() {
         "/overlay/checkin",
         "/overlay/sound",
         "/overlay/bgm",
+        "/overlay/counter",
     ] {
         let res = app()
             .oneshot(

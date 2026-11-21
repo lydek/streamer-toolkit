@@ -70,6 +70,7 @@ pub(crate) struct AdminState {
     alerts: Arc<AlertsService>,
     redemption: Arc<RedemptionService>,
     checkin: Arc<CheckinService>,
+    counters: Arc<counter::Counters>,
     sounds: Arc<SoundService>,
     stream: Arc<StreamService>,
     activity: Arc<ActivityService>,
@@ -101,6 +102,7 @@ impl AdminState {
         alerts: Arc<AlertsService>,
         redemption: Arc<RedemptionService>,
         checkin: Arc<CheckinService>,
+        counters: Arc<counter::Counters>,
         sounds: Arc<SoundService>,
         stream: Arc<StreamService>,
         activity: Arc<ActivityService>,
@@ -120,6 +122,7 @@ impl AdminState {
             alerts,
             redemption,
             checkin,
+            counters,
             sounds,
             stream,
             activity,
@@ -135,7 +138,7 @@ impl AdminState {
         state
     }
 
-    /// Connects chat (and its check-in command), alerts, redemptions (and their reward sounds) and the stream's
+    /// Connects chat (and its check-in and counter commands), alerts, redemptions (and their reward sounds) and the stream's
     /// start and end for `auth`, and checks once a minute whether the stream is live (both wait until signed in);
     /// stops the tasks of the previous auth.
     fn start_eventsub(&self, auth: TwitchAuth) {
@@ -145,6 +148,7 @@ impl AdminState {
         let activity = self.activity.clone();
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
+        let counters = self.counters.clone();
         let sounds = self.sounds.clone();
         // One handle per delivery: chat, alerts and redemptions each record their viewer.
         let (chat_viewers, alert_viewers, redemption_viewers) = (
@@ -192,6 +196,7 @@ impl AdminState {
                     });
                 }
                 checkin.receive_chat(&m, Source::Twitch);
+                counters.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),
             deliver_alert: Arc::new(move |a| {
