@@ -84,7 +84,7 @@
             }
           },
           "413": {
-            "description": "`backup.too_large`: more than a restore accepts",
+            "description": "`backup.too_large`: more than a restore accepts (20 GB unpacked, 100,000 files)",
             "content": {
               "application/json": {
                 "schema": {
@@ -95,6 +95,16 @@
           },
           "500": {
             "description": "`backup.export_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "`backup.no_space`, with `needed` (bytes): not enough free disk space",
             "content": {
               "application/json": {
                 "schema": {
@@ -140,15 +150,107 @@
         }
       }
     },
-    "/api/admin/backup/restore/preview": {
+    "/api/admin/backup/restore/upload": {
       "post": {
         "tags": [
           "admin"
         ],
-        "summary": "Checks a backup file (at most 512 MB) and stages it for a restore; nothing in use changes. The body is the\nfile itself. A later preview replaces the staged one.",
-        "operationId": "preview_restore",
+        "summary": "Starts a restore upload of a file of `size` bytes, replacing any earlier upload. Refused before anything is written\nwhen the file is above the cap or the disk has less than twice its size free (the upload, then its unpacked copy).",
+        "operationId": "start",
         "requestBody": {
-          "description": "The backup file",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`backup.invalid`: empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`backup.too_large`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.restore_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "`backup.no_space`, with `needed` (bytes)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/backup/restore/upload/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Adds the next part (the body, at most 16 MB) at `offset`, which must be the bytes received so far.",
+        "operationId": "part",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "From the upload's start",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Where this part starts: the bytes received so far.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The next part",
           "content": {
             "application/octet-stream": {
               "schema": {
@@ -163,6 +265,110 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/UploadProgress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`backup.invalid`: past the size given at the start",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`backup.upload_gone`: cancelled, replaced or never started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`backup.upload_offset`, with `received`: not where the upload stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`backup.too_large`: a part above 16 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`backup.restore_failed`: could not be written; the upload is dropped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancels the upload and removes what arrived; one already gone is fine.",
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "From the upload's start",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cancelled"
+          }
+        }
+      }
+    },
+    "/api/admin/backup/restore/upload/{id}/check": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Checks the complete upload and stages it for a restore (as the one-request preview did); nothing in use changes.\nThe uploaded file is removed either way.",
+        "operationId": "check",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "From the upload's start",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/RestorePreview"
                 }
               }
@@ -170,6 +376,26 @@
           },
           "400": {
             "description": "`backup.invalid`: damaged or not a backup; `backup.newer_version`: made by a newer version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`backup.upload_gone`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`backup.upload_offset`, with `received`: not all of it has arrived",
             "content": {
               "application/json": {
                 "schema": {
@@ -12063,6 +12289,45 @@
           "current": {
             "type": "string",
             "description": "The running version."
+          }
+        }
+      },
+      "UploadProgress": {
+        "type": "object",
+        "required": [
+          "received"
+        ],
+        "properties": {
+          "received": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes received so far.",
+            "minimum": 0
+          }
+        }
+      },
+      "UploadStart": {
+        "type": "object",
+        "required": [
+          "size"
+        ],
+        "properties": {
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The backup file's size in bytes.",
+            "minimum": 0
+          }
+        }
+      },
+      "UploadStarted": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
           }
         }
       },

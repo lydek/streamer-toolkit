@@ -3,6 +3,11 @@
     <Button :label="t('backup.export')" icon="pi pi-download" :disabled="busy" @click="exportBackup" />
     <label for="restore-file">{{ t('backup.restoreFile') }}</label>
     <input id="restore-file" ref="input" type="file" accept=".stbackup" :disabled="busy" @change="choose" />
+    <div v-if="progress" class="progress">
+      <p role="status">{{ progressText }}</p>
+      <ProgressBar :value="progressPercent" :mode="progress.phase === 'check' ? 'indeterminate' : 'determinate'" />
+      <Button :label="t('backup.cancel')" severity="secondary" text @click="controller?.abort()" />
+    </div>
     <p v-if="error" role="alert">{{ error }}</p>
     <template v-if="preview">
       <ul class="preview">
@@ -22,12 +27,12 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import ProgressBar from 'primevue/progressbar'
 import { useToast } from 'primevue/usetoast'
-import { ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { errorMessage } from '../i18n'
-import { ApiError, type Schemas } from './api'
-import { BACKUP_MAX_BYTES, confirmRestore, previewRestore, saveBackup } from './backup'
+import { type Schemas } from './api'
+import { type RestoreProgress, backupError, confirmRestore, formatSize, previewRestore, saveBackup, sizeUnit } from './backup'
 import { errorToast, successToast } from './home'
 
 const { t, locale } = useI18n()
@@ -37,8 +42,19 @@ const input = ref<HTMLInputElement>()
 const preview = shallowRef<Schemas['RestorePreview']>()
 const error = ref('')
 const restarting = ref(false)
+const progress = shallowRef<RestoreProgress>()
+let controller: AbortController | undefined
 
-const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
+const message = backupError
+const progressPercent = computed(() => (progress.value ? Math.floor((progress.value.sent / progress.value.total) * 100) : 0))
+const progressText = computed(() => {
+  const p = progress.value
+  if (!p || p.phase === 'check') return t('backup.checking')
+  // Both in the total's unit: 上傳中 1.2 / 3.4 GB.
+  const unit = sizeUnit(p.total)
+  return t('backup.uploading', { sent: formatSize(p.sent, unit).split(' ')[0], total: formatSize(p.total, unit) })
+})
+onBeforeUnmount(() => controller?.abort())
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleString(locale.value, { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -59,13 +75,16 @@ async function choose() {
   error.value = ''
   const file = input.value?.files?.[0]
   if (!file) return
-  if (file.size > BACKUP_MAX_BYTES) return refuse(t('errors.backup.too_large'))
   busy.value = true
+  controller = new AbortController()
+  const { signal } = controller
   try {
-    preview.value = await previewRestore(file)
+    preview.value = await previewRestore(file, (p) => (progress.value = p), signal)
   } catch (e) {
-    refuse(message(e))
+    refuse(signal.aborted ? '' : message(e))
   } finally {
+    progress.value = undefined
+    controller = undefined
     busy.value = false
   }
 }
@@ -90,6 +109,15 @@ async function restore() {
 </script>
 
 <style scoped>
+.progress {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.progress p {
+  margin: 0;
+}
+
 .preview {
   margin: 0;
   overflow-wrap: anywhere;

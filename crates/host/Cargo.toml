@@ -33,7 +33,7 @@ color_quant = "2.0.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 oxipng = { version = "10.2.1", default-features = false }
 sysinfo = { version = "0.40.4", default-features = false, features = ["system"] }
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "fs", "io-util"] }
 tokio-util = { version = "0.7", features = ["io"] }
 toolkit-core = { version = "0.1.0", path = "../core" }
 tracing = "0.1.44"
@@ -41,6 +41,9 @@ utoipa = "6.0.0"
 uuid = { version = "1.29.2", features = ["v7"] }
 zip = { version = "9.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 sha2 = "0.10.9"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }

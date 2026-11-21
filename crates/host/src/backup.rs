@@ -2,13 +2,13 @@
 //! of the database, `templates/`, `sounds/`, `music/`, `media/` and `checkin/`, plus `manifest.json` with every
 //! file's size and SHA-256.
 //! Credentials live in the Windows Credential Manager, never in the data folder, so no backup holds them.
-//! A restore is checked and staged by the admin API, then applied on the next start before the database opens.
-//! Admin routes; the caller adds the token check.
+//! A restore uploads the file in parts (`upload`), is checked and staged by the admin API, then applied on the next
+//! start before the database opens. Admin routes; the caller adds the token check.
 
 use std::{
     collections::HashSet,
     fs,
-    io::{self, Cursor, Read, Seek, Write},
+    io::{self, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -16,11 +16,10 @@ use std::{
 
 use axum::{
     Json, Router,
-    body::Bytes,
-    extract::{DefaultBodyLimit, State, rejection::BytesRejection},
+    extract::{DefaultBodyLimit, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -37,11 +36,15 @@ const MANIFEST: &str = "manifest.json";
 const SETTINGS: &str = "settings.json";
 /// Data folder subfolders taken whole. Never `logs/`, `cache/`, `WebView2/`, `backups/` or `instance-id`.
 const FOLDERS: [&str; 5] = ["templates", "sounds", "music", "media", "checkin"];
-/// What a restore accepts; an export beyond these is refused, so every backup restores.
-const MAX_ARCHIVE_BYTES: usize = 512 * 1024 * 1024;
-const MAX_EXPANDED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
-const MAX_ENTRIES: usize = 10_000;
-const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+/// What a restore accepts (unpacked size and files); an export beyond these is refused, so every backup restores.
+const MAX_EXPANDED_BYTES: u64 = 20 * 1024 * 1024 * 1024;
+const MAX_ENTRIES: usize = 100_000;
+/// The largest backup file: the unpacked cap plus room for zip headers and data that does not compress.
+const MAX_ARCHIVE_BYTES: u64 = MAX_EXPANDED_BYTES + 1024 * 1024 * 1024;
+/// The longest path a backup may hold, in bytes.
+const MAX_PATH_BYTES: usize = 1024;
+/// A manifest listing `MAX_ENTRIES` files of the longest path, each with its size and SHA-256, pretty-printed.
+const MAX_MANIFEST_BYTES: u64 = (MAX_ENTRIES * (MAX_PATH_BYTES + 256) + 64 * 1024) as u64;
 /// A checked backup waiting for the restart, in the data folder; its `manifest.json` is written last, once complete.
 const STAGING_DIR: &str = "restore-staging";
 /// Written when the broadcaster confirms, holding a new restore ID; the next start applies the staged backup.
@@ -85,6 +88,10 @@ pub(crate) struct BackupState {
     pub restart: Arc<dyn Fn() + Send + Sync>,
     /// One staging or confirmation at a time.
     pub lock: tokio::sync::Mutex<()>,
+    /// The restore upload in progress; one at a time.
+    pub upload: tokio::sync::Mutex<Option<upload::Upload>>,
+    /// Free bytes on the disk holding a folder ([`free_space`]; tests pass their own).
+    pub free_space: fn(&Path) -> Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,6 +140,9 @@ pub(crate) struct RestorePreview {
 pub enum BackupError {
     #[error("backup.too_large")]
     TooLarge,
+    /// The disk has less free space than this many bytes, which the export or restore needs.
+    #[error("backup.no_space: {0} bytes needed")]
+    NoSpace(u64),
     #[error("backup.export_failed: {0}")]
     Export(String),
     /// Damaged, tampered with, or not a backup at all.
@@ -163,7 +173,15 @@ pub enum BackupError {
 
 impl BackupError {
     fn response(&self) -> Response {
+        if let Self::NoSpace(needed) = self {
+            return (
+                StatusCode::INSUFFICIENT_STORAGE,
+                Json(serde_json::json!({ "code": "backup.no_space", "needed": needed })),
+            )
+                .into_response();
+        }
         let (status, code) = match self {
+            Self::NoSpace(_) => unreachable!("answered above"),
             Self::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "backup.too_large"),
             Self::Invalid => (StatusCode::BAD_REQUEST, "backup.invalid"),
             Self::NewerVersion => (StatusCode::BAD_REQUEST, "backup.newer_version"),
@@ -197,12 +215,51 @@ fn restore_failed(e: impl std::fmt::Display) -> BackupError {
 pub(crate) fn routes(state: BackupState) -> Router {
     Router::new()
         .route("/api/admin/backup", get(export_backup))
+        .route("/api/admin/backup/restore/upload", post(upload::start))
         .route(
-            "/api/admin/backup/restore/preview",
-            post(preview_restore).layer(DefaultBodyLimit::max(MAX_ARCHIVE_BYTES)),
+            "/api/admin/backup/restore/upload/{id}",
+            put(upload::part)
+                .layer(DefaultBodyLimit::max(upload::PART_MAX_BYTES))
+                .delete(upload::cancel),
+        )
+        .route(
+            "/api/admin/backup/restore/upload/{id}/check",
+            post(upload::check),
         )
         .route("/api/admin/backup/restore", post(confirm_restore))
         .with_state(Arc::new(state))
+}
+
+/// Free bytes on the disk holding `dir`; `None` when unknown.
+#[cfg(windows)]
+pub(crate) fn free_space(dir: &Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut free = 0u64;
+    // SAFETY: `wide` is NUL-terminated and outlives the call; the two other outputs are optional.
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    (ok != 0).then_some(free)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn free_space(_dir: &Path) -> Option<u64> {
+    None
+}
+
+/// Refuses before anything is written when the disk has less than `needed` free. An unknown amount is not refused:
+/// a write that then runs out still fails cleanly.
+fn room(needed: u64, free: Option<u64>) -> Result<(), BackupError> {
+    match free {
+        Some(free) if free < needed => Err(BackupError::NoSpace(needed)),
+        _ => Ok(()),
+    }
 }
 
 /// A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes
@@ -213,54 +270,24 @@ pub(crate) fn routes(state: BackupState) -> Router {
     tag = "admin",
     responses(
         (status = 200, description = "The backup file", content_type = "application/octet-stream", body = String),
-        (status = 413, description = "`backup.too_large`: more than a restore accepts", body = ErrorBody),
+        (status = 413, description = "`backup.too_large`: more than a restore accepts (20 GB unpacked, 100,000 files)", body = ErrorBody),
         (status = 500, description = "`backup.export_failed`", body = ErrorBody),
+        (status = 507, description = "`backup.no_space`, with `needed` (bytes): not enough free disk space", body = ErrorBody),
     )
 )]
 pub(crate) async fn export_backup(State(s): State<Arc<BackupState>>) -> Response {
     match export_file(&s.db, &s.data_dir, &s.app_version).await {
+        // The file's name goes now; the open handle streams it and the file is gone once closed.
         Ok(file) => (
             [
                 (header::CONTENT_TYPE, "application/octet-stream"),
                 (header::CACHE_CONTROL, "no-store"),
             ],
             axum::body::Body::from_stream(tokio_util::io::ReaderStream::new(
-                tokio::fs::File::from_std(file),
+                tokio::fs::File::from_std(file.into_file()),
             )),
         )
             .into_response(),
-        Err(e) => e.response(),
-    }
-}
-
-/// Checks a backup file (at most 512 MB) and stages it for a restore; nothing in use changes. The body is the
-/// file itself. A later preview replaces the staged one.
-#[utoipa::path(
-    post,
-    path = "/api/admin/backup/restore/preview",
-    tag = "admin",
-    request_body(content = String, content_type = "application/octet-stream", description = "The backup file"),
-    responses(
-        (status = 200, body = RestorePreview),
-        (status = 400, description = "`backup.invalid`: damaged or not a backup; `backup.newer_version`: made by a newer version", body = ErrorBody),
-        (status = 413, description = "`backup.too_large`", body = ErrorBody),
-        (status = 500, description = "`backup.restore_failed`: could not be staged", body = ErrorBody),
-    )
-)]
-pub(crate) async fn preview_restore(
-    State(s): State<Arc<BackupState>>,
-    body: Result<Bytes, BytesRejection>,
-) -> Response {
-    let bytes = match body {
-        Ok(bytes) => bytes,
-        Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-            return BackupError::TooLarge.response();
-        }
-        Err(_) => return BackupError::Invalid.response(),
-    };
-    let _one_at_a_time = s.lock.lock().await;
-    match stage(&s.data_dir, bytes).await {
-        Ok(preview) => Json(preview).into_response(),
         Err(e) => e.response(),
     }
 }
@@ -295,12 +322,13 @@ pub(crate) async fn confirm_restore(State(s): State<Arc<BackupState>>) -> Respon
     StatusCode::ACCEPTED.into_response()
 }
 
-/// The backup file's bytes. The snapshot goes to `cache/` and is removed afterwards.
+/// The backup file, in `cache/` until it is dropped or persisted. The snapshot goes to `cache/` too and is removed
+/// afterwards.
 async fn export_file(
     pool: &SqlitePool,
     data_dir: &Path,
     app_version: &str,
-) -> Result<fs::File, BackupError> {
+) -> Result<tempfile::NamedTempFile, BackupError> {
     let cache = data_dir.join("cache");
     std::fs::create_dir_all(&cache).map_err(export_failed)?;
     let snapshot = cache.join(format!("backup-{}.db", uuid::Uuid::now_v7()));
@@ -314,7 +342,7 @@ async fn export_snapshot(
     data_dir: &Path,
     app_version: &str,
     snapshot: &Path,
-) -> Result<fs::File, BackupError> {
+) -> Result<tempfile::NamedTempFile, BackupError> {
     db::snapshot(pool, snapshot).await.map_err(export_failed)?;
     let (schema_version, records) = describe(snapshot).await.map_err(export_failed)?;
     let manifest = Manifest {
@@ -360,7 +388,7 @@ fn write_archive(
     data_dir: &Path,
     snapshot: &Path,
     mut manifest: Manifest,
-) -> Result<fs::File, BackupError> {
+) -> Result<tempfile::NamedTempFile, BackupError> {
     let mut files = Vec::new();
     let settings = data_dir.join(SETTINGS);
     if settings.is_file() {
@@ -373,10 +401,20 @@ fn write_archive(
     if files.len() >= MAX_ENTRIES {
         return Err(BackupError::TooLarge);
     }
+    let mut total = 0u64;
+    for (_, path) in &files {
+        total = total.saturating_add(fs::metadata(path).map_err(export_failed)?.len());
+    }
+    if total > MAX_EXPANDED_BYTES {
+        return Err(BackupError::TooLarge);
+    }
+    let cache = data_dir.join("cache");
+    // The backup file is at most about as large as what it holds.
+    room(total, free_space(&cache))?;
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    let mut file = tempfile::tempfile_in(data_dir.join("cache")).map_err(export_failed)?;
+    let mut file = tempfile::NamedTempFile::new_in(&cache).map_err(export_failed)?;
     let mut output = LimitedWriter {
-        file: &mut file,
+        file: file.as_file_mut(),
         remaining: MAX_ARCHIVE_BYTES,
         exceeded: false,
     };
@@ -386,11 +424,16 @@ fn write_archive(
         let mut expanded = 0;
         for (name, path) in files {
             let mut source = fs::File::open(path).map_err(export_failed)?;
-            if source.metadata().map_err(export_failed)?.len() > MAX_EXPANDED_BYTES - expanded {
+            let len = source.metadata().map_err(export_failed)?.len();
+            if len > MAX_EXPANDED_BYTES - expanded {
                 return Err(BackupError::TooLarge);
             }
-            zip.start_file(name.as_str(), options)
-                .map_err(export_failed)?;
+            // Zip64 for a file of 4 GiB or more; one that grows past that while it is read fails the export.
+            zip.start_file(
+                name.as_str(),
+                options.large_file(len >= u64::from(u32::MAX)),
+            )
+            .map_err(export_failed)?;
             let mut size = 0;
             let mut hash = Sha256::new();
             loop {
@@ -431,18 +474,18 @@ fn write_archive(
 
 struct LimitedWriter<'a> {
     file: &'a mut fs::File,
-    remaining: usize,
+    remaining: u64,
     exceeded: bool,
 }
 
 impl Write for LimitedWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() > self.remaining {
+        if bytes.len() as u64 > self.remaining {
             self.exceeded = true;
             return Err(io::Error::other("backup size limit reached"));
         }
         let written = self.file.write(bytes)?;
-        self.remaining -= written;
+        self.remaining -= written as u64;
         Ok(written)
     }
 
@@ -517,7 +560,7 @@ fn allowed_path(path: &str) -> bool {
             && !s.chars().any(char::is_control)
             && !RESERVED.iter().any(|r| stem.eq_ignore_ascii_case(r))
     };
-    path.len() <= 1024
+    path.len() <= MAX_PATH_BYTES
         && segments.iter().all(plain)
         && match segments.as_slice() {
             [single] => *single == SETTINGS || *single == db::DB_FILE,
@@ -562,16 +605,17 @@ fn copy_checked(
     Ok(())
 }
 
-type Archive<'a> = ZipArchive<Cursor<&'a [u8]>>;
+type Archive = ZipArchive<BufReader<fs::File>>;
 
-/// Checks a backup in memory before anything is written: the limits, every path, each file's size and hash, and
-/// that this version can read it.
-fn validate(bytes: &[u8]) -> Result<(Manifest, Archive<'_>), BackupError> {
+/// Checks a backup file before anything is written: the limits, every path, each file's size and hash, and that this
+/// version can read it. Entries are read in small pieces, so memory does not grow with the backup's size.
+fn validate(path: &Path) -> Result<(Manifest, Archive), BackupError> {
     use BackupError::{Invalid, NewerVersion, TooLarge};
-    if bytes.len() > MAX_ARCHIVE_BYTES {
+    let file = fs::File::open(path).map_err(stage_failed)?;
+    if file.metadata().map_err(stage_failed)?.len() > MAX_ARCHIVE_BYTES {
         return Err(TooLarge);
     }
-    let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(|_| Invalid)?;
+    let mut zip = ZipArchive::new(BufReader::new(file)).map_err(|_| Invalid)?;
     if zip.len() > MAX_ENTRIES {
         return Err(TooLarge);
     }
@@ -613,20 +657,20 @@ fn validate(bytes: &[u8]) -> Result<(Manifest, Archive<'_>), BackupError> {
     Ok((manifest, zip))
 }
 
-/// Checks the backup and writes it to `restore-staging/`, replacing anything staged before; on any failure nothing
-/// stays staged. The data in use is never touched.
-async fn stage(data_dir: &Path, bytes: Bytes) -> Result<RestorePreview, BackupError> {
+/// Checks the backup file and writes it to `restore-staging/`, replacing anything staged before; on any failure
+/// nothing stays staged. The data in use is never touched.
+async fn stage(data_dir: &Path, file: &Path) -> Result<RestorePreview, BackupError> {
     let staging = data_dir.join(STAGING_DIR);
-    let result = stage_into(&staging, bytes).await;
+    let result = stage_into(&staging, file.to_owned()).await;
     if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
     }
     result
 }
 
-async fn stage_into(staging: &Path, bytes: Bytes) -> Result<RestorePreview, BackupError> {
+async fn stage_into(staging: &Path, file: PathBuf) -> Result<RestorePreview, BackupError> {
     let dir = staging.to_owned();
-    let manifest = tokio::task::spawn_blocking(move || extract(&bytes, &dir))
+    let manifest = tokio::task::spawn_blocking(move || extract(&file, &dir))
         .await
         .map_err(stage_failed)??;
     // The database itself, not only the manifest's claim: every applied migration must be one this build knows.
@@ -644,8 +688,8 @@ async fn stage_into(staging: &Path, bytes: Bytes) -> Result<RestorePreview, Back
     Ok(preview(&manifest))
 }
 
-fn extract(bytes: &[u8], staging: &Path) -> Result<Manifest, BackupError> {
-    let (manifest, mut zip) = validate(bytes)?;
+fn extract(file: &Path, staging: &Path) -> Result<Manifest, BackupError> {
+    let (manifest, mut zip) = validate(file)?;
     remove(staging).map_err(stage_failed)?;
     for file in &manifest.files {
         // Checked by `allowed_path`: plain relative segments, so the target stays inside the staging folder.
@@ -688,6 +732,8 @@ fn preview(m: &Manifest) -> RestorePreview {
 /// database opens (docs/architecture.md §6). Returns whether a restore was applied. On any failure the data from
 /// before is back in place, except for [`BackupError::PutBack`].
 pub async fn apply_pending(data_dir: &Path, app_version: &str) -> Result<bool, BackupError> {
+    // A restore upload cancelled, cut off or left when the app ended never outlives the run it started in.
+    upload::clean(data_dir);
     let pending = data_dir.join(PENDING);
     let staging = data_dir.join(STAGING_DIR);
     let previous = data_dir.join(PREVIOUS_DIR);
@@ -779,14 +825,16 @@ async fn back_up_current(data_dir: &Path, app_version: &str) -> Result<PathBuf, 
     let pool = db::open_file(&db_file).await.map_err(restore_failed)?;
     let archive = export_file(&pool, data_dir, app_version).await;
     pool.close().await;
-    let mut archive =
-        archive.map_err(|e| restore_failed(format!("backing up the current data: {e}")))?;
+    let archive = archive.map_err(|e| match e {
+        // Same limits as an export; the restore stops before anything moves.
+        BackupError::TooLarge | BackupError::NoSpace(_) => e,
+        e => restore_failed(format!("backing up the current data: {e}")),
+    })?;
     let dir = data_dir.join(db::BACKUP_DIR);
     fs::create_dir_all(&dir).map_err(restore_failed)?;
     let path = dir.join(format!("before-restore-{}.stbackup", db::stamp()));
-    let mut tmp = tempfile::NamedTempFile::new_in(&dir).map_err(restore_failed)?;
-    io::copy(&mut archive, &mut tmp).map_err(restore_failed)?;
-    tmp.persist(&path).map_err(restore_failed)?;
+    // `cache/` and `backups/` are both in the data folder: a rename, not a second copy.
+    archive.persist(&path).map_err(restore_failed)?;
     tracing::info!(backup = %path.display(), "current data backed up before restoring");
     Ok(path)
 }
@@ -838,6 +886,8 @@ fn remove(path: &Path) -> io::Result<()> {
         Err(e) => Err(e),
     }
 }
+
+pub(crate) mod upload;
 
 #[cfg(test)]
 mod tests;

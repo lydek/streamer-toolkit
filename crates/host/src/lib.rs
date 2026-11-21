@@ -459,6 +459,8 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         app_version: config.app_version.clone(),
         restart: config.restart,
         lock: Default::default(),
+        upload: Default::default(),
+        free_space: backup::free_space,
     });
     let admin = Arc::new(admin::AdminState::new(
         config.admin_token,

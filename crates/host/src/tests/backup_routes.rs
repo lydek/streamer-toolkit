@@ -4,7 +4,10 @@ use super::*;
 async fn backup_routes_require_the_token() {
     for (method, uri) in [
         (Method::GET, "/api/admin/backup"),
-        (Method::POST, "/api/admin/backup/restore/preview"),
+        (Method::POST, "/api/admin/backup/restore/upload"),
+        (Method::PUT, "/api/admin/backup/restore/upload/x?offset=0"),
+        (Method::DELETE, "/api/admin/backup/restore/upload/x"),
+        (Method::POST, "/api/admin/backup/restore/upload/x/check"),
         (Method::POST, "/api/admin/backup/restore"),
     ] {
         let req = get_req(uri, "127.0.0.1:47810")

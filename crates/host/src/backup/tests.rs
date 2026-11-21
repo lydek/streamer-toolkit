@@ -1,6 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    io::Cursor,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+use axum::{body::Body, http::Request};
+use tower::ServiceExt;
 
 use super::*;
+
+/// Stages a backup given as bytes, through a file as an upload does.
+async fn stage_bytes(dir: &Path, bytes: Vec<u8>) -> Result<RestorePreview, BackupError> {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    fs::write(file.path(), bytes).unwrap();
+    stage(dir, file.path()).await
+}
 
 #[test]
 fn output_limit_rejects_writes_before_the_file_grows() {
@@ -246,14 +259,25 @@ fn leftovers(dir: &Path) -> Vec<&'static str> {
         .collect()
 }
 
-fn test_state(dir: &Path, pool: SqlitePool, restarted: Arc<AtomicBool>) -> Arc<BackupState> {
-    Arc::new(BackupState {
+fn backup_state(
+    dir: &Path,
+    pool: SqlitePool,
+    restarted: Arc<AtomicBool>,
+    free_space: fn(&Path) -> Option<u64>,
+) -> BackupState {
+    BackupState {
         db: pool,
         data_dir: dir.to_owned(),
         app_version: "1.2.3".into(),
         restart: Arc::new(move || restarted.store(true, Ordering::SeqCst)),
         lock: Default::default(),
-    })
+        upload: Default::default(),
+        free_space,
+    }
+}
+
+fn test_state(dir: &Path, pool: SqlitePool, restarted: Arc<AtomicBool>) -> Arc<BackupState> {
+    Arc::new(backup_state(dir, pool, restarted, |_| None))
 }
 
 fn repack(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
@@ -314,7 +338,7 @@ async fn export_then_restore_brings_back_the_same_settings_and_rows() {
     let changed = state_of(&dir).await;
     assert_ne!(changed, before);
 
-    let preview = stage(&dir, exported.into()).await.unwrap();
+    let preview = stage_bytes(&dir, exported).await.unwrap();
     assert_eq!(preview.app_version, "1.2.3");
     assert_eq!(
         (
@@ -368,7 +392,7 @@ async fn export_then_restore_brings_back_the_same_settings_and_rows() {
         .try_into()
         .unwrap();
     assert!(saved.to_string_lossy().ends_with(".stbackup"));
-    stage(&dir, fs::read(saved).unwrap().into()).await.unwrap();
+    stage_bytes(&dir, fs::read(saved).unwrap()).await.unwrap();
     fs::write(dir.join(PENDING), b"").unwrap();
     assert!(apply_pending(&dir, "1.2.4").await.unwrap());
     assert_eq!(state_of(&dir).await, changed);
@@ -428,7 +452,7 @@ async fn damaged_or_foreign_files_are_refused_and_nothing_changes() {
         ),
         (
             "expands too far",
-            with_manifest(&good, |m| m["files"][0]["size"] = (3u64 << 30).into()),
+            with_manifest(&good, |m| m["files"][0]["size"] = (21u64 << 30).into()),
             "backup.too_large",
         ),
         (
@@ -445,7 +469,7 @@ async fn damaged_or_foreign_files_are_refused_and_nothing_changes() {
         ),
     ];
     for (label, bytes, code) in cases {
-        let e = stage(&dir, bytes.into())
+        let e = stage_bytes(&dir, bytes)
             .await
             .err()
             .unwrap_or_else(|| panic!("{label} accepted"));
@@ -476,10 +500,10 @@ async fn a_database_from_a_newer_version_is_refused_even_if_the_manifest_hides_i
     .unwrap();
     let newer = export(&pool, &dir, "9.0.0").await.unwrap();
     let before = state_of(&dir).await;
-    let e = stage(&dir, newer.clone().into()).await.unwrap_err();
+    let e = stage_bytes(&dir, newer.clone()).await.unwrap_err();
     assert_eq!(e.to_string(), "backup.newer_version");
     let hidden = with_manifest(&newer, |m| m["schema_version"] = 1.into());
-    let e = stage(&dir, hidden.into()).await.unwrap_err();
+    let e = stage_bytes(&dir, hidden).await.unwrap_err();
     assert_eq!(e.to_string(), "backup.newer_version");
     assert!(leftovers(&dir).is_empty());
     assert_eq!(state_of(&dir).await, before);
@@ -498,7 +522,7 @@ async fn a_restore_that_fails_half_way_puts_the_data_back() {
         .await
         .unwrap();
     fs::write(dir.join("templates/chat/template.html"), "changed").unwrap();
-    stage(&dir, bytes.into()).await.unwrap();
+    stage_bytes(&dir, bytes).await.unwrap();
     fs::write(dir.join(PENDING), b"").unwrap();
     pool.close().await;
     let before = state_of(&dir).await;
@@ -554,7 +578,7 @@ async fn a_restore_previous_left_by_an_earlier_restore_is_never_put_back() {
     fs::write(previous.join(RESTORE_ID), "earlier").unwrap();
     fs::write(previous.join(MOVED), "").unwrap();
     fs::write(previous.join(SETTINGS), "stale settings").unwrap();
-    stage(&dir, exported.into()).await.unwrap();
+    stage_bytes(&dir, exported).await.unwrap();
     let state = test_state(&dir, pool.clone(), Arc::default());
     assert_eq!(
         confirm_restore(State(state)).await.status(),
@@ -577,7 +601,7 @@ async fn a_restore_previous_left_by_an_earlier_restore_is_never_put_back() {
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    stage(&dir, fs::read(saved).unwrap().into()).await.unwrap();
+    stage_bytes(&dir, fs::read(saved).unwrap()).await.unwrap();
     fs::write(dir.join(PENDING), "again").unwrap();
     assert!(apply_pending(&dir, "1.2.3").await.unwrap());
     assert_eq!(state_of(&dir).await, changed);
@@ -625,7 +649,7 @@ async fn a_marker_that_cannot_be_removed_is_reported_and_never_undoes_the_restor
     let exported = export(&pool, &dir, "1.2.3").await.unwrap();
     let before = state_of(&dir).await;
     toolkit_core::settings::update(&dir, |s| s.twitch_client_id = "changed".into()).unwrap();
-    stage(&dir, exported.into()).await.unwrap();
+    stage_bytes(&dir, exported).await.unwrap();
     fs::write(dir.join(PENDING), "r1").unwrap();
     pool.close().await;
 
@@ -650,11 +674,274 @@ async fn a_marker_that_cannot_be_removed_is_reported_and_never_undoes_the_restor
 async fn a_staged_backup_never_confirmed_is_dropped_on_start() {
     let (dir, pool) = sample_folder("unconfirmed").await;
     let bytes = export(&pool, &dir, "1.2.3").await.unwrap();
-    stage(&dir, bytes.into()).await.unwrap();
+    stage_bytes(&dir, bytes).await.unwrap();
     pool.close().await;
     let before = state_of(&dir).await;
     assert!(!apply_pending(&dir, "1.2.3").await.unwrap());
     assert_eq!(state_of(&dir).await, before);
     assert!(leftovers(&dir).is_empty());
     let _ = fs::remove_dir_all(dir);
+}
+
+/// Sends one request to the backup routes; returns the status and the JSON body (`null` when empty).
+async fn send(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    body: Body,
+) -> (StatusCode, serde_json::Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(body)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+}
+
+fn uploads(dir: &Path) -> usize {
+    fs::read_dir(dir.join("cache"))
+        .map(|d| {
+            d.flatten()
+                .filter(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with("restore-upload-")
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+#[tokio::test]
+async fn a_backup_uploaded_in_parts_is_checked_from_the_file_and_leaves_no_upload_behind() {
+    let (dir, pool) = sample_folder("upload").await;
+    let bytes = export(&pool, &dir, "1.2.3").await.unwrap();
+    let before = state_of(&dir).await;
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| {
+        Some(u64::MAX)
+    }));
+    let size = bytes.len();
+    let (status, started) = send(
+        &app,
+        "POST",
+        "/api/admin/backup/restore/upload",
+        Body::from(format!(r#"{{"size":{size}}}"#)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let id = started["id"].as_str().unwrap().to_owned();
+    let part_uri = |offset: usize| format!("/api/admin/backup/restore/upload/{id}?offset={offset}");
+    let check_uri = format!("/api/admin/backup/restore/upload/{id}/check");
+
+    let half = size / 2;
+    let (status, progress) = send(
+        &app,
+        "PUT",
+        &part_uri(0),
+        Body::from(bytes[..half].to_vec()),
+    )
+    .await;
+    assert_eq!(
+        (status, progress["received"].as_u64()),
+        (StatusCode::OK, Some(half as u64))
+    );
+    // Not all of it yet: nothing is checked.
+    let (status, body) = send(&app, "POST", &check_uri, Body::empty()).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::CONFLICT, Some("backup.upload_offset"))
+    );
+    // A part sent twice is refused, and says where the upload stands.
+    let (status, body) = send(
+        &app,
+        "PUT",
+        &part_uri(0),
+        Body::from(bytes[..half].to_vec()),
+    )
+    .await;
+    assert_eq!(
+        (status, body["received"].as_u64()),
+        (StatusCode::CONFLICT, Some(half as u64))
+    );
+    // Nothing past the size given at the start.
+    let mut over = bytes[half..].to_vec();
+    over.push(0);
+    let (status, _) = send(&app, "PUT", &part_uri(half), Body::from(over)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = send(
+        &app,
+        "PUT",
+        &part_uri(half),
+        Body::from(bytes[half..].to_vec()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, preview) = send(&app, "POST", &check_uri, Body::empty()).await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert_eq!(preview["redemptions"], 2);
+    assert!(dir.join(STAGING_DIR).join(MANIFEST).is_file(), "staged");
+    assert_eq!(uploads(&dir), 0, "the uploaded file is gone once checked");
+    assert_eq!(state_of(&dir).await, before, "nothing in use changes");
+    // Checked once: the upload is over.
+    let (status, _) = send(&app, "POST", &check_uri, Body::empty()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_damaged_upload_is_refused_and_removed() {
+    let (dir, pool) = sample_folder("upload-damaged").await;
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| None));
+    let junk = b"not a backup".to_vec();
+    let (_, started) = send(
+        &app,
+        "POST",
+        "/api/admin/backup/restore/upload",
+        Body::from(format!(r#"{{"size":{}}}"#, junk.len())),
+    )
+    .await;
+    let id = started["id"].as_str().unwrap().to_owned();
+    send(
+        &app,
+        "PUT",
+        &format!("/api/admin/backup/restore/upload/{id}?offset=0"),
+        Body::from(junk),
+    )
+    .await;
+    let (status, body) = send(
+        &app,
+        "POST",
+        &format!("/api/admin/backup/restore/upload/{id}/check"),
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("backup.invalid"))
+    );
+    assert_eq!(uploads(&dir), 0);
+    assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_cancelled_replaced_or_cut_off_upload_leaves_nothing() {
+    let (dir, pool) = sample_folder("upload-cancel").await;
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| None));
+    let start = || {
+        send(
+            &app,
+            "POST",
+            "/api/admin/backup/restore/upload",
+            Body::from(r#"{"size":10}"#),
+        )
+    };
+    let (_, first) = start().await;
+    let first = first["id"].as_str().unwrap().to_owned();
+    send(
+        &app,
+        "PUT",
+        &format!("/api/admin/backup/restore/upload/{first}?offset=0"),
+        Body::from(vec![1; 4]),
+    )
+    .await;
+    assert_eq!(uploads(&dir), 1);
+    // Starting another drops the first.
+    let (_, second) = start().await;
+    let second = second["id"].as_str().unwrap().to_owned();
+    assert_eq!(uploads(&dir), 1);
+    let (status, body) = send(
+        &app,
+        "PUT",
+        &format!("/api/admin/backup/restore/upload/{first}?offset=4"),
+        Body::from(vec![1; 4]),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::NOT_FOUND, Some("backup.upload_gone"))
+    );
+    // Cancelled.
+    let (status, _) = send(
+        &app,
+        "DELETE",
+        &format!("/api/admin/backup/restore/upload/{second}"),
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(uploads(&dir), 0);
+    // The app ended mid-way: the next start removes it.
+    start().await;
+    assert_eq!(uploads(&dir), 1);
+    pool.close().await;
+    assert!(!apply_pending(&dir, "1.2.3").await.unwrap());
+    assert_eq!(uploads(&dir), 0);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn an_upload_without_room_or_above_the_cap_is_refused_before_anything_is_written() {
+    let (dir, pool) = sample_folder("upload-room").await;
+    // 1,000 bytes free: a 600-byte backup needs 1,200 (the upload, then its unpacked copy).
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| {
+        Some(1000)
+    }));
+    let (status, body) = send(
+        &app,
+        "POST",
+        "/api/admin/backup/restore/upload",
+        Body::from(r#"{"size":600}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE);
+    assert_eq!(
+        body,
+        serde_json::json!({ "code": "backup.no_space", "needed": 1200 })
+    );
+    assert_eq!(uploads(&dir), 0);
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/admin/backup/restore/upload",
+        Body::from(r#"{"size":400}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let too_big = format!(r#"{{"size":{}}}"#, MAX_ARCHIVE_BYTES + 1);
+    let (status, body) = send(
+        &app,
+        "POST",
+        "/api/admin/backup/restore/upload",
+        Body::from(too_big),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::PAYLOAD_TOO_LARGE, Some("backup.too_large"))
+    );
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn room_needs_the_bytes_free_and_lets_an_unknown_amount_through() {
+    assert!(room(10, Some(10)).is_ok());
+    assert!(matches!(room(11, Some(10)), Err(BackupError::NoSpace(11))));
+    assert!(room(u64::MAX, None).is_ok());
 }
