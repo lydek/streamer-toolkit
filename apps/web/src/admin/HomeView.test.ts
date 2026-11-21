@@ -67,6 +67,22 @@ describe('HomeView chat tile', () => {
   })
 })
 
+describe('HomeView tiles', () => {
+  it('show a big count with its unit and the latest on the line', async () => {
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(
+        {
+          ...responses,
+          '/api/admin/modules': ['sound'].map((id) => ({ id, enabled: true, closed: false })),
+          '/api/admin/sounds': { sounds: [{ id: 'a', label: '叮咚' }, { id: 'b', label: '歡呼' }], slots: {}, volume: 100 },
+        }[path],
+      )) as never)
+    await home()
+    const text = (id: string) => document.querySelector(`[data-drawer-tile="${id}"]`)?.textContent?.replace(/\s+/g, '')
+    expect(text('sound')).toContain('2個音效叮咚、歡呼')
+  })
+})
+
 describe('HomeView skip link', () => {
   const skip = () => document.querySelector<HTMLAnchorElement>('a.skip-link')!
 

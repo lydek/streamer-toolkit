@@ -58,7 +58,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
 
   const tile = page.locator('[data-drawer-tile="checkin"]')
   const features = page.getByRole('list', { name: zh.home.groups.features })
-  await expect(features.locator('[data-drawer-tile="checkin"]')).toContainText(fill(zh.checkin.today, { n: 1 }))
+  await expect(features.locator('[data-drawer-tile="checkin"]')).toContainText(`1${zh.home.units.checkin}`)
   await tile.click()
   const drawer = page.locator('#drawer-checkin')
   await expect(drawer.getByText(HTML)).toBeVisible()
@@ -68,7 +68,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
   today = { ...today, count: 2, recent: [{ viewer_id: 'v9', user_name: 'Newest', occurred_at: '2026-11-16T10:05:00.000Z' }, ...today.recent] }
   await changed(1)
   await expect(drawer.getByText('Newest')).toBeVisible()
-  await expect(tile).toContainText(fill(zh.checkin.today, { n: 2 }))
+  await expect(tile).toContainText(`2${zh.home.units.checkin}`)
 
   await drawer.getByRole('link', { name: zh.drawer.fullPage }).click()
   await expect(page).toHaveURL(/\/admin\/checkin$/)

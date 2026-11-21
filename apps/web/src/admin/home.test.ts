@@ -271,8 +271,8 @@ describe('useThrottled', () => {
 describe('tileGroups', () => {
   it('drops disabled modules and empty groups', () => {
     const tiles = [
-      { id: 'chat', group: 'live' as const, icon: '' },
-      { id: 'checkin', group: 'features' as const, icon: '' },
+      { id: 'chat', group: 'live' as const, icon: '', tint: 'blue' as const },
+      { id: 'checkin', group: 'features' as const, icon: '', tint: 'blue' as const },
     ]
     expect(tileGroups([{ id: 'chat', enabled: true, closed: false }, { id: 'checkin', enabled: false, closed: false }], tiles)).toEqual([
       { group: 'live', tiles: [tiles[0]] },
@@ -283,9 +283,9 @@ describe('tileGroups', () => {
 
 describe('tile arrangement', () => {
   const tiles = [
-    { id: 'chat', group: 'live' as const, icon: '' },
-    { id: 'checkin', group: 'features' as const, icon: '' },
-    { id: 'alerts', group: 'live' as const, icon: '' },
+    { id: 'chat', group: 'live' as const, icon: '', tint: 'blue' as const },
+    { id: 'checkin', group: 'features' as const, icon: '', tint: 'blue' as const },
+    { id: 'alerts', group: 'live' as const, icon: '', tint: 'blue' as const },
   ]
   const ids = (list: { id: string }[]) => list.map((t) => t.id)
 
@@ -329,7 +329,7 @@ describe('toasts', () => {
 describe('HomeTile', () => {
   const tile = (line: Line, attention = false) =>
     mount(HomeTile, {
-      props: { id: 'chat', name: '聊天室', icon: 'pi pi-comments', line, attention, expanded: false },
+      props: { id: 'chat', name: '聊天室', icon: 'pi pi-comments', tint: 'blue', line, attention, expanded: false },
       global: { plugins: [i18n] },
     })
 
@@ -349,6 +349,18 @@ describe('HomeTile', () => {
     expect(failed.find('.dot').exists()).toBe(true)
     expect(failed.get('.sr-only').text()).toBe('需要注意')
     expect(tile({ state: 'ready', text: 'x' }, true).find('.dot').exists()).toBe(true)
+  })
+
+  it('shows a big count with its unit, a word smaller, and viewer text only as text', () => {
+    const counted = tile({ state: 'ready', num: '1,200', unit: '人今天打卡', text: '最新：<b>小魚</b>' })
+    expect(counted.get('.num').text()).toBe('1,200人今天打卡')
+    expect(counted.get('.num').classes()).not.toContain('word')
+    expect(counted.get('.line').text()).toBe('最新：<b>小魚</b>')
+    expect(counted.find('b').exists()).toBe(false)
+    expect(tile({ state: 'ready', num: '遊戲畫面', text: '6 個場景' }).get('.num').classes()).toContain('word')
+    const bare = tile({ state: 'ready', num: '12', unit: '死亡次數', text: '' })
+    expect(bare.find('.line').exists()).toBe(false)
+    expect(tile({ state: 'ready', text: '還沒有音效' }).find('.num').exists()).toBe(false)
   })
 })
 

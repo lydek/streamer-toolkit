@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { i18n } from '../i18n'
-import { type FeedItem, changesFeed, feedLine, feedResult, feedText } from './feed'
+import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
 
 const t = i18n.global.t
 const item = (p: Partial<FeedItem>): FeedItem => ({
@@ -39,8 +39,14 @@ describe('feed', () => {
   })
 
   it('counts and shows the latest on the tile, and knows which messages change it', () => {
-    expect(feedLine([item({}), item({ viewer: '莓莓' })])).toBe('2 件 · 阿凱 送了 3 份訂閱！')
-    expect(feedLine([])).toBe(t('feed.empty'))
+    expect(feedTile([item({}), item({ viewer: '莓莓' })])).toEqual({
+      state: 'ready',
+      num: '2',
+      unit: '件',
+      text: '最新：阿凱 送了 3 份訂閱！',
+    })
+    expect(feedTile(Array.from({ length: 50 }, () => item({})))).toMatchObject({ num: '50+' })
+    expect(feedTile([])).toEqual({ state: 'ready', text: t('feed.empty') })
     expect(changesFeed('presentation.queue')).toBe(true)
     expect(changesFeed('chat.message')).toBe(false)
   })
