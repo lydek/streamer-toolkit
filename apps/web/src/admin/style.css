@@ -28,9 +28,14 @@ h2 {
    takes room beside it. */
 main {
   container: view / inline-size;
-  max-width: 48rem;
+  max-width: 120rem;
   margin: 0 auto;
   padding: 1rem;
+}
+
+/* Pages use the full width; forms and running text keep a readable width. */
+main :is(form, p) {
+  max-width: 48rem;
 }
 
 /* Below 600px the group tabs are a fixed bottom bar (AppBar.vue); keep the page end clear of it. */

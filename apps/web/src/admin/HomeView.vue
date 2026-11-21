@@ -293,6 +293,7 @@ import AppDrawer from './AppDrawer.vue'
 import ArrangeTiles from './ArrangeTiles.vue'
 import ChatNow from './ChatNow.vue'
 import { EMPTY_LOG, applyChat } from './chatLog'
+import { useDock } from './dock'
 import { useDrawer } from './drawer'
 import {
   type Line,
@@ -424,7 +425,14 @@ const broadcasterId = computed(() =>
   overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
 )
 const obs = computed(() => obsLight(live.value))
-const groups = computed(() => tileGroups(modules.value ?? [], arrangedTiles(savedTiles.value)))
+const dock = useDock()
+// The docked chat panel already shows the chat, so its tile steps aside while the panel is beside the page.
+const groups = computed(() =>
+  tileGroups(
+    modules.value ?? [],
+    arrangedTiles(savedTiles.value).filter((t) => !(dock.docked && t.id === 'chat')),
+  ),
+)
 const soonTiles = SOON_PAGES.filter((p) => p.soon!.tile)
 const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
 

@@ -72,7 +72,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
@@ -99,6 +99,7 @@ const onWide = () => {
 }
 // Turning the chat feature off in settings removes the panel too.
 const shown = computed(() => !hidden.value.has('/chat') && (wide.value ? dock.open : dock.sheet))
+watchEffect(() => (dock.docked = wide.value && shown.value))
 
 const filter = ref<(typeof FILTERS)[number]>('all')
 const query = ref('')

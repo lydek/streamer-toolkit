@@ -40,23 +40,31 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
 const chatButton = (page: Page) => page.getByRole('banner').getByRole('button', { name: zh.dock.title, exact: true })
 const panel = (page: Page) => page.getByRole('complementary', { name: zh.dock.title })
 
-test('closed until opened; opening docks it and saves, and the pages still fit', async ({ page }) => {
+test('docked by default, and the pages still fit; closing saves it, and opening docks it again', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   const puts = await open(page)
-  await expect(panel(page)).toHaveCount(0)
-  await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'false')
-
-  await chatButton(page).click()
   await expect(panel(page)).toBeVisible()
   await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'true')
-  await expect.poll(() => puts).toEqual([{ open: true, width: 340 }])
   await expect(panel(page).getByText('hello everyone')).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
+  expect(puts).toEqual([])
 
   await panel(page).getByRole('button', { name: zh.dock.close }).click()
   await expect(panel(page)).toHaveCount(0)
   await expect(chatButton(page)).toBeFocused()
   await expect.poll(() => puts.at(-1)).toEqual({ open: false, width: 340 })
+
+  await chatButton(page).click()
+  await expect(panel(page)).toBeVisible()
+  await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'true')
+  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 340 })
+})
+
+test('a saved "closed" stays closed', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await open(page, { open: false, width: 340 })
+  await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'false')
+  await expect(panel(page)).toHaveCount(0)
 })
 
 test('the saved state comes back after a restart, and the edge resizes from the keyboard', async ({ page }) => {
