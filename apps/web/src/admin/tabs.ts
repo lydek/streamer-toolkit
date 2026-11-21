@@ -84,7 +84,7 @@ export const GROUPS: TabGroup[] = [
       { path: '/screen-tools', label: 'modules.names.screen-tools' },
       soon('/avatar', 'avatar', 'pi pi-face-smile', true),
       soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
-      soon('/image-sizes', 'imageSizes', 'pi pi-image', true),
+      { path: '/image-sizes', label: 'pages.imageSizes.name' },
     ],
   },
   {

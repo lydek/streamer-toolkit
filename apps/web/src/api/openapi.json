@@ -2598,6 +2598,85 @@
         }
       }
     },
+    "/api/admin/image-sizes": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resizes a PNG, JPEG, GIF or WebP picture (at most 10 MB and 4096 px a side; the body is the file itself) to the\nsizes of `kind`, as JSON with previews or, with `zip=true`, as one zip of PNG files.",
+        "operationId": "make_sizes",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ImageKind"
+            }
+          },
+          {
+            "name": "fit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Fit"
+            }
+          },
+          {
+            "name": "zip",
+            "in": "query",
+            "description": "`zip`: every size in one zip file; otherwise JSON with a preview of each.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The picture",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Or, with `zip=true`, an `application/zip` file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SizedImages"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`image_sizes.unsupported`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`image_sizes.too_large`: more than 10 MB or 4096 px a side",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/leaderboard": {
       "get": {
         "tags": [
@@ -8460,6 +8539,14 @@
           }
         }
       },
+      "Fit": {
+        "type": "string",
+        "description": "How a picture that is not square becomes square.",
+        "enum": [
+          "pad",
+          "crop"
+        ]
+      },
       "GeneralSettings": {
         "type": "object",
         "description": "Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window.",
@@ -8476,6 +8563,13 @@
             "description": "Read only (ignored on PUT): `settings.json` exists but cannot be read or parsed. Defaults are in use and\nno setting saves (`settings.save_failed`) until the file is fixed or removed."
           }
         }
+      },
+      "ImageKind": {
+        "type": "string",
+        "enum": [
+          "badge",
+          "points"
+        ]
       },
       "ImportSkip": {
         "type": "object",
@@ -10826,6 +10920,48 @@
           },
           "userName": {
             "type": "string"
+          }
+        }
+      },
+      "SizedImage": {
+        "type": "object",
+        "required": [
+          "px",
+          "bytes",
+          "data_url",
+          "too_large"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data_url": {
+            "type": "string",
+            "description": "A `data:image/png;base64,…` URL to preview it."
+          },
+          "px": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "too_large": {
+            "type": "boolean",
+            "description": "A badge still above 25 KB after reducing its colors."
+          }
+        }
+      },
+      "SizedImages": {
+        "type": "object",
+        "required": [
+          "images"
+        ],
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SizedImage"
+            }
           }
         }
       },

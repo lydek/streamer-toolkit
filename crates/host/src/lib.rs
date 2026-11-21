@@ -10,6 +10,7 @@ pub mod db;
 mod diagnostics;
 mod event_feed;
 mod home_tiles;
+mod image_sizes;
 mod leaderboard;
 mod obs;
 mod openapi;
@@ -565,6 +566,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(card_pack_files)
+            .merge(image_sizes::routes().layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(performance_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

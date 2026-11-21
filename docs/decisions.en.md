@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 3101346a6d76bc368eaa82000708d4846305a6a07cb7fbc4502a9ba1fed74351 -->
+<!-- source: docs/decisions.md source-sha256: 2d2e4c1880bfbedd973f17c9888870e4a1760e02bff084b2f8c7a3cfddd59d41 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -76,6 +76,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Embedded frontend | `rust-embed` (with `debug-embed`) |
 | Backup files | `zip` (deflate only: `flate2` + `zlib-rs`) + `sha2`; format in architecture.en.md §6 "Backup files" |
 | Performance monitor | `sysinfo` (MIT, `system` only): CPU and memory of this computer and of this app's process |
+| Image sizes | `image` (MIT/Apache-2.0, PNG, JPEG, GIF and WebP only) to resize; `oxipng` (MIT, default features off) to compress PNGs losslessly; `color_quant` (MIT) to reduce to 256 colors. Never `libimagequant` (GPL-3) |
 | OpenAPI | `utoipa` |
 | Frontend API types | `openapi-typescript` + `openapi-fetch`; WS event types also live in OpenAPI components |
 | Architecture tests | Custom Rust test: `cargo_metadata` checks crate dependencies and scans `domain/` for any occurrence of `sqlx`/`axum` (including derives and full paths) |
