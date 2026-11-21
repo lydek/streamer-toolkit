@@ -99,6 +99,8 @@ pub fn routes(pool: SqlitePool, service: Arc<CheckinService>) -> Router {
             post(deduct_stamps),
         )
         .route("/api/admin/checkin/deductions", get(list_deductions))
+        .route("/api/admin/checkin/viewers/{id}/card", post(push_card))
+        .route("/api/admin/checkin/card/hide", post(hide_card))
         .route(
             "/api/admin/checkin/import/preview",
             post(preview_import).layer(DefaultBodyLimit::max(IMPORT_MAX_BYTES)),
@@ -529,6 +531,38 @@ pub(crate) async fn deduct_stamps(
         Ok(Deducted::UnknownViewer) => error(StatusCode::NOT_FOUND, "checkin.viewer_not_found"),
         Err(e) => storage_error(e),
     }
+}
+
+/// Puts the viewer's stamp card on the screen through the presentation queue; no check-in is recorded.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/viewers/{id}/card",
+    tag = "admin",
+    params(("id" = String, Path, description = "The viewer's internal ID")),
+    responses(
+        (status = 204),
+        (status = 404, description = "`checkin.viewer_not_found`", body = ErrorBody),
+        (status = 500, description = "`checkin.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn push_card(State(s): State<Arc<HttpState>>, Path(id): Path<String>) -> Response {
+    match s.service.push_card(&id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => error(StatusCode::NOT_FOUND, "checkin.viewer_not_found"),
+        Err(e) => storage_error(e),
+    }
+}
+
+/// 隱藏畫面卡片: takes the stamp card on the screen away at once.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/card/hide",
+    tag = "admin",
+    responses((status = 204))
+)]
+pub(crate) async fn hide_card(State(s): State<Arc<HttpState>>) -> StatusCode {
+    s.service.hide_card();
+    StatusCode::NO_CONTENT
 }
 
 /// The change log: the latest 100 deductions, newest first.

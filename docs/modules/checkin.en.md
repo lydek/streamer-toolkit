@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 46c453f95b60dd3484471e8ee5d9da3198046b4651664b8953f44298660fc029 -->
+<!-- source: docs/modules/checkin.md source-sha256: e6230771e19564cddec740e984d96c5136b2b6414aa7cd16c9a23ab282fd11b2 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -28,6 +28,7 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 
 ## OBS stamp card
 - `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing.
+- Each row of the full page can push the viewer's stamp card to the screen (queued on the presentation queue, no check-in recorded); 隱藏畫面卡片 at the top takes the card on screen away at once.
 - The simulator in the drawer tests the overlay without writing records. Details in [architecture.en.md](../architecture.en.md) "Stamp card overlay".
 
 ## Import

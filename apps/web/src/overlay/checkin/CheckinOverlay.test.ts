@@ -7,7 +7,7 @@ import CheckinOverlay from './CheckinOverlay.vue'
 import { twitchImage } from './checkin'
 
 const played = vi.hoisted(() => [] as [string, number][])
-vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]) }))
+vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]), stopSounds: () => {} }))
 
 const AVATAR = 'https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png'
 
@@ -64,6 +64,18 @@ describe('CheckinOverlay', () => {
     expect(wrapper.get('.name').text()).toBe('<img src=x onerror=alert(1)>')
 
     vi.advanceTimersByTime(5000)
+    await nextTick()
+    expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
+  })
+
+  it('takes the card away at once on 隱藏畫面卡片', async () => {
+    const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
+    const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }
+    vm.receive({ type: 'snapshot', version: 1, seq: 1, payload: {} })
+    vm.receive(stamped(2))
+    await nextTick()
+    expect(wrapper.find('[data-checkin-card]').exists()).toBe(true)
+    vm.receive({ id: 'h', type: 'checkin.hidden', version: 1, seq: 3, occurredAt: '', source: 'system', payload: {} })
     await nextTick()
     expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
   })

@@ -23,8 +23,8 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        self, COMMAND_KEY, Card, CheckedIn, CheckinService, Config, OnCheckedIn, ProfileImages,
-        Redeemed, Screen, ShowCard, Timing,
+        self, COMMAND_KEY, Card, CheckedIn, CheckinService, Config, HideCard, OnCheckedIn,
+        ProfileImages, Redeemed, Screen, ShowCard, Timing,
     },
     domain::{TwitchUserId, Viewer},
 };
@@ -96,6 +96,44 @@ fn publish_card(bus: &EventBus, sounds: &SoundService, card: &Card, show: std::t
     });
 }
 
+const HIDDEN: &str = "checkin.hidden";
+const HIDDEN_VERSION: u32 = 1;
+
+/// A `checkin.hidden` event exactly as `/ws/overlay` sends it: 隱藏畫面卡片 takes the card on screen away at once.
+/// Not kept in snapshots.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckinHiddenEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: CheckinHiddenType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: CheckinHiddenPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum CheckinHiddenType {
+    #[serde(rename = "checkin.hidden")]
+    CheckinHidden,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CheckinHiddenPayload {}
+
+fn publish_hidden(bus: &EventBus) {
+    bus.publish(Event {
+        id: Uuid::now_v7().to_string(),
+        event_type: HIDDEN,
+        version: HIDDEN_VERSION,
+        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        source: Source::System,
+        payload: serde_json::to_value(CheckinHiddenPayload {}).expect("serializable"),
+    });
+}
+
 const CHANGED: &str = "checkin.changed";
 const CHANGED_VERSION: u32 = 1;
 
@@ -158,8 +196,9 @@ pub fn start(
     presenter: Arc<Presenter>,
     commands: Arc<CommandTable>,
 ) -> CheckinService {
-    let changed_bus = bus.clone();
+    let (changed_bus, hidden_bus) = (bus.clone(), bus.clone());
     let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
+    let hide_card: HideCard = Arc::new(move || publish_hidden(&hidden_bus));
     let show_card: ShowCard = Arc::new(move |card, show| publish_card(&bus, &sounds, card, show));
     CheckinService::start(
         db::SqliteCheckins::new(pool),
@@ -168,6 +207,7 @@ pub fn start(
         Screen {
             changed,
             show_card,
+            hide_card,
             profiles,
             timing,
             presenter,
@@ -240,10 +280,12 @@ impl Subscriber for RedemptionCheckins {
         http::manual_check_in,
         http::deduct_stamps,
         http::list_deductions,
+        http::push_card,
+        http::hide_card,
         http::preview_import,
         http::apply_import
     ),
-    components(schemas(CheckinChangedEvent, CheckinStampedEvent))
+    components(schemas(CheckinChangedEvent, CheckinStampedEvent, CheckinHiddenEvent))
 )]
 struct CheckinApi;
 

@@ -48,6 +48,20 @@ describe('CheckinsPage', () => {
     expect((wrapper.get('#cf-date').element as HTMLInputElement).value).toBe('2026-11-18')
   })
 
+  it('pushes a viewer’s card to the screen and hides the card on screen', async () => {
+    client.POST.mockResolvedValue({ data: undefined, response: new Response(null, { status: 204 }) })
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/checkins', component: CheckinsPage }] })
+    await router.push('/checkins')
+    const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] } })
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === '把集點卡推到畫面')!.trigger('click')
+    await flushPromises()
+    expect(client.POST).toHaveBeenCalledWith('/api/admin/checkin/viewers/{id}/card', { params: { path: { id: 'v1' } } })
+    await wrapper.findAll('button').find((b) => b.text() === '隱藏畫面卡片')!.trigger('click')
+    await flushPromises()
+    expect(client.POST).toHaveBeenCalledWith('/api/admin/checkin/card/hide')
+  })
+
   it('deducts stamps with an optional reason and lists the change', async () => {
     client.GET.mockImplementation(async (path: string) =>
       path === '/api/admin/checkin/deductions'

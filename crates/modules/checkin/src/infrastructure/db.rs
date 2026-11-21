@@ -366,6 +366,18 @@ impl CheckinRepository for SqliteCheckins {
         tx.commit().await.map_err(storage)?;
         Ok(outcome)
     }
+    async fn total(&self, viewer_id: &str) -> Result<Option<u64>, RepositoryError> {
+        let total: Option<i64> = sqlx::query_scalar(
+            "SELECT v.baseline_total + (SELECT COUNT(*) FROM checkin_records r WHERE r.viewer_id = v.id) \
+             FROM checkin_viewers v WHERE v.id = ?",
+        )
+        .bind(viewer_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(total.map(|t| u64::try_from(t).unwrap_or(0)))
+    }
+
     async fn deduct(
         &self,
         viewer_id: &str,

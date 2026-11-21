@@ -476,6 +476,18 @@
         }
       }
     },
+    "/api/admin/checkin/card/hide": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "隱藏畫面卡片: takes the stamp card on the screen away at once.",
+        "operationId": "hide_card",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/admin/checkin/deductions": {
       "get": {
         "tags": [
@@ -944,6 +956,49 @@
           },
           "400": {
             "description": "`checkin.invalid_query`: a bad page size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/viewers/{id}/card": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts the viewer's stamp card on the screen through the presentation queue; no check-in is recorded.",
+        "operationId": "push_card",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The viewer's internal ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`checkin.viewer_not_found`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6739,6 +6794,55 @@
             "type": "string"
           }
         }
+      },
+      "CheckinHiddenEvent": {
+        "type": "object",
+        "description": "A `checkin.hidden` event exactly as `/ws/overlay` sends it: 隱藏畫面卡片 takes the card on screen away at once.\nNot kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CheckinHiddenPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CheckinHiddenType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CheckinHiddenPayload": {
+        "type": "object"
+      },
+      "CheckinHiddenType": {
+        "type": "string",
+        "enum": [
+          "checkin.hidden"
+        ]
       },
       "CheckinOutbox": {
         "type": "object",

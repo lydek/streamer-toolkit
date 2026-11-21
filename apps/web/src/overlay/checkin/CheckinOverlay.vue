@@ -62,8 +62,8 @@ function receive(msg: Incoming) {
   if (msg.type === 'snapshot') {
     // Cards are never in snapshots, so none replays after a reconnect.
     lastSeq = msg.seq
-  } else if (stopsStage(msg, 'checkin') && msg.seq > lastSeq) {
-    // Emergency stop or skip: the card and its sound go away at once.
+  } else if ((stopsStage(msg, 'checkin') || msg.type === 'checkin.hidden') && msg.seq > lastSeq) {
+    // Emergency stop, skip or 隱藏畫面卡片: the card and its sound go away at once.
     lastSeq = msg.seq
     clearTimeout(hide)
     card.value = undefined

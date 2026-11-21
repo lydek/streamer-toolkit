@@ -305,3 +305,81 @@ async fn stamp_cards_record_what_became_of_each() {
     assert!(service.simulate_card("Kai", 3));
     assert_eq!(service.recent()[0].source, Source::Simulation);
 }
+
+#[tokio::test]
+async fn a_pushed_card_shows_without_a_record_and_hide_clears_it() {
+    use crate::{
+        application::CheckinRepository,
+        domain::{BusinessDay, CheckIn, Trigger},
+    };
+    let pool = pool().await;
+    let dir = data_dir("cards-push");
+    let bus = Arc::new(EventBus::default());
+    let (_, mut rx) = bus.subscribe();
+    let service = Arc::new(start_quiet(
+        pool.clone(),
+        bus,
+        Arc::new(Modules::load(dir.clone())),
+        dir.clone(),
+    ));
+    let at = DateTime::parse_from_rfc3339("2026-11-20T01:00:00Z")
+        .unwrap()
+        .to_utc();
+    let rule = BusinessDay::new("Asia/Taipei", 0).unwrap();
+    let viewer = Viewer {
+        twitch_id: TwitchUserId("1".into()),
+        login: "ann".into(),
+        name: "Ann".into(),
+    };
+    db::SqliteCheckins::new(pool.clone())
+        .check_in(&viewer, &CheckIn::at(&rule, at, Trigger::Chat, at))
+        .await
+        .unwrap();
+    let id: String = sqlx::query_scalar("SELECT id FROM checkin_viewers")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let app = http::routes(pool.clone(), service.clone());
+    let post = |uri: String| {
+        let app = app.clone();
+        async move {
+            let req = Request::post(uri).body(Body::empty()).unwrap();
+            app.oneshot(req).await.unwrap().status().as_u16()
+        }
+    };
+
+    assert_eq!(
+        post(format!("/api/admin/checkin/viewers/{id}/card")).await,
+        204
+    );
+    let (card, _) = next_card(&mut rx).await;
+    assert_eq!(card["payload"]["userName"], "Ann");
+    assert_eq!(
+        (&card["payload"]["stamps"], &card["payload"]["total"]),
+        (&1.into(), &1.into())
+    );
+    assert_eq!(count(&pool).await, 1, "a push records no check-in");
+    assert!(
+        service.recent().is_empty(),
+        "nor does the event feed list it"
+    );
+    assert_eq!(
+        post("/api/admin/checkin/viewers/nobody/card".into()).await,
+        404
+    );
+
+    assert_eq!(post("/api/admin/checkin/card/hide".into()).await, 204);
+    let hidden = loop {
+        let text = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let wire: serde_json::Value = serde_json::from_str(&text).unwrap();
+        if wire["type"] == "checkin.hidden" {
+            break wire;
+        }
+    };
+    let typed: CheckinHiddenEvent = serde_json::from_value(hidden.clone()).unwrap();
+    assert_eq!(serde_json::to_value(typed).unwrap(), hidden);
+    let _ = std::fs::remove_dir_all(&dir);
+}

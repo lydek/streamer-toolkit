@@ -103,6 +103,12 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
         check_in: &CheckIn,
     ) -> impl Future<Output = Result<Outcome, RepositoryError>> + Send;
 
+    /// The viewer's lifetime check-ins; `None` for an unknown viewer.
+    fn total(
+        &self,
+        viewer_id: &str,
+    ) -> impl Future<Output = Result<Option<u64>, RepositoryError>> + Send;
+
     /// In one transaction: works out what the viewer has available and records `deduction` only if it fits.
     fn deduct(
         &self,
@@ -310,11 +316,16 @@ impl Card {
 
 /// Shows a card for the given time; the infrastructure publishes it to the overlay.
 pub(crate) type ShowCard = Arc<dyn Fn(&Card, Duration) + Send + Sync>;
+/// Takes the card on the overlay away at once.
+pub(crate) type HideCard = Arc<dyn Fn() + Send + Sync>;
+/// Queues a card on the presentation queue; `true` records what became of it for the event feed.
+type QueueCard = Arc<dyn Fn(&CheckedIn, bool) + Send + Sync>;
 
 /// Where recorded check-ins go besides the database.
 pub(crate) struct Screen {
     pub(crate) changed: OnCheckedIn,
     pub(crate) show_card: ShowCard,
+    pub(crate) hide_card: HideCard,
     pub(crate) profiles: Arc<dyn ProfileImages>,
     pub(crate) timing: Timing,
     pub(crate) presenter: Arc<Presenter>,
@@ -401,6 +412,11 @@ enum Job {
         deduction: Deduction,
         reply: oneshot::Sender<Result<Deducted, RepositoryError>>,
     },
+    /// Queues a viewer's card without recording anything; `false` for an unknown viewer.
+    Push {
+        viewer_id: String,
+        reply: oneshot::Sender<Result<bool, RepositoryError>>,
+    },
 }
 
 pub struct CheckinService {
@@ -409,6 +425,7 @@ pub struct CheckinService {
     recent: Recent,
     presenter: Arc<Presenter>,
     show_card: ShowCard,
+    hide_card: HideCard,
     timing: Timing,
     modules: Arc<Modules>,
     config: Arc<Config>,
@@ -429,6 +446,7 @@ impl CheckinService {
         let Screen {
             changed,
             show_card,
+            hide_card,
             profiles,
             timing,
             presenter,
@@ -440,8 +458,7 @@ impl CheckinService {
             show_card.clone(),
             recent.clone(),
         );
-        let on_checked_in: OnCheckedIn = Arc::new(move |c| {
-            changed(c);
+        let queue_card: QueueCard = Arc::new(move |c, record| {
             // The card is built (avatar looked up) while it waits its turn; it shows only once built.
             let card: Arc<std::sync::Mutex<Option<Card>>> = Arc::default();
             let (built, repo, profiles, c) =
@@ -452,8 +469,10 @@ impl CheckinService {
                 stamps: c.stamps,
                 slots: c.slots,
             };
-            let done =
-                card_recent.record(Some(c.record_id.clone()), subject.clone(), Source::Twitch);
+            // A pushed card is no check-in: the event feed never lists it.
+            let done = record.then(|| {
+                card_recent.record(Some(c.record_id.clone()), subject.clone(), Source::Twitch)
+            });
             card_presenter.push(Item {
                 stage: Stage::Checkin,
                 subject,
@@ -469,8 +488,13 @@ impl CheckinService {
                     }
                     None => Shown::No,
                 }),
-                done: Some(done),
+                done,
             });
+        });
+        let queued = queue_card.clone();
+        let on_checked_in: OnCheckedIn = Arc::new(move |c| {
+            changed(c);
+            queued(c, true);
         });
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
         let worker_config = config.clone();
@@ -516,6 +540,13 @@ impl CheckinService {
                     } => {
                         let _ = reply.send(repo.deduct(&viewer_id, &deduction, Utc::now()).await);
                     }
+                    Job::Push { viewer_id, reply } => {
+                        let found = pushed(&*repo, &rules, &viewer_id).await;
+                        if let Ok(Some(c)) = &found {
+                            queue_card(c, false);
+                        }
+                        let _ = reply.send(found.map(|c| c.is_some()));
+                    }
                 }
             }
         });
@@ -524,6 +555,7 @@ impl CheckinService {
             recent,
             presenter,
             show_card,
+            hide_card,
             timing,
             modules,
             config,
@@ -623,6 +655,24 @@ impl CheckinService {
         answer.await.map_err(|_| stopped())?
     }
 
+    /// Puts a viewer's card on the screen through the presentation queue, without recording a check-in; `false` for
+    /// an unknown viewer.
+    pub(crate) async fn push_card(&self, viewer_id: &str) -> Result<bool, RepositoryError> {
+        let (reply, answer) = oneshot::channel();
+        let job = Job::Push {
+            viewer_id: viewer_id.to_owned(),
+            reply,
+        };
+        let stopped = || RepositoryError("check-in worker stopped".into());
+        self.tx.send(job).map_err(|_| stopped())?;
+        answer.await.map_err(|_| stopped())?
+    }
+
+    /// Takes the card on the screen away at once.
+    pub(crate) fn hide_card(&self) {
+        (self.hide_card)();
+    }
+
     /// Spends a viewer's stamps; handled in turn with the check-ins, so two at once never go below 0.
     pub(crate) async fn deduct(
         &self,
@@ -639,6 +689,28 @@ impl CheckinService {
         self.tx.send(job).map_err(|_| stopped())?;
         answer.await.map_err(|_| stopped())?
     }
+}
+
+/// The card a push shows: the viewer's card as of their total, under no record.
+async fn pushed<R: CheckinRepository>(
+    repo: &R,
+    rules: &Rules,
+    viewer_id: &str,
+) -> Result<Option<CheckedIn>, RepositoryError> {
+    let (Some(viewer), Some(total)) = (
+        repo.find_viewer(viewer_id).await?,
+        repo.total(viewer_id).await?,
+    ) else {
+        return Ok(None);
+    };
+    Ok(Some(CheckedIn {
+        record_id: String::new(),
+        viewer_id: viewer_id.to_owned(),
+        viewer,
+        total,
+        stamps: rules.slots.stamps(total),
+        slots: rules.slots.get(),
+    }))
 }
 
 async fn manual<R: CheckinRepository>(

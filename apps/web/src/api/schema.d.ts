@@ -208,6 +208,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/checkin/card/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 隱藏畫面卡片: takes the stamp card on the screen away at once. */
+        post: operations["hide_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/deductions": {
         parameters: {
             query?: never;
@@ -371,6 +388,23 @@ export interface paths {
         get: operations["list_viewers"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/viewers/{id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Puts the viewer's stamp card on the screen through the presentation queue; no check-in is recorded. */
+        post: operations["push_card"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2234,6 +2268,24 @@ export interface components {
             user_name: string;
             viewer_id: string;
         };
+        /**
+         * @description A `checkin.hidden` event exactly as `/ws/overlay` sends it: 隱藏畫面卡片 takes the card on screen away at once.
+         *     Not kept in snapshots.
+         */
+        CheckinHiddenEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["CheckinHiddenPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["CheckinHiddenType"];
+            /** Format: int32 */
+            version: number;
+        };
+        CheckinHiddenPayload: Record<string, never>;
+        /** @enum {string} */
+        CheckinHiddenType: "checkin.hidden";
         /** @description Redemptions waiting for the check-in module (while it is paused), and those it failed to take. */
         CheckinOutbox: {
             dead_letters: components["schemas"]["CheckinDeadLetter"][];
@@ -4150,6 +4202,23 @@ export interface operations {
             };
         };
     };
+    hide_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_deductions: {
         parameters: {
             query?: never;
@@ -4543,6 +4612,44 @@ export interface operations {
             };
             /** @description `checkin.invalid_query`: a bad page size */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    push_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The viewer's internal ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `checkin.viewer_not_found` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
