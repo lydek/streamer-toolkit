@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import CloseHint from './CloseHint.vue'
+import { previewUrl, togglePreview } from './preview'
 
 const { invoke, listen } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
@@ -64,5 +65,26 @@ describe('CloseHint', () => {
     emit(false)
     expect(dialog.open).toBe(false)
     expect(invoke).not.toHaveBeenCalledWith('close_hint', { action: 'cancel' })
+  })
+
+  it('stops a preview when the window hides to the tray', async () => {
+    const pause = vi.fn()
+    vi.stubGlobal(
+      'Audio',
+      class {
+        volume = 1
+        onended = null
+        onerror = null
+        pause = pause
+        play = () => Promise.resolve()
+      },
+    )
+    togglePreview('/sounds/a')
+    expect(previewUrl.value).toBe('/sounds/a')
+    await open()
+    emit(false)
+    expect(pause).toHaveBeenCalled()
+    expect(previewUrl.value).toBeUndefined()
+    vi.unstubAllGlobals()
   })
 })

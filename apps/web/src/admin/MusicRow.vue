@@ -7,7 +7,7 @@
       :disabled="track.missing"
       text
       rounded
-      @click="toggle"
+      @click="togglePreview(url)"
     />
     <div class="field">
       <label :for="`music-title-${track.id}`">{{ t('music.title') }}</label>
@@ -63,6 +63,7 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
+import { previewUrl, stopPreview, togglePreview } from './preview'
 import { formatLength } from './music'
 
 const props = defineProps<{ track: Schemas['Track']; playlists: Schemas['MusicPlaylist'][] }>()
@@ -85,21 +86,10 @@ async function choose(ids: string[]) {
   emit('changed')
 }
 
-const playing = ref(false)
-let audio: HTMLAudioElement | undefined
-function toggle() {
-  audio?.pause()
-  if (playing.value) {
-    playing.value = false
-    return
-  }
-  // The read-only music route; the admin window is on the Host's origin.
-  audio = new Audio(`/music/${props.track.id}`)
-  audio.onended = audio.onerror = () => (playing.value = false)
-  playing.value = true
-  audio.play()?.catch(() => (playing.value = false))
-}
-onBeforeUnmount(() => audio?.pause())
+// The read-only music route; the admin window is on the Host's origin. One preview plays at a time.
+const url = `/music/${props.track.id}`
+const playing = computed(() => previewUrl.value === url)
+onBeforeUnmount(() => stopPreview(url))
 
 const confirming = ref(false)
 const busy = ref(false)
