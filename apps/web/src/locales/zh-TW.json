@@ -386,6 +386,7 @@
     "checks": {
       "ready": "{ok} / {all} 好了",
       "fix": "修正",
+      "copied": "已複製。在 OBS 新增「瀏覽器」來源，貼上這個網址。",
       "twitch": { "ok": "Twitch 已登入", "bad": "Twitch 還沒登入" },
       "eventsub": { "ok": "EventSub 已連線", "bad": "EventSub 還沒連上，收不到聊天、特效與兌換" },
       "obs": { "ok": "OBS 已連線", "bad": "OBS 還沒連上" },
