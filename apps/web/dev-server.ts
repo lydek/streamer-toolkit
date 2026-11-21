@@ -21,7 +21,7 @@ export const devCsp = (url = '', host = '') => (url.startsWith('/overlay/') ? OV
 
 const DEFAULT_PORT = 47810
 // Vite's proxy matches these as plain prefixes, so the null-origin rule uses the same test.
-const HOST_PREFIXES = ['/api', '/ws', '/templates', '/sounds']
+const HOST_PREFIXES = ['/api', '/ws', '/templates', '/sounds', '/music']
 const isHostPath = (url = '') => HOST_PREFIXES.some((p) => url.startsWith(p))
 
 /** `tauri dev` runs the debug build, whose data folder sits next to the executable. */
@@ -41,9 +41,9 @@ export function hostPort(dataDir: string): number {
 }
 
 /**
- * `/api`, `/ws`, `/templates` and `/sounds` go to the Host. The target is read on every request, not once at startup:
- * Vite starts before the app, and a first run may save a free port instead of the default, or the port page may
- * save a new one.
+ * `/api`, `/ws`, `/templates`, `/sounds` and `/music` go to the Host. The target is read on every request, not once
+ * at startup: Vite starts before the app, and a first run may save a free port instead of the default, or the port
+ * page may save a new one.
  */
 export function hostProxy(dataDir: string): Record<string, ProxyOptions> {
   const options = (ws: boolean): ProxyOptions => ({

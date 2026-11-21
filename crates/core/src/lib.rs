@@ -2,6 +2,7 @@
 //! Internal integration events (e.g. chat messages) live here too, so business modules never depend on
 //! `integrations` or any external SDK.
 
+pub mod audio;
 pub mod bus;
 pub mod events;
 pub mod modules;

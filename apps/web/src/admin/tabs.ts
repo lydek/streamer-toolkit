@@ -78,7 +78,7 @@ export const GROUPS: TabGroup[] = [
     icon: 'pi pi-images',
     pages: [
       { path: '/scenes', label: 'modules.names.scene' },
-      soon('/music', 'music', 'pi pi-headphones', true),
+      { path: '/music', label: 'modules.names.bgm' },
       { path: '/sounds', label: 'modules.names.sound' },
       soon('/tts', 'tts', 'pi pi-comment', true),
       soon('/screen-tools', 'screenTools', 'pi pi-desktop', true),

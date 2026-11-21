@@ -86,7 +86,7 @@ export const invokes = (page: Page, cmd?: string) =>
 export const emit = (page: Page, event: string, payload: unknown) =>
   page.evaluate(([event, payload]) => window.__e2eEmit(event as string, payload), [event, payload])
 
-const hostPath = (url: URL) => /^\/(api|ws|templates|sounds)(\/|$)/.test(url.pathname)
+const hostPath = (url: URL) => /^\/(api|ws|templates|sounds|music)(\/|$)/.test(url.pathname)
 
 /**
  * Mocks the IPC, the admin API and `/ws/overlay` for the admin UI on the Vite dev server. Requests to Host paths

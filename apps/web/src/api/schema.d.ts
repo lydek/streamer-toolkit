@@ -46,7 +46,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A `.stbackup` file of this data folder: settings, the database, custom templates and sounds. Live use goes
+         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds and music. Live use goes
          *     on while it is made; database writes wait only for the snapshot.
          */
         get: operations["export_backup"];
@@ -438,6 +438,113 @@ export interface paths {
         };
         get?: never;
         put: operations["set_module"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_music"];
+        put?: never;
+        /** Copies an MP3, WAV or OGG file (at most 50 MB) into the music library. The body is the file itself. */
+        post: operations["import_music"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds an empty playlist at the end. */
+        post: operations["create_playlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/playlists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renames a playlist. */
+        put: operations["rename_playlist"];
+        post?: never;
+        /** Deletes a playlist; its tracks stay in the library. */
+        delete: operations["delete_playlist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renames a track. */
+        put: operations["update_track"];
+        post?: never;
+        /** Deletes a track, takes it out of every playlist, and deletes its file. */
+        delete: operations["delete_track"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/{id}/duration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Records how long a track plays; the admin window measures each track after import, and unmeasured ones when
+         *     the music page opens.
+         */
+        put: operations["set_duration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/{id}/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Chooses which playlists a track is in. */
+        put: operations["set_playlists"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1559,6 +1666,18 @@ export interface components {
             enabled: boolean;
             id: string;
         };
+        MusicLibrary: {
+            playlists: components["schemas"]["MusicPlaylist"][];
+            /** @description In import order. */
+            tracks: components["schemas"]["Track"][];
+        };
+        /** @description A playlist. `name` is broadcaster text: render it as text. */
+        MusicPlaylist: {
+            id: string;
+            name: string;
+            /** @description Track IDs in play order. */
+            tracks: string[];
+        };
         ObsOverview: {
             host: string;
             /** @description Whether a password is stored; the password itself is never returned. */
@@ -1661,6 +1780,10 @@ export interface components {
             /** @description RFC 3339 time it started. */
             startedAt: string;
             subject: components["schemas"]["Subject"];
+        };
+        PlaylistName: {
+            /** @description 1–100 characters after trimming. */
+            name: string;
         };
         /** @description A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
         PresentationQueueEvent: {
@@ -1812,6 +1935,7 @@ export interface components {
             checkins: number;
             /** @description When the backup was made (RFC 3339, UTC). */
             created_at: string;
+            music: number;
             /** Format: int64 */
             redemptions: number;
             sounds: number;
@@ -2139,6 +2263,33 @@ export interface components {
              */
             error: string | null;
             selected: components["schemas"]["ChatTemplate"];
+        };
+        /** @description One imported track. `title` is broadcaster text: render it as text. Its file is `GET /music/{id}`. */
+        Track: {
+            /**
+             * Format: int32
+             * @description How long it plays; `null` until the admin window has measured it (`PUT /api/admin/music/{id}/duration`).
+             */
+            duration_ms: number | null;
+            id: string;
+            /** @description Its file is gone from the music folder (deleted outside the app). */
+            missing: boolean;
+            title: string;
+        };
+        TrackDuration: {
+            /**
+             * Format: int32
+             * @description How long the track plays, 1 ms to 24 hours.
+             */
+            duration_ms: number;
+        };
+        TrackPlaylists: {
+            /** @description Every playlist the track should be in; it joins the end of new ones and leaves the others. */
+            playlists: string[];
+        };
+        TrackUpdate: {
+            /** @description 1–100 characters after trimming. */
+            title: string;
         };
         /** @description A chat badge as Twitch names it. */
         TwitchBadgePayload: {
@@ -3151,6 +3302,398 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_music: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicLibrary"];
+                };
+            };
+        };
+    };
+    import_music: {
+        parameters: {
+            query: {
+                /** @description The original file name: its extension must match the content; the rest becomes the title. */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The music file */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Track"];
+                };
+            };
+            /** @description `music.unsupported_type`: not an MP3, WAV or OGG file (by extension and content) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.too_large`: larger than 50 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_playlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistName"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicPlaylist"];
+                };
+            };
+            /** @description `music.invalid`: an empty name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rename_playlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistName"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicPlaylist"];
+                };
+            };
+            /** @description `music.invalid`: an empty name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_playlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_track: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Track"];
+                };
+            };
+            /** @description `music.invalid`: an empty title */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_track: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_duration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackDuration"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.invalid`: not between 1 ms and 24 hours */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_playlists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackPlaylists"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found`: no such track or playlist */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

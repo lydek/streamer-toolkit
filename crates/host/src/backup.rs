@@ -1,5 +1,5 @@
 //! Backup files (`.stbackup`, docs/architecture.md §6 資料夾): a zip of `settings.json`, a `VACUUM INTO` snapshot
-//! of the database, `templates/` and `sounds/`, plus `manifest.json` with every file's size and SHA-256.
+//! of the database, `templates/`, `sounds/` and `music/`, plus `manifest.json` with every file's size and SHA-256.
 //! Credentials live in the Windows Credential Manager, never in the data folder, so no backup holds them.
 //! A restore is checked and staged by the admin API, then applied on the next start before the database opens.
 //! Admin routes; the caller adds the token check.
@@ -35,7 +35,7 @@ const FORMAT_VERSION: u32 = 1;
 const MANIFEST: &str = "manifest.json";
 const SETTINGS: &str = "settings.json";
 /// Data folder subfolders taken whole. Never `logs/`, `cache/`, `WebView2/`, `backups/` or `instance-id`.
-const FOLDERS: [&str; 2] = ["templates", "sounds"];
+const FOLDERS: [&str; 3] = ["templates", "sounds", "music"];
 /// What a restore accepts; an export beyond these is refused, so every backup restores.
 const MAX_ARCHIVE_BYTES: usize = 512 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
@@ -54,16 +54,17 @@ const RESTORE_ID: &str = ".restore-id";
 /// the backup.
 const MOVED: &str = ".moved";
 /// What a restore replaces. The database's WAL files go too: SQLite would apply a stale WAL to the restored file.
-const REPLACED: [&str; 6] = [
+const REPLACED: [&str; 7] = [
     SETTINGS,
     db::DB_FILE,
     "toolkit.db-wal",
     "toolkit.db-shm",
     "templates",
     "sounds",
+    "music",
 ];
 /// What a backup puts in place.
-const RESTORED: [&str; 4] = [SETTINGS, db::DB_FILE, "templates", "sounds"];
+const RESTORED: [&str; 5] = [SETTINGS, db::DB_FILE, "templates", "sounds", "music"];
 
 pub(crate) struct BackupState {
     pub db: SqlitePool,
@@ -113,6 +114,7 @@ pub(crate) struct RestorePreview {
     /// Template folders, e.g. `templates/chat/`.
     pub templates: usize,
     pub sounds: usize,
+    pub music: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -191,7 +193,7 @@ pub(crate) fn routes(state: BackupState) -> Router {
         .with_state(Arc::new(state))
 }
 
-/// A `.stbackup` file of this data folder: settings, the database, custom templates and sounds. Live use goes
+/// A `.stbackup` file of this data folder: settings, the database, custom templates, sounds and music. Live use goes
 /// on while it is made; database writes wait only for the snapshot.
 #[utoipa::path(
     get,
@@ -484,8 +486,8 @@ fn collect(dir: &Path, prefix: &str, out: &mut Vec<(String, PathBuf)>) -> Result
     Ok(())
 }
 
-/// `settings.json`, `toolkit.db`, or a file under `templates/` or `sounds/`, as plain relative segments that are
-/// safe to create on Windows.
+/// `settings.json`, `toolkit.db`, or a file under `templates/`, `sounds/` or `music/`, as plain relative segments
+/// that are safe to create on Windows.
 fn allowed_path(path: &str) -> bool {
     const RESERVED: [&str; 22] = [
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
@@ -665,6 +667,7 @@ fn preview(m: &Manifest) -> RestorePreview {
             .collect::<HashSet<_>>()
             .len(),
         sounds: under("sounds").count(),
+        music: under("music").count(),
     }
 }
 

@@ -52,6 +52,8 @@ pub struct Settings {
     pub checkin: CheckinSettings,
     /// Imported sound files; the sound module checks them.
     pub sound: SoundSettings,
+    /// Imported background music and its playlists; the bgm module checks them.
+    pub bgm: BgmSettings,
     /// Look for a newer release on GitHub at start and every 24 h; off means no request at all.
     pub update_check: bool,
     /// The release the broadcaster chose to skip ("not this one"); only a newer one shows the notice again.
@@ -147,6 +149,36 @@ pub struct SoundEntry {
     pub duration_ms: Option<u32>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BgmSettings {
+    pub library: Vec<MusicEntry>,
+    pub playlists: Vec<Playlist>,
+}
+
+/// One imported track; its file is `music/<id>.<format>` in the data folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MusicEntry {
+    /// UUID v7.
+    pub id: String,
+    /// Shown to the broadcaster; starts as the original file name, which is never used as a path.
+    pub title: String,
+    /// `mp3`, `wav` or `ogg`.
+    pub format: String,
+    /// How long it plays, measured by the admin window; `None` until measured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Playlist {
+    /// UUID v7.
+    pub id: String,
+    pub name: String,
+    /// Track IDs in play order; a track can be in several playlists.
+    pub tracks: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CheckinSettings {
@@ -209,6 +241,7 @@ impl Default for Settings {
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
             sound: SoundSettings::default(),
+            bgm: BgmSettings::default(),
             update_check: true,
             dismissed_version: None,
         }
