@@ -54,6 +54,13 @@ pub struct PlayerStatus {
     pub volume: u8,
 }
 
+/// What a test plays: the track and the music volume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTrack {
+    pub track: NowPlaying,
+    pub volume: u8,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Starts `playlist` (or the last chosen one) from its start, or resumes it when it is paused.
@@ -434,6 +441,31 @@ impl BgmPlayer {
         inner.on_air = on_air;
         inner.sync(Instant::now());
         self.publish(&inner);
+    }
+
+    /// Hands `send` the track a test plays: the first playable one of the playlist chosen last, in the playlist's own
+    /// order. Changes nothing; refused while the music plays. `send` runs under the player's lock, so a play command
+    /// cannot slip in between the check and the test: the overlay always hears the test before the music starts.
+    pub fn test(&self, send: impl FnOnce(TestTrack)) -> Result<(), BgmError> {
+        if !self.modules.is_enabled(modules::BGM) {
+            return Err(BgmError::Off);
+        }
+        let inner = self.lock();
+        if inner.state == PlayState::Playing {
+            return Err(BgmError::Playing);
+        }
+        let bgm = settings::load(self.service.data_dir()).bgm;
+        let track = inner
+            .playlist
+            .as_deref()
+            .and_then(|id| bgm.playlists.iter().find(|p| p.id == id))
+            .and_then(|p| p.tracks.iter().find_map(|t| self.playable(&bgm, t)))
+            .ok_or(BgmError::NothingToPlay)?;
+        send(TestTrack {
+            track,
+            volume: bgm.volume.min(100),
+        });
+        Ok(())
     }
 
     /// Saves the volume and the order; turning shuffle on or off reorders the rest of the run around the track

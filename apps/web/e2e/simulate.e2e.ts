@@ -8,13 +8,17 @@ const fill = (text: string, values: Record<string, string | number>) =>
 
 test('each row sends its test event, a feature turned off cannot, and Esc returns focus', async ({ page }) => {
   const sent: { path: string; body: unknown }[] = []
-  await page.route(/\/api\/admin\/(simulate\/[\w-]+|sounds\/[^/]+\/play)$/, (r) => {
+  await page.route(/\/api\/admin\/(simulate\/[\w-]+|sounds\/[^/]+\/play|music\/player\/test)$/, (r) => {
     sent.push({ path: new URL(r.request().url()).pathname, body: r.request().postDataJSON() })
     return r.fulfill({ status: 204 })
   })
   await page.route('**/api/admin/overlays', (r) => r.fulfill({ json: { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, other: 0 } }))
+  await page.route('**/api/admin/sounds', (r) =>
+    r.fulfill({ json: { sounds: [{ id: 's1', label: '叮咚' }, { id: 's2', label: '鈴聲' }], slots: {}, volume: 100 } }),
+  )
+  await page.route('**/api/admin/checkin/settings', (r) => r.fulfill({ json: { card_slots: 10 } }))
   await openAdmin(page, {
-    modules: ['chat', 'alerts', 'checkin', 'counter'].map((id) => ({ id, enabled: true, closed: false })),
+    modules: ['chat', 'alerts', 'checkin', 'counter', 'sound'].map((id) => ({ id, enabled: true, closed: false })),
   })
   const opener = page.getByRole('banner').getByRole('button', { name: zh.simulate.dialog.title })
   await opener.click()
@@ -27,20 +31,31 @@ test('each row sends its test event, a feature turned off cannot, and Esc return
   for (const kind of ['follow', 'subscribe', 'resubscribe', 'gift', 'cheer', 'raid'] as const) {
     await row('alerts').getByRole('button', { name: zh.alerts.kinds[kind], exact: true }).click()
   }
+  // The sound list opens inside the modal dialog, and the picked sound plays.
+  await row('sound').getByRole('combobox').click()
+  await page.getByRole('option', { name: '鈴聲' }).click()
+  await row('sound').getByRole('button', { name: zh.simulate.dialog.play }).click()
+  await row('checkin').getByRole('button', { name: zh.simulate.dialog.checkin }).click()
   await row('checkin').getByRole('button', { name: zh.simulate.dialog.fullCard }).click()
   await row('marathon').getByRole('button', { name: zh.simulate.dialog.showTest }).click()
-  await expect.poll(() => sent.map((s) => s.path)).toEqual([
-    '/api/admin/simulate/chat',
-    ...Array(6).fill('/api/admin/simulate/alert'),
-    '/api/admin/simulate/checkin',
-    '/api/admin/simulate/overlay-test',
+  await expect.poll(() => sent.length).toBe(11)
+  expect(sent).toEqual([
+    { path: '/api/admin/simulate/chat', body: { text: zh.simulate.dialog.chatText } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'follow', amount: null } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'subscribe', amount: null } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'resubscribe', amount: 3 } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'gift', amount: 5 } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'cheer', amount: 100 } },
+    { path: '/api/admin/simulate/alert', body: { kind: 'raid', amount: 20 } },
+    { path: '/api/admin/sounds/s2/play', body: null },
+    { path: '/api/admin/simulate/checkin', body: { stamps: 1 } },
+    { path: '/api/admin/simulate/checkin', body: { stamps: 10 } },
+    { path: '/api/admin/simulate/overlay-test', body: { overlay: 'marathon' } },
   ])
-  expect(sent.at(-2)!.body).toEqual({ stamps: 10 })
-  expect(sent.at(-1)!.body).toEqual({ overlay: 'marathon' })
 
-  // The sound feature is off in this test: its row cannot send.
-  await expect(row('sound')).toContainText(zh.simulate.dialog.featureOff)
-  await expect(row('sound').getByRole('button', { name: zh.simulate.dialog.play })).toBeDisabled()
+  // The music feature is off in this test: its row cannot send.
+  await expect(row('bgm')).toContainText(zh.simulate.dialog.featureOff)
+  await expect(row('bgm').getByRole('button', { name: zh.simulate.dialog.playTest })).toBeDisabled()
   await expect(row('alerts')).toContainText(zh.simulate.dialog.notInObs)
 
   // A failure says why.

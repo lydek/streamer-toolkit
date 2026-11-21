@@ -128,7 +128,7 @@
     </nav>
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
-    <SimulateDialog ref="simulate" @closed="simulateButton?.$el.focus()" />
+    <SimulateDialog ref="simulate" :bgm="live.bgm" @closed="simulateButton?.$el.focus()" />
     <nav
       v-if="group && subPages.length > 1"
       ref="subTabsEl"

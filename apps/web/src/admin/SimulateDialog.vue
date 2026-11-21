@@ -36,12 +36,13 @@
             :label="b.label"
             size="small"
             outlined
-            :disabled="!row.on || b.disabled || busy"
+            :disabled="!row.on || !!row.blocked || b.disabled || busy"
             @click="send(row.id, b.label, b.run)"
           />
         </span>
         <span class="state">
           <span v-if="modules && !row.on" class="off">{{ t('simulate.dialog.featureOff') }}</span>
+          <span v-else-if="row.blocked" class="off">{{ row.blocked }}</span>
           <!-- Feature states not read yet (or the read failed): nothing can be sent, and it says so. -->
           <span v-else-if="!modules || connected[row.overlay] === undefined" class="unknown">
             <i class="pi pi-question-circle" aria-hidden="true"></i>{{ t('simulate.dialog.unknown') }}
@@ -68,11 +69,15 @@ import { errorMessage } from '../i18n'
 import { ALERT_KINDS } from '../overlay/alerts/alerts'
 import { ApiError, type Schemas, api, client } from './api'
 import { FEATURES, isOn, useModules } from './features'
-import { ALERT_AMOUNTS, simulateAlert, simulateChat, simulateCheckin, testOverlay, testSound } from './simulate'
+import { ALERT_AMOUNTS, simulateAlert, simulateChat, simulateCheckin, testMusic, testOverlay, testSound } from './simulate'
 
 // How often the dialog asks which overlays are open in OBS, while it is open.
 const OVERLAYS_MS = 3000
 
+const props = defineProps<{
+  /** The latest `bgm.player` event; `undefined` until the live connection has it. */
+  bgm?: Schemas['BgmPlayerEvent']
+}>()
 const emit = defineEmits<{ closed: [] }>()
 const { t } = useI18n()
 const { modules } = useModules()
@@ -84,6 +89,7 @@ const sounds = shallowRef<{ id: string; label: string }[]>([])
 const soundId = ref<string>()
 // `undefined` until the card's slot count is read: 集滿 waits for it.
 const cardSlots = ref<number>()
+const music = shallowRef<Schemas['MusicLibrary']>()
 // Overlay connections from `GET /api/admin/overlays`; a kind is `undefined` while that could not be read.
 const connected = ref<Partial<Record<string, boolean>>>({})
 let timer: number | undefined
@@ -93,11 +99,26 @@ type Row = {
   module: string
   overlay: string
   buttons: { label: string; run: () => Promise<unknown>; disabled?: boolean }[]
+  /** Why its buttons cannot be pressed now; the Host refuses the same cases. */
+  blocked?: string
 }
 const on = (module: string) => {
   const feature = FEATURES.find((f) => f.module === module)
   return !!modules.value && !!feature && isOn(feature, modules.value)
 }
+// Until the player status arrives nothing can be checked, so the music test waits for it.
+const musicBlocked = computed(() => {
+  const player = props.bgm?.payload
+  if (!player) return t('simulate.dialog.unknown')
+  if (player.state === 'playing') return t('simulate.dialog.bgmPlaying')
+  if (!player.playlist) return t('simulate.dialog.noPlaylist')
+  const library = music.value
+  // Without the library the Host's check alone decides.
+  if (!library) return undefined
+  const tracks = library.playlists.find((p) => p.id === player.playlist)?.tracks ?? []
+  const playable = tracks.some((id) => library.tracks.some((tr) => tr.id === id && !tr.missing && !!tr.duration_ms))
+  return playable ? undefined : t('simulate.dialog.nothingToPlay')
+})
 const rows = computed(() =>
   (
     [
@@ -138,6 +159,13 @@ const rows = computed(() =>
         overlay: id,
         buttons: [{ label: t('simulate.dialog.showTest'), run: () => testOverlay(id) }],
       })),
+      {
+        id: 'bgm',
+        module: 'bgm',
+        overlay: 'bgm',
+        buttons: [{ label: t('simulate.dialog.playTest'), run: testMusic }],
+        blocked: musicBlocked.value,
+      },
     ] satisfies Row[]
   ).map((row: Row) => ({ ...row, on: on(row.module) })),
 )
@@ -172,6 +200,11 @@ async function loadChoices() {
   } catch {
     sounds.value = []
     soundId.value = undefined
+  }
+  try {
+    music.value = await api(client.GET('/api/admin/music'))
+  } catch {
+    music.value = undefined
   }
   try {
     cardSlots.value = (await api(client.GET('/api/admin/checkin/settings'))).card_slots

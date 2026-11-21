@@ -34,18 +34,36 @@ beforeEach(() => {
     '/api/admin/overlays': { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, other: 0 },
     '/api/admin/sounds': { sounds: [{ id: 's1', label: '叮咚' }], slots: {}, volume: 100 },
     '/api/admin/checkin/settings': { card_slots: 7 },
+    '/api/admin/music': {
+      tracks: [
+        { id: 't1', title: '沒量長度', duration_ms: null, missing: false, used_by: [] },
+        { id: 't2', title: 'Lo-fi', duration_ms: 60000, missing: false, used_by: [] },
+      ],
+      playlists: [{ id: 'p1', name: '聊天', tracks: ['t1', 't2'], used_by: [] }],
+      scene_rules: [],
+    },
   }
   calls.get.mockReset()
   calls.get.mockImplementation((path: string) => Promise.resolve(answers[path]))
   calls.post.mockReset()
   calls.post.mockResolvedValue(undefined)
-  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin', 'counter'])
+  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin', 'counter', 'bgm'])
+})
+
+const player = (state: string, playlist: string | null = 'p1') => ({
+  id: 'e1',
+  type: 'bgm.player',
+  version: 1,
+  seq: 1,
+  occurredAt: '',
+  source: 'system',
+  payload: { state, playlist, track: null, positionMs: 0, onAir: true, shuffle: false, volume: 50 },
 })
 
 afterEach(() => vi.unstubAllGlobals())
 
-async function opened() {
-  const wrapper = mount(SimulateDialog, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
+async function opened(bgm: unknown = player('stopped')) {
+  const wrapper = mount(SimulateDialog, { props: { bgm: bgm ?? undefined } as never, global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
   await (wrapper.vm as unknown as { open: () => Promise<void> }).open()
   await flushPromises()
   return wrapper
@@ -76,6 +94,8 @@ describe('SimulateDialog', () => {
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'counter' } })
     await press('marathon', '顯示測試值')
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'marathon' } })
+    await press('bgm', '播 5 秒')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/music/player/test')
     wrapper.unmount()
   })
 
@@ -118,6 +138,24 @@ describe('SimulateDialog', () => {
     wrapper.unmount()
   })
 
+  it('says why the music test cannot play: playing, no playlist, nothing playable, or no status yet', async () => {
+    const reason = async (bgm: unknown) => {
+      const wrapper = await opened(bgm)
+      const text = row('bgm').querySelector('.state')!.textContent!.trim()
+      const disabled = row('bgm').querySelector('button')!.disabled
+      wrapper.unmount()
+      return [text, disabled]
+    }
+    expect(await reason(player('playing'))).toEqual(['背景音樂正在播', true])
+    expect(await reason(player('stopped', null))).toEqual(['還沒選過歌單', true])
+    expect(await reason(null)).toEqual(['無法確認', true])
+    // Paused is fine: the test plays on its own and the player stays paused.
+    expect((await reason(player('paused')))[1]).toBe(false)
+    answers['/api/admin/music'] = { tracks: [], playlists: [{ id: 'p1', name: '聊天', tracks: [], used_by: [] }], scene_rules: [] }
+    expect(await reason(player('stopped'))).toEqual(['歌單裡沒有能播的歌', true])
+  })
+
+
   it('offers only sounds still in the library, and 集滿 only once the card size is known', async () => {
     let slots: (v: unknown) => void = () => {}
     calls.get.mockImplementation((path: string) =>
@@ -143,4 +181,5 @@ describe('SimulateDialog', () => {
     expect(full().disabled).toBe(true)
     wrapper.unmount()
   })
+
 })

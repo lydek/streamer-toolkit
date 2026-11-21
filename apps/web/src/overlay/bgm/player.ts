@@ -1,6 +1,7 @@
 import type { components } from '../../api/schema'
 
 export type BgmPlayer = components['schemas']['BgmPlayerPayload']
+export type BgmTest = components['schemas']['BgmTestPayload']
 
 /** The audio only seeks when it is further off than this, so a volume change does not make it skip. */
 const DRIFT_MS = 1000
@@ -27,4 +28,32 @@ export function follow(audio: HTMLAudioElement, p: BgmPlayer, occurredAt: string
   // OBS lets browser sources play without a click; elsewhere a refusal only means silence.
   if (p.state === 'playing') audio.play()?.catch(() => {})
   else audio.pause()
+}
+
+/**
+ * Plays `bgm.test` tracks on `audio`, an element of their own, so the player's audio and position stay as they are.
+ * A test ends after its time, when another starts, or as soon as the player plays: the two never sound together.
+ */
+export function testPlayer(audio: HTMLAudioElement) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  function stop() {
+    clearTimeout(timer)
+    audio.pause()
+    audio.removeAttribute('src')
+  }
+  return {
+    play(t: BgmTest) {
+      stop()
+      audio.volume = Math.min(Math.max(t.volume, 0), 100) / 100
+      audio.src = t.track.url
+      audio.currentTime = 0
+      audio.play()?.catch(() => {})
+      timer = setTimeout(stop, t.durationMs)
+    },
+    /** Called with every player status. */
+    player(p: BgmPlayer) {
+      if (p.state === 'playing') stop()
+    },
+    stop,
+  }
 }

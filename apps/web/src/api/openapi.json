@@ -2311,6 +2311,28 @@
         }
       }
     },
+    "/api/admin/music/player/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays the first playable track of the playlist chosen last on the music overlay for 5 seconds, as a `bgm.test`\nevent (`source=simulation`, not kept in snapshots). The player, its track and its position do not change.",
+        "operationId": "test_player",
+        "responses": {
+          "204": {},
+          "409": {
+            "description": "`music.nothing_to_play`: no playlist chosen yet, or none of its tracks can play; `music.playing`: the music is playing; `music.off`: the feature is turned off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/music/playlists": {
       "post": {
         "tags": [
@@ -4947,6 +4969,77 @@
         "type": "string",
         "enum": [
           "bgm.player"
+        ]
+      },
+      "BgmTestEvent": {
+        "type": "object",
+        "description": "A `bgm.test` event exactly as `/ws/overlay` sends it; never kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BgmTestPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/BgmTestType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "BgmTestPayload": {
+        "type": "object",
+        "description": "The `payload` of a `bgm.test` event: the music overlay plays `track` from its start at `volume` for `durationMs`,\non its own and not as the player, and stops early when the player starts playing.",
+        "required": [
+          "track",
+          "volume",
+          "durationMs"
+        ],
+        "properties": {
+          "durationMs": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "track": {
+            "$ref": "#/components/schemas/PlayerTrack"
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "BgmTestType": {
+        "type": "string",
+        "enum": [
+          "bgm.test"
         ]
       },
       "ChatBadgeName": {

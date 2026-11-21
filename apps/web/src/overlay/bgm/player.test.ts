@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { type BgmPlayer, follow, positionMs } from './player'
+import { type BgmPlayer, follow, positionMs, testPlayer } from './player'
 
 const AT = '2026-11-21T10:00:00.000Z'
 const track = { id: 't1', title: 'Lo-fi', url: '/music/t1', durationMs: 180_000 }
@@ -83,5 +83,40 @@ describe('follow', () => {
     follow(a, status({ state: 'stopped', track: null, positionMs: 0 }), AT)
     expect(audio.getAttribute('src')).toBeNull()
     vi.useRealTimers()
+  })
+})
+
+describe('testPlayer', () => {
+  const test = { track, volume: 30, durationMs: 5000 }
+
+  it('plays a test from the start on its own element for its time, then stops', () => {
+    vi.useFakeTimers()
+    const real = fakeAudio()
+    follow(real as unknown as HTMLAudioElement, status({ state: 'paused' }), AT)
+    const own = fakeAudio()
+    const player = testPlayer(own as unknown as HTMLAudioElement)
+    player.play(test)
+    expect([own.getAttribute('src'), own.currentTime, own.volume, own.paused]).toEqual(['/music/t1', 0, 0.3, false])
+    // Another test starts the time again.
+    vi.advanceTimersByTime(4000)
+    player.play(test)
+    vi.advanceTimersByTime(4000)
+    expect(own.paused).toBe(false)
+    vi.advanceTimersByTime(1000)
+    expect([own.paused, own.getAttribute('src')]).toEqual([true, null])
+    // The player's own audio was never touched.
+    expect([real.paused, real.currentTime]).toEqual([true, 10])
+    vi.useRealTimers()
+  })
+
+  it('stops at once when the player starts playing, not when it pauses or stops', () => {
+    const own = fakeAudio()
+    const player = testPlayer(own as unknown as HTMLAudioElement)
+    player.play(test)
+    player.player(status({ state: 'paused' }))
+    player.player(status({ state: 'stopped', track: null }))
+    expect(own.paused).toBe(false)
+    player.player(status())
+    expect(own.paused).toBe(true)
   })
 })
