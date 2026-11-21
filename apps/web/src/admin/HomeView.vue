@@ -312,6 +312,27 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="rehearsal" :title="moduleName('rehearsal')" full-page="/rehearsal">
+      <template #actions>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <ul class="plain rehearsal-list">
+          <li v-for="id in BUILT_IN" :key="id">
+            <span>{{ t(`rehearsal.scripts.${id}`) }}</span>
+            <Button
+              :label="t('rehearsal.start')"
+              icon="pi pi-play"
+              size="small"
+              outlined
+              @click="runBuiltIn(id, 'normal').catch(drawerFailed)"
+            />
+          </li>
+        </ul>
+        <Button :label="t('rehearsal.stop')" icon="pi pi-stop" severity="danger" text @click="stopScript().catch(() => {})" />
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
@@ -369,6 +390,8 @@ import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
 import { counterTile, stepCounter } from './counters'
 import { hideBreak, showBreak } from './screenTools'
+import { BUILT_IN, runBuiltIn, stopScript } from './rehearsal'
+import { GROUPS } from './tabs'
 import WarningSettings from './WarningSettings.vue'
 import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
 import MusicPlayer from './MusicPlayer.vue'
@@ -559,6 +582,7 @@ const lines = computed<Record<string, Line>>(() => {
         : live.value.counters
           ? counterTile(live.value.counters)
           : { state: 'loading' },
+    rehearsal: { state: 'ready', text: t('rehearsal.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }
@@ -633,7 +657,11 @@ function recentLine(r: typeof recent.value): Line {
 const moduleName = (id: string) => {
   const unbuilt = TILES.find((tile) => tile.id === id)?.unbuilt
   if (unbuilt) return t(unbuilt.label)
-  return te(`modules.names.${id}`) ? t(`modules.names.${id}`) : te(`home.blocks.${id}`) ? t(`home.blocks.${id}`) : id
+  if (te(`modules.names.${id}`)) return t(`modules.names.${id}`)
+  if (te(`home.blocks.${id}`)) return t(`home.blocks.${id}`)
+  // A tile that is no module's (e.g. 演練) is named after its page.
+  const page = GROUPS.flatMap((g) => g.pages).find((p) => p.path === `/${id}`)
+  return page ? t(page.label) : id
 }
 
 async function refreshOverview() {
@@ -812,6 +840,14 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   font-size: 0.85em;
   background: var(--p-content-hover-background);
+}
+
+.rehearsal-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0;
 }
 
 .break-quick {

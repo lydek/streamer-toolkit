@@ -10,6 +10,7 @@ import CountersPage from './CountersPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
+import RehearsalPage from './RehearsalPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
@@ -34,6 +35,7 @@ export const router = createRouter({
     { path: '/scenes', component: ScenesPage },
     { path: '/music', component: MusicPage },
     { path: '/counters', component: CountersPage },
+    { path: '/rehearsal', component: RehearsalPage },
     { path: '/screen-tools', component: ScreenToolsPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     // A page not built yet has a grey tab; its URL leads home.

@@ -4542,6 +4542,78 @@
         }
       }
     },
+    "/api/admin/simulate/script": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays a script (see the module docs); it replaces one still running.",
+        "operationId": "run_script",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunScript"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`rehearsal.invalid`, with the line when the JSON is wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRefused"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`rehearsal.too_large`: more than 256 KB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRefused"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/simulate/script/stop": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stops the script running; what it already sent plays on (the emergency stop clears that).",
+        "operationId": "stop_script",
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`rehearsal.not_running`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds": {
       "get": {
         "tags": [
@@ -9986,6 +10058,22 @@
           }
         }
       },
+      "RunScript": {
+        "type": "object",
+        "required": [
+          "speed",
+          "script"
+        ],
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "The script file's text: `{\"steps\": [{\"type\": \"chat\" | \"alert\" | \"checkin\" | \"stop\", \"at\": <ms>, …}]}`."
+          },
+          "speed": {
+            "$ref": "#/components/schemas/Speed"
+          }
+        }
+      },
       "Scene": {
         "type": "object",
         "required": [
@@ -10104,6 +10192,54 @@
             "type": "integer",
             "format": "int32",
             "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "ScriptRefused": {
+        "type": "object",
+        "description": "Why a script was refused: the line when the JSON itself is broken, or the step that does not fit.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "`rehearsal.invalid` or `rehearsal.too_large`."
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1-based line in the file of broken JSON.",
+            "minimum": 0
+          },
+          "step": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1-based number of a step that is not a known kind or misses a field.",
+            "minimum": 0
+          }
+        }
+      },
+      "ScriptStarted": {
+        "type": "object",
+        "required": [
+          "steps",
+          "duration_ms"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When the last step plays, at the chosen speed.",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "integer",
             "minimum": 0
           }
         }
@@ -10615,6 +10751,14 @@
           "obs",
           "simulation",
           "system"
+        ]
+      },
+      "Speed": {
+        "type": "string",
+        "enum": [
+          "normal",
+          "double",
+          "burst"
         ]
       },
       "Stage": {

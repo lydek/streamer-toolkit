@@ -14,6 +14,7 @@ mod openapi;
 mod overlay;
 mod overlay_test;
 mod queue;
+mod rehearsal;
 mod stream_summary;
 mod tab_bar;
 mod templates;
@@ -255,6 +256,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     });
     queue::follow(&presenter, bus.clone());
     let queue_routes = queue::routes(presenter.clone(), bus.clone());
+    let rehearsal_presenter = presenter.clone();
     let overlay_test_routes = overlay_test::routes(bus.clone(), modules.clone());
     let sounds = Arc::new(sound::SoundService::new(
         config.data_dir.clone(),
@@ -536,6 +538,18 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(card_pack_files)
+            .merge(
+                rehearsal::routes(rehearsal::RehearsalState {
+                    admin: admin.clone(),
+                    presenter: rehearsal_presenter,
+                    bus: bus.clone(),
+                    running: Default::default(),
+                })
+                .layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
             .merge(queue_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

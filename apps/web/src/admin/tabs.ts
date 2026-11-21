@@ -35,7 +35,7 @@ export const GROUPS: TabGroup[] = [
     pages: [
       { path: '/', label: 'nav.groups.home' },
       soon('/stream-info', 'streamInfo', 'pi pi-pencil', true),
-      soon('/rehearsal', 'rehearsal', 'pi pi-play-circle', true),
+      { path: '/rehearsal', label: 'pages.rehearsal.name' },
     ],
   },
   {

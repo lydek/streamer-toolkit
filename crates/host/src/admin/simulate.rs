@@ -22,11 +22,19 @@ pub(super) async fn simulate_chat(
     State(s): State<Arc<AdminState>>,
     Json(body): Json<SimulatedChat>,
 ) -> Response {
-    let text = body.text.trim();
-    if text.is_empty() || text.chars().count() > SIMULATED_TEXT_MAX {
-        return error(StatusCode::BAD_REQUEST, "simulate.invalid_text");
+    match send_chat(&s, &body.user_name, &body.text) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(code) => error(StatusCode::BAD_REQUEST, code),
     }
-    let user_name = match body.user_name.trim() {
+}
+
+/// A chat message tagged `source=simulation`, through the same path as Twitch chat; it reaches the chat display only.
+pub(crate) fn send_chat(s: &AdminState, user_name: &str, text: &str) -> Result<(), &'static str> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > SIMULATED_TEXT_MAX {
+        return Err("simulate.invalid_text");
+    }
+    let user_name = match user_name.trim() {
         "" => "Simulator",
         name => name,
     };
@@ -50,7 +58,7 @@ pub(super) async fn simulate_chat(
         },
         Source::Simulation,
     );
-    StatusCode::NO_CONTENT.into_response()
+    Ok(())
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -162,15 +170,18 @@ pub(super) async fn simulate_alert(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, "simulate.invalid_alert");
     };
-    match simulated_alerts(body) {
-        Ok(alerts) => {
-            for alert in alerts {
-                s.alerts.receive(alert, Source::Simulation);
-            }
-            StatusCode::NO_CONTENT.into_response()
-        }
+    match send_alert(&s, body) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(code) => error(StatusCode::BAD_REQUEST, code),
     }
+}
+
+/// An alert tagged `source=simulation`, through the same path as Twitch; it reaches the alerts overlay only.
+pub(crate) fn send_alert(s: &AdminState, body: SimulatedAlert) -> Result<(), &'static str> {
+    for alert in simulated_alerts(body)? {
+        s.alerts.receive(alert, Source::Simulation);
+    }
+    Ok(())
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -197,14 +208,26 @@ pub(super) async fn simulate_checkin(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, "simulate.invalid_checkin");
     };
-    let name: String = match body.user_name.trim() {
+    match send_checkin(&s, &body.user_name, body.stamps) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(code) => error(StatusCode::BAD_REQUEST, code),
+    }
+}
+
+/// A stamp card tagged `source=simulation`; nothing is recorded.
+pub(crate) fn send_checkin(
+    s: &AdminState,
+    user_name: &str,
+    stamps: u32,
+) -> Result<(), &'static str> {
+    let name: String = match user_name.trim() {
         "" => "Simulator".into(),
         name => name.chars().take(25).collect(),
     };
-    if s.checkin.simulate_card(&name, body.stamps) {
-        StatusCode::NO_CONTENT.into_response()
+    if s.checkin.simulate_card(&name, stamps) {
+        Ok(())
     } else {
-        error(StatusCode::BAD_REQUEST, "simulate.invalid_stamps")
+        Err("simulate.invalid_stamps")
     }
 }
 

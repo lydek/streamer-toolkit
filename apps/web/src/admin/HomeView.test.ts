@@ -158,6 +158,13 @@ describe('HomeView tiles', () => {
     const text = (id: string) => document.querySelector(`[data-drawer-tile="${id}"]`)?.textContent?.replace(/\s+/g, '')
     expect(text('sound')).toContain('2個音效叮咚、歡呼')
   })
+
+  it('name a tile that is no module after its page', async () => {
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok({ ...responses, '/api/admin/home-tiles': ['rehearsal'] }[path])) as never)
+    await home()
+    expect(document.querySelector('[data-drawer-tile="rehearsal"]')?.textContent).toContain('演練')
+  })
 })
 
 describe('HomeView skip link', () => {

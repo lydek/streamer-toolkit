@@ -270,6 +270,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'bgm', icon: 'pi pi-headphones', tint: 'yellow' },
   { id: 'counter', icon: 'pi pi-hashtag', tint: 'red' },
   { id: 'screen-tools', icon: 'pi pi-desktop', tint: 'yellow' },
+  { id: 'rehearsal', icon: 'pi pi-play-circle', tint: 'blue', always: true },
 ]
 
 /**

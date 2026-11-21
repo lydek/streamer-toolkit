@@ -549,3 +549,110 @@ async fn the_stream_summary_adds_up_the_latest_session_and_needs_the_token() {
         "the token is required"
     );
 }
+
+#[tokio::test]
+async fn a_rehearsal_script_records_nothing_whatever_its_source_says() {
+    let mut config = test_config();
+    let pool = db::memory_migrated().await;
+    config.db = pool.clone();
+    let app = router(config).unwrap();
+    let post = |uri: &str, body: serde_json::Value| {
+        Request::post(uri)
+            .header(header::HOST, "127.0.0.1:47810")
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let script = serde_json::json!({ "steps": [
+        { "type": "chat", "at": 0, "userName": "小魚", "text": "!打卡", "source": "twitch" },
+        { "type": "alert", "at": 10, "kind": "raid", "userName": "Raider", "amount": 50, "source": "twitch" },
+        { "type": "checkin", "at": 20, "userName": "小魚", "stamps": 3 },
+        { "type": "stop", "at": 30 }
+    ]})
+    .to_string();
+    let res = app
+        .clone()
+        .oneshot(post(
+            "/api/admin/simulate/script",
+            serde_json::json!({ "speed": "burst", "script": script }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    for sql in [
+        "SELECT COUNT(*) FROM checkin_records",
+        "SELECT COUNT(*) FROM checkin_viewers",
+        "SELECT COUNT(*) FROM activity_events",
+        "SELECT COUNT(*) FROM chat_messages",
+        "SELECT COUNT(*) FROM redemption_records",
+        "SELECT COUNT(*) FROM viewers",
+    ] {
+        let n: i64 = sqlx::query_scalar(sql).fetch_one(&pool).await.unwrap();
+        assert_eq!(n, 0, "{sql}");
+    }
+
+    let broken = "{\n  \"steps\": [\n    {\"type\": \"chat\", \"at\": 0 }\n  ]\n}";
+    let res = app
+        .clone()
+        .oneshot(post(
+            "/api/admin/simulate/script",
+            serde_json::json!({ "speed": "normal", "script": broken }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        (&body["code"], &body["step"]),
+        (&"rehearsal.invalid".into(), &1.into()),
+        "a chat step without text"
+    );
+
+    // A script of the largest size, all quotes, doubles once escaped in the body; it is still read and checked.
+    let quotes = "\"".repeat(crate::rehearsal::MAX_SCRIPT_BYTES);
+    for (script, status, code) in [
+        (quotes, StatusCode::BAD_REQUEST, "rehearsal.invalid"),
+        (
+            "x".repeat(crate::rehearsal::MAX_SCRIPT_BYTES + 1),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "rehearsal.too_large",
+        ),
+    ] {
+        let res = app
+            .clone()
+            .oneshot(post(
+                "/api/admin/simulate/script",
+                serde_json::json!({ "speed": "normal", "script": script }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), status);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], code);
+        if code == "rehearsal.invalid" {
+            assert_eq!(body["line"], 1, "the script itself was checked");
+        }
+    }
+
+    let res = app
+        .oneshot(post(
+            "/api/admin/simulate/script/stop",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "nothing is running any more"
+    );
+}
