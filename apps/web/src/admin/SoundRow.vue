@@ -26,7 +26,13 @@
       />
     </div>
     <div class="buttons">
-      <Button :label="t('sound.play')" icon="pi pi-play" outlined @click="play" />
+      <Button
+        :label="t(playing ? 'sound.stop' : 'sound.play')"
+        :icon="playing ? 'pi pi-stop' : 'pi pi-play'"
+        :aria-pressed="playing"
+        outlined
+        @click="togglePreview(url, volume.value.value)"
+      />
       <Button ref="deleteButton" :label="t('sound.delete')" icon="pi pi-trash" severity="danger" text @click="ask" />
     </div>
     <div v-if="confirming" class="confirm" role="group" :aria-label="t('sound.delete')">
@@ -49,10 +55,11 @@
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
+import { previewUrl, stopPreview, togglePreview } from './preview'
 
 const props = defineProps<{ sound: Schemas['Sound']; usedBy: string[] }>()
 const emit = defineEmits<{ deleted: [Schemas['Sound']]; error: [unknown] }>()
@@ -76,15 +83,10 @@ const label = useDrawerSetting(labelSaved, (v) => put({ label: v }))
 const volumeSaved = ref(props.sound.volume)
 const volume = useDrawerSetting(volumeSaved, (v) => put({ volume: v }))
 
-let audio: HTMLAudioElement | undefined
-function play() {
-  audio?.pause()
-  // The read-only sound route; the admin window is on the Host's origin.
-  audio = new Audio(`/sounds/${props.sound.id}`)
-  audio.volume = volume.value.value / 100
-  audio.play()?.catch(() => {})
-}
-onBeforeUnmount(() => audio?.pause())
+// The read-only sound route; the admin window is on the Host's origin. One preview plays at a time.
+const url = `/sounds/${props.sound.id}`
+const playing = computed(() => previewUrl.value === url)
+onBeforeUnmount(() => stopPreview(url))
 
 const confirming = ref(false)
 const busy = ref(false)

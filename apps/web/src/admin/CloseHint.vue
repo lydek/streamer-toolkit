@@ -16,6 +16,7 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { stopPreview } from './preview'
 
 // Rust asks when the admin window's ✕ is pressed (docs/architecture.md §6): `true` shows the hint, `false` closes it.
 const { t } = useI18n()
@@ -32,6 +33,8 @@ onMounted(async () => {
   unlisten = await listen<boolean>('close-hint', ({ payload: show }) => {
     const d = dialog.value!
     if (!show) {
+      // Sent whenever the window hides to the tray: a preview must not go on playing unseen.
+      stopPreview()
       if (d.open) d.close('dismissed')
       return
     }

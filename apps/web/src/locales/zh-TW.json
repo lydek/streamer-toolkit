@@ -762,6 +762,7 @@
     "label": "名稱",
     "volume": "音量",
     "play": "試聽",
+    "stop": "停止試聽",
     "delete": "刪除",
     "confirmDelete": "確定刪除",
     "cancel": "取消",
