@@ -33,6 +33,28 @@
         />
       </ul>
     </section>
+
+    <section class="stack" aria-labelledby="viewer-counters-heading">
+      <h2 id="viewer-counters-heading">{{ t('counter.viewers.heading') }}</h2>
+      <form class="create" @submit.prevent="createViewerCounter">
+        <div class="field">
+          <label for="new-viewer-counter-name">{{ t('counter.name') }}</label>
+          <InputText id="new-viewer-counter-name" v-model="newViewerName" autocomplete="off" maxlength="100" />
+        </div>
+        <Button type="submit" :label="t('counter.viewers.add')" icon="pi pi-plus" :disabled="!newViewerName.trim() || busy" />
+      </form>
+      <p v-if="viewerCounters?.length === 0">{{ t('counter.empty') }}</p>
+      <ul v-else-if="viewerCounters" class="rows">
+        <ViewerCounterRow
+          v-for="c in viewerCounters"
+          :key="c.id"
+          :counter="c"
+          @changed="loadViewerCounters"
+          @deleted="viewerCounterDeleted"
+          @error="report"
+        />
+      </ul>
+    </section>
   </FullPage>
 </template>
 
@@ -49,6 +71,7 @@ import CounterRow from './CounterRow.vue'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import { keepFocus } from './page'
+import ViewerCounterRow from './ViewerCounterRow.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -58,6 +81,8 @@ const failed = ref('')
 const newName = ref('')
 const newCommand = ref('')
 const busy = ref(false)
+const viewerCounters = shallowRef<Schemas['ViewerCounterBody'][]>()
+const newViewerName = ref('')
 
 const report = (e: unknown) =>
   toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)))
@@ -91,6 +116,33 @@ async function create() {
   }
 }
 
+async function loadViewerCounters() {
+  try {
+    viewerCounters.value = await api(client.GET('/api/admin/counters/viewers'))
+  } catch (e) {
+    report(e)
+  }
+}
+
+async function createViewerCounter() {
+  busy.value = true
+  try {
+    await api(client.POST('/api/admin/counters/viewers', { body: { name: newViewerName.value } }))
+    newViewerName.value = ''
+    await loadViewerCounters()
+  } catch (e) {
+    report(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function viewerCounterDeleted(c: Schemas['ViewerCounterBody']) {
+  toast.add(successToast(t('counter.deleted', { name: c.name })))
+  await loadViewerCounters()
+  await keepFocus(() => document.getElementById('new-viewer-counter-name') ?? undefined)
+}
+
 const step = (c: Schemas['CounterBody'], delta: 1 | -1) => stepCounter(c.id, delta).catch(report)
 const reset = (c: Schemas['CounterBody']) => resetCounter(c.id).catch(report)
 
@@ -112,6 +164,7 @@ async function copyObsUrl() {
 }
 
 void load()
+void loadViewerCounters()
 </script>
 
 <style scoped>

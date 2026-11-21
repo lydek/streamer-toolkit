@@ -17,6 +17,7 @@ toolkit-core = { version = "0.1.0", path = "../../core" }
 tracing = "0.1.44"
 utoipa = "6.0.0"
 uuid = { version = "1.29.2", features = ["v7"] }
+viewers = { version = "0.1.0", path = "../viewers" }
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

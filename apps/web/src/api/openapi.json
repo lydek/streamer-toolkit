@@ -1093,6 +1093,374 @@
         }
       }
     },
+    "/api/admin/counters/viewers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The per-viewer counters with their totals and top three.",
+        "operationId": "list_viewer_counters",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViewerCounterBody"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_viewer_counter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewerCounterName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerCounterBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`counter.invalid`: an empty name, or more than 100 per-viewer counters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/viewers/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "rename_viewer_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewerCounterName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`counter.invalid`: an empty name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deletes a per-viewer counter and every viewer's count in it.",
+        "operationId": "delete_viewer_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/viewers/{id}/add": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Adds or takes one for a viewer.",
+        "operationId": "add_for_viewer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewerStep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`counter.invalid`: not 1 or -1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`, or `counter.viewer_not_found`: not in the viewer directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/viewers/{id}/counts": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Every viewer above 0, most first.",
+        "operationId": "viewer_counts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViewerCountBody"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/viewers/{id}/search": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Viewers in the viewer directory whose login or display name contains `q` (at most 20, most recently seen\nfirst), with their count in this counter.",
+        "operationId": "search_viewers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Part of a login or display name.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViewerCountBody"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`counter.invalid`: no `q`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/counters/{id}": {
       "put": {
         "tags": [
@@ -7748,6 +8116,91 @@
           "current": {
             "type": "string",
             "description": "The running version."
+          }
+        }
+      },
+      "ViewerCountBody": {
+        "type": "object",
+        "description": "One viewer's count. `login` and `display_name` are viewer text: render them as text.",
+        "required": [
+          "twitch_user_id",
+          "login",
+          "display_name",
+          "value"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "login": {
+            "type": "string"
+          },
+          "twitch_user_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ViewerCounterBody": {
+        "type": "object",
+        "description": "A count kept per viewer. `name` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "name",
+          "total",
+          "top"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "top": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewerCountBody"
+            },
+            "description": "The three viewers with the most, most first."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every viewer's count added up."
+          }
+        }
+      },
+      "ViewerCounterName": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
+          }
+        }
+      },
+      "ViewerStep": {
+        "type": "object",
+        "required": [
+          "twitch_user_id",
+          "delta"
+        ],
+        "properties": {
+          "delta": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`1` or `-1`; a count never goes below 0."
+          },
+          "twitch_user_id": {
+            "type": "string",
+            "description": "A viewer from the viewer directory."
           }
         }
       },

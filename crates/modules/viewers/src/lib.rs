@@ -7,6 +7,6 @@ mod infrastructure;
 
 pub use application::ViewerService;
 pub use infrastructure::{
-    db::{MIGRATOR, avatars},
+    db::{MIGRATOR, ViewerName, avatars, names, search},
     start,
 };
