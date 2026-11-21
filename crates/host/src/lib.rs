@@ -11,6 +11,7 @@ mod home_tiles;
 mod obs;
 mod openapi;
 mod overlay;
+mod overlay_test;
 mod queue;
 mod stream_summary;
 mod tab_bar;
@@ -222,6 +223,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     });
     queue::follow(&presenter, bus.clone());
     let queue_routes = queue::routes(presenter.clone(), bus.clone());
+    let overlay_test_routes = overlay_test::routes(bus.clone(), modules.clone());
     let sounds = Arc::new(sound::SoundService::new(
         config.data_dir.clone(),
         modules.clone(),
@@ -456,6 +458,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     admin::require_token,
                 )),
             )
+            .merge(overlay_test_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(home_tiles.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

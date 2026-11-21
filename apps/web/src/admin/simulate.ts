@@ -12,6 +12,10 @@ export const simulateAlert = (body: Schemas['SimulatedAlert']) => api(client.POS
 export const simulateCheckin = (body: Schemas['SimulatedCheckin']) =>
   api(client.POST('/api/admin/simulate/checkin', { body }))
 
+/** Shows a fixed test value on the counter or marathon timer overlay for a few seconds; no counter changes. */
+export const testOverlay = (overlay: Schemas['TestOverlay']) =>
+  api(client.POST('/api/admin/simulate/overlay-test', { body: { overlay } }))
+
 /** Plays a library sound on the sound overlay. */
 export const testSound = (id: string) => api(client.POST('/api/admin/sounds/{id}/play', { params: { path: { id } } }))
 

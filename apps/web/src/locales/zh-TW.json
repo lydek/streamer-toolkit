@@ -975,7 +975,9 @@
         "chat": "聊天室",
         "alerts": "特效",
         "sound": "音效",
-        "checkin": "打卡卡片"
+        "checkin": "打卡卡片",
+        "counter": "計數器",
+        "marathon": "訂閱馬拉松計時器"
       },
       "sendMessage": "送一則訊息",
       "chatText": "這是一則測試訊息",
@@ -983,6 +985,7 @@
       "play": "播放",
       "checkin": "一般打卡",
       "fullCard": "集滿",
+      "showTest": "顯示測試值",
       "sent": "已送出測試：{row} · {button}",
       "connected": "OBS 已連上",
       "notInObs": "還沒放進 OBS",
@@ -1013,6 +1016,9 @@
     "checkin": {
       "total": "累計 {n} 次",
       "full": "集滿了！"
+    },
+    "counter": {
+      "test": "測試"
     },
     "status": {
       "connecting": "連線中……",
@@ -1107,7 +1113,9 @@
       "invalid_text": "請輸入 1 到 500 字的訊息。",
       "invalid_name": "名稱最多 25 個字。",
       "invalid_alert": "模擬特效的內容格式不正確。",
-      "invalid_amount": "數量超出範圍：送禮訂閱 1 到 100 份，其他 1 到 100000。"
+      "invalid_amount": "數量超出範圍：送禮訂閱 1 到 100 份，其他 1 到 100000。",
+      "invalid_overlay": "沒有這個 Overlay 可以測試。",
+      "feature_off": "計數器功能已關閉。"
     },
     "template": {
       "unknown": "沒有這款聊天室樣板。",

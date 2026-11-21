@@ -68,7 +68,7 @@ import { errorMessage } from '../i18n'
 import { ALERT_KINDS } from '../overlay/alerts/alerts'
 import { ApiError, type Schemas, api, client } from './api'
 import { FEATURES, isOn, useModules } from './features'
-import { ALERT_AMOUNTS, simulateAlert, simulateChat, simulateCheckin, testSound } from './simulate'
+import { ALERT_AMOUNTS, simulateAlert, simulateChat, simulateCheckin, testOverlay, testSound } from './simulate'
 
 // How often the dialog asks which overlays are open in OBS, while it is open.
 const OVERLAYS_MS = 3000
@@ -131,6 +131,13 @@ const rows = computed(() =>
           },
         ],
       },
+      // The marathon timer belongs to the counter module.
+      ...(['counter', 'marathon'] as const).map((id) => ({
+        id,
+        module: 'counter',
+        overlay: id,
+        buttons: [{ label: t('simulate.dialog.showTest'), run: () => testOverlay(id) }],
+      })),
     ] satisfies Row[]
   ).map((row: Row) => ({ ...row, on: on(row.module) })),
 )

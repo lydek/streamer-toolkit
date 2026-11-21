@@ -1080,6 +1080,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/simulate/overlay-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shows a fixed test value on the counter or marathon timer overlay for a few seconds (`counter.test`,
+         *     `marathon.test`); no counter or timer changes.
+         */
+        post: operations["test_overlay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds": {
         parameters: {
             query?: never;
@@ -2036,6 +2056,27 @@ export interface components {
              */
             delta: number;
         };
+        /**
+         * @description A `counter.test` event exactly as `/ws/overlay` sends it: the counter overlay shows an extra test row for a few
+         *     seconds. Not kept in snapshots.
+         */
+        CounterTestEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["CounterTestPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["CounterTestType"];
+            /** Format: int32 */
+            version: number;
+        };
+        CounterTestPayload: {
+            /** Format: int64 */
+            value: number;
+        };
+        /** @enum {string} */
+        CounterTestType: "counter.test";
         /** @description One counter on the overlay. `name` is broadcaster text: render it as text. */
         CounterValue: {
             id: string;
@@ -2262,6 +2303,27 @@ export interface components {
             /** Format: int32 */
             subMinutes: number;
         };
+        /**
+         * @description A `marathon.test` event exactly as `/ws/overlay` sends it: the marathon overlay shows a fixed time for a few
+         *     seconds. Not kept in snapshots.
+         */
+        MarathonTestEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["MarathonTestPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["MarathonTestType"];
+            /** Format: int32 */
+            version: number;
+        };
+        MarathonTestPayload: {
+            /** Format: int64 */
+            remainingMs: number;
+        };
+        /** @enum {string} */
+        MarathonTestType: "marathon.test";
         /** @enum {string} */
         MarathonType: "counter.marathon";
         ModuleBody: {
@@ -2366,6 +2428,9 @@ export interface components {
             marathon: number;
             other: number;
             sound: number;
+        };
+        OverlayTest: {
+            overlay: components["schemas"]["TestOverlay"];
         };
         Overview: {
             /**
@@ -3036,6 +3101,11 @@ export interface components {
              */
             text_size: number | null;
         };
+        /**
+         * @description Which overlay gets a test value.
+         * @enum {string}
+         */
+        TestOverlay: "counter" | "marathon";
         /** @description `PUT /api/admin/templates/chat/text-size`. */
         TextSizeChoice: {
             /**
@@ -5900,6 +5970,45 @@ export interface operations {
             };
             /** @description `simulate.invalid_checkin` or `simulate.invalid_stamps` */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    test_overlay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlayTest"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `simulate.invalid_overlay` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `simulate.feature_off`: counters are turned off */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

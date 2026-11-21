@@ -409,6 +409,22 @@ async fn skipping_clearing_and_stopping_the_queue_need_the_token() {
 }
 
 #[tokio::test]
+async fn overlay_test_values_need_the_token() {
+    let post = |token: bool| {
+        let mut b = get_req("/api/admin/simulate/overlay-test", "127.0.0.1:47810")
+            .method(Method::POST)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::CONTENT_TYPE, "application/json");
+        if token {
+            b = b.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+        }
+        b.body(Body::from(r#"{"overlay":"counter"}"#)).unwrap()
+    };
+    assert_eq!(status(post(false)).await, StatusCode::UNAUTHORIZED);
+    assert_ne!(status(post(true)).await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn overlay_counts_need_the_token() {
     let res = app()
         .oneshot(
