@@ -1864,6 +1864,39 @@
         }
       }
     },
+    "/api/admin/feed": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "This stream's (or since launch, before the first stream) latest 50 alerts, redemptions and check-ins, newest\nfirst.",
+        "operationId": "event_feed",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeedItem"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`feed.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/general": {
       "get": {
         "tags": [
@@ -5911,6 +5944,155 @@
           }
         }
       },
+      "FeedEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "`alert` is its kind as in the `alert` payload (`follow`, `subscribe`, ...); `amount` the months of a resub,\nthe subs of a gift, the bits of a cheer or the viewers of a raid.",
+            "required": [
+              "alert",
+              "kind"
+            ],
+            "properties": {
+              "alert": {
+                "type": "string"
+              },
+              "amount": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "alert"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The reward's title (raw text).",
+            "required": [
+              "reward",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "redemption"
+                ]
+              },
+              "reward": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "`chat`, `redemption` or `manual`; `simulation` for a card from the simulator.",
+            "required": [
+              "trigger",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "checkin"
+                ]
+              },
+              "trigger": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "What happened."
+      },
+      "FeedItem": {
+        "type": "object",
+        "description": "One item. `viewer` is raw viewer text: render it as text.",
+        "required": [
+          "at",
+          "viewer",
+          "event",
+          "result",
+          "simulated"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "event": {
+            "$ref": "#/components/schemas/FeedEvent"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedResult",
+                "description": "What it set off and what became of it; `null` when this launch does not know (it happened before a restart,\nor set off nothing)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "simulated": {
+            "type": "boolean",
+            "description": "From the simulator (shown as 測試); never in the records."
+          },
+          "viewer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for an anonymous gift or cheer."
+          }
+        }
+      },
+      "FeedOutcome": {
+        "type": "string",
+        "description": "What became of what it set off.",
+        "enum": [
+          "queued",
+          "played",
+          "sound_missing",
+          "off_air",
+          "declined",
+          "skipped",
+          "cleared",
+          "stopped"
+        ]
+      },
+      "FeedResult": {
+        "type": "object",
+        "required": [
+          "triggered",
+          "sound",
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/FeedOutcome"
+          },
+          "sound": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The reward sound's name (raw text), for a sound."
+          },
+          "triggered": {
+            "$ref": "#/components/schemas/Triggered"
+          }
+        }
+      },
       "GeneralSettings": {
         "type": "object",
         "description": "Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window.",
@@ -8407,6 +8589,15 @@
             "description": "1–100 characters after trimming."
           }
         }
+      },
+      "Triggered": {
+        "type": "string",
+        "description": "What it set off.",
+        "enum": [
+          "alert",
+          "sound",
+          "card"
+        ]
       },
       "TwitchBadgePayload": {
         "type": "object",

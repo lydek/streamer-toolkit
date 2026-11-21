@@ -6,6 +6,7 @@ mod chat_display;
 mod chat_dock;
 mod chat_log;
 pub mod db;
+mod event_feed;
 mod home_tiles;
 mod obs;
 mod openapi;
@@ -347,7 +348,15 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     ));
     let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone(), records());
     let chat_routes = chat::routes(config.db.clone()).merge(chat_log::routes(config.db.clone()));
-    let stream_summary = stream_summary::routes(config.db.clone(), chrono::Utc::now());
+    let launched_at = chrono::Utc::now();
+    let stream_summary = stream_summary::routes(config.db.clone(), launched_at);
+    let feed = event_feed::routes(event_feed::FeedState {
+        pool: config.db.clone(),
+        launched_at,
+        alerts: alerts.clone(),
+        sounds: sounds.clone(),
+        checkin: checkin.clone(),
+    });
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     // Background music follows the scene on air: applied when OBS connects, stopped when it goes away.
     let (mut states, music_player) = (obs.states(), player.clone());
@@ -472,6 +481,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(stream_summary.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(feed.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )))

@@ -398,6 +398,9 @@ async fn play(presenter: Arc<Presenter>) {
 pub struct RecentItem {
     /// Unique in this launch.
     pub id: u64,
+    /// What it was queued for, in its module's terms (e.g. a redemption's Twitch ID); `None` when nothing is
+    /// recorded for it (a simulation).
+    pub key: Option<String>,
     pub subject: Subject,
     pub source: crate::events::Source,
     /// RFC 3339, UTC.
@@ -419,6 +422,7 @@ impl Recent {
     /// Records an item as queued; give the returned callback to its [`Item::done`] to record its outcome.
     pub fn record(
         &self,
+        key: Option<String>,
         subject: Subject,
         source: crate::events::Source,
     ) -> Box<dyn FnOnce(Outcome) + Send> {
@@ -428,6 +432,7 @@ impl Recent {
             let id = items.0;
             items.1.push_front(RecentItem {
                 id,
+                key,
                 subject,
                 source,
                 queued_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
@@ -490,7 +495,11 @@ mod tests {
         Item {
             stage,
             show: Duration::from_millis(1000),
-            done: Some(recent.record(subject.clone(), crate::events::Source::Twitch)),
+            done: Some(recent.record(
+                Some(format!("k{n}")),
+                subject.clone(),
+                crate::events::Source::Twitch,
+            )),
             subject,
             simulated: false,
             ready: None,
@@ -563,6 +572,7 @@ mod tests {
 
         for n in 100..160 {
             let _ = recent.record(
+                None,
                 Subject::Sound {
                     sound: format!("item {n}"),
                     viewer: "v".into(),

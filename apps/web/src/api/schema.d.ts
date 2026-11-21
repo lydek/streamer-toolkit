@@ -600,6 +600,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This stream's (or since launch, before the first stream) latest 50 alerts, redemptions and check-ins, newest
+         *     first.
+         */
+        get: operations["event_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -1982,6 +2002,44 @@ export interface components {
              */
             count: number;
         };
+        /** @description What happened. */
+        FeedEvent: {
+            alert: string;
+            /** Format: int32 */
+            amount?: number | null;
+            /** @enum {string} */
+            kind: "alert";
+        } | {
+            /** @enum {string} */
+            kind: "redemption";
+            reward: string;
+        } | {
+            /** @enum {string} */
+            kind: "checkin";
+            trigger: string;
+        };
+        /** @description One item. `viewer` is raw viewer text: render it as text. */
+        FeedItem: {
+            /** @description RFC 3339, UTC. */
+            at: string;
+            event: components["schemas"]["FeedEvent"];
+            result: components["schemas"]["FeedResult"] | null;
+            /** @description From the simulator (shown as 測試); never in the records. */
+            simulated: boolean;
+            /** @description `null` for an anonymous gift or cheer. */
+            viewer: string | null;
+        };
+        /**
+         * @description What became of what it set off.
+         * @enum {string}
+         */
+        FeedOutcome: "queued" | "played" | "sound_missing" | "off_air" | "declined" | "skipped" | "cleared" | "stopped";
+        FeedResult: {
+            outcome: components["schemas"]["FeedOutcome"];
+            /** @description The reward sound's name (raw text), for a sound. */
+            sound: string | null;
+            triggered: components["schemas"]["Triggered"];
+        };
         /** @description Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window. */
         GeneralSettings: {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
@@ -2853,6 +2911,11 @@ export interface components {
             /** @description 1–100 characters after trimming. */
             title: string;
         };
+        /**
+         * @description What it set off.
+         * @enum {string}
+         */
+        Triggered: "alert" | "sound" | "card";
         /** @description A chat badge as Twitch names it. */
         TwitchBadgePayload: {
             /** @description The version within the set (e.g. a subscriber badge's tier and months). */
@@ -4454,6 +4517,34 @@ export interface operations {
                 };
             };
             /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    event_feed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedItem"][];
+                };
+            };
+            /** @description `feed.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

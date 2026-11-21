@@ -18,6 +18,7 @@ const responses: Record<string, unknown> = {
   '/api/admin/home-tiles': null,
   '/api/admin/modules': [{ id: 'chat', enabled: true, closed: false }],
   '/api/admin/templates/chat': { error: null },
+  '/api/admin/feed': [],
 }
 let put: ReturnType<typeof vi.fn>
 const drawer = useDrawer()
@@ -166,7 +167,7 @@ describe('HomeView arrange mode', () => {
     await flushPromises()
     // The tiles other than chat stay in the order, hidden while their modules are off.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
-      body: ['alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+      body: ['alerts', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()

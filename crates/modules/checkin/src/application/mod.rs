@@ -29,8 +29,12 @@ pub(crate) struct RepositoryError(pub(crate) String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Outcome {
-    /// Recorded; the viewer's internal ID and total check-ins after it.
-    CheckedIn { viewer_id: String, total: u64 },
+    /// Recorded; the record's ID, the viewer's internal ID and total check-ins after it.
+    CheckedIn {
+        record_id: String,
+        viewer_id: String,
+        total: u64,
+    },
     /// The viewer already checked in on that business day; nothing was written.
     Repeat,
 }
@@ -232,6 +236,8 @@ pub(crate) async fn redeemed<R: CheckinRepository>(
 /// A check-in that was recorded, for the screen events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckedIn {
+    /// The check-in record's ID.
+    pub(crate) record_id: String,
     pub(crate) viewer_id: String,
     pub(crate) viewer: Viewer,
     pub(crate) total: u64,
@@ -331,7 +337,12 @@ async fn card_for<R: CheckinRepository>(
 
 pub(crate) fn checked_in(viewer: &Viewer, outcome: &Outcome, rules: &Rules) -> Option<CheckedIn> {
     match outcome {
-        Outcome::CheckedIn { viewer_id, total } => Some(CheckedIn {
+        Outcome::CheckedIn {
+            record_id,
+            viewer_id,
+            total,
+        } => Some(CheckedIn {
+            record_id: record_id.clone(),
             viewer_id: viewer_id.clone(),
             viewer: viewer.clone(),
             total: *total,
@@ -414,7 +425,8 @@ impl CheckinService {
                 stamps: c.stamps,
                 slots: c.slots,
             };
-            let done = card_recent.record(subject.clone(), Source::Twitch);
+            let done =
+                card_recent.record(Some(c.record_id.clone()), subject.clone(), Source::Twitch);
             card_presenter.push(Item {
                 stage: Stage::Checkin,
                 subject,
@@ -506,7 +518,9 @@ impl CheckinService {
             stamps,
             slots,
         };
-        let done = self.recent.record(subject.clone(), Source::Simulation);
+        let done = self
+            .recent
+            .record(None, subject.clone(), Source::Simulation);
         self.presenter.push(Item {
             stage: Stage::Checkin,
             subject,

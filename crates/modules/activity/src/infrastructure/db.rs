@@ -63,9 +63,11 @@ pub struct SessionCounts {
     pub raids: u32,
 }
 
-/// One stored follow, sub, resub, gift, cheer or raid, as the chat log merges it in.
+/// One stored follow, sub, resub, gift, cheer or raid, as the chat log and the event feed merge it in.
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct ActivityEntry {
+    /// The alert's ID (Twitch's message ID), as the alerts module knows it.
+    pub alert_id: String,
     /// `follow`, `subscribe`, `resubscribe`, `gift`, `cheer` or `raid`.
     pub kind: String,
     /// `None` for an anonymous gift or cheer.
@@ -89,7 +91,8 @@ pub async fn activity_between(
     limit: u32,
 ) -> Result<Vec<ActivityEntry>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT kind, user_name, tier, months, count, bits, viewers, gifted, message, occurred_at FROM \
+        "SELECT twitch_message_id AS alert_id, kind, user_name, tier, months, count, bits, viewers, gifted, \
+         message, occurred_at FROM \
          (SELECT * FROM activity_events WHERE (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2) \
           ORDER BY occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
     )

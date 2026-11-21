@@ -614,7 +614,8 @@
       "sound": "音效",
       "scene": "OBS 場景",
       "bgm": "背景音樂",
-      "counter": "計數器"
+      "counter": "計數器",
+      "feed": "事件流"
     }
   },
   "settings": {
@@ -759,6 +760,31 @@
     "rewards": "頻道點數獎勵",
     "playInObs": "在 OBS 播放",
     "playedInObs": "已送到 OBS 播放。"
+  },
+  "feed": {
+    "line": "{n} 件 · {latest}",
+    "empty": "還沒有事件",
+    "loadFailed": "無法載入事件流。",
+    "redemption": "{name} 兌換了「{reward}」",
+    "checkin": "{name} 打卡",
+    "card": "{name} 的集點卡",
+    "test": "測試",
+    "result": "{what}：{outcome}",
+    "triggered": {
+      "alert": "特效",
+      "sound": "音效「{sound}」",
+      "card": "集點卡"
+    },
+    "outcome": {
+      "queued": "排隊中",
+      "played": "已播",
+      "sound_missing": "已播，但音效檔案不見了",
+      "off_air": "Overlay 沒開，沒有播",
+      "declined": "被模組拒絕",
+      "skipped": "已跳過",
+      "cleared": "已清空排隊",
+      "stopped": "緊急停止"
+    }
   },
   "counter": {
     "heading": "全域計數",

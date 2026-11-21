@@ -106,6 +106,37 @@ async fn redemption_records_need_the_token() {
 }
 
 #[tokio::test]
+async fn the_event_feed_needs_the_token_and_starts_empty() {
+    let dir = std::env::temp_dir().join(format!("st-host-feed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = test_config();
+    config.db = db::open(&dir).await.unwrap();
+    let app = router(config).unwrap();
+    let req = |token: Option<&str>| {
+        let b = get_req("/api/admin/feed", "127.0.0.1:47810");
+        match token {
+            Some(t) => b.header(header::AUTHORIZATION, format!("Bearer {t}")),
+            None => b,
+        }
+        .body(Body::empty())
+        .unwrap()
+    };
+    let res = app.clone().oneshot(req(None)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let res = app.clone().oneshot(req(Some(TOKEN))).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!([])
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn sound_library_needs_the_token_but_sound_files_do_not() {
     for (token, expected) in [
         (None, StatusCode::UNAUTHORIZED),
