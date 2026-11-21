@@ -20,6 +20,7 @@ import {
   STAGE_DEFAULTS,
   stageDefaults,
   TILES,
+  UNBUILT_TILES,
   moveTile,
   obsLight,
   successToast,
@@ -270,6 +271,26 @@ describe('useThrottled', () => {
   })
 })
 
+describe('unbuilt tiles', () => {
+  it('come from the tile pages, with IDs the Host accepts and no clash with built tiles', () => {
+    const built = TILES.filter((t) => !t.unbuilt).map((t) => t.id)
+    const ids = UNBUILT_TILES.map((t) => t.id)
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) expect(id).toMatch(/^[a-z0-9-]{1,32}$/)
+    expect(new Set([...ids, ...built]).size).toBe(ids.length + built.length)
+    expect(ids).toContain('stream-info')
+    // Grey tiles are never in a default home.
+    for (const order of Object.values(STAGE_DEFAULTS)) expect(order.filter((id) => ids.includes(id))).toEqual([])
+  })
+
+  it('stay on home whatever modules are on, and list after the built ones when hidden', () => {
+    expect(homeTiles([], UNBUILT_TILES).map((t) => t.id)).toEqual(UNBUILT_TILES.map((t) => t.id))
+    const hidden = availableTiles(arrangedTiles(['chat']))
+    expect(hidden.findIndex((t) => t.unbuilt)).toBeGreaterThan(hidden.findIndex((t) => t.id === 'alerts'))
+    expect(hidden.slice(hidden.findIndex((t) => t.unbuilt)).every((t) => t.unbuilt)).toBe(true)
+  })
+})
+
 describe('stageDefaults', () => {
   it('gives each stage its own home from known tiles, and the defaults stand in until saved', () => {
     for (const stage of ['before', 'live', 'after'] as const) {
@@ -356,6 +377,18 @@ describe('HomeTile', () => {
     expect(failed.find('.dot').exists()).toBe(true)
     expect(failed.get('.sr-only').text()).toBe('需要注意')
     expect(tile({ state: 'ready', text: 'x' }, true).find('.dot').exists()).toBe(true)
+  })
+
+  it('shows a feature not built yet as a grey block that does nothing', () => {
+    const wrapper = mount(HomeTile, {
+      props: { id: 'songs', name: '點歌', icon: 'pi pi-microphone', tint: 'muted', line: { state: 'loading' }, expanded: false, unbuilt: true },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('button').exists()).toBe(false)
+    expect(wrapper.get('.tile').attributes('title')).toBe('還沒有這個功能')
+    expect(wrapper.get('.tile').attributes('data-drawer-tile')).toBeUndefined()
+    expect(wrapper.text()).toContain('點歌')
+    expect(wrapper.text()).toContain('還沒有這個功能')
   })
 
   it('shows a big count with its unit, a word smaller, and viewer text only as text', () => {

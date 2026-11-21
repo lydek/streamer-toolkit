@@ -241,14 +241,16 @@ test('an unbuilt page says it is not available yet and calls no API beyond the a
   expect(calls).toEqual([])
 })
 
-test('a coming-soon home tile opens its page, and going home puts focus back on it', async ({ page }) => {
-  await openAdmin(page)
-  const tile = page.getByRole('link', { name: new RegExp(zh.pages.scenes.name) })
-  await tile.click()
-  await expect(page).toHaveURL(/\/admin\/scenes$/)
-  await page.getByRole('button', { name: zh.app.home }).click()
-  await expect(page).toHaveURL(/\/admin\/$/)
-  await expect(tile).toBeFocused()
+test('a grey tile for a feature not built yet is no link or button, and the skip link passes it', async ({ page }) => {
+  await openAdmin(page, { homeTiles: ['songs', 'feed'] })
+  const grey = page.locator('#tiles .tile.off')
+  await expect(grey).toContainText(zh.pages.songs.name)
+  await expect(grey).toContainText(zh.home.unbuilt)
+  await expect(grey.getByRole('link')).toHaveCount(0)
+  await expect(page.locator('#tiles').getByRole('button', { name: new RegExp(zh.pages.songs.name) })).toHaveCount(0)
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('[data-expand="feed"]')).toBeFocused()
 })
 
 /** Opens home with the saved tab bar `saved`; returns the bodies of every save. */

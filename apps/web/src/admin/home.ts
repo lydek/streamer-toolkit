@@ -1,6 +1,7 @@
 import { onScopeDispose, shallowRef, watch } from 'vue'
 import { removes, type Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
+import { SOON_PAGES } from './tabs'
 
 /** The Twitch status the app bar polls every 2 s (undefined until its first answer); read it instead of polling again. */
 export const twitchOverview = shallowRef<Schemas['Overview']>()
@@ -226,19 +227,21 @@ export function useThrottled<T>(source: () => T, ms = 3000) {
 export interface Tile {
   id: string
   icon: string
-  /** The icon's color (prototype tints). */
-  tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue'
+  /** The icon's color (prototype tints); `muted` for a feature not built yet. */
+  tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue' | 'muted'
   /** Not a module's: shown whatever modules are on. */
   always?: boolean
   /** Wider than a tile in the 12-column grid: `m` a third of a row, `l` two thirds, `w` a whole row. */
   size?: 'm' | 'l' | 'w'
+  /** A feature not built yet: a grey tile that does nothing; `label` is its page's name key. */
+  unbuilt?: { label: string }
 }
 
 /** The small tiles that open in place into a block, and how wide the block is (prototype `NATURAL`). */
 export const EXPANDS: Record<string, 'm' | 'l' | 'w'> = { stats: 'w', feed: 'l', queue: 'm' }
 
 /** Default home order: the stage blocks, then one tile per module (and the event feed); a disabled module shows no tile. */
-export const TILES: Tile[] = [
+const BUILT_TILES: Tile[] = [
   // The stage blocks, shown on home itself (no drawer); the Host puts them first in lists saved before they joined.
   { id: 'pending', icon: 'pi pi-exclamation-circle', tint: 'primary', always: true, size: 'w' },
   { id: 'checklist', icon: 'pi pi-verified', tint: 'green', always: true, size: 'w' },
@@ -256,10 +259,24 @@ export const TILES: Tile[] = [
   { id: 'counter', icon: 'pi pi-hashtag', tint: 'red' },
 ]
 
-/** The tiles home shows, in order: those of enabled modules, and the ones shown whatever modules are on. */
+/**
+ * Features not built yet, from the pages tabs.ts marks as home tiles. The ID is the page path without its `/`
+ * (kebab-case, which the Host's `home-tiles` accepts), so a feature keeps its tile ID once it is built.
+ */
+export const UNBUILT_TILES: Tile[] = SOON_PAGES.filter((p) => p.soon!.tile).map((p) => ({
+  id: p.path.slice(1),
+  icon: p.soon!.icon,
+  tint: 'muted',
+  unbuilt: { label: p.label },
+}))
+
+/** Every tile: the built ones in default order, then the unbuilt ones (so hidden grey tiles list last). */
+export const TILES: Tile[] = [...BUILT_TILES, ...UNBUILT_TILES]
+
+/** The tiles home shows, in order: those of enabled modules, and the ones shown whatever modules are on (incl. grey ones). */
 export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
   const enabled = new Set(modules.filter((m) => m.enabled).map((m) => m.id))
-  return tiles.filter((t) => t.always || enabled.has(t.id))
+  return tiles.filter((t) => t.always || t.unbuilt || enabled.has(t.id))
 }
 
 /** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). */

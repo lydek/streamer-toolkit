@@ -8,7 +8,7 @@
         v-for="(tile, i) in arranged"
         :key="tile.id"
         class="item"
-        :class="[{ over: over === tile.id }, tile.size && `size-${tile.size}`]"
+        :class="[{ over: over === tile.id, off: tile.unbuilt }, tile.size && `size-${tile.size}`]"
         :data-tile="tile.id"
         draggable="true"
         @dragstart="onDragstart($event, tile.id)"
@@ -60,7 +60,8 @@
         <li v-for="tile in available" :key="tile.id" :data-available="tile.id">
           <Button
             data-action="add"
-            :label="name(tile.id)"
+            :class="{ off: tile.unbuilt }"
+            :label="tile.unbuilt ? `${name(tile.id)}（${t('home.unbuilt')}）` : name(tile.id)"
             :aria-label="t('arrange.for', { action: t('arrange.add'), name: name(tile.id) })"
             icon="pi pi-plus"
             severity="secondary"
@@ -116,7 +117,11 @@ const arranged = computed(() => arrangedTiles(props.saved, TILES, props.defaults
 const available = computed(() => availableTiles(arranged.value))
 const disabled = (id: string) => props.modules.some((m) => m.id === id && !m.enabled)
 const lineOf = (id: string): Line =>
-  disabled(id) ? { state: 'ready', text: t('arrange.notEnabled') } : (props.lines[id] ?? { state: 'loading' })
+  TILES.find((tile) => tile.id === id)?.unbuilt
+    ? { state: 'ready', text: t('home.unbuilt') }
+    : disabled(id)
+      ? { state: 'ready', text: t('arrange.notEnabled') }
+      : (props.lines[id] ?? { state: 'loading' })
 
 async function announce(text: string) {
   // Cleared first, so the same text twice in a row is still announced.
@@ -280,6 +285,11 @@ function onDrop(target: string) {
   border-radius: 6px;
   background: var(--p-surface-900);
   cursor: grab;
+}
+
+.item.off,
+.off {
+  color: var(--p-text-muted-color);
 }
 
 .item.over {
