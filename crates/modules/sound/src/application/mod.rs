@@ -120,7 +120,8 @@ impl SoundService {
             .into_iter()
             .find(|e| e.id == id)
             .ok_or(SoundError::NotFound)?;
-        (self.play)(&entry.id, entry.volume, Source::Simulation);
+        let volume = domain::scaled(entry.volume, self.volume());
+        (self.play)(&entry.id, volume, Source::Simulation);
         Ok(())
     }
 
@@ -155,13 +156,11 @@ impl SoundService {
         known.then_some(()).ok_or(SoundError::NotFound)
     }
 
-    /// What `slot` plays now. While the module is off every slot plays its default.
+    /// What `slot` plays now, at the master volume. While the module is off every slot plays its default.
     pub fn cue(&self, slot: &str) -> Cue {
-        if !self.modules.is_enabled(modules::SOUND) {
-            return domain::default_cue(slot);
-        }
         let sound = settings::load(&self.data_dir).sound;
-        match sound.slots.get(slot).map(String::as_str) {
+        let cue = match sound.slots.get(slot).map(String::as_str) {
+            _ if !self.modules.is_enabled(modules::SOUND) => domain::default_cue(slot),
             None => domain::default_cue(slot),
             Some(SILENT) => Cue::Silent,
             // A sound deleted outside the app also falls back to the default.
@@ -172,7 +171,21 @@ impl SoundService {
                     volume: e.volume,
                 },
             ),
+        };
+        cue.at(sound.volume)
+    }
+
+    /// The master volume, 0–100.
+    pub fn volume(&self) -> u8 {
+        settings::load(&self.data_dir).sound.volume.min(100)
+    }
+
+    pub fn set_volume(&self, volume: u8) -> Result<(), SoundError> {
+        if !domain::valid_volume(volume) {
+            return Err(SoundError::Invalid);
         }
+        settings::update(&self.data_dir, |s| s.sound.volume = volume)?;
+        Ok(())
     }
 
     /// `kind` as in the `alert` payload, e.g. `follow`.

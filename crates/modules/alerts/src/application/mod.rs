@@ -562,7 +562,7 @@ mod tests {
         assert_eq!(
             payloads[2],
             &serde_json::json!({"kind":"resubscribe","userId":"7","userLogin":"viewer","userName":"Viewer","tier":1,"months":12,
-                                "message":"<b>hi</b>","durationMs":9000,"sound":{"kind":"built_in"}}),
+                                "message":"<b>hi</b>","durationMs":9000,"sound":{"kind":"built_in","volume":100}}),
             "viewer text stays raw"
         );
         assert_eq!(

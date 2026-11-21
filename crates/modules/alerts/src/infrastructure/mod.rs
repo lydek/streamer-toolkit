@@ -182,7 +182,7 @@ fn payload(alert: Alert, show: Duration, sounds: &SoundService) -> Value {
 fn alert_payload(alert: Alert, show: Duration, sounds: &SoundService) -> AlertPayload {
     let base = AlertPayload {
         duration_ms: show.as_millis() as u64,
-        sound: AlertSound::BuiltIn,
+        sound: AlertSound::Silent,
         kind: AlertKindName::Follow,
         user_id: alert.user_id,
         user_login: alert.user_login,

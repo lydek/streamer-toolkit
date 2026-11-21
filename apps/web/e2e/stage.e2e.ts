@@ -51,6 +51,7 @@ async function open(
           'obs.state': [],
           'presentation.queue': [],
           'stream.status': [event(1, stream)],
+          'bgm.player': [],
         },
       }),
     )

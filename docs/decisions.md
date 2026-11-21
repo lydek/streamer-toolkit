@@ -65,6 +65,7 @@
 | 錯誤處理 | `thiserror`（domain／application，對應錯誤碼）＋`anyhow`（只用在 host 組合根與啟動流程）；錯誤碼格式 `<區域>.<原因>`（例：`twitch.sign_in_required`），API 回 `{"code": …}`，UI 以資源鍵 `errors.<錯誤碼>` 顯示，記錄檔欄位也叫 `code` |
 | 時間 | `chrono`＋`chrono-tz` |
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
+| 亂數 | `fastrand`：背景音樂的隨機播放順序，不用在任何安全用途 |
 | Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message`，特效的追隨、訂閱、小奇點、揪團也走 EventSub（訂閱清單見 architecture.md） |
 | 對外 HTTPS | `hyper-util`＋`hyper-rustls`＋`rustls`（`ring`）＋`rustls-platform-verifier`：憑證走 Windows 憑證庫；EventSub 的 `wss://` 共用同一組 TLS 設定 |
 | OBS | `obws`；已接上，目前只顯示 OBS 連線狀態 |

@@ -2,9 +2,10 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import MultiSelect from 'primevue/multiselect'
+import Select from 'primevue/select'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
-import { client } from './api'
+import { type Schemas, client } from './api'
 import { MUSIC_MAX_BYTES, formatLength } from './music'
 import MusicPage from './MusicPage.vue'
 import { testRouter } from './testRouter'
@@ -22,6 +23,7 @@ let library: { tracks: Track[]; playlists: Playlist[] }
 // Lengths in seconds that the fake `<audio>` reads per URL.
 let lengths: Record<string, number>
 let get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>
+let socket: { onmessage?: (e: { data: string }) => void }
 
 async function page() {
   const wrapper = mount(MusicPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
@@ -60,7 +62,19 @@ beforeEach(() => {
       }
     },
   )
-  get = vi.fn(() => ok(structuredClone(library)))
+  vi.stubGlobal(
+    'WebSocket',
+    class {
+      onmessage?: (e: { data: string }) => void
+      constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        socket = this
+      }
+      close() {}
+    },
+  )
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
+  get = vi.fn((path: string) => (path === '/api/admin/sounds' ? ok({ sounds: [], slots: {}, volume: 80 }) : ok(structuredClone(library))))
   post = vi.fn((path: string, init: { params?: { query: { name: string } }; body: { name: string } }) => {
     if (path === '/api/admin/music/playlists') {
       const p = { id: `p${library.playlists.length + 1}`, name: init.body.name, tracks: [] }
@@ -141,6 +155,89 @@ describe('MusicPage', () => {
       params: { path: { id: 't2' } },
       body: { playlists: ['p1', 'p2'] },
     })
+  })
+})
+
+describe('MusicPage player', () => {
+  const player = (p: Partial<Schemas['BgmPlayerPayload']> = {}) => ({
+    id: 'b',
+    type: 'bgm.player',
+    version: 1,
+    seq: 1,
+    occurredAt: new Date().toISOString(),
+    source: 'system',
+    payload: { state: 'stopped', playlist: null, track: null, positionMs: 0, onAir: true, shuffle: false, volume: 50, ...p },
+  })
+  const snapshot = (event: ReturnType<typeof player>) => ({
+    type: 'snapshot',
+    version: 1,
+    seq: 1,
+    payload: { 'chat.message': [], 'chat.removed': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [event] },
+  })
+  const receive = async (msg: unknown) => {
+    socket.onmessage!({ data: JSON.stringify(msg) })
+    await flushPromises()
+  }
+  const control = (wrapper: Awaited<ReturnType<typeof page>>, key: string) =>
+    wrapper.get<HTMLButtonElement>(`[aria-label="${t(`music.player.${key}`)}"]`)
+  const slide = async (wrapper: Awaited<ReturnType<typeof page>>, id: string, value: number) => {
+    const input = wrapper.get<HTMLInputElement>(`#${id}`)
+    await input.setValue(value)
+    await input.trigger('change')
+    await flushPromises()
+  }
+
+  it('plays the chosen playlist and shows what plays, or that no overlay is open', async () => {
+    const wrapper = await page()
+    await receive(snapshot(player()))
+    expect(wrapper.text()).toContain(t('music.player.stopped'))
+    expect(control(wrapper, 'play').element.disabled).toBe(true)
+
+    wrapper.findAllComponents(Select)[0].vm.$emit('update:modelValue', 'p1')
+    await flushPromises()
+    await control(wrapper, 'play').trigger('click')
+    expect(post).toHaveBeenCalledWith('/api/admin/music/player', { body: { action: 'play', playlist: 'p1' } })
+
+    const track = { id: 't1', title: 'Lo-fi Morning', url: '/music/t1', durationMs: 188_000 }
+    await receive({ ...player({ state: 'playing', playlist: 'p1', track, positionMs: 65_000 }), seq: 2 })
+    expect(wrapper.text()).toContain(t('music.player.playing', { title: 'Lo-fi Morning' }))
+    expect(wrapper.get('output[for="player-position"]').text()).toBe('1:05 / 3:08')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    await control(wrapper, 'pause').trigger('click')
+    expect(post).toHaveBeenLastCalledWith('/api/admin/music/player', { body: { action: 'pause' } })
+    await slide(wrapper, 'player-position', 120_000)
+    expect(post).toHaveBeenLastCalledWith('/api/admin/music/player', { body: { action: 'seek', position_ms: 120_000 } })
+    for (const key of ['next', 'previous', 'stop']) {
+      await control(wrapper, key).trigger('click')
+      expect(post).toHaveBeenLastCalledWith('/api/admin/music/player', { body: { action: key } })
+    }
+
+    // Not pretending: without a music overlay it says so instead of the track.
+    await receive({ ...player({ state: 'playing', playlist: 'p1', track, onAir: false }), seq: 3 })
+    expect(wrapper.get('[role="status"]').text()).toBe(t('music.player.offAir'))
+    expect(wrapper.text()).not.toContain(t('music.player.playing', { title: 'Lo-fi Morning' }))
+  })
+
+  it('saves the music and sound volumes and the order', async () => {
+    const wrapper = await page()
+    await receive(snapshot(player()))
+    expect(wrapper.get<HTMLInputElement>('#sound-volume').element.value).toBe('80')
+    await slide(wrapper, 'player-volume', 30)
+    expect(put).toHaveBeenCalledWith('/api/admin/music/player/options', { body: { volume: 30, shuffle: false } })
+    await slide(wrapper, 'sound-volume', 60)
+    expect(put).toHaveBeenCalledWith('/api/admin/sounds/volume', { body: { volume: 60 } })
+    await wrapper.get('#player-shuffle').setValue(true)
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/music/player/options', { body: { volume: 50, shuffle: true } })
+  })
+
+  it('shows why the Host refused to play', async () => {
+    post.mockImplementation(() => fail('music.nothing_to_play', 409))
+    const wrapper = await page()
+    await receive(snapshot(player({ playlist: 'p1' })))
+    await control(wrapper, 'play').trigger('click')
+    await flushPromises()
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: t('errors.music.nothing_to_play') }))
   })
 })
 

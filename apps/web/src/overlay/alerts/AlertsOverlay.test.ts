@@ -41,7 +41,7 @@ const alert = (seq: number, durationMs = 6000): AlertEvent => ({
   seq,
   occurredAt: '',
   source: 'simulation',
-  payload: { kind: 'raid', userId: `${seq}`, userLogin: `r${seq}`, userName: `R${seq}`, viewers: seq, durationMs, sound: { kind: 'built_in' } },
+  payload: { kind: 'raid', userId: `${seq}`, userLogin: `r${seq}`, userName: `R${seq}`, viewers: seq, durationMs, sound: { kind: 'built_in', volume: 100 } },
 })
 const changed: Incoming = {
   type: 'template.changed',
@@ -113,7 +113,7 @@ describe('AlertsOverlay', () => {
     for (const l of loads) l.release('a')
     await vi.runAllTimersAsync()
     const sounds: AlertEvent['payload']['sound'][] = [
-      { kind: 'built_in' },
+      { kind: 'built_in', volume: 70 },
       { kind: 'file', url: '/sounds/s1', volume: 40 },
       { kind: 'silent' },
     ]
@@ -122,7 +122,7 @@ describe('AlertsOverlay', () => {
       await vi.runAllTimersAsync()
     }
     expect(played).toEqual([
-      [chimeUrl, 100],
+      [chimeUrl, 70],
       ['/sounds/s1', 40],
     ])
     wrapper.unmount()

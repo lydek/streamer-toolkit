@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 03e2600a99b2e1e414e89d9b09e761643c35b960ff05564a27c8c72312989179 -->
+<!-- source: docs/decisions.md source-sha256: 986faec0f57a3f8d66891eaada2bddfa195313c718b87e9b2efe9f3487a42599 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -66,6 +66,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup); error codes use `<area>.<reason>` (e.g. `twitch.sign_in_required`), the API returns `{"code": …}`, the UI shows the message for the resource key `errors.<code>`, and logs use a `code` field too |
 | Time | `chrono` + `chrono-tz` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
+| Randomness | `fastrand`: the background music's shuffled order; never used for anything security-related |
 | Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message`, and the follow, sub, Bits and raid alerts via EventSub too (subscription list in architecture.en.md) |
 | Outgoing HTTPS | `hyper-util` + `hyper-rustls` + `rustls` (`ring`) + `rustls-platform-verifier`: certificates checked against the Windows store; EventSub `wss://` shares the same TLS config |
 | OBS | `obws`; connected, currently showing only the OBS connection status |

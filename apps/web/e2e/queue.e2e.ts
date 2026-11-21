@@ -20,7 +20,7 @@ async function openWithQueue(page: Page, queue: unknown) {
           'obs.status': [],
           'obs.state': [],
           'presentation.queue': [{ id: 'q', type: 'presentation.queue', version: 1, seq: 1, occurredAt: '', source: 'system', payload: queue }],
-          'stream.status': [],
+          'stream.status': [], 'bgm.player': [],
         },
       }),
     ),

@@ -104,13 +104,25 @@ pub enum TabBarPosition {
     Bottom,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SoundSettings {
     pub library: Vec<SoundEntry>,
     /// What plays where, e.g. `alert.follow` → a library sound's ID or `silent`. A missing slot plays its
     /// default: the built-in sound for alerts, nothing for check-ins.
     pub slots: BTreeMap<String, String>,
+    /// Master volume, 0–100 (%), applied on top of each sound's own: reward, alert and check-in sounds.
+    pub volume: u8,
+}
+
+impl Default for SoundSettings {
+    fn default() -> Self {
+        Self {
+            library: Vec::new(),
+            slots: BTreeMap::new(),
+            volume: 100,
+        }
+    }
 }
 
 /// Keep records for this many days (1–3650), or forever; older ones are deleted on their own.
@@ -149,11 +161,26 @@ pub struct SoundEntry {
     pub duration_ms: Option<u32>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BgmSettings {
     pub library: Vec<MusicEntry>,
     pub playlists: Vec<Playlist>,
+    /// The player's volume, 0–100 (%).
+    pub volume: u8,
+    /// The player plays playlists in random order instead of their own.
+    pub shuffle: bool,
+}
+
+impl Default for BgmSettings {
+    fn default() -> Self {
+        Self {
+            library: Vec::new(),
+            playlists: Vec::new(),
+            volume: 50,
+            shuffle: false,
+        }
+    }
 }
 
 /// One imported track; its file is `music/<id>.<format>` in the data folder.

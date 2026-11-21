@@ -45,7 +45,7 @@ function snapshot(state: object) {
       'obs.status': [],
       'obs.state': [{ payload: state }],
       'presentation.queue': [],
-      'stream.status': [],
+      'stream.status': [], 'bgm.player': [],
       'chat.message': [],
     },
   })

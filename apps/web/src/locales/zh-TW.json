@@ -375,7 +375,8 @@
         "chat": { "ok": "聊天室已放進 OBS", "bad": "聊天室還沒放進 OBS" },
         "alerts": { "ok": "特效已放進 OBS", "bad": "特效還沒放進 OBS" },
         "checkin": { "ok": "打卡卡片已放進 OBS", "bad": "打卡卡片還沒放進 OBS" },
-        "sound": { "ok": "兌換音效已放進 OBS", "bad": "兌換音效還沒放進 OBS" }
+        "sound": { "ok": "兌換音效已放進 OBS", "bad": "兌換音效還沒放進 OBS" },
+        "bgm": { "ok": "背景音樂已放進 OBS", "bad": "背景音樂還沒放進 OBS" }
       }
     },
     "stats": {
@@ -784,7 +785,25 @@
     "imported": "已匯入 {n} 首。",
     "importFailed": "「{file}」：{reason}",
     "deleted": "已刪除「{title}」。",
-    "loadFailed": "無法載入音樂庫。"
+    "loadFailed": "無法載入音樂庫。",
+    "player": {
+      "heading": "播放器",
+      "playlist": "歌單",
+      "choosePlaylist": "選擇歌單",
+      "play": "播放",
+      "pause": "暫停",
+      "previous": "上一首",
+      "next": "下一首",
+      "stop": "停止",
+      "shuffle": "隨機播放",
+      "position": "播放進度",
+      "volume": "背景音樂音量",
+      "soundVolume": "音效總音量",
+      "offAir": "Overlay 沒有連線",
+      "stopped": "已停止",
+      "playing": "播放中：{title}",
+      "paused": "已暫停：{title}"
+    }
   },
   "scene": {
     "notConnected": "OBS 未連線",
@@ -977,7 +996,9 @@
       "unsupported_type": "只能匯入 MP3、WAV、OGG 檔，而且副檔名要和檔案內容相符。",
       "too_large": "檔案超過 50 MB。",
       "not_found": "找不到這首歌或歌單，可能已經刪除。",
-      "invalid": "名稱不能空白。",
+      "invalid": "名稱不能空白，音量是 0 到 100%。",
+      "nothing_to_play": "這個歌單沒有能播的歌：檔案不見了，或還沒量到長度。",
+      "off": "背景音樂功能已關閉。",
       "save_failed": "無法儲存音樂庫。"
     },
     "backup": {

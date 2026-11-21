@@ -211,6 +211,90 @@ fn choose(slot: &str, sound: serde_json::Value) -> Request<Body> {
 }
 
 #[tokio::test]
+async fn the_master_volume_applies_to_reward_alert_and_check_in_sounds() {
+    let dir = data_dir("master");
+    let bus = Arc::new(EventBus::default());
+    let service = Arc::new(SoundService::new(
+        dir.clone(),
+        Arc::new(toolkit_core::modules::Modules::load(dir.clone())),
+        bus.clone(),
+        toolkit_core::presentation::Presenter::start(
+            toolkit_core::presentation::DEFAULT_GAP,
+            |_| true,
+        ),
+    ));
+    let app = routes(service.clone());
+    let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for slot in ["alert.follow", "checkin", "reward.r1"] {
+        send(&app, choose(slot, id.as_str().into())).await;
+    }
+    let volume = |v: serde_json::Value| {
+        Request::put("/api/admin/sounds/volume")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::json!({ "volume": v }).to_string()))
+            .unwrap()
+    };
+    assert_eq!(
+        json(
+            send(
+                &app,
+                Request::get("/api/admin/sounds")
+                    .body(Body::empty())
+                    .unwrap()
+            )
+            .await
+            .1
+        )
+        .await["volume"],
+        100
+    );
+    assert_eq!(
+        send(&app, volume(101.into())).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(&app, volume(50.into())).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        json(
+            send(
+                &app,
+                Request::get("/api/admin/sounds")
+                    .body(Body::empty())
+                    .unwrap()
+            )
+            .await
+            .1
+        )
+        .await["volume"],
+        50
+    );
+
+    let half = |kind| Cue::File {
+        id: id.clone(),
+        volume: kind,
+    };
+    assert_eq!(service.alert("follow"), half(50));
+    assert_eq!(service.checkin(false), half(50));
+    assert_eq!(service.cue("reward.r1"), half(50));
+    // The built-in alert sound too.
+    assert_eq!(
+        AlertSound::from(service.alert("raid")),
+        AlertSound::BuiltIn { volume: 50 }
+    );
+    // The test button plays it as OBS would.
+    let (_, mut events) = bus.subscribe();
+    service.play_test(&id).unwrap();
+    let played: serde_json::Value = serde_json::from_str(&events.recv().await.unwrap()).unwrap();
+    assert_eq!(played["payload"]["volume"], 50);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
     let dir = data_dir("slots");
     let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
@@ -232,7 +316,7 @@ async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
     // Nothing chosen: alerts keep the built-in sound, check-ins are silent.
     assert_eq!(
         AlertSound::from(service.alert("follow")),
-        AlertSound::BuiltIn
+        AlertSound::BuiltIn { volume: 100 }
     );
     assert_eq!(PlaySound::from_cue(service.checkin(false)), None);
 
@@ -255,7 +339,7 @@ async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
     assert_eq!(AlertSound::from(service.alert("raid")), AlertSound::Silent);
     assert_eq!(
         AlertSound::from(service.alert("cheer")),
-        AlertSound::BuiltIn
+        AlertSound::BuiltIn { volume: 100 }
     );
     assert_eq!(
         PlaySound::from_cue(service.checkin(true)),
@@ -314,7 +398,7 @@ async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
         .unwrap();
     assert_eq!(
         AlertSound::from(service.alert("follow")),
-        AlertSound::BuiltIn
+        AlertSound::BuiltIn { volume: 100 }
     );
     assert_eq!(PlaySound::from_cue(service.checkin(true)), None);
     modules
@@ -327,7 +411,7 @@ async fn slots_play_their_choice_and_fall_back_when_the_sound_is_deleted() {
     assert_eq!(send(&app, delete).await.0, StatusCode::NO_CONTENT);
     assert_eq!(
         AlertSound::from(service.alert("follow")),
-        AlertSound::BuiltIn
+        AlertSound::BuiltIn { volume: 100 }
     );
     assert_eq!(PlaySound::from_cue(service.checkin(true)), None);
     assert_eq!(
