@@ -22,6 +22,8 @@
       <div v-if="card.full" class="banner">{{ t('overlay.checkin.full') }}</div>
     </div>
   </div>
+  <!-- An animation pack's markup is mounted here (see pack.ts); viewer text goes in as text only. -->
+  <div ref="packHost" data-checkin-pack></div>
 </template>
 
 <script setup lang="ts">
@@ -32,6 +34,7 @@ import type { components } from '../../api/schema'
 import { type Incoming, stopsStage } from '../chat/chat'
 import { playSound, stopSounds } from '../sound'
 import { twitchImage } from './checkin'
+import { type CardPack, fillPack, loadPack, packOf } from './pack'
 
 type Stamped = components['schemas']['CheckinStampedPayload']
 
@@ -77,21 +80,45 @@ const look = computed(() => {
 })
 let lastSeq = 0
 let hide: ReturnType<typeof setTimeout> | undefined
+const packHost = ref<HTMLElement>()
+/** The pack mounted now, by ID; loaded again on every card, so an edited or removed pack shows at once. */
+let pack: { id: string; parsed: CardPack } | undefined
+// Bumped by every card and by a stop, so a pack still loading never shows an old card.
+let generation = 0
 let ws: WebSocket | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
 let stopped = false
 
 /** Shows one card for its duration with its sound; the Host paces them, so a new one only replaces a stale one. */
-function show(p: Stamped) {
-  // A preview's card never reaches its leave animation, so it stays while the style is edited.
+async function show(p: Stamped) {
+  // A preview's card (built-in or pack) never reaches its leave animation, so it stays while the style is edited.
   if (preview) p = { ...p, durationMs: PREVIEW_HOLD_MS }
   clearTimeout(hide)
-  card.value = p
-  key.value++
+  const mine = ++generation
+  clearCards()
+  const id = packOf(p.style?.preset)
+  const parsed = id ? await loadPack(id) : null
+  if (mine !== generation) return
+  if (id && parsed && packHost.value) {
+    if (pack?.id !== id) packHost.value.replaceChildren(...parsed.nodes)
+    pack = pack?.id === id ? pack : { id, parsed }
+    pack.parsed.stage.replaceChildren(fillPack(pack.parsed.item, p))
+  } else {
+    // No pack, or it is gone or broken: the built-in card, without the last pack's markup and styles.
+    packHost.value?.replaceChildren()
+    pack = undefined
+    card.value = p
+    key.value++
+  }
   // A preview keeps its card on screen, silently.
   if (preview) return
-  hide = setTimeout(() => (card.value = undefined), p.durationMs)
+  hide = setTimeout(clearCards, p.durationMs)
   if (p.sound) playSound(p.sound.url, p.sound.volume)
+}
+
+function clearCards() {
+  card.value = undefined
+  pack?.parsed.stage.replaceChildren()
 }
 
 // Theme and text size from 畫面工具 (built-in look only).
@@ -106,11 +133,12 @@ function receive(msg: Incoming) {
     // Emergency stop, skip or 隱藏畫面卡片: the card and its sound go away at once.
     lastSeq = msg.seq
     clearTimeout(hide)
-    card.value = undefined
+    generation++
+    clearCards()
     stopSounds()
   } else if (msg.type === 'checkin.stamped' && msg.seq > lastSeq) {
     lastSeq = msg.seq
-    show(msg.payload)
+    void show(msg.payload)
   }
 }
 

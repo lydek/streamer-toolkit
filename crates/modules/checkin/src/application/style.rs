@@ -52,6 +52,18 @@ impl Config {
         {
             return Err(StyleError::Invalid);
         }
+        // An animation pack lives in the template directory (the host installs it).
+        if let Some(pack) = style::pack_of(&next.preset)
+            && !self
+                .data_dir
+                .join("templates")
+                .join("checkin")
+                .join(pack)
+                .join("index.html")
+                .is_file()
+        {
+            return Err(StyleError::Invalid);
+        }
         let mut current = self.style.write().unwrap();
         settings::update(&self.data_dir, |s| s.checkin.card = next.clone())?;
         *current = next.clone();

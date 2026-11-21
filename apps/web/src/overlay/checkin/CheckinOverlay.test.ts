@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../../i18n'
@@ -125,6 +125,34 @@ describe('CheckinOverlay', () => {
     expect(wrapper.get<HTMLElement>('[data-checkin-card]').element.style.getPropertyValue('--duration')).toBe('86400000ms')
     wrapper.unmount()
     history.replaceState(null, '', '/')
+  })
+
+  it('shows a pack’s card when the style names a pack, and the built-in card when the pack is gone', async () => {
+    const PACK = '0190a1b2-0000-7000-8000-000000000001'
+    const html =
+      '<style>.pack-card { color: red }</style><div data-card-stage></div><template data-card><p class="pack-card" data-field="title"></p></template>'
+    let gone = false
+    vi.stubGlobal('fetch', vi.fn(async () => (gone ? new Response('', { status: 404 }) : new Response(html))))
+    const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
+    const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }
+    const style = { preset: `pack:${PACK}`, backgroundColor: '#000000', backgroundUrl: null, stampColor: '#ffffff', stampUrl: null, perRow: 5, animation: 'none' }
+    vm.receive({ type: 'snapshot', version: 1, seq: 1, payload: {} })
+    vm.receive(stamped(2, { title: 'Pack Ann', style }))
+    await flushPromises()
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.find('.pack-card').text()).toBe('Pack Ann')
+    expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
+    expect(vi.mocked(fetch).mock.calls[0][0].toString()).toContain(`/templates/checkin/${PACK}/index.html`)
+
+    gone = true
+    vm.receive(stamped(3, { title: 'Back to built-in', style }))
+    await flushPromises()
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.find('.pack-card').exists()).toBe(false)
+    expect(wrapper.get('[data-checkin-card] .name').text()).toBe('Back to built-in')
+    expect(wrapper.get('[data-checkin-pack]').element.childElementCount, "the pack's styles are gone too").toBe(0)
   })
 
   it('takes the card away at once on 隱藏畫面卡片', async () => {

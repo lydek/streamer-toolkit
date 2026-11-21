@@ -908,6 +908,129 @@
         }
       }
     },
+    "/api/admin/checkin/packs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_packs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CardPack"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Installs an animation pack: a zip (at most 10 MB) with `pack.json` (`{\"name\": …}`), `index.html` and CSS,\nimages, fonts or sounds. The body is the zip itself.",
+        "operationId": "upload_pack",
+        "requestBody": {
+          "description": "The pack's zip file",
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardPack"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`card_pack.invalid` or `card_pack.script`, with the file (and place) in `detail`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRefused"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`card_pack.too_large`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRefused"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`card_pack.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/packs/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Removes a pack; a card style that used it falls back to the simple style.",
+        "operationId": "delete_pack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`card_pack.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`card_pack.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/rewards": {
       "get": {
         "tags": [
@@ -6300,6 +6423,22 @@
           }
         }
       },
+      "CardPack": {
+        "type": "object",
+        "description": "An installed pack. `name` is the pack's own text: show it as text.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "CardStyleBody": {
         "type": "object",
         "description": "The stamp card's look. `title` and `description` may hold `#觀眾#`, `#章數#`, `#次數#` and `#格數#`; they are\nbroadcaster text, shown as text.",
@@ -9025,6 +9164,23 @@
           },
           "status": {
             "$ref": "#/components/schemas/AuthStatus"
+          }
+        }
+      },
+      "PackRefused": {
+        "type": "object",
+        "description": "Why a zip was refused; `detail` names the file (and the line and column in `index.html`).",
+        "required": [
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "`card_pack.invalid`, `card_pack.too_large` or `card_pack.script`."
+          },
+          "detail": {
+            "type": "string"
           }
         }
       },

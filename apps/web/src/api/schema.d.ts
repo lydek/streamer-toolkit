@@ -380,6 +380,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/checkin/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_packs"];
+        put?: never;
+        /**
+         * Installs an animation pack: a zip (at most 10 MB) with `pack.json` (`{"name": …}`), `index.html` and CSS,
+         *     images, fonts or sounds. The body is the zip itself.
+         */
+        post: operations["upload_pack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/packs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Removes a pack; a card style that used it falls back to the simple style. */
+        delete: operations["delete_pack"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/rewards": {
         parameters: {
             query?: never;
@@ -2095,6 +2132,11 @@ export interface components {
             stampColor: string;
             stampUrl: string | null;
         };
+        /** @description An installed pack. `name` is the pack's own text: show it as text. */
+        CardPack: {
+            id: string;
+            name: string;
+        };
         /**
          * @description The stamp card's look. `title` and `description` may hold `#觀眾#`, `#章數#`, `#次數#` and `#格數#`; they are
          *     broadcaster text, shown as text.
@@ -3079,6 +3121,12 @@ export interface components {
              */
             irc_connected: boolean;
             status: components["schemas"]["AuthStatus"];
+        };
+        /** @description Why a zip was refused; `detail` names the file (and the line and column in `index.html`). */
+        PackRefused: {
+            /** @description `card_pack.invalid`, `card_pack.too_large` or `card_pack.script`. */
+            code: string;
+            detail: string;
         };
         /** @enum {string} */
         PeriodKind: "stream" | "offline";
@@ -4681,6 +4729,113 @@ export interface operations {
                 };
             };
             /** @description `outbox.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_packs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPack"][];
+                };
+            };
+        };
+    };
+    upload_pack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The pack's zip file */
+        requestBody: {
+            content: {
+                "application/zip": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPack"];
+                };
+            };
+            /** @description `card_pack.invalid` or `card_pack.script`, with the file (and place) in `detail` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackRefused"];
+                };
+            };
+            /** @description `card_pack.too_large` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackRefused"];
+                };
+            };
+            /** @description `card_pack.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_pack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `card_pack.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `card_pack.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

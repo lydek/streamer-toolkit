@@ -11,6 +11,21 @@ export const PRESET_COLORS = {
   journal: { background: '#fbf6ee', stamp: '#c0392b' },
 } as const
 
+/** The Host's limit for an animation pack zip (crates/host/src/card_packs.rs). */
+export const CARD_PACK_MAX_BYTES = 10 * 1024 * 1024
+
+/** Uploads a pack zip as-is; the Host checks every file in it. */
+export function uploadCardPack(file: File) {
+  if (file.size > CARD_PACK_MAX_BYTES) return Promise.reject(new ApiError('card_pack.too_large', { detail: file.name }))
+  return api(
+    client.POST('/api/admin/checkin/packs', {
+      body: file as unknown as string,
+      bodySerializer: (b: unknown) => b as BodyInit,
+      headers: { 'Content-Type': 'application/zip' },
+    }),
+  )
+}
+
 /** Uploads `file` as-is; the Host checks its extension and content. */
 export function importCardImage(file: File) {
   if (file.size > CARD_IMAGE_MAX_BYTES) return Promise.reject(new ApiError('checkin.image_too_large'))
