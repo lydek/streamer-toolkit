@@ -7,6 +7,7 @@ fn main() {
             "open_twitch_activate",
             "open_download_page",
             "open_twitch_chat",
+            "open_logs_folder",
             "close_hint",
         ]),
     ))

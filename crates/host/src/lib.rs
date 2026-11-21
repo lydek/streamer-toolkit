@@ -7,6 +7,7 @@ mod chat_display;
 mod chat_dock;
 mod chat_log;
 pub mod db;
+mod diagnostics;
 mod event_feed;
 mod home_tiles;
 mod leaderboard;
@@ -438,6 +439,17 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         http.clone(),
         config.latest_release_url,
     );
+    let diagnostics_state = diagnostics::DiagnosticsState {
+        data_dir: config.data_dir.clone(),
+        app_version: config.app_version.clone(),
+        http: http.clone(),
+        helix: config.twitch.helix.clone(),
+        twitch: twitch.clone(),
+        // Set below, once the admin state that follows EventSub exists.
+        eventsub_up: Arc::new(|| false),
+        obs: obs.states(),
+        modules: modules.clone(),
+    };
     let backup = backup::routes(backup::BackupState {
         db: config.db.clone(),
         data_dir: config.data_dir.clone(),
@@ -467,6 +479,11 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         modules,
     ));
     watch_warnings(&screen_tools, &overlays, &admin, obs.states());
+    let eventsub_admin = admin.clone();
+    let diagnostics_routes = diagnostics::routes(diagnostics::DiagnosticsState {
+        eventsub_up: Arc::new(move || eventsub_admin.eventsub_up()),
+        ..diagnostics_state
+    });
     let router =
         Router::new()
             .route("/api/health", get(|| async { "ok" }))
@@ -546,6 +563,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(card_pack_files)
+            .merge(diagnostics_routes.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(leaderboard_routes.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
