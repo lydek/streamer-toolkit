@@ -3710,6 +3710,42 @@
         }
       }
     },
+    "/api/admin/stream/record": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest stream's follows, subs and resubs (each gifted sub included), cheers, raids and redemptions, one row\neach, as its stats count them; `null` before the first stream. Simulated events are never stored, so never\nhere.",
+        "operationId": "stream_record",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/StreamRecord"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/stream/summary": {
       "get": {
         "tags": [
@@ -7299,6 +7335,18 @@
           }
         }
       },
+      "RecordKind": {
+        "type": "string",
+        "description": "One row of the stream's record: what the stats count, one row each.",
+        "enum": [
+          "follow",
+          "subscribe",
+          "resubscribe",
+          "cheer",
+          "raid",
+          "redemption"
+        ]
+      },
       "RecordRetention": {
         "oneOf": [
           {
@@ -7322,6 +7370,98 @@
           }
         ],
         "description": "Keep records for this many days (1–3650), or forever; older ones are deleted on their own."
+      },
+      "RecordRow": {
+        "type": "object",
+        "description": "One row; names, messages, reward titles and inputs are raw viewer text.",
+        "required": [
+          "at",
+          "kind",
+          "viewer",
+          "tier",
+          "gifted",
+          "months",
+          "bits",
+          "viewers",
+          "message",
+          "reward",
+          "input"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "bits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "gifted": {
+            "type": "boolean",
+            "description": "A sub handed out by a gift."
+          },
+          "input": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the viewer typed for the reward; `null` when nothing."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RecordKind"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A resub's or cheer's message."
+          },
+          "months": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "reward": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A redemption's reward title."
+          },
+          "tier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "1, 2 or 3, for a sub or resub.",
+            "minimum": 0
+          },
+          "viewer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for an anonymous sub or cheer."
+          },
+          "viewers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Raiders.",
+            "minimum": 0
+          }
+        }
       },
       "RedemptionChangedEvent": {
         "type": "object",
@@ -8108,6 +8248,33 @@
           "sentAt": {
             "type": "string",
             "description": "RFC 3339."
+          }
+        }
+      },
+      "StreamRecord": {
+        "type": "object",
+        "description": "The latest stream session and what its stats count, row by row, to export.",
+        "required": [
+          "startedAt",
+          "endedAt",
+          "rows"
+        ],
+        "properties": {
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordRow"
+            },
+            "description": "Oldest first."
+          },
+          "startedAt": {
+            "type": "string"
           }
         }
       },

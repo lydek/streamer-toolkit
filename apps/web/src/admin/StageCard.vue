@@ -33,17 +33,23 @@
           <span class="label">{{ t(`stage.stats.${s.key}`) }}</span>
         </li>
       </ul>
+      <div v-if="session.endedAt" class="export">
+        <Button :label="t('record.export')" icon="pi pi-download" outlined :disabled="exporting" @click="exportIt" />
+        <p v-if="exportNotice" :role="exportNotice.error ? 'alert' : 'status'">{{ exportNotice.text }}</p>
+      </div>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
+import Button from 'primevue/button'
 import SelectButton from 'primevue/selectbutton'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { type LiveState, type Stage, clockText, preStreamChecks, sessionRange, streamStage, twitchOverview } from './home'
+import { exportRecord } from './streamRecord'
 
 const STAGES: Stage[] = ['before', 'live', 'after']
 // Follows, subs and the rest arrive between status events; read them again this often while live.
@@ -110,6 +116,20 @@ const line = computed(() => {
   const when = s.endedAt ? sessionRange(s.startedAt, s.endedAt) : clockText(now.value - Date.parse(s.startedAt))
   return when + peak
 })
+const exporting = ref(false)
+const exportNotice = ref<{ text: string; error: boolean }>()
+async function exportIt() {
+  exporting.value = true
+  exportNotice.value = undefined
+  try {
+    if (await exportRecord(session.value!.startedAt)) exportNotice.value = { text: t('record.exported'), error: false }
+  } catch (e) {
+    exportNotice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true }
+  } finally {
+    exporting.value = false
+  }
+}
+
 const stats = computed(() => {
   const s = session.value!
   return [
@@ -165,6 +185,17 @@ const stats = computed(() => {
 
 .fix {
   margin-left: auto;
+}
+
+.export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.export p {
+  margin: 0;
 }
 
 .stats {

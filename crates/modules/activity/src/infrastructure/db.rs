@@ -103,6 +103,21 @@ pub async fn activity_between(
     .await
 }
 
+/// What `session_id`'s stats count, one entry each, oldest first: follows, subs and resubs (each sub a gift hands
+/// out included; the gift itself is left out, as the stats do), cheers and raids.
+pub async fn session_entries(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<Vec<ActivityEntry>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT twitch_message_id AS alert_id, kind, user_name, tier, months, count, bits, viewers, gifted, \
+         message, occurred_at FROM activity_events WHERE session_id = ? AND kind <> 'gift' ORDER BY occurred_at",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Counts what is stored for `session_id` (simulated events never are).
 pub async fn session_counts(
     pool: &SqlitePool,
