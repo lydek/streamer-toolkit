@@ -384,3 +384,184 @@ async fn a_counter_made_before_any_stream_resets_at_the_first() {
     r.service.stream_live().await;
     assert_eq!(value(&r, &id).await, 0);
 }
+
+/// Viewers in the shared viewer directory, as the viewers module records them.
+async fn seed_viewers(pool: &SqlitePool) {
+    for (id, login, name, seen) in [
+        ("1", "fish", "小魚", "2026-11-21T01:00:00.000000Z"),
+        ("2", "berry", "莓莓", "2026-11-21T02:00:00.000000Z"),
+        ("3", "kai", "阿凱", "2026-11-21T03:00:00.000000Z"),
+        ("4", "fishbone", "魚骨", "2026-11-21T04:00:00.000000Z"),
+    ] {
+        sqlx::query(
+            "INSERT INTO viewers (twitch_user_id, login, display_name, first_seen_at, last_seen_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(login)
+        .bind(name)
+        .bind(seen)
+        .bind(seen)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn per_viewer_counts_rank_the_top_three_and_survive_a_restart() {
+    let r = rig("viewers").await;
+    seed_viewers(&r.pool).await;
+    let (status, created) = call(
+        &r.app,
+        "POST",
+        "/api/admin/counters/viewers",
+        Some(json!({ "name": " 猜中死亡次數 " })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(created["name"], "猜中死亡次數");
+    let id = created["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        call(
+            &r.app,
+            "POST",
+            "/api/admin/counters/viewers",
+            Some(json!({ "name": "" }))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+
+    // Found by login or display name, with their count here.
+    let (_, found) = call(
+        &r.app,
+        "GET",
+        &format!("/api/admin/counters/viewers/{id}/search?q=FISH"),
+        None,
+    )
+    .await;
+    let logins: Vec<_> = found
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v["login"].as_str().unwrap())
+        .collect();
+    assert_eq!(logins, ["fishbone", "fish"]);
+    assert_eq!(found[0]["value"], 0);
+
+    let step = |viewer: &str, delta: i64| {
+        let (app, uri) = (
+            r.app.clone(),
+            format!("/api/admin/counters/viewers/{id}/add"),
+        );
+        let body = json!({ "twitch_user_id": viewer, "delta": delta });
+        async move { call(&app, "POST", &uri, Some(body)).await.0 }
+    };
+    for (viewer, times) in [("1", 3), ("2", 2), ("3", 2), ("4", 1)] {
+        for _ in 0..times {
+            assert_eq!(step(viewer, 1).await, StatusCode::NO_CONTENT);
+        }
+    }
+    assert_eq!(step("2", -1).await, StatusCode::NO_CONTENT);
+    assert_eq!(step("4", -1).await, StatusCode::NO_CONTENT);
+    assert_eq!(step("4", -1).await, StatusCode::NO_CONTENT, "never below 0");
+    assert_eq!(step("1", 2).await, StatusCode::BAD_REQUEST);
+    let (status, body) = call(
+        &r.app,
+        "POST",
+        &format!("/api/admin/counters/viewers/{id}/add"),
+        Some(json!({ "twitch_user_id": "999", "delta": 1 })),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("counter.viewer_not_found"))
+    );
+
+    let summary = |all: &Value| {
+        let c = &all[0];
+        let top: Vec<_> = c["top"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| {
+                (
+                    v["display_name"].as_str().unwrap().to_owned(),
+                    v["value"].as_i64().unwrap(),
+                )
+            })
+            .collect();
+        (c["total"].as_i64().unwrap(), top)
+    };
+    let (_, all) = call(&r.app, "GET", "/api/admin/counters/viewers", None).await;
+    let expected = (
+        6,
+        vec![
+            ("小魚".to_owned(), 3),
+            ("阿凱".to_owned(), 2),
+            ("莓莓".to_owned(), 1),
+        ],
+    );
+    assert_eq!(summary(&all), expected);
+    let (_, counts) = call(
+        &r.app,
+        "GET",
+        &format!("/api/admin/counters/viewers/{id}/counts"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        counts.as_array().unwrap().len(),
+        3,
+        "viewers at 0 are left out"
+    );
+
+    // Kept across a restart.
+    let (dir, pool, session) = (r.dir.clone(), r.pool.clone(), r.session.clone());
+    let restarted = restart(dir, pool, session).await;
+    let (_, all) = call(&restarted.app, "GET", "/api/admin/counters/viewers", None).await;
+    assert_eq!(summary(&all), expected);
+
+    assert_eq!(
+        call(
+            &restarted.app,
+            "PUT",
+            &format!("/api/admin/counters/viewers/{id}"),
+            Some(json!({ "name": "猜中" }))
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call(
+            &restarted.app,
+            "DELETE",
+            &format!("/api/admin/counters/viewers/{id}"),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM counter_viewer_counts")
+        .fetch_one(&restarted.pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "its counts go too");
+    assert_eq!(
+        call(
+            &restarted.app,
+            "GET",
+            &format!("/api/admin/counters/viewers/{id}/counts"),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    // The first rig shares the data folder; only the restarted one cleans it up.
+    std::mem::forget(r);
+}

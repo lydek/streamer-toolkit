@@ -4,8 +4,11 @@ use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{CounterRepository, RepositoryError},
-    domain::Counter,
+    domain::{Counter, ViewerCount, ViewerCounter},
 };
+
+/// The most viewers a search returns.
+const SEARCH_LIMIT: u32 = 20;
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -120,6 +123,137 @@ impl CounterRepository for SqliteCounters {
         .map_err(storage)?;
         Ok(done.rows_affected())
     }
+
+    async fn viewer_counters(&self) -> Result<Vec<ViewerCounter>, RepositoryError> {
+        let rows: Vec<(String, String)> =
+            sqlx::query_as("SELECT id, name FROM counter_viewer_counters ORDER BY id")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(storage)?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, name)| ViewerCounter { id, name })
+            .collect())
+    }
+
+    async fn insert_viewer_counter(&self, c: &ViewerCounter) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO counter_viewer_counters (id, name) VALUES (?, ?)")
+            .bind(&c.id)
+            .bind(&c.name)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn rename_viewer_counter(&self, id: &str, name: &str) -> Result<bool, RepositoryError> {
+        let done = sqlx::query("UPDATE counter_viewer_counters SET name = ? WHERE id = ?")
+            .bind(name)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    async fn delete_viewer_counter(&self, id: &str) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        sqlx::query("DELETE FROM counter_viewer_counts WHERE counter_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let done = sqlx::query("DELETE FROM counter_viewer_counters WHERE id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    async fn add_for_viewer(
+        &self,
+        counter_id: &str,
+        twitch_user_id: &str,
+        delta: i64,
+    ) -> Result<bool, RepositoryError> {
+        let done = sqlx::query(
+            "INSERT INTO counter_viewer_counts (counter_id, twitch_user_id, value) \
+             SELECT id, ?2, MAX(?3, 0) FROM counter_viewer_counters WHERE id = ?1 \
+             ON CONFLICT (counter_id, twitch_user_id) DO UPDATE SET value = MAX(value + ?3, 0)",
+        )
+        .bind(counter_id)
+        .bind(twitch_user_id)
+        .bind(delta)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    async fn viewer_counts(
+        &self,
+        counter_id: &str,
+        limit: Option<u32>,
+    ) -> Result<Vec<ViewerCount>, RepositoryError> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT twitch_user_id, value FROM counter_viewer_counts \
+             WHERE counter_id = ? AND value > 0 ORDER BY value DESC, twitch_user_id LIMIT ?",
+        )
+        .bind(counter_id)
+        .bind(limit.map_or(-1, i64::from))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        let ids: Vec<String> = rows.iter().map(|(id, _)| id.clone()).collect();
+        let names = viewers::names(&self.pool, &ids).await.map_err(storage)?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, value)| {
+                // A viewer missing from the directory still counts; its ID stands in for its names.
+                let name = names.get(&id);
+                ViewerCount {
+                    login: name.map_or_else(|| id.clone(), |n| n.login.clone()),
+                    display_name: name.map_or_else(|| id.clone(), |n| n.display_name.clone()),
+                    twitch_user_id: id,
+                    value,
+                }
+            })
+            .collect())
+    }
+
+    async fn viewer_total(&self, counter_id: &str) -> Result<i64, RepositoryError> {
+        sqlx::query_scalar(
+            "SELECT COALESCE(SUM(value), 0) FROM counter_viewer_counts WHERE counter_id = ?",
+        )
+        .bind(counter_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+    }
+
+    async fn search_viewers(&self, query: &str) -> Result<Vec<ViewerCount>, RepositoryError> {
+        let found = viewers::search(&self.pool, query, SEARCH_LIMIT)
+            .await
+            .map_err(storage)?;
+        Ok(found
+            .into_iter()
+            .map(|v| ViewerCount {
+                twitch_user_id: v.twitch_user_id,
+                login: v.login,
+                display_name: v.display_name,
+                value: 0,
+            })
+            .collect())
+    }
+
+    async fn viewer_known(&self, twitch_user_id: &str) -> Result<bool, RepositoryError> {
+        let found = viewers::names(&self.pool, &[twitch_user_id.to_owned()])
+            .await
+            .map_err(storage)?;
+        Ok(!found.is_empty())
+    }
 }
 
 #[cfg(test)]
@@ -133,7 +267,14 @@ pub(crate) mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        MIGRATOR.run(&pool).await.unwrap();
+        // The viewer directory shares the database; the Host merges every module's migrations the same way.
+        let mut all: Vec<_> = MIGRATOR
+            .iter()
+            .chain(viewers::MIGRATOR.iter())
+            .cloned()
+            .collect();
+        all.sort_by_key(|m| m.version);
+        Migrator::with_migrations(all).run(&pool).await.unwrap();
         pool
     }
 }

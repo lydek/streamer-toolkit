@@ -112,6 +112,73 @@ pub async fn avatars(
     Ok(rows.into_iter().collect())
 }
 
+/// A viewer's names, for other modules to show next to their own records (they never read this table).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewerName {
+    pub twitch_user_id: String,
+    pub login: String,
+    pub display_name: String,
+}
+
+/// At most `limit` viewers whose login or display name contains `query` (ASCII letters ignoring case), most
+/// recently seen first; nothing for a blank query.
+pub async fn search(
+    pool: &SqlitePool,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<ViewerName>, sqlx::Error> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The query is matched literally: `%`, `_` and the escape character `!` lose their LIKE meaning.
+    let pattern = format!(
+        "%{}%",
+        query
+            .replace('!', "!!")
+            .replace('%', "!%")
+            .replace('_', "!_")
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT twitch_user_id, login, display_name FROM viewers \
+         WHERE login LIKE ?1 ESCAPE '!' OR display_name LIKE ?1 ESCAPE '!' \
+         ORDER BY last_seen_at DESC LIMIT ?2",
+    )
+    .bind(pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(name).collect())
+}
+
+/// The names of `ids` (Twitch user IDs) by ID; IDs not in the directory are left out.
+pub async fn names(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<std::collections::HashMap<String, ViewerName>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Default::default());
+    }
+    let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+        "SELECT twitch_user_id, login, display_name FROM viewers WHERE twitch_user_id IN (",
+    );
+    let mut list = q.separated(", ");
+    for id in ids {
+        list.push_bind(id);
+    }
+    q.push(")");
+    let rows: Vec<(String, String, String)> = q.build_query_as().fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|r| (r.0.clone(), name(r))).collect())
+}
+
+fn name((twitch_user_id, login, display_name): (String, String, String)) -> ViewerName {
+    ViewerName {
+        twitch_user_id,
+        login,
+        display_name,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,6 +219,57 @@ mod tests {
             self.asked.lock().unwrap().push(id.to_owned());
             Box::pin(async move { Some(self.url.to_owned()) })
         }
+    }
+
+    #[tokio::test]
+    async fn viewers_are_found_by_login_or_display_name_and_named_by_id() {
+        let pool = pool().await;
+        for (id, login, name, seen) in [
+            ("1", "fish", "小魚", "2026-11-21T01:00:00.000000Z"),
+            ("2", "berry", "莓莓", "2026-11-21T03:00:00.000000Z"),
+            ("3", "fisher_kai", "阿凱", "2026-11-21T02:00:00.000000Z"),
+            ("4", "a%b", "100%", "2026-11-21T00:00:00.000000Z"),
+        ] {
+            sqlx::query(
+                "INSERT INTO viewers (twitch_user_id, login, display_name, first_seen_at, last_seen_at) \
+                 VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(login)
+            .bind(name)
+            .bind(seen)
+            .bind(seen)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let ids = |found: Vec<ViewerName>| {
+            found
+                .into_iter()
+                .map(|v| v.twitch_user_id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            ids(search(&pool, " FISH ", 20).await.unwrap()),
+            ["3", "1"],
+            "latest seen first"
+        );
+        assert_eq!(ids(search(&pool, "莓", 20).await.unwrap()), ["2"]);
+        assert_eq!(ids(search(&pool, "fish", 1).await.unwrap()), ["3"]);
+        assert_eq!(
+            ids(search(&pool, "%", 20).await.unwrap()),
+            ["4"],
+            "matched literally"
+        );
+        assert_eq!(ids(search(&pool, "_", 20).await.unwrap()), ["3"]);
+        assert!(search(&pool, "  ", 20).await.unwrap().is_empty());
+
+        let found = names(&pool, &["2".into(), "9".into()]).await.unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            (found["2"].login.as_str(), found["2"].display_name.as_str()),
+            ("berry", "莓莓")
+        );
     }
 
     type Row = (String, String, Option<String>, bool, bool, String, String);

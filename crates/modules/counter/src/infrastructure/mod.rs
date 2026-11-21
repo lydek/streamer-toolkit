@@ -6,7 +6,10 @@ use std::{future::Future, sync::Arc};
 
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -22,8 +25,8 @@ use toolkit_core::{
 use utoipa::{OpenApi, ToSchema};
 
 use crate::{
-    application::{CounterError, CounterService, CounterSettings},
-    domain::Counter,
+    application::{CounterError, CounterService, CounterSettings, ViewerCounterSummary},
+    domain::{Counter, ViewerCount},
 };
 
 /// The counter service the host runs.
@@ -124,6 +127,7 @@ fn counter_error(e: CounterError) -> Response {
     match e {
         CounterError::Invalid => error(StatusCode::BAD_REQUEST, "counter.invalid"),
         CounterError::NotFound => error(StatusCode::NOT_FOUND, "counter.not_found"),
+        CounterError::ViewerNotFound => error(StatusCode::NOT_FOUND, "counter.viewer_not_found"),
         CounterError::Command(CommandError::Taken { module, label }) => (
             StatusCode::CONFLICT,
             Json(CommandTakenBody::new(module, label)),
@@ -194,9 +198,89 @@ pub struct CounterStep {
     pub delta: i64,
 }
 
+/// One viewer's count. `login` and `display_name` are viewer text: render them as text.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ViewerCountBody {
+    pub twitch_user_id: String,
+    pub login: String,
+    pub display_name: String,
+    pub value: i64,
+}
+
+impl From<ViewerCount> for ViewerCountBody {
+    fn from(v: ViewerCount) -> Self {
+        Self {
+            twitch_user_id: v.twitch_user_id,
+            login: v.login,
+            display_name: v.display_name,
+            value: v.value,
+        }
+    }
+}
+
+/// A count kept per viewer. `name` is broadcaster text: render it as text.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ViewerCounterBody {
+    pub id: String,
+    pub name: String,
+    /// Every viewer's count added up.
+    pub total: i64,
+    /// The three viewers with the most, most first.
+    pub top: Vec<ViewerCountBody>,
+}
+
+impl From<ViewerCounterSummary> for ViewerCounterBody {
+    fn from(s: ViewerCounterSummary) -> Self {
+        Self {
+            id: s.counter.id,
+            name: s.counter.name,
+            total: s.total,
+            top: s.top.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ViewerCounterName {
+    /// 1–100 characters after trimming.
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ViewerStep {
+    /// A viewer from the viewer directory.
+    pub twitch_user_id: String,
+    /// `1` or `-1`; a count never goes below 0.
+    pub delta: i64,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ViewerSearch {
+    /// Part of a login or display name.
+    pub q: String,
+}
+
 /// The admin API.
 pub fn routes(service: Arc<Counters>) -> Router {
     Router::new()
+        .route(
+            "/api/admin/counters/viewers",
+            get(list_viewer_counters).post(create_viewer_counter),
+        )
+        .route(
+            "/api/admin/counters/viewers/{id}",
+            put(rename_viewer_counter).delete(delete_viewer_counter),
+        )
+        .route(
+            "/api/admin/counters/viewers/{id}/counts",
+            get(viewer_counts),
+        )
+        .route(
+            "/api/admin/counters/viewers/{id}/search",
+            get(search_viewers),
+        )
+        .route("/api/admin/counters/viewers/{id}/add", post(add_for_viewer))
         .route(
             "/api/admin/counters",
             get(list_counters).post(create_counter),
@@ -355,9 +439,208 @@ pub(crate) async fn reset_counter(
     }
 }
 
+/// The per-viewer counters with their totals and top three.
+#[utoipa::path(
+    get,
+    path = "/api/admin/counters/viewers",
+    tag = "admin",
+    responses(
+        (status = 200, body = Vec<ViewerCounterBody>),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn list_viewer_counters(State(s): State<Arc<Counters>>) -> Response {
+    match s.viewer_counters().await {
+        Ok(all) => Json(
+            all.into_iter()
+                .map(ViewerCounterBody::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => counter_error(e.into()),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/counters/viewers",
+    tag = "admin",
+    request_body = ViewerCounterName,
+    responses(
+        (status = 200, body = ViewerCounterBody),
+        (status = 400, description = "`counter.invalid`: an empty name, or more than 100 per-viewer counters", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn create_viewer_counter(
+    State(s): State<Arc<Counters>>,
+    body: Result<Json<ViewerCounterName>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    match s.create_viewer_counter(&b.name).await {
+        Ok(counter) => Json(ViewerCounterBody::from(ViewerCounterSummary {
+            counter,
+            total: 0,
+            top: Vec::new(),
+        }))
+        .into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/counters/viewers/{id}",
+    tag = "admin",
+    params(("id" = String, Path)),
+    request_body = ViewerCounterName,
+    responses(
+        (status = 204),
+        (status = 400, description = "`counter.invalid`: an empty name", body = ErrorBody),
+        (status = 404, description = "`counter.not_found`", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn rename_viewer_counter(
+    State(s): State<Arc<Counters>>,
+    Path(id): Path<String>,
+    body: Result<Json<ViewerCounterName>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    match s.rename_viewer_counter(&id, &b.name).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+/// Deletes a per-viewer counter and every viewer's count in it.
+#[utoipa::path(
+    delete,
+    path = "/api/admin/counters/viewers/{id}",
+    tag = "admin",
+    params(("id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`counter.not_found`", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn delete_viewer_counter(
+    State(s): State<Arc<Counters>>,
+    Path(id): Path<String>,
+) -> Response {
+    match s.delete_viewer_counter(&id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+/// Every viewer above 0, most first.
+#[utoipa::path(
+    get,
+    path = "/api/admin/counters/viewers/{id}/counts",
+    tag = "admin",
+    params(("id" = String, Path)),
+    responses(
+        (status = 200, body = Vec<ViewerCountBody>),
+        (status = 404, description = "`counter.not_found`", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn viewer_counts(
+    State(s): State<Arc<Counters>>,
+    Path(id): Path<String>,
+) -> Response {
+    match s.viewer_counts(&id).await {
+        Ok(all) => Json(
+            all.into_iter()
+                .map(ViewerCountBody::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+/// Viewers in the viewer directory whose login or display name contains `q` (at most 20, most recently seen
+/// first), with their count in this counter.
+#[utoipa::path(
+    get,
+    path = "/api/admin/counters/viewers/{id}/search",
+    tag = "admin",
+    params(("id" = String, Path), ViewerSearch),
+    responses(
+        (status = 200, body = Vec<ViewerCountBody>),
+        (status = 400, description = "`counter.invalid`: no `q`", body = ErrorBody),
+        (status = 404, description = "`counter.not_found`", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn search_viewers(
+    State(s): State<Arc<Counters>>,
+    Path(id): Path<String>,
+    query: Result<Query<ViewerSearch>, QueryRejection>,
+) -> Response {
+    let Ok(Query(q)) = query else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    match s.search_viewers(&id, &q.q).await {
+        Ok(found) => Json(
+            found
+                .into_iter()
+                .map(ViewerCountBody::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+/// Adds or takes one for a viewer.
+#[utoipa::path(
+    post,
+    path = "/api/admin/counters/viewers/{id}/add",
+    tag = "admin",
+    params(("id" = String, Path)),
+    request_body = ViewerStep,
+    responses(
+        (status = 204),
+        (status = 400, description = "`counter.invalid`: not 1 or -1", body = ErrorBody),
+        (status = 404, description = "`counter.not_found`, or `counter.viewer_not_found`: not in the viewer directory", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn add_for_viewer(
+    State(s): State<Arc<Counters>>,
+    Path(id): Path<String>,
+    step: Result<Json<ViewerStep>, JsonRejection>,
+) -> Response {
+    match step {
+        Ok(Json(ViewerStep {
+            twitch_user_id,
+            delta: d @ (1 | -1),
+        })) => match s.add_for_viewer(&id, &twitch_user_id, d).await {
+            Ok(()) => StatusCode::NO_CONTENT.into_response(),
+            Err(e) => counter_error(e),
+        },
+        _ => error(StatusCode::BAD_REQUEST, "counter.invalid"),
+    }
+}
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        list_viewer_counters,
+        create_viewer_counter,
+        rename_viewer_counter,
+        delete_viewer_counter,
+        viewer_counts,
+        search_viewers,
+        add_for_viewer,
         list_counters,
         create_counter,
         update_counter,

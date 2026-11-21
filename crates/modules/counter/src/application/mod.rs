@@ -14,7 +14,7 @@ use toolkit_core::{
 };
 use uuid::Uuid;
 
-use crate::domain::{self, Counter};
+use crate::domain::{self, Counter, ViewerCount, ViewerCounter};
 
 #[derive(Debug, thiserror::Error)]
 #[error("counter.storage_failed: {0}")]
@@ -27,6 +27,9 @@ pub enum CounterError {
     Invalid,
     #[error("counter.not_found")]
     NotFound,
+    /// A viewer the viewer directory does not have.
+    #[error("counter.viewer_not_found")]
+    ViewerNotFound,
     #[error(transparent)]
     Command(#[from] CommandError),
     #[error(transparent)]
@@ -56,6 +59,61 @@ pub trait CounterRepository: Send + Sync + 'static {
         &self,
         session: &str,
     ) -> impl Future<Output = Result<u64, RepositoryError>> + Send;
+
+    /// Per-viewer counters, in creation order.
+    fn viewer_counters(
+        &self,
+    ) -> impl Future<Output = Result<Vec<ViewerCounter>, RepositoryError>> + Send;
+    fn insert_viewer_counter(
+        &self,
+        counter: &ViewerCounter,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    fn rename_viewer_counter(
+        &self,
+        id: &str,
+        name: &str,
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
+    /// The counter and every viewer's count in it.
+    fn delete_viewer_counter(
+        &self,
+        id: &str,
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
+    /// Adds `delta` to the viewer's count, never going below 0; `false` when there is no such counter.
+    fn add_for_viewer(
+        &self,
+        counter_id: &str,
+        twitch_user_id: &str,
+        delta: i64,
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
+    /// The viewers above 0, most first (ties by Twitch user ID), at most `limit`, named from the viewer directory.
+    fn viewer_counts(
+        &self,
+        counter_id: &str,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<Vec<ViewerCount>, RepositoryError>> + Send;
+    /// Every viewer's count added up.
+    fn viewer_total(
+        &self,
+        counter_id: &str,
+    ) -> impl Future<Output = Result<i64, RepositoryError>> + Send;
+    /// Viewers in the directory whose login or display name contains `query`, with a value of 0.
+    fn search_viewers(
+        &self,
+        query: &str,
+    ) -> impl Future<Output = Result<Vec<ViewerCount>, RepositoryError>> + Send;
+    /// Whether the viewer directory has the viewer.
+    fn viewer_known(
+        &self,
+        twitch_user_id: &str,
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
+}
+
+/// A per-viewer counter with its total and its top three.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewerCounterSummary {
+    pub counter: ViewerCounter,
+    pub total: i64,
+    pub top: Vec<ViewerCount>,
 }
 
 /// The stream session now (the live one, or the last one after it ended; `None` before any).
@@ -264,6 +322,102 @@ impl<R: CounterRepository> CounterService<R> {
             }
             service.announce_all().await;
         });
+    }
+
+    pub async fn viewer_counters(&self) -> Result<Vec<ViewerCounterSummary>, RepositoryError> {
+        let mut all = Vec::new();
+        for counter in self.repo.viewer_counters().await? {
+            let total = self.repo.viewer_total(&counter.id).await?;
+            let top = self.repo.viewer_counts(&counter.id, Some(3)).await?;
+            all.push(ViewerCounterSummary {
+                counter,
+                total,
+                top,
+            });
+        }
+        Ok(all)
+    }
+
+    pub async fn create_viewer_counter(&self, name: &str) -> Result<ViewerCounter, CounterError> {
+        let name = domain::clean_name(name).ok_or(CounterError::Invalid)?;
+        if self.repo.viewer_counters().await?.len() >= domain::MAX_COUNTERS {
+            return Err(CounterError::Invalid);
+        }
+        let counter = ViewerCounter {
+            id: Uuid::now_v7().to_string(),
+            name,
+        };
+        self.repo.insert_viewer_counter(&counter).await?;
+        Ok(counter)
+    }
+
+    pub async fn rename_viewer_counter(
+        &self,
+        id: &str,
+        name: &str,
+    ) -> Result<ViewerCounter, CounterError> {
+        let name = domain::clean_name(name).ok_or(CounterError::Invalid)?;
+        match self.repo.rename_viewer_counter(id, &name).await? {
+            true => Ok(ViewerCounter {
+                id: id.into(),
+                name,
+            }),
+            false => Err(CounterError::NotFound),
+        }
+    }
+
+    pub async fn delete_viewer_counter(&self, id: &str) -> Result<(), CounterError> {
+        match self.repo.delete_viewer_counter(id).await? {
+            true => Ok(()),
+            false => Err(CounterError::NotFound),
+        }
+    }
+
+    /// Adds or takes one for a viewer from the viewer directory (never below 0).
+    pub async fn add_for_viewer(
+        &self,
+        id: &str,
+        twitch_user_id: &str,
+        delta: i64,
+    ) -> Result<(), CounterError> {
+        if !self.repo.viewer_known(twitch_user_id).await? {
+            return Err(CounterError::ViewerNotFound);
+        }
+        match self.repo.add_for_viewer(id, twitch_user_id, delta).await? {
+            true => Ok(()),
+            false => Err(CounterError::NotFound),
+        }
+    }
+
+    /// Every viewer above 0 in a per-viewer counter, most first.
+    pub async fn viewer_counts(&self, id: &str) -> Result<Vec<ViewerCount>, CounterError> {
+        if !self
+            .repo
+            .viewer_counters()
+            .await?
+            .iter()
+            .any(|c| c.id == id)
+        {
+            return Err(CounterError::NotFound);
+        }
+        Ok(self.repo.viewer_counts(id, None).await?)
+    }
+
+    /// Viewers to count for, with their count in `id` (0 when they have none).
+    pub async fn search_viewers(
+        &self,
+        id: &str,
+        query: &str,
+    ) -> Result<Vec<ViewerCount>, CounterError> {
+        let counts = self.viewer_counts(id).await?;
+        let mut found = self.repo.search_viewers(query).await?;
+        for v in &mut found {
+            v.value = counts
+                .iter()
+                .find(|c| c.twitch_user_id == v.twitch_user_id)
+                .map_or(0, |c| c.value);
+        }
+        Ok(found)
     }
 
     /// The broadcaster is live: per-stream counters not yet reset for this stream's session go back to 0, once

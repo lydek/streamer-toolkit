@@ -19,6 +19,23 @@ pub struct Counter {
     pub reset_session: Option<String>,
 }
 
+/// A count kept per viewer, e.g. "who guessed right".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewerCounter {
+    /// UUID v7.
+    pub id: String,
+    pub name: String,
+}
+
+/// One viewer's count, with the names the viewer directory has for them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewerCount {
+    pub twitch_user_id: String,
+    pub login: String,
+    pub display_name: String,
+    pub value: i64,
+}
+
 /// A chat command name: one word, with or without its leading `!` (dropped), at most 25 characters. An empty one
 /// means no chat command; `None` when it cannot be one.
 pub(crate) fn command_name(text: &str) -> Option<String> {
