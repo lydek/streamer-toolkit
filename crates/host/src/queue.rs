@@ -202,15 +202,19 @@ pub(crate) async fn clear_queue(State(s): State<QueueState>) -> Json<Cleared> {
     responses((status = 200, body = Stopped))
 )]
 pub(crate) async fn stop_queue(State(s): State<QueueState>) -> Json<Stopped> {
+    Json(stop_all(&s.presenter, &s.bus))
+}
+
+/// The emergency stop: ends the item playing and drops the waiting ones; every overlay hears it at once.
+pub(crate) fn stop_all(presenter: &Presenter, bus: &Arc<EventBus>) -> Stopped {
     // Published by stop() itself, under the queue's lock, so nothing queued after it plays before overlays hear it.
-    let bus = s.bus.clone();
-    let (stopped, cancelled) = s.presenter.stop(move |stopped, cancelled| {
+    let bus = bus.clone();
+    let (stopped, cancelled) = presenter.stop(move |stopped, cancelled| {
         publish(
             &bus,
             STOPPED_EVENT,
             serde_json::to_value(Stopped { stopped, cancelled }).expect("serializes"),
         )
     });
-    let result = Stopped { stopped, cancelled };
-    Json(result)
+    Stopped { stopped, cancelled }
 }

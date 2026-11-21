@@ -28,7 +28,7 @@ export interface Feature {
 export const FEATURES: Feature[] = [
   { id: 'home', group: 'home', icon: 'pi pi-home', pages: ['/'], fixed: true },
   { id: 'streamInfo', group: 'home', icon: 'pi pi-pencil', pages: ['/stream-info'], scopes: ['channel:manage:broadcast'] },
-  { id: 'rehearsal', group: 'home', icon: 'pi pi-play-circle', pages: ['/rehearsal'] },
+  { id: 'rehearsal', group: 'home', icon: 'pi pi-play-circle', pages: ['/rehearsal'], fixed: true },
   { id: 'songs', group: 'song', icon: 'pi pi-microphone', pages: ['/songs', '/song-list'] },
   { id: 'singingBooth', group: 'song', icon: 'pi pi-headphones', pages: ['/singing-booth'], needs: 'program', requires: ['songs'] },
   { id: 'chat', group: 'chat', icon: 'pi pi-comments', pages: ['/chat-log', '/chat', '/chat-window'], module: 'chat' },

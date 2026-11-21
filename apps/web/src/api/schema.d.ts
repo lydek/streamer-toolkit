@@ -1451,6 +1451,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/simulate/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plays a script (see the module docs); it replaces one still running. */
+        post: operations["run_script"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/simulate/script/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stops the script running; what it already sent plays on (the emergency stop clears that). */
+        post: operations["stop_script"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds": {
         parameters: {
             query?: never;
@@ -3390,6 +3424,11 @@ export interface components {
             id: string;
             title: string;
         };
+        RunScript: {
+            /** @description The script file's text: `{"steps": [{"type": "chat" | "alert" | "checkin" | "stop", "at": <ms>, …}]}`. */
+            script: string;
+            speed: components["schemas"]["Speed"];
+        };
         Scene: {
             /**
              * @description The scene's own items, front to back (as the program's source list shows them); items inside a group are
@@ -3440,6 +3479,23 @@ export interface components {
              * @description 0–100 (%).
              */
             volume: number;
+        };
+        /** @description Why a script was refused: the line when the JSON itself is broken, or the step that does not fit. */
+        ScriptRefused: {
+            /** @description `rehearsal.invalid` or `rehearsal.too_large`. */
+            code: string;
+            /** @description 1-based line in the file of broken JSON. */
+            line?: number | null;
+            /** @description 1-based number of a step that is not a known kind or misses a field. */
+            step?: number | null;
+        };
+        ScriptStarted: {
+            /**
+             * Format: int64
+             * @description When the last step plays, at the chosen speed.
+             */
+            duration_ms: number;
+            steps: number;
         };
         /** @description Another channel in a shared chat. */
         SharedChannelPayload: {
@@ -3625,6 +3681,8 @@ export interface components {
          * @enum {string}
          */
         Source: "twitch" | "obs" | "simulation" | "system";
+        /** @enum {string} */
+        Speed: "normal" | "double" | "burst";
         /**
          * @description The overlay that presents an item.
          * @enum {string}
@@ -7739,6 +7797,73 @@ export interface operations {
             };
             /** @description `simulate.feature_off`: counters are turned off */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    run_script: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunScript"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptStarted"];
+                };
+            };
+            /** @description `rehearsal.invalid`, with the line when the JSON is wrong */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptRefused"];
+                };
+            };
+            /** @description `rehearsal.too_large`: more than 256 KB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptRefused"];
+                };
+            };
+        };
+    };
+    stop_script: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `rehearsal.not_running` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
