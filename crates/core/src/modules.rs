@@ -19,8 +19,18 @@ pub const SCENE: &str = "scene";
 pub const BGM: &str = "bgm";
 /// Counters: global counts with chat commands.
 pub const COUNTER: &str = "counter";
+/// Screen tools: the break card; the ID is its page's path, so its home tile keeps the ID it had while unbuilt.
+pub const SCREEN_TOOLS: &str = "screen-tools";
 pub const ALL: &[&str] = &[
-    CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND, SCENE, BGM, COUNTER,
+    CHAT,
+    ALERTS,
+    REDEMPTION,
+    CHECKIN,
+    SOUND,
+    SCENE,
+    BGM,
+    COUNTER,
+    SCREEN_TOOLS,
 ];
 
 #[derive(Debug, thiserror::Error)]

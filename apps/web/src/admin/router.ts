@@ -12,6 +12,7 @@ import RedemptionsPage from './RedemptionsPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
+import ScreenToolsPage from './ScreenToolsPage.vue'
 import SoundsPage from './SoundsPage.vue'
 import { SOON_PAGES } from './tabs'
 
@@ -31,6 +32,7 @@ export const router = createRouter({
     { path: '/scenes', component: ScenesPage },
     { path: '/music', component: MusicPage },
     { path: '/counters', component: CountersPage },
+    { path: '/screen-tools', component: ScreenToolsPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     // A page not built yet has a grey tab; its URL leads home.
     ...SOON_PAGES.map((p) => ({ path: p.path, redirect: '/' })),

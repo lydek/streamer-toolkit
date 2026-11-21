@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -37,6 +37,7 @@ pub(crate) enum OverlayKind {
     Bgm,
     Counter,
     Marathon,
+    Break,
 }
 
 impl OverlayKind {
@@ -50,6 +51,7 @@ impl OverlayKind {
             "bgm" => Some(Self::Bgm),
             "counter" => Some(Self::Counter),
             "marathon" => Some(Self::Marathon),
+            "break" => Some(Self::Break),
             _ => None,
         }
     }
@@ -74,6 +76,7 @@ pub(crate) struct OverlayConnections {
     bgm: AtomicUsize,
     counter: AtomicUsize,
     marathon: AtomicUsize,
+    break_card: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -89,6 +92,7 @@ impl Default for OverlayConnections {
             bgm: AtomicUsize::default(),
             counter: AtomicUsize::default(),
             marathon: AtomicUsize::default(),
+            break_card: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -105,6 +109,7 @@ impl OverlayConnections {
             Some(OverlayKind::Bgm) => &self.bgm,
             Some(OverlayKind::Counter) => &self.counter,
             Some(OverlayKind::Marathon) => &self.marathon,
+            Some(OverlayKind::Break) => &self.break_card,
             None => &self.other,
         }
     }
@@ -140,6 +145,7 @@ impl OverlayConnections {
             bgm: load(&self.bgm),
             counter: load(&self.counter),
             marathon: load(&self.marathon),
+            break_card: load(&self.break_card),
             other: load(&self.other),
         }
     }
@@ -192,6 +198,8 @@ pub(crate) struct OverlayCounts {
     bgm: usize,
     counter: usize,
     marathon: usize,
+    #[serde(rename = "break")]
+    break_card: usize,
     other: usize,
 }
 
@@ -285,6 +293,9 @@ struct SnapshotPayload {
     /// At most one: the latest sub marathon timer.
     #[serde(rename = "counter.marathon")]
     counter_marathon: Vec<counter::MarathonEvent>,
+    /// At most one: the break card.
+    #[serde(rename = "screen.break")]
+    screen_break: Vec<overlays::BreakEvent>,
     /// At most one: the chat overlay's text size.
     #[serde(rename = "chat.text_size")]
     chat_text_size: Vec<crate::templates::ChatTextSizeEvent>,
@@ -314,6 +325,7 @@ mod tests {
                 bgm: 1,
                 counter: 0,
                 marathon: 0,
+                break_card: 0,
                 other: 2
             }
         );
@@ -334,6 +346,7 @@ mod tests {
                 bgm: 0,
                 counter: 0,
                 marathon: 0,
+                break_card: 0,
                 other: 0
             }
         );
@@ -376,6 +389,18 @@ mod tests {
         bus.retain("counter.values", 1);
         bus.retain("counter.marathon", 1);
         bus.retain("chat.text_size", 1);
+        bus.retain("screen.break", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "k".into(),
+            event_type: "screen.break",
+            version: 1,
+            occurred_at: "2026-11-22T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({
+                "shown": true, "text": "休息", "endText": "馬上回來", "endsAt": "2026-11-22T10:10:00.000Z",
+                "mode": "minutes", "minutes": 10, "untilTime": "20:00"
+            }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "t".into(),
             event_type: "chat.text_size",
@@ -494,6 +519,9 @@ mod tests {
         let marathon = &wire["payload"]["counter.marathon"][0];
         assert_required("MarathonEvent", marathon);
         assert_required("MarathonPayload", &marathon["payload"]);
+        let card = &wire["payload"]["screen.break"][0];
+        assert_required("BreakEvent", card);
+        assert_required("BreakPayload", &card["payload"]);
         let size = &wire["payload"]["chat.text_size"][0];
         assert_required("ChatTextSizeEvent", size);
         assert_required("ChatTextSizePayload", &size["payload"]);

@@ -45,7 +45,7 @@ function snapshot(state: object) {
       'obs.status': [],
       'obs.state': [{ payload: state }],
       'presentation.queue': [],
-      'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [],
+      'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'chat.text_size': [],
       'chat.message': [],
     },
   })

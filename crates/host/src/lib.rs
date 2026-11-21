@@ -327,6 +327,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             }
         }
     });
+    let screen_tools = overlays::start(config.db.clone(), bus.clone());
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
         modules.clone(),
@@ -451,6 +452,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             .merge(bgm::file_routes(music))
             .merge(
                 counter::routes(counters).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(
+                overlays::routes(screen_tools).layer(middleware::from_fn_with_state(
                     admin.clone(),
                     admin::require_token,
                 )),

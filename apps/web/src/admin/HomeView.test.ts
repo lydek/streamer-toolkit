@@ -109,7 +109,7 @@ describe('HomeView stage homes', () => {
     expect(put).toHaveBeenCalledTimes(1)
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
       params: { query: { stage: 'live' } },
-      body: ['pending', 'stats', 'feed', 'queue', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+      body: ['pending', 'stats', 'feed', 'queue', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'screen-tools'],
     })
     // The other stages keep their own orders: 開播前 still has its chat tile, 下播後 stays empty.
     await pickStage('開播前')
@@ -285,7 +285,7 @@ describe('HomeView arrange mode', () => {
     // 開播前's home, without the chat tile; the other stages are not sent.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
       params: { query: { stage: 'before' } },
-      body: ['checklist', 'scene', 'bgm', 'sound', 'alerts'],
+      body: ['checklist', 'scene', 'screen-tools', 'bgm', 'sound', 'alerts'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()

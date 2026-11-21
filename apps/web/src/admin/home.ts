@@ -137,6 +137,8 @@ export interface LiveState {
   counters?: Schemas['CounterValue'][]
   /** The sub marathon timer, with the time its remaining time was taken. */
   marathon?: Schemas['MarathonEvent']
+  /** The break card. */
+  breakCard?: Schemas['BreakPayload']
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -154,6 +156,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       bgm: msg.payload['bgm.player'].at(-1),
       counters: msg.payload['counter.values'].at(-1)?.payload.counters,
       marathon: msg.payload['counter.marathon'].at(-1),
+      breakCard: msg.payload['screen.break'].at(-1)?.payload,
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -167,6 +170,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'bgm.player') next.bgm = msg
   if (msg.type === 'counter.values') next.counters = msg.payload.counters
   if (msg.type === 'counter.marathon') next.marathon = msg
+  if (msg.type === 'screen.break') next.breakCard = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'chat.removed' && next.lastChat && removes(msg.payload, next.lastChat)) next.lastChat = undefined
   if (msg.type === 'alert') next.lastAlert = msg
@@ -257,6 +261,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'scene', icon: 'pi pi-images', tint: 'blue' },
   { id: 'bgm', icon: 'pi pi-headphones', tint: 'yellow' },
   { id: 'counter', icon: 'pi pi-hashtag', tint: 'red' },
+  { id: 'screen-tools', icon: 'pi pi-desktop', tint: 'yellow' },
 ]
 
 /**
@@ -281,8 +286,8 @@ export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
 
 /** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). */
 export const STAGE_DEFAULTS: Record<Stage, string[]> = {
-  before: ['checklist', 'scene', 'bgm', 'sound', 'alerts', 'chat'],
-  live: ['pending', 'stats', 'feed', 'queue', 'chat', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+  before: ['checklist', 'scene', 'screen-tools', 'bgm', 'sound', 'alerts', 'chat'],
+  live: ['pending', 'stats', 'feed', 'queue', 'chat', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'screen-tools'],
   after: ['summary', 'counter', 'redemption', 'checkin', 'chat'],
 }
 export const stageDefaults = (stage: Stage, tiles = TILES) =>

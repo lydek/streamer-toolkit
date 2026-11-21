@@ -83,7 +83,7 @@ function start(): Incoming[] {
         sample(2, 'Someone', null, t('preview.sample.second')),
         sample(3, 'Streamer', '#9146FF', t('preview.sample.third')),
       ]
-  return [{ type: 'snapshot', version: 1, seq: chat.lastSeq, payload: { 'chat.removed': [], 'chat.message': messages, 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': sizeEvent ? [sizeEvent] : [] } }]
+  return [{ type: 'snapshot', version: 1, seq: chat.lastSeq, payload: { 'chat.removed': [], 'chat.message': messages, 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'chat.text_size': sizeEvent ? [sizeEvent] : [] } }]
 }
 </script>
 

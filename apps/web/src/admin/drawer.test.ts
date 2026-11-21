@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, h, nextTick, ref } from 'vue'
 import { i18n } from '../i18n'
 import AppDrawer from './AppDrawer.vue'
-import { drawerId, focusTarget, onDrawerSubmit, useDrawer, useDrawerSetting } from './drawer'
+import { drawerId, focusTarget, onDrawerSubmit, settingQueue, useDrawer, useDrawerSetting } from './drawer'
 import { testRouter } from './testRouter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -186,6 +186,38 @@ describe('useDrawerSetting', () => {
     fine.value.value = 'new'
     await fine.commit()
     expect(drawer.error.value).toContain('boom')
+  })
+
+  it('builds the next PUT after the previous one saved when settings share a queue', async () => {
+    // One PUT carries both fields, so the second save must see the first one's saved value.
+    const title = ref('old')
+    const end = ref('old')
+    const sent: string[][] = []
+    let release = () => {}
+    const put = async (patch: { title?: string; end?: string }) => {
+      sent.push([patch.title ?? title.value, patch.end ?? end.value])
+      if (sent.length === 1) await new Promise<void>((r) => (release = r))
+    }
+    const scope = effectScope()
+    const [a, b] = scope.run(() => {
+      const queue = settingQueue()
+      return [
+        useDrawerSetting(title, (v) => put({ title: v }), queue),
+        useDrawerSetting(end, (v) => put({ end: v }), queue),
+      ]
+    })!
+    cleanups.push(() => scope.stop())
+    a.value.value = 'new title'
+    const first = a.commit()
+    b.value.value = 'new end'
+    const second = b.commit()
+    await nextTick()
+    release()
+    expect(await Promise.all([first, second])).toEqual([true, true])
+    expect(sent).toEqual([
+      ['new title', 'old'],
+      ['new title', 'new end'],
+    ])
   })
 })
 

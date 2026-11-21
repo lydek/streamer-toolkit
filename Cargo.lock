@@ -1914,6 +1914,7 @@ dependencies = [
  "counter",
  "integrations",
  "mime_guess",
+ "overlays",
  "redemption",
  "rust-embed",
  "secrecy",
@@ -3100,6 +3101,24 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "overlays"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "toolkit-core",
+ "tower",
+ "tracing",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
