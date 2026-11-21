@@ -1184,6 +1184,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest sample; `null` until the first one (2 seconds after start). */
+        get: operations["performance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/queue/clear": {
         parameters: {
             query?: never;
@@ -3224,6 +3241,21 @@ export interface components {
             port: number;
             status: components["schemas"]["ObsStatusPayload"];
         };
+        /** @description OBS's numbers; absent while OBS is not connected. */
+        ObsPerformance: {
+            /**
+             * Format: int64
+             * @description The stream output's bitrate over the last 60 s; `null` while not streaming.
+             */
+            bitrate_kbps?: number | null;
+            /** Format: double */
+            cpu_percent: number;
+            /**
+             * Format: double
+             * @description Frames dropped (rendering and the stream output) in the last 60 s, in percent; `null` before two readings.
+             */
+            dropped_percent?: number | null;
+        };
         ObsSettingsBody: {
             /** @description Host name or IPv4 address. */
             host: string;
@@ -3321,6 +3353,24 @@ export interface components {
             /** @description `card_pack.invalid`, `card_pack.too_large` or `card_pack.script`. */
             code: string;
             detail: string;
+        };
+        Performance: {
+            /**
+             * Format: double
+             * @description This app's own process.
+             */
+            app_cpu_percent: number;
+            /** Format: int64 */
+            app_memory_mb: number;
+            /** Format: double */
+            cpu_percent: number;
+            /** Format: int64 */
+            memory_total_mb: number;
+            /** Format: int64 */
+            memory_used_mb: number;
+            obs: components["schemas"]["ObsPerformance"] | null;
+            /** @description Dropped frames above 5 % in the last 60 s. */
+            warning: boolean;
         };
         /** @enum {string} */
         Period: "stream" | "month" | "all";
@@ -7161,6 +7211,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverlayCounts"];
+                };
+            };
+        };
+    };
+    performance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Performance"] | null;
                 };
             };
         };

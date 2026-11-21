@@ -5,8 +5,8 @@ use utoipa::OpenApi;
 
 use crate::{
     admin, backup, card_packs, chat_display, chat_dock, chat_log, diagnostics, event_feed,
-    home_tiles, leaderboard, obs, overlay, overlay_test, queue, rehearsal, stream_summary, tab_bar,
-    templates, text_size, update,
+    home_tiles, leaderboard, obs, overlay, overlay_test, performance, queue, rehearsal,
+    stream_summary, tab_bar, templates, text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -61,6 +61,7 @@ use crate::{
         diagnostics::connections,
         diagnostics::logs,
         diagnostics::report,
+        performance::performance,
         leaderboard::leaderboard,
         leaderboard::bots,
         rehearsal::run_script,

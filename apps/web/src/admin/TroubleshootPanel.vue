@@ -1,5 +1,6 @@
 <template>
   <div class="stack">
+    <PerformancePanel />
     <section class="stack" aria-labelledby="ts-connections">
       <div class="head">
         <h3 id="ts-connections">{{ t('troubleshoot.connections') }}</h3>
@@ -67,6 +68,7 @@ import { ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { type Schemas, api, client } from './api'
+import PerformancePanel from './PerformancePanel.vue'
 import { saveFile } from './save'
 
 type Level = 'error' | 'warn' | 'info'

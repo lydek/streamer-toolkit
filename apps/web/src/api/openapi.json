@@ -3556,6 +3556,33 @@
         }
       }
     },
+    "/api/admin/performance": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The latest sample; `null` until the first one (2 seconds after start).",
+        "operationId": "performance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Performance"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/queue/clear": {
       "post": {
         "tags": [
@@ -9302,6 +9329,36 @@
           }
         }
       },
+      "ObsPerformance": {
+        "type": "object",
+        "description": "OBS's numbers; absent while OBS is not connected.",
+        "required": [
+          "cpu_percent"
+        ],
+        "properties": {
+          "bitrate_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The stream output's bitrate over the last 60 s; `null` while not streaming.",
+            "minimum": 0
+          },
+          "cpu_percent": {
+            "type": "number",
+            "format": "double"
+          },
+          "dropped_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Frames dropped (rendering and the stream output) in the last 60 s, in percent; `null` before two readings."
+          }
+        }
+      },
       "ObsSettingsBody": {
         "type": "object",
         "required": [
@@ -9599,6 +9656,58 @@
           },
           "detail": {
             "type": "string"
+          }
+        }
+      },
+      "Performance": {
+        "type": "object",
+        "required": [
+          "cpu_percent",
+          "memory_used_mb",
+          "memory_total_mb",
+          "app_cpu_percent",
+          "app_memory_mb",
+          "obs",
+          "warning"
+        ],
+        "properties": {
+          "app_cpu_percent": {
+            "type": "number",
+            "format": "double",
+            "description": "This app's own process."
+          },
+          "app_memory_mb": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "cpu_percent": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory_total_mb": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "memory_used_mb": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "obs": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ObsPerformance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warning": {
+            "type": "boolean",
+            "description": "Dropped frames above 5 % in the last 60 s."
           }
         }
       },

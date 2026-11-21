@@ -28,7 +28,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     settings,
-    streaming::{StreamingError, StreamingSoftware, StreamingState},
+    streaming::{StreamingError, StreamingSoftware, StreamingState, StreamingStats},
 };
 use utoipa::ToSchema;
 
@@ -251,6 +251,10 @@ impl StreamingSoftware for ObsLink {
     ) -> Result<(), StreamingError> {
         self.check(scene, Some(item))?;
         self.control.set_item_enabled(scene, item, enabled).await
+    }
+
+    async fn stats(&self) -> Result<StreamingStats, StreamingError> {
+        self.control.stats().await
     }
 
     async fn set_item_locked(
