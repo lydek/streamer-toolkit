@@ -126,6 +126,8 @@ impl PlaySound {
 
 const PLAY: &str = "sound.play";
 const PLAY_VERSION: u32 = 1;
+const STOPPED: &str = "sound.stopped";
+const STOPPED_VERSION: u32 = 1;
 
 /// A `sound.play` event exactly as `/ws/overlay` sends it: a reward sound for `/overlay/sound/`, which plays them
 /// one at a time in order. Not kept in snapshots, so nothing replays after a reload or restart.
@@ -149,6 +151,32 @@ enum SoundPlayType {
     SoundPlay,
 }
 
+/// A `sound.stopped` event exactly as `/ws/overlay` sends it: `/overlay/sound/` silences the test sound playing
+/// (`sound.play` with `source=simulation`) and drops the waiting ones; reward sounds play on. Not kept in snapshots.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundStoppedEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: SoundStoppedType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: SoundStoppedPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum SoundStoppedType {
+    #[serde(rename = "sound.stopped")]
+    SoundStopped,
+}
+
+/// Empty: the event itself is the stop.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SoundStoppedPayload {}
+
 impl SoundService {
     /// Plays reward sounds as `presenter` paces them, and test sounds at once, by publishing on `bus`.
     pub fn new(
@@ -157,10 +185,26 @@ impl SoundService {
         bus: Arc<EventBus>,
         presenter: Arc<Presenter>,
     ) -> Self {
-        Self::with_player(data_dir, modules, presenter, move |id, volume, source| {
-            publish_play(&bus, id, volume, source)
-        })
+        let stopping = bus.clone();
+        Self::with_player(
+            data_dir,
+            modules,
+            presenter,
+            move |id, volume, source| publish_play(&bus, id, volume, source),
+            move || publish_stopped(&stopping),
+        )
     }
+}
+
+fn publish_stopped(bus: &EventBus) {
+    bus.publish(Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type: STOPPED,
+        version: STOPPED_VERSION,
+        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        source: Source::Simulation,
+        payload: serde_json::json!({}),
+    });
 }
 
 fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
@@ -242,6 +286,7 @@ pub fn routes(service: Arc<SoundService>) -> Router {
         )
         .route("/api/admin/sounds/slots/{slot}", put(set_slot))
         .route("/api/admin/sounds/volume", put(set_volume))
+        .route("/api/admin/sounds/stop", post(stop_test_sounds))
         .route("/api/admin/sounds/{id}/play", post(play_sound))
         .route("/api/admin/sounds/{id}/duration", put(set_duration))
         .with_state(service)
@@ -288,6 +333,19 @@ pub(crate) async fn play_sound(
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => sound_error(e),
     }
+}
+
+/// Stops what 「在 OBS 播放」 sent: the test sound playing on `/overlay/sound/` and the waiting ones
+/// (`sound.stopped`). Reward sounds play on.
+#[utoipa::path(
+    post,
+    path = "/api/admin/sounds/stop",
+    tag = "admin",
+    responses((status = 204))
+)]
+pub(crate) async fn stop_test_sounds(State(s): State<Arc<SoundService>>) -> StatusCode {
+    s.stop_tests();
+    StatusCode::NO_CONTENT
 }
 
 /// Chooses what a slot plays.
@@ -487,10 +545,11 @@ async fn sound_file(State(s): State<Arc<SoundService>>, Path(id): Path<String>) 
         delete_sound,
         set_slot,
         play_sound,
+        stop_test_sounds,
         set_duration,
         set_volume
     ),
-    components(schemas(SoundPlayEvent))
+    components(schemas(SoundPlayEvent, SoundStoppedEvent))
 )]
 struct SoundApi;
 

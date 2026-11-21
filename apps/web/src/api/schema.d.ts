@@ -1114,6 +1114,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sounds/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stops what 「在 OBS 播放」 sent: the test sound playing on `/overlay/sound/` and the waiting ones
+         *     (`sound.stopped`). Reward sounds play on.
+         */
+        post: operations["stop_test_sounds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds/volume": {
         parameters: {
             query?: never;
@@ -2809,6 +2829,25 @@ export interface components {
         };
         /** @enum {string} */
         SoundPlayType: "sound.play";
+        /**
+         * @description A `sound.stopped` event exactly as `/ws/overlay` sends it: `/overlay/sound/` silences the test sound playing
+         *     (`sound.play` with `source=simulation`) and drops the waiting ones; reward sounds play on. Not kept in snapshots.
+         */
+        SoundStoppedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["SoundStoppedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["SoundStoppedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description Empty: the event itself is the stop. */
+        SoundStoppedPayload: Record<string, never>;
+        /** @enum {string} */
+        SoundStoppedType: "sound.stopped";
         SoundUpdate: {
             /** @description 1–100 characters after trimming. */
             label: string;
@@ -5976,6 +6015,23 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+        };
+    };
+    stop_test_sounds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

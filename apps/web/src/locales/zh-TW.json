@@ -785,6 +785,7 @@
     },
     "rewards": "頻道點數獎勵",
     "playInObs": "在 OBS 播放",
+    "stopInObs": "停止播放",
     "playedInObs": "已送到 OBS 播放。"
   },
   "feed": {

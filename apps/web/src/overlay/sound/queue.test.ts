@@ -25,4 +25,28 @@ describe('soundQueue', () => {
     enqueue(sound(4))
     expect(started.at(-1)).toBe('/sounds/s4')
   })
+
+  it("drops only test sounds and says whether the one playing is one", async () => {
+    const started: string[] = []
+    const finish: (() => void)[] = []
+    const enqueue = soundQueue((s) => {
+      started.push(s.url)
+      return new Promise((done) => finish.push(done))
+    })
+    enqueue(sound(1), true)
+    enqueue(sound(2))
+    enqueue(sound(3), true)
+    await Promise.resolve()
+    expect(enqueue.clearTests()).toBe(true)
+    finish.shift()!()
+    await new Promise((r) => setTimeout(r))
+    expect(started).toEqual(['/sounds/s1', '/sounds/s2'])
+    enqueue(sound(4), true)
+    expect(enqueue.clearTests()).toBe(false)
+    finish.shift()!()
+    await new Promise((r) => setTimeout(r))
+    expect(started).toEqual(['/sounds/s1', '/sounds/s2'])
+    enqueue(sound(5))
+    expect(started.at(-1)).toBe('/sounds/s5')
+  })
 })

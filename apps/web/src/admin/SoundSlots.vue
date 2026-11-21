@@ -15,12 +15,12 @@
         />
         <Button
           v-if="playable"
-          :label="t('sound.playInObs')"
-          icon="pi pi-play"
+          :label="t(testing === s.slot ? 'sound.stopInObs' : 'sound.playInObs')"
+          :icon="testing === s.slot ? 'pi pi-stop' : 'pi pi-play'"
           outlined
           :aria-describedby="`sound-slot-${s.slot}`"
-          :disabled="!isFile(fields[i].value.value)"
-          @click="play(fields[i].value.value)"
+          :disabled="testing !== s.slot && !isFile(fields[i].value.value)"
+          @click="testing === s.slot ? stop() : play(s.slot, fields[i].value.value)"
         />
       </div>
     </template>
@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Select from 'primevue/select'
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
@@ -65,10 +65,33 @@ const options = computed(() => [
 
 const isFile = (v: string) => v !== DEFAULT && v !== 'silent'
 
-async function play(id: string) {
+// The slot whose sound was last sent to OBS: its button stops it until the sound's length has passed (or, not yet
+// measured, until pressed).
+const testing = ref<string>()
+let ended: ReturnType<typeof setTimeout> | undefined
+function testOver() {
+  clearTimeout(ended)
+  testing.value = undefined
+}
+onBeforeUnmount(() => clearTimeout(ended))
+
+async function play(slot: string, id: string) {
   try {
     await api(client.POST('/api/admin/sounds/{id}/play', { params: { path: { id } } }))
+    testOver()
+    testing.value = slot
+    const ms = library.value?.sounds.find((s) => s.id === id)?.duration_ms
+    if (ms) ended = setTimeout(testOver, ms)
     emit('played')
+  } catch (e) {
+    emit('error', e)
+  }
+}
+
+async function stop() {
+  try {
+    await api(client.POST('/api/admin/sounds/stop'))
+    testOver()
   } catch (e) {
     emit('error', e)
   }

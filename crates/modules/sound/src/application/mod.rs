@@ -37,6 +37,8 @@ pub enum SoundError {
 
 /// Plays a library sound (ID, volume) on `/overlay/sound/`; `infrastructure` publishes it on the bus.
 type Play = Arc<dyn Fn(&str, u8, Source) + Send + Sync>;
+/// Silences the test sounds on `/overlay/sound/`; `infrastructure` publishes it on the bus.
+type StopTests = Arc<dyn Fn() + Send + Sync>;
 
 /// How long a reward sound holds the presentation queue before the admin window has measured it.
 const UNMEASURED: Duration = Duration::from_secs(5);
@@ -50,6 +52,7 @@ pub struct SoundService {
     modules: Arc<Modules>,
     presenter: Arc<Presenter>,
     play: Play,
+    stop_tests: StopTests,
     /// What became of the latest reward sounds.
     recent: Recent,
 }
@@ -60,12 +63,14 @@ impl SoundService {
         modules: Arc<Modules>,
         presenter: Arc<Presenter>,
         play: impl Fn(&str, u8, Source) + Send + Sync + 'static,
+        stop_tests: impl Fn() + Send + Sync + 'static,
     ) -> Self {
         Self {
             data_dir,
             modules,
             presenter,
             play: Arc::new(play),
+            stop_tests: Arc::new(stop_tests),
             recent: Recent::default(),
         }
     }
@@ -135,6 +140,11 @@ impl SoundService {
         let volume = domain::scaled(entry.volume, self.volume());
         (self.play)(&entry.id, volume, Source::Simulation);
         Ok(())
+    }
+
+    /// Stops what the test button sent: the test sound playing and the waiting ones. Reward sounds play on.
+    pub fn stop_tests(&self) {
+        (self.stop_tests)();
     }
 
     fn folder(&self) -> PathBuf {
