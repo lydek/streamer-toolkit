@@ -299,10 +299,6 @@
       "name": "計數器",
       "desc": "死亡次數等計數，可以用聊天指令加減。"
     },
-    "scenes": {
-      "name": "場景與模式",
-      "desc": "切換 OBS 場景、顯示或隱藏物件，切換直播模式。"
-    },
     "music": {
       "name": "背景音樂",
       "desc": "依場景自動播放的背景音樂。"
@@ -622,7 +618,8 @@
       "alerts": "特效",
       "redemption": "兌換紀錄",
       "checkin": "打卡",
-      "sound": "音效"
+      "sound": "音效",
+      "scene": "OBS 場景"
     }
   },
   "settings": {
@@ -768,6 +765,38 @@
     "playInObs": "在 OBS 播放",
     "playedInObs": "已送到 OBS 播放。"
   },
+  "scene": {
+    "notConnected": "OBS 未連線",
+    "connect": "前往連線設定",
+    "scenes": "場景",
+    "onAir": "直播中",
+    "items": "「{scene}」的物件",
+    "order": "由上到下＝由前到後",
+    "noItems": "這個場景沒有物件。",
+    "item": "物件",
+    "kind": "類型",
+    "shown": "顯示",
+    "locked": "鎖定",
+    "showItem": "顯示「{item}」",
+    "lockItem": "鎖定「{item}」",
+    "kinds": {
+      "scene": "場景",
+      "group": "群組",
+      "browser": "瀏覽器",
+      "text": "文字",
+      "game": "遊戲擷取",
+      "window": "視窗擷取",
+      "monitor": "螢幕擷取",
+      "camera": "視訊擷取裝置",
+      "image": "圖片",
+      "slideshow": "圖片投影片",
+      "media": "媒體",
+      "color": "色塊",
+      "audioIn": "音訊輸入",
+      "audioOut": "音訊輸出",
+      "appAudio": "應用程式音訊"
+    }
+  },
   "simulate": {
     "heading": "事件模擬器",
     "hint": "送出的事件標記為模擬（source=simulation），只顯示在 Overlay，不寫入任何正式紀錄。",
@@ -903,7 +932,11 @@
       "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",
       "invalid_address": "OBS 位址格式不正確。",
       "secret_store_failed": "無法存取 Windows 認證管理員中的 OBS 密碼。",
-      "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。"
+      "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。",
+      "not_connected": "OBS 沒有連線。",
+      "not_found": "OBS 裡找不到這個場景或物件，可能剛被改名或刪除。",
+      "request_failed": "OBS 沒有完成這個動作。",
+      "nothing_to_change": "沒有要變更的項目。"
     },
     "port": {
       "invalid": "連接埠必須介於 1024 到 65535。",

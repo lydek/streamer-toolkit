@@ -56,6 +56,8 @@ use crate::{
         text_size::set_text_size,
         obs::obs_overview,
         obs::update_obs,
+        obs::switch_scene,
+        obs::update_item,
         templates::chat_template,
         templates::select_chat_template,
         templates::alert_template,

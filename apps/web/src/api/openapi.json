@@ -1246,6 +1246,113 @@
         }
       }
     },
+    "/api/admin/obs/item": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Shows, hides, locks or unlocks a scene item; `obs.state` shows the change once OBS has made it.",
+        "operationId": "update_item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/obs/scene": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts a scene on air; `obs.state` shows the switch once OBS has made it.",
+        "operationId": "switch_scene",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/overlays": {
       "get": {
         "tags": [
@@ -4032,6 +4139,37 @@
           }
         }
       },
+      "ItemBody": {
+        "type": "object",
+        "required": [
+          "scene",
+          "item"
+        ],
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Shows or hides the item; absent leaves it."
+          },
+          "item": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The item's `id` in `obs.state`."
+          },
+          "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Locks or unlocks the item; absent leaves it."
+          },
+          "scene": {
+            "type": "string"
+          }
+        }
+      },
       "LogEvent": {
         "type": "object",
         "description": "A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind\ndoes not have are left out; names and texts are raw viewer text.",
@@ -4968,9 +5106,20 @@
             "items": {
               "$ref": "#/components/schemas/SceneItem"
             },
-            "description": "The scene's own items; items inside a group are not listed."
+            "description": "The scene's own items, front to back (as the program's source list shows them); items inside a group are\nnot listed."
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SceneBody": {
+        "type": "object",
+        "required": [
+          "scene"
+        ],
+        "properties": {
+          "scene": {
             "type": "string"
           }
         }
@@ -4980,7 +5129,9 @@
         "required": [
           "id",
           "source",
-          "enabled"
+          "enabled",
+          "locked",
+          "kind"
         ],
         "properties": {
           "enabled": {
@@ -4991,6 +5142,14 @@
             "type": "integer",
             "format": "int64",
             "description": "Unique within its scene."
+          },
+          "kind": {
+            "type": "string",
+            "description": "What the source is: the program's input kind (OBS: `browser_source`, `game_capture`…), `scene` for a nested\nscene, `group` for a group; empty when the program does not say."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "Whether the item is locked against moving it by mistake in the program."
           },
           "source": {
             "type": "string",

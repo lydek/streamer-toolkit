@@ -173,8 +173,8 @@ apps/
 
 ### OBS 連線
 - 用 `obws` 連 OBS 內建的 obs-websocket 5，不開 TLS。位址存在 `settings.json` 的 `obs.host`／`obs.port`（預設 `127.0.0.1`／`4455`）；密碼存 Windows Credential Manager，取出後立即包成 `SecretString`，不寫入 `settings.json` 與 log；沒設密碼就不帶驗證連線（OBS 關閉驗證時這是正常狀態）。交握時只送 challenge 回應，不送密碼本身。
-- 直播軟體介面：場景、物件、輸入與輸出的狀態定義在 `core` 的 `streaming`（`StreamingState` 與 `StreamingSoftware` trait），OBS 只是它的一種實作；之後的場景、模式等功能只透過這個介面，不直接用 `obws`。目前只讀狀態，切場景、顯示物件、靜音等指令等功能需要時再加。
-- 連上後先讀一次完整狀態（目前場景、每個場景的物件與是否顯示、每個輸入是否靜音、是否在串流與錄影），之後依 OBS 事件更新：切場景、物件顯示、靜音、串流與錄影狀態直接更新；新增、刪除、改名或重排場景、物件、輸入時重新讀一次。群組裡的物件不列出。斷線時狀態清空（場景為 `null`，表示未知），重連後重新讀取。狀態以事件 `obs.state` 發布，`payload` 是整份狀態；管理 UI 頁首依它顯示「串流中」「錄影中」。
+- 直播軟體介面：場景、物件、輸入與輸出的狀態定義在 `core` 的 `streaming`（`StreamingState` 與 `StreamingSoftware` trait），OBS 只是它的一種實作；之後的場景、模式等功能只透過這個介面，不直接用 `obws`。指令目前有切換場景、顯示或隱藏物件、鎖定物件，透過狀態所用的同一條連線送出；結果不從指令的回應更新，而是等 OBS 的事件反映到狀態。靜音等其他指令等功能需要時再加。
+- 連上後先讀一次完整狀態（目前場景、每個場景的物件與是否顯示、是否鎖定、來源類型，物件依 OBS 來源清單由前到後排列；每個輸入是否靜音、是否在串流與錄影），之後依 OBS 事件更新：切場景、物件顯示與鎖定、靜音、串流與錄影狀態直接更新；新增、刪除、改名或重排場景、物件、輸入時重新讀一次。群組裡的物件不列出。斷線時狀態清空（場景為 `null`，表示未知），重連後重新讀取。狀態以事件 `obs.state` 發布，`payload` 是整份狀態；管理 UI 頁首依它顯示「串流中」「錄影中」。
 - 連不上或斷線時以指數退避重連（1 秒起，最多 60 秒，與 EventSub 相同）；連上後重新從 1 秒計算。每次連線嘗試（含交握與版本檢查）最多 10 秒。
 - 狀態（事件 `obs.status`，`payload` 為 `state` 與 `reason`；`reason` 是固定代碼，`connected` 與剛啟動時為 `null`）：
   - `connected`：已連上。
@@ -185,6 +185,7 @@ apps/
   - `GET` 回傳位址、是否已設密碼（`password_set`，不回傳密碼本身）與目前狀態；讀不到 Credential Manager 時回 500 `obs.secret_store_failed`。
   - `PUT` 修改位址與密碼（`password` 省略表示不變，空字串表示刪除），修改後立即用新設定重連，並清掉舊連線的場景與輸出狀態；被取代的舊連線不再寫入狀態。host 只接受主機名稱與 IPv4、port 不得為 0，否則回 400 `obs.invalid_address`。
   - `PUT` 先存 `settings.json` 再寫密碼：密碼寫入失敗時新位址仍會生效，回 500 `obs.secret_store_failed`；存不了 `settings.json` 時回 500 `settings.save_failed`，位址、密碼與連線都維持原樣。
+- 管理 API `PUT /api/admin/obs/scene`（切換場景，`scene`）與 `PUT /api/admin/obs/item`（`scene`、`item` 加上 `enabled` 和／或 `locked`，兩者都沒給回 400 `obs.nothing_to_change`）：成功回 204；沒連上 OBS 回 409 `obs.not_connected`；目前狀態或 OBS 找不到場景或物件回 404 `obs.not_found`；OBS 拒絕或送出時連線中斷回 502 `obs.request_failed`。場景頁屬於模組 `scene`，停用只隱藏它的頁面與功能磚。
 
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。

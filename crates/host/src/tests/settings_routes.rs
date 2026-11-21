@@ -85,6 +85,53 @@ async fn saving_the_same_client_id_keeps_the_sign_in() {
 }
 
 #[tokio::test]
+async fn obs_commands_need_a_connection_and_something_to_change() {
+    let dir = std::env::temp_dir().join(format!("st-host-obs-cmd-{}", std::process::id()));
+    // Port 1 refuses at once, so a running OBS on this machine cannot answer.
+    settings::update(&dir, |s| s.obs.port = 1).unwrap();
+    let mut config = test_config();
+    config.data_dir = dir.clone();
+    let app = router(config).unwrap();
+    let put = |path: &'static str, body: &'static str| {
+        get_req(path, "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let code = |res: axum::response::Response| async move {
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["code"].clone()
+    };
+
+    let res = app
+        .clone()
+        .oneshot(put("/api/admin/obs/scene", r#"{"scene":"Live"}"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    assert_eq!(code(res).await, "obs.not_connected");
+    let res = app
+        .clone()
+        .oneshot(put(
+            "/api/admin/obs/item",
+            r#"{"scene":"Live","item":1,"enabled":false}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    let res = app
+        .oneshot(put("/api/admin/obs/item", r#"{"scene":"Live","item":1}"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(code(res).await, "obs.nothing_to_change");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn obs_password_goes_to_the_secret_store_only() {
     let dir = std::env::temp_dir().join(format!("st-host-obs-{}", std::process::id()));
     let secrets = Arc::new(MemSecrets::default());
