@@ -16,12 +16,11 @@ import {
   availableTiles,
   dropTile,
   errorToast,
-  groupPosition,
-  groupTiles,
+  homeTiles,
   moveTile,
   obsLight,
   successToast,
-  tileGroups,
+  tilePosition,
   twitchLight,
   useLiveEvents,
   useThrottled,
@@ -268,24 +267,26 @@ describe('useThrottled', () => {
   })
 })
 
-describe('tileGroups', () => {
-  it('drops disabled modules and empty groups', () => {
+describe('homeTiles', () => {
+  it('keeps the order and drops tiles of disabled modules, but not the ones shown always', () => {
     const tiles = [
-      { id: 'chat', group: 'live' as const, icon: '', tint: 'blue' as const },
-      { id: 'checkin', group: 'features' as const, icon: '', tint: 'blue' as const },
+      { id: 'checkin', icon: '', tint: 'blue' as const },
+      { id: 'chat', icon: '', tint: 'blue' as const },
+      { id: 'feed', icon: '', tint: 'blue' as const, always: true },
     ]
-    expect(tileGroups([{ id: 'chat', enabled: true, closed: false }, { id: 'checkin', enabled: false, closed: false }], tiles)).toEqual([
-      { group: 'live', tiles: [tiles[0]] },
-    ])
-    expect(tileGroups([{ id: 'chat', enabled: false, closed: false }], tiles)).toEqual([])
+    const modules = [
+      { id: 'chat', enabled: true, closed: false },
+      { id: 'checkin', enabled: false, closed: false },
+    ]
+    expect(homeTiles(modules, tiles).map((t) => t.id)).toEqual(['chat', 'feed'])
   })
 })
 
 describe('tile arrangement', () => {
   const tiles = [
-    { id: 'chat', group: 'live' as const, icon: '', tint: 'blue' as const },
-    { id: 'checkin', group: 'features' as const, icon: '', tint: 'blue' as const },
-    { id: 'alerts', group: 'live' as const, icon: '', tint: 'blue' as const },
+    { id: 'chat', icon: '', tint: 'blue' as const },
+    { id: 'checkin', icon: '', tint: 'blue' as const },
+    { id: 'alerts', icon: '', tint: 'blue' as const },
   ]
   const ids = (list: { id: string }[]) => list.map((t) => t.id)
 
@@ -296,26 +297,18 @@ describe('tile arrangement', () => {
     expect(ids(availableTiles(arrangedTiles(['alerts'], tiles), tiles))).toEqual(['chat', 'checkin'])
   })
 
-  it('moves within a group, past tiles of other groups, and not past the edge', () => {
-    expect(moveTile(tiles, 'alerts', -1)).toEqual(['alerts', 'checkin', 'chat'])
-    expect(moveTile(tiles, 'chat', 1)).toEqual(['alerts', 'checkin', 'chat'])
+  it('swaps a tile with its neighbour, whatever it is, and not past the edge', () => {
+    expect(moveTile(tiles, 'alerts', -1)).toEqual(['chat', 'alerts', 'checkin'])
+    expect(moveTile(tiles, 'chat', 1)).toEqual(['checkin', 'chat', 'alerts'])
     expect(moveTile(tiles, 'chat', -1)).toEqual(['chat', 'checkin', 'alerts'])
-    expect(moveTile(tiles, 'checkin', 1)).toEqual(['chat', 'checkin', 'alerts'])
+    expect(moveTile(tiles, 'alerts', 1)).toEqual(['chat', 'checkin', 'alerts'])
   })
 
-  it('drops a dragged tile into the target place and reports group positions', () => {
+  it('drops a dragged tile into the target place, anywhere, and reports positions', () => {
     expect(dropTile(tiles, 'alerts', 'chat')).toEqual(['alerts', 'chat', 'checkin'])
     expect(dropTile(tiles, 'chat', 'alerts')).toEqual(['checkin', 'alerts', 'chat'])
-    expect(groupPosition(tiles, 'alerts')).toBe(2)
-    expect(groupPosition(tiles, 'checkin')).toBe(1)
-  })
-
-  it('groups tiles in display order without empty groups', () => {
-    expect(groupTiles(tiles)).toEqual([
-      { group: 'live', tiles: [tiles[0], tiles[2]] },
-      { group: 'features', tiles: [tiles[1]] },
-    ])
-    expect(groupTiles([])).toEqual([])
+    expect(tilePosition(tiles, 'alerts')).toBe(3)
+    expect(tilePosition(tiles, 'checkin')).toBe(2)
   })
 })
 

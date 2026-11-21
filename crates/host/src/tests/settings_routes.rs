@@ -322,6 +322,29 @@ async fn home_tiles_persist_and_reject_bad_bodies() {
         serde_json::from_slice::<serde_json::Value>(&body).unwrap()
     };
 
+    // A list saved while home grouped its tiles comes back once in the order it was shown: 「直播中」 first.
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("settings.json"),
+        r#"{"home_tiles":["checkin","chat","sound","feed"]}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!(["chat", "feed", "checkin", "sound"])
+    );
+    let res = app_for(&dir)
+        .oneshot(put(r#"["checkin","chat"]"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!(["checkin", "chat"]),
+        "a flat order is kept as saved"
+    );
+    std::fs::remove_file(dir.join("settings.json")).unwrap();
+
     let app = app_for(&dir);
     assert_eq!(get(app.clone()).await, serde_json::Value::Null);
     let res = app.clone().oneshot(put("[]")).await.unwrap();

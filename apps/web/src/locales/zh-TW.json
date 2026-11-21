@@ -442,16 +442,12 @@
   "home": {
     "skip": "跳到功能磚",
     "tiles": "功能磚",
-    "groups": {
-      "live": "直播中",
-      "features": "功能"
-    },
     "pending": "待處理",
     "soon": "即將推出",
     "attention": "需要注意",
     "loadFailed": "載入失敗",
     "empty": "首頁沒有功能磚",
-    "arrange": "整理功能磚",
+    "arrange": "編輯首頁",
     "connections": "連線與 OBS 來源",
     "chatEmpty": "還沒有訊息",
     "latest": "最新：{text}",
@@ -483,14 +479,14 @@
     "restore": "還原預設",
     "earlier": "往前移",
     "later": "往後移",
-    "remove": "移除",
-    "add": "加入",
+    "remove": "隱藏",
+    "add": "加回",
     "for": "{action}：{name}",
-    "available": "可加入的功能磚",
+    "available": "隱藏的磚",
     "notEnabled": "未啟用 · 到設定開啟",
-    "moved": "{name}移到{group}第 {position} 個",
-    "removed": "已移除{name}",
-    "added": "{name}已加到{group}第 {position} 個",
+    "moved": "{name}移到第 {position} 個",
+    "removed": "已隱藏{name}",
+    "added": "{name}已加回第 {position} 個",
     "restored": "已還原預設功能磚"
   },
   "chat": {

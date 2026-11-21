@@ -16,6 +16,8 @@ use crate::admin::{ErrorBody, error};
 
 const MAX_TILES: usize = 50;
 const MAX_ID_LEN: usize = 32;
+/// The tiles of the old 「直播中」 group, which home showed before the others while it grouped its tiles.
+const OLD_LIVE_GROUP: [&str; 3] = ["chat", "alerts", "feed"];
 
 pub(crate) fn routes(data_dir: PathBuf) -> Router {
     Router::new()
@@ -31,7 +33,29 @@ pub(crate) fn routes(data_dir: PathBuf) -> Router {
     responses((status = 200, body = Option<Vec<String>>))
 )]
 pub(crate) async fn home_tiles(State(data_dir): State<PathBuf>) -> Json<Option<Vec<String>>> {
-    Json(settings::load(&data_dir).home_tiles)
+    let saved = settings::load(&data_dir);
+    if saved.home_tiles.is_none() || saved.home_tiles_flat {
+        return Json(saved.home_tiles);
+    }
+    // A list from the grouped home: saved in the order it was shown, once. If saving fails, the next read tries again.
+    let mut shown = saved.home_tiles.map(as_shown);
+    if let Ok(now) = settings::update(&data_dir, |s| {
+        if !s.home_tiles_flat {
+            s.home_tiles = s.home_tiles.take().map(as_shown);
+            s.home_tiles_flat = true;
+        }
+    }) {
+        shown = now.home_tiles;
+    }
+    Json(shown)
+}
+
+/// The old grouped order: the 「直播中」 tiles first, each group keeping its saved order.
+fn as_shown(ids: Vec<String>) -> Vec<String> {
+    let (live, rest): (Vec<_>, Vec<_>) = ids
+        .into_iter()
+        .partition(|id| OLD_LIVE_GROUP.contains(&id.as_str()));
+    live.into_iter().chain(rest).collect()
 }
 
 /// Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
@@ -60,7 +84,13 @@ pub(crate) async fn set_home_tiles(
         Some(Some(tiles)) => Some(tiles),
         Some(None) => return error(StatusCode::BAD_REQUEST, "home.invalid_tiles"),
     };
-    if settings::update(&data_dir, |s| s.home_tiles = tiles).is_err() {
+    if settings::update(&data_dir, |s| {
+        // Defaults (`None`) have no order to mark, so restoring them still writes nothing.
+        s.home_tiles_flat = tiles.is_some();
+        s.home_tiles = tiles;
+    })
+    .is_err()
+    {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed");
     }
     StatusCode::NO_CONTENT.into_response()
