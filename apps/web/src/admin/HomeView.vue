@@ -194,6 +194,26 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="feed" :title="moduleName('feed')">
+      <template #now>
+        <p v-if="feed.state === 'failed'" role="alert">{{ t('feed.loadFailed') }}</p>
+        <p v-else-if="feed.state === 'loading'">{{ t('app.loading') }}</p>
+        <template v-else-if="feed.state === 'ready'">
+          <p v-if="!feed.items.length">{{ t('feed.empty') }}</p>
+          <ol v-else class="plain feed-list">
+            <li v-for="(item, i) in feed.items" :key="i">
+              <time :datetime="item.at">{{ formatTime(item.at) }}</time>
+              <span class="feed-text">
+                {{ feedText(item) }}
+                <span v-if="item.simulated" class="tag">{{ t('feed.test') }}</span>
+              </span>
+              <span v-if="item.result" class="feed-result">{{ feedResult(item) }}</span>
+            </li>
+          </ol>
+        </template>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('sound')" />
@@ -291,6 +311,7 @@ import RedemptionList from './RedemptionList.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
 import { counterLine, stepCounter } from './counters'
+import { type FeedItem, changesFeed, feedLine, feedResult, feedText } from './feed'
 import MusicPlayer from './MusicPlayer.vue'
 import { playerLine } from './music'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
@@ -378,7 +399,22 @@ async function loadPlaylists() {
   }
 }
 watch(drawer.current, (id) => id === 'bgm' && void loadPlaylists())
+// This stream's alerts, redemptions and check-ins with what became of them; reloaded (at most once a second) when
+// a live message may have changed them.
+const feed = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: FeedItem[] }>({ state: 'loading' })
+let feedTimer: ReturnType<typeof setTimeout> | undefined
+async function loadFeed() {
+  feedTimer = undefined
+  try {
+    feed.value = { state: 'ready', items: await api(client.GET('/api/admin/feed')) }
+  } catch {
+    feed.value = { state: 'failed' }
+  }
+}
+const reloadFeedSoon = () => (feedTimer ??= setTimeout(() => void loadFeed(), 1000))
+onBeforeUnmount(() => clearTimeout(feedTimer))
 const live = useLiveEvents(2000, (msg) => {
+  if (changesFeed(msg.type)) reloadFeedSoon()
   chatLog.value = applyChat(chatLog.value, msg)
   if (changesRecords(msg)) void loadRecent()
   if (changesCheckins(msg)) void loadCheckinToday()
@@ -420,6 +456,7 @@ const lines = computed<Record<string, Line>>(() => {
         ? { state: 'ready', text: live.value.obsState?.scene ?? t('scene.notConnected') }
         : { state: status },
     bgm: status !== 'open' ? { state: status } : live.value.bgm ? { state: 'ready', text: playerLine(live.value.bgm.payload) } : { state: 'loading' },
+    feed: feed.value.state === 'ready' ? { state: 'ready', text: feedLine(feed.value.items) } : { state: feed.value.state },
     counter:
       status !== 'open'
         ? { state: status }
@@ -586,6 +623,31 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.feed-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.25rem 0;
+}
+
+.feed-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feed-result {
+  color: var(--p-text-muted-color);
+}
+
+.feed-text .tag {
+  margin-inline-start: 0.5rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85em;
+  background: var(--p-content-hover-background);
+}
+
 .counter-list li {
   display: flex;
   align-items: center;

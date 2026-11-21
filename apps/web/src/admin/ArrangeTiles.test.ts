@@ -54,10 +54,15 @@ describe('ArrangeTiles', () => {
     button('chat', 'later').focus()
     button('chat', 'later').click()
     await flushPromises()
-    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
-    expect(wrapper.props('saved')).toEqual(['alerts', 'chat', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
-    expect(document.activeElement).toBe(button('chat', 'earlier'))
+    expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
+    expect(document.activeElement).toBe(button('chat', 'later'))
     expect(live()).toBe('聊天室移到直播中第 2 個')
+    // At the edge the move button is disabled, so focus goes to the other one.
+    button('chat', 'later').click()
+    await flushPromises()
+    expect(wrapper.props('saved')).toEqual(['alerts', 'feed', 'chat', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
+    expect(document.activeElement).toBe(button('chat', 'earlier'))
+    expect(live()).toBe('聊天室移到直播中第 3 個')
   })
 
   it('puts focus back and announces nothing when the save fails', async () => {

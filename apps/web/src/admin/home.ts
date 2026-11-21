@@ -228,12 +228,15 @@ export interface Tile {
   id: string
   group: Group
   icon: string
+  /** Not a module's: shown whatever modules are on. */
+  always?: boolean
 }
 
-/** Default home tiles, one per module; a disabled module shows no tile. */
+/** Default home tiles, one per module (and the event feed); a disabled module shows no tile. */
 export const TILES: Tile[] = [
   { id: 'chat', group: 'live', icon: 'pi pi-comments' },
   { id: 'alerts', group: 'live', icon: 'pi pi-bell' },
+  { id: 'feed', group: 'live', icon: 'pi pi-list', always: true },
   { id: 'redemption', group: 'features', icon: 'pi pi-gift' },
   { id: 'checkin', group: 'features', icon: 'pi pi-check-square' },
   { id: 'sound', group: 'features', icon: 'pi pi-volume-up' },
@@ -252,7 +255,7 @@ export function groupTiles(tiles: Tile[]) {
 /** Non-empty groups in display order, each with the tiles of its enabled modules. */
 export function tileGroups(modules: Schemas['ModuleState'][], tiles = TILES) {
   const enabled = new Set(modules.filter((m) => m.enabled).map((m) => m.id))
-  return groupTiles(tiles.filter((t) => enabled.has(t.id)))
+  return groupTiles(tiles.filter((t) => t.always || enabled.has(t.id)))
 }
 
 /** The home's tiles in saved order (`null`: never arranged, the defaults). Unknown and repeated IDs are skipped. */

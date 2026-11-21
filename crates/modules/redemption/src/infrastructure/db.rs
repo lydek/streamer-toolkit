@@ -39,9 +39,11 @@ pub async fn count_between(
     .await
 }
 
-/// One redemption as the chat log merges it in.
+/// One redemption as the chat log and the event feed merge it in.
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct RedeemedEntry {
+    /// Twitch's redemption ID.
+    pub twitch_redemption_id: String,
     pub user_name: String,
     pub reward_title: String,
     pub reward_cost: u32,
@@ -58,7 +60,7 @@ pub async fn redeemed_between(
     limit: u32,
 ) -> Result<Vec<RedeemedEntry>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT user_name, reward_title, reward_cost, user_input, redeemed_at FROM \
+        "SELECT twitch_redemption_id, user_name, reward_title, reward_cost, user_input, redeemed_at FROM \
          (SELECT * FROM redemption_records WHERE (?1 IS NULL OR redeemed_at >= ?1) AND (?2 IS NULL OR redeemed_at < ?2) \
           ORDER BY redeemed_at DESC LIMIT ?3) ORDER BY redeemed_at",
     )

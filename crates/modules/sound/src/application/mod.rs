@@ -94,7 +94,9 @@ impl SoundService {
             sound: entry.map(|e| e.label).unwrap_or_default(),
             viewer: r.user_name.clone(),
         };
-        let done = self.recent.record(subject.clone(), Source::Twitch);
+        let done = self
+            .recent
+            .record(Some(r.id.clone()), subject.clone(), Source::Twitch);
         self.presenter.push(Item {
             stage: Stage::Sound,
             subject,

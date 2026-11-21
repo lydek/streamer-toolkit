@@ -202,6 +202,7 @@ pub(crate) async fn check_in_tx(
     .await
     .map_err(storage)?;
     Ok(Outcome::CheckedIn {
+        record_id: c.id.to_string(),
         viewer_id,
         total: u64::try_from(total).unwrap_or(0),
     })
@@ -320,6 +321,39 @@ impl CheckinRepository for SqliteCheckins {
         tx.commit().await.map_err(storage)?;
         Ok(outcome)
     }
+}
+
+/// One check-in as the event feed merges it in.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct CheckedInEntry {
+    /// The record's ID, as the module's stamp card outcomes know it.
+    pub record_id: String,
+    /// Latest name seen; raw viewer text.
+    pub user_name: String,
+    /// `chat`, `redemption` or `manual`.
+    pub trigger: String,
+    pub occurred_at: String,
+}
+
+/// Check-ins from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
+pub async fn checked_in_between(
+    pool: &SqlitePool,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    limit: u32,
+) -> Result<Vec<CheckedInEntry>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT record_id, user_name, trigger, occurred_at FROM \
+         (SELECT r.id AS record_id, v.user_name, r.trigger_kind AS trigger, r.occurred_at FROM checkin_records r \
+          JOIN checkin_viewers v ON v.id = r.viewer_id \
+          WHERE (?1 IS NULL OR r.occurred_at >= ?1) AND (?2 IS NULL OR r.occurred_at < ?2) \
+          ORDER BY r.occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
+    )
+    .bind(from.map(time_text))
+    .bind(until.map(time_text))
+    .bind(limit)
+    .fetch_all(pool)
+    .await
 }
 
 #[cfg(test)]

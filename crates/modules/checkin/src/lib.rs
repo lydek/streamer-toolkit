@@ -9,7 +9,7 @@ pub use application::{CheckinService, ProfileImages, Timing};
 pub use infrastructure::{
     COMMANDS, CheckinChangedEvent, CheckinChangedPayload, CheckinStampedEvent,
     CheckinStampedPayload,
-    db::{MIGRATOR, record_count},
+    db::{CheckedInEntry, MIGRATOR, checked_in_between, record_count},
     http::{CheckinSettingsBody, routes},
     openapi, start, subscriptions,
 };
