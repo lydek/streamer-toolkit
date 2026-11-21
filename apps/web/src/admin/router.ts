@@ -9,6 +9,7 @@ import NotFoundView from './NotFoundView.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
+import ScenesPage from './ScenesPage.vue'
 import SoundsPage from './SoundsPage.vue'
 import ComingSoon from './ComingSoon.vue'
 import { SOON_PAGES } from './tabs'
@@ -26,6 +27,7 @@ export const router = createRouter({
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
     { path: '/sounds', component: SoundsPage },
+    { path: '/scenes', component: ScenesPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     ...SOON_PAGES.map((p) => ({ path: p.path, component: ComingSoon, props: { id: p.soon!.id } })),
     { path: '/:path(.*)*', component: NotFoundView },

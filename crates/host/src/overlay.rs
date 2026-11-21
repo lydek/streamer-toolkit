@@ -372,6 +372,8 @@ mod tests {
                         id: 1,
                         source: "Camera".into(),
                         enabled: true,
+                        locked: false,
+                        kind: "dshow_input".into(),
                     }],
                 }],
                 inputs: vec![toolkit_core::streaming::Input {

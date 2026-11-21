@@ -41,7 +41,8 @@ describe('firstPage', () => {
   const media = GROUPS.find((g) => g.id === 'media')!
 
   it('skips coming-soon pages for the first built one, and hidden ones too', () => {
-    expect(firstPage(media)).toBe('/sounds')
-    expect(firstPage(media, new Set(['/sounds']))).toBe('/scenes')
+    expect(firstPage(media)).toBe('/scenes')
+    // Hidden scenes, then the coming-soon music page, are skipped.
+    expect(firstPage(media, new Set(['/scenes']))).toBe('/sounds')
   })
 })

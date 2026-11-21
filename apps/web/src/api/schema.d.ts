@@ -462,6 +462,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/item": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Shows, hides, locks or unlocks a scene item; `obs.state` shows the change once OBS has made it. */
+        put: operations["update_item"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/obs/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Puts a scene on air; `obs.state` shows the switch once OBS has made it. */
+        put: operations["switch_scene"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/overlays": {
         parameters: {
             query?: never;
@@ -1463,6 +1497,18 @@ export interface components {
             muted: boolean;
             name: string;
         };
+        ItemBody: {
+            /** @description Shows or hides the item; absent leaves it. */
+            enabled?: boolean | null;
+            /**
+             * Format: int64
+             * @description The item's `id` in `obs.state`.
+             */
+            item: number;
+            /** @description Locks or unlocks the item; absent leaves it. */
+            locked?: boolean | null;
+            scene: string;
+        };
         /**
          * @description A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind
          *     does not have are left out; names and texts are raw viewer text.
@@ -1778,9 +1824,15 @@ export interface components {
             title: string;
         };
         Scene: {
-            /** @description The scene's own items; items inside a group are not listed. */
+            /**
+             * @description The scene's own items, front to back (as the program's source list shows them); items inside a group are
+             *     not listed.
+             */
             items: components["schemas"]["SceneItem"][];
             name: string;
+        };
+        SceneBody: {
+            scene: string;
         };
         SceneItem: {
             /** @description Whether the item is shown. */
@@ -1790,6 +1842,13 @@ export interface components {
              * @description Unique within its scene.
              */
             id: number;
+            /**
+             * @description What the source is: the program's input kind (OBS: `browser_source`, `game_capture`…), `scene` for a nested
+             *     scene, `group` for a group; empty when the program does not say.
+             */
+            kind: string;
+            /** @description Whether the item is locked against moving it by mistake in the program. */
+            locked: boolean;
             /** @description The source the item shows. */
             source: string;
         };
@@ -3157,6 +3216,104 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    switch_scene: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

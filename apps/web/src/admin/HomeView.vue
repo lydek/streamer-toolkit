@@ -210,6 +210,16 @@
         </template>
       </template>
     </AppDrawer>
+
+    <AppDrawer id="scene" :title="moduleName('scene')" full-page="/scenes">
+      <template #actions>
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <SceneList v-if="obsReady(live.obsState)" :state="live.obsState" @error="sceneFailed" />
+        <p v-else>{{ t('scene.notConnected') }}</p>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
@@ -245,6 +255,8 @@ import { changesCheckins } from './checkins'
 import { SOON_PAGES } from './tabs'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
+import SceneList from './SceneList.vue'
+import { obsReady } from './scenes'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import TwitchSignIn from './TwitchSignIn.vue'
 import UpdateNotice from './UpdateNotice.vue'
@@ -357,8 +369,14 @@ const lines = computed<Record<string, Line>>(() => {
             text: sounds.value.items.length ? t('sound.count', { n: sounds.value.items.length }) : t('sound.empty'),
           }
         : { state: sounds.value.state },
+    scene:
+      status === 'open'
+        ? { state: 'ready', text: live.value.obsState?.scene ?? t('scene.notConnected') }
+        : { state: status },
   }
 })
+const sceneFailed = (e: unknown) =>
+  (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
 
 function recentLine(r: typeof recent.value): Line {

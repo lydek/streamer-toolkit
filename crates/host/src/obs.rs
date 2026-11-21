@@ -15,10 +15,10 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, put},
 };
 use integrations::{
-    obs::{Obs, ObsState, ObsStatus},
+    obs::{Obs, ObsControl, ObsState, ObsStatus},
     secrets::SecretStore,
 };
 use secrecy::{ExposeSecret, SecretString};
@@ -28,7 +28,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     settings,
-    streaming::{StreamingSoftware, StreamingState},
+    streaming::{StreamingError, StreamingSoftware, StreamingState},
 };
 use utoipa::ToSchema;
 
@@ -133,6 +133,8 @@ pub(crate) struct ObsLink {
     state: Arc<watch::Sender<StreamingState>>,
     /// The current connection's number; a replaced one stops writing (see [`Obs::generation`]).
     generation: Arc<AtomicU64>,
+    /// The current connection's client, for commands.
+    control: Arc<ObsControl>,
     task: Mutex<Option<AbortHandle>>,
 }
 
@@ -173,6 +175,7 @@ impl ObsLink {
             status,
             state,
             generation: Arc::new(AtomicU64::new(0)),
+            control: Arc::default(),
             task: Mutex::new(None),
         });
         link.restart();
@@ -189,6 +192,7 @@ impl ObsLink {
         if let Some(old) = current.take() {
             old.abort();
         }
+        self.control.clear();
         self.state.send_replace(StreamingState::default());
         let task = tokio::spawn(
             Obs {
@@ -199,6 +203,7 @@ impl ObsLink {
                 state: self.state.clone(),
                 generation,
                 current: self.generation.clone(),
+                control: self.control.clone(),
             }
             .run(),
         );
@@ -206,9 +211,51 @@ impl ObsLink {
     }
 }
 
+impl ObsLink {
+    /// `NotFound` for a scene (or an item of it) the latest state does not list; OBS answers the same, but this
+    /// gives the same answer without a round trip and before a client exists.
+    fn check(&self, scene: &str, item: Option<i64>) -> Result<(), StreamingError> {
+        let state = self.state.borrow();
+        if state.scene.is_none() {
+            return Err(StreamingError::NotConnected);
+        }
+        let found = state.scenes.iter().find(|s| s.name == scene);
+        match (found, item) {
+            (Some(s), Some(id)) if s.items.iter().any(|i| i.id == id) => Ok(()),
+            (Some(_), None) => Ok(()),
+            _ => Err(StreamingError::NotFound),
+        }
+    }
+}
+
 impl StreamingSoftware for ObsLink {
     fn state(&self) -> StreamingState {
         self.state.borrow().clone()
+    }
+
+    async fn switch_scene(&self, scene: &str) -> Result<(), StreamingError> {
+        self.check(scene, None)?;
+        self.control.switch_scene(scene).await
+    }
+
+    async fn set_item_enabled(
+        &self,
+        scene: &str,
+        item: i64,
+        enabled: bool,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.set_item_enabled(scene, item, enabled).await
+    }
+
+    async fn set_item_locked(
+        &self,
+        scene: &str,
+        item: i64,
+        locked: bool,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.set_item_locked(scene, item, locked).await
     }
 }
 
@@ -224,7 +271,88 @@ impl Drop for ObsLink {
 pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
     Router::new()
         .route("/api/admin/obs", get(obs_overview).put(update_obs))
+        .route("/api/admin/obs/scene", put(switch_scene))
+        .route("/api/admin/obs/item", put(update_item))
         .with_state(link)
+}
+
+fn command_response(result: Result<(), StreamingError>) -> Response {
+    match result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(StreamingError::NotConnected) => error(StatusCode::CONFLICT, "obs.not_connected"),
+        Err(StreamingError::NotFound) => error(StatusCode::NOT_FOUND, "obs.not_found"),
+        Err(StreamingError::Failed) => error(StatusCode::BAD_GATEWAY, "obs.request_failed"),
+    }
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct SceneBody {
+    scene: String,
+}
+
+/// Puts a scene on air; `obs.state` shows the switch once OBS has made it.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs/scene",
+    tag = "admin",
+    request_body = SceneBody,
+    responses(
+        (status = 204),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn switch_scene(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<SceneBody>,
+) -> Response {
+    command_response(link.switch_scene(&body.scene).await)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct ItemBody {
+    scene: String,
+    /// The item's `id` in `obs.state`.
+    item: i64,
+    /// Shows or hides the item; absent leaves it.
+    #[serde(default)]
+    enabled: Option<bool>,
+    /// Locks or unlocks the item; absent leaves it.
+    #[serde(default)]
+    locked: Option<bool>,
+}
+
+/// Shows, hides, locks or unlocks a scene item; `obs.state` shows the change once OBS has made it.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs/item",
+    tag = "admin",
+    request_body = ItemBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn update_item(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<ItemBody>,
+) -> Response {
+    if body.enabled.is_none() && body.locked.is_none() {
+        return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
+    }
+    if let Some(enabled) = body.enabled
+        && let Err(e) = link.set_item_enabled(&body.scene, body.item, enabled).await
+    {
+        return command_response(Err(e));
+    }
+    if let Some(locked) = body.locked {
+        return command_response(link.set_item_locked(&body.scene, body.item, locked).await);
+    }
+    command_response(Ok(()))
 }
 
 #[derive(Serialize, ToSchema)]

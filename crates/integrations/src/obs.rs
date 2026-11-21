@@ -1,10 +1,11 @@
 //! OBS WebSocket (obs-websocket 5) through `obws`: the connection status, reconnecting with backoff, and the
 //! streaming-software state (scenes, items, inputs, outputs), read in full on connect and then kept current from
-//! OBS's events. OBS not running is a normal state: the status says so and only changes are logged.
+//! OBS's events, and the commands features send through the same connection. OBS not running is a normal state: the
+//! status says so and only changes are logged.
 
 use std::{
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -16,12 +17,18 @@ use obws::{
     client::{ConnectConfig, HandshakeError},
     error::Error as ObwsError,
     events::Event,
-    requests::{EventSubscription, inputs::InputId, scenes::SceneId},
+    requests::{
+        EventSubscription,
+        inputs::InputId,
+        scene_items::{SetEnabled, SetLocked},
+        scenes::SceneId,
+    },
+    responses::{StatusCode, scene_items::SourceType},
 };
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
-use toolkit_core::streaming::{Input, Scene, SceneItem, StreamingState};
+use toolkit_core::streaming::{Input, Scene, SceneItem, StreamingError, StreamingState};
 
 use crate::secrets::SecretStore;
 
@@ -70,6 +77,83 @@ impl ObsStatus {
     }
 }
 
+/// The connected client, shared so commands go through the connection the state follows; empty while not connected.
+#[derive(Default)]
+pub struct ObsControl(Mutex<Option<Arc<Client>>>);
+
+impl ObsControl {
+    /// Forgets the client, e.g. when new settings replace the connection.
+    pub fn clear(&self) {
+        *self.0.lock().unwrap() = None;
+    }
+
+    fn client(&self) -> Result<Arc<Client>, StreamingError> {
+        self.0
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(StreamingError::NotConnected)
+    }
+
+    pub async fn switch_scene(&self, scene: &str) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scenes()
+            .set_current_program_scene(SceneId::Name(scene))
+            .await
+            .map_err(command_error)
+    }
+
+    pub async fn set_item_enabled(
+        &self,
+        scene: &str,
+        item: i64,
+        enabled: bool,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scene_items()
+            .set_enabled(SetEnabled {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                enabled,
+            })
+            .await
+            .map_err(command_error)
+    }
+
+    pub async fn set_item_locked(
+        &self,
+        scene: &str,
+        item: i64,
+        locked: bool,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scene_items()
+            .set_locked(SetLocked {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                locked,
+            })
+            .await
+            .map_err(command_error)
+    }
+}
+
+fn command_error(error: ObwsError) -> StreamingError {
+    match error {
+        ObwsError::Api {
+            code: StatusCode::ResourceNotFound,
+            ..
+        } => StreamingError::NotFound,
+        error => {
+            tracing::warn!(%error, "OBS command failed");
+            StreamingError::Failed
+        }
+    }
+}
+
 pub struct Obs {
     pub host: String,
     pub port: u16,
@@ -82,6 +166,8 @@ pub struct Obs {
     /// replaced by new settings never writes over the new one.
     pub generation: u64,
     pub current: Arc<AtomicU64>,
+    /// Holds this connection's client while it is connected and still the current one.
+    pub control: Arc<ObsControl>,
 }
 
 impl Obs {
@@ -93,8 +179,11 @@ impl Obs {
             let ended = match self.connect().await {
                 Ok(client) => {
                     failures = 0;
+                    let client = Arc::new(client);
+                    self.share(&client);
                     self.set(ObsStatus::CONNECTED);
                     self.follow(&client).await;
+                    self.unshare(&client);
                     self.set_state(&StreamingState::default());
                     ObsStatus::reconnecting(Some("obs.disconnected"))
                 }
@@ -132,6 +221,22 @@ impl Obs {
             Ok(connected) => connected.map_err(|e| classify(&e, password.is_some())),
             // Something answered the upgrade but never finished the obs-websocket handshake.
             Err(_) => Err(ObsStatus::reconnecting(Some("obs.handshake_failed"))),
+        }
+    }
+
+    /// Lets commands use `client`, unless new settings replaced this connection.
+    fn share(&self, client: &Arc<Client>) {
+        let mut slot = self.control.0.lock().unwrap();
+        if self.live() {
+            *slot = Some(client.clone());
+        }
+    }
+
+    /// Takes `client` back from commands; a newer connection's client stays.
+    fn unshare(&self, client: &Arc<Client>) {
+        let mut slot = self.control.0.lock().unwrap();
+        if slot.as_ref().is_some_and(|c| Arc::ptr_eq(c, client)) {
+            *slot = None;
         }
     }
 
@@ -204,11 +309,21 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
     for scene in list.scenes {
         let id = SceneId::Uuid(scene.id.uuid);
         let mut items = Vec::new();
-        for item in client.scene_items().list(id).await? {
+        // OBS lists index 0 (the bottom item) first; the port lists front to back.
+        for item in client.scene_items().list(id).await?.into_iter().rev() {
+            let kind = if item.is_group == Some(true) {
+                "group".to_owned()
+            } else if item.source_type == SourceType::Scene {
+                "scene".to_owned()
+            } else {
+                item.input_kind.unwrap_or_default()
+            };
             items.push(SceneItem {
                 id: item.id,
                 enabled: client.scene_items().enabled(id, item.id).await?,
+                locked: client.scene_items().locked(id, item.id).await?,
                 source: item.source_name,
+                kind,
             });
         }
         scenes.push(Scene {
@@ -253,21 +368,24 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
             scene,
             item_id,
             enabled,
-        } => {
-            let item = state
-                .scenes
-                .iter_mut()
-                .filter(|s| s.name == scene.name)
-                .flat_map(|s| s.items.iter_mut())
-                .find(|i| u64::try_from(i.id).ok() == Some(*item_id));
-            match item {
-                Some(item) => {
-                    item.enabled = *enabled;
-                    Change::Updated
-                }
-                None => Change::None,
+        } => match item_mut(state, &scene.name, *item_id) {
+            Some(item) => {
+                item.enabled = *enabled;
+                Change::Updated
             }
-        }
+            None => Change::None,
+        },
+        Event::SceneItemLockStateChanged {
+            scene,
+            item_id,
+            locked,
+        } => match item_mut(state, &scene.name, *item_id) {
+            Some(item) => {
+                item.locked = *locked;
+                Change::Updated
+            }
+            None => Change::None,
+        },
         Event::InputMuteStateChanged { id, muted } => {
             match state.inputs.iter_mut().find(|i| i.name == id.name) {
                 Some(input) => {
@@ -297,6 +415,15 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
         | Event::InputNameChanged { .. } => Change::Reread,
         _ => Change::None,
     }
+}
+
+fn item_mut<'a>(state: &'a mut StreamingState, scene: &str, id: u64) -> Option<&'a mut SceneItem> {
+    state
+        .scenes
+        .iter_mut()
+        .filter(|s| s.name == scene)
+        .flat_map(|s| s.items.iter_mut())
+        .find(|i| u64::try_from(i.id).ok() == Some(id))
 }
 
 fn classify(error: &ObwsError, has_password: bool) -> ObsStatus {
@@ -336,7 +463,8 @@ mod tests {
     use tokio::sync::Notify;
 
     /// A minimal obs-websocket 5 server: handshake, `GetVersion`, the requests the state is read with (one scene
-    /// "Live" with a camera, one microphone), events on demand, and closing on demand like OBS exiting.
+    /// "Live" with a camera under a nested scene, one microphone), the commands (recorded; scene "Missing" answers
+    /// not found), events on demand, and closing on demand like OBS exiting.
     #[derive(Clone, Default)]
     struct FakeObs {
         require_auth: bool,
@@ -348,6 +476,8 @@ mod tests {
         pending: Arc<Mutex<Vec<(&'static str, Value)>>>,
         push: Arc<Notify>,
         scene_lists: Arc<Mutex<u32>>,
+        /// `Set…` requests as `(requestType, requestData)`.
+        commands: Arc<Mutex<Vec<(String, Value)>>>,
     }
 
     const LIVE: &str = "00000000-0000-0000-0000-000000000001";
@@ -367,10 +497,15 @@ mod tests {
                            "currentPreviewSceneName": null, "currentPreviewSceneUuid": null,
                            "scenes": [{"sceneName": "Live", "sceneUuid": LIVE, "sceneIndex": 0}]})
                 }
+                // Index 0 is the bottom item, as OBS lists it.
                 "GetSceneItemList" => json!({"sceneItems": [{
                     "sceneItemId": 1, "sceneItemIndex": 0, "sourceName": "Camera",
-                    "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}]}),
+                    "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}, {
+                    "sceneItemId": 2, "sceneItemIndex": 1, "sourceName": "Frame",
+                    "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}]}),
                 "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
+                "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
+                t if t.starts_with("Set") => Value::Null,
                 "GetInputList" => json!({"inputs": [{"inputName": "Mic", "inputUuid": MIC,
                     "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}]}),
                 "GetInputMute" => json!({"inputMuted": false}),
@@ -432,10 +567,19 @@ mod tests {
                         Some(Ok(ws::Message::Text(text))) => {
                             let request: Value = serde_json::from_str(text.as_str()).unwrap();
                             let request_type = request["d"]["requestType"].as_str().unwrap_or_default();
+                            let data = &request["d"]["requestData"];
+                            if request_type.starts_with("Set") {
+                                fake.commands.lock().unwrap().push((request_type.into(), data.clone()));
+                            }
+                            let status = if data["sceneName"] == "Missing" {
+                                json!({"result": false, "code": 600})
+                            } else {
+                                json!({"result": true, "code": 100})
+                            };
                             send(&mut socket, json!({"op": 7, "d": {
                                 "requestType": request_type,
                                 "requestId": request["d"]["requestId"],
-                                "requestStatus": {"result": true, "code": 100},
+                                "requestStatus": status,
                                 "responseData": fake.answer(request_type)}}))
                             .await;
                         }
@@ -470,11 +614,16 @@ mod tests {
     fn run_with_state(
         port: u16,
         password: Option<&str>,
-    ) -> (watch::Receiver<ObsStatus>, watch::Receiver<StreamingState>) {
+    ) -> (
+        watch::Receiver<ObsStatus>,
+        watch::Receiver<StreamingState>,
+        Arc<ObsControl>,
+    ) {
         let secrets = Arc::new(MemoryStore::default());
         *secrets.value.lock().unwrap() = password.map(str::to_owned);
         let (tx, rx) = watch::channel(ObsStatus::CONNECTING);
         let (state_tx, state_rx) = watch::channel(StreamingState::default());
+        let control = Arc::new(ObsControl::default());
         tokio::spawn(
             Obs {
                 host: "127.0.0.1".into(),
@@ -484,10 +633,11 @@ mod tests {
                 state: Arc::new(state_tx),
                 generation: 1,
                 current: Arc::new(AtomicU64::new(1)),
+                control: control.clone(),
             }
             .run(),
         );
-        (rx, state_rx)
+        (rx, state_rx, control)
     }
 
     #[tokio::test]
@@ -496,6 +646,7 @@ mod tests {
         let port = start(fake.clone()).await;
         let (tx, mut rx) = watch::channel(ObsStatus::CONNECTING);
         let (state_tx, state_rx) = watch::channel(StreamingState::default());
+        let control = Arc::new(ObsControl::default());
         // Generation 1 when the settings already moved on to 2.
         tokio::spawn(
             Obs {
@@ -506,6 +657,7 @@ mod tests {
                 state: Arc::new(state_tx),
                 generation: 1,
                 current: Arc::new(AtomicU64::new(2)),
+                control: control.clone(),
             }
             .run(),
         );
@@ -521,6 +673,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert_eq!(*rx.borrow_and_update(), ObsStatus::CONNECTING);
         assert_eq!(*state_rx.borrow(), StreamingState::default());
+        assert_eq!(
+            control.switch_scene("Live").await,
+            Err(StreamingError::NotConnected),
+            "nor does it take commands"
+        );
     }
 
     async fn state_reaches(
@@ -537,7 +694,7 @@ mod tests {
     #[tokio::test]
     async fn state_is_read_on_connect_follows_events_and_resets_on_disconnect() {
         let fake = FakeObs::default();
-        let (mut status, mut state) = run_with_state(start(fake.clone()).await, None);
+        let (mut status, mut state, _) = run_with_state(start(fake.clone()).await, None);
         reaches(&mut status, ObsStatus::CONNECTED).await;
         state_reaches(&mut state, "read on connect", |s| s.scene.is_some()).await;
         assert_eq!(
@@ -546,11 +703,23 @@ mod tests {
                 scene: Some("Live".into()),
                 scenes: vec![Scene {
                     name: "Live".into(),
-                    items: vec![SceneItem {
-                        id: 1,
-                        source: "Camera".into(),
-                        enabled: true,
-                    }],
+                    // Front to back: the nested scene sits above the camera.
+                    items: vec![
+                        SceneItem {
+                            id: 2,
+                            source: "Frame".into(),
+                            enabled: true,
+                            locked: false,
+                            kind: "scene".into(),
+                        },
+                        SceneItem {
+                            id: 1,
+                            source: "Camera".into(),
+                            enabled: true,
+                            locked: false,
+                            kind: "dshow_input".into(),
+                        },
+                    ],
                 }],
                 inputs: vec![Input {
                     name: "Mic".into(),
@@ -571,7 +740,12 @@ mod tests {
             "SceneItemEnableStateChanged",
             json!({"sceneName": "Live", "sceneUuid": LIVE, "sceneItemId": 1, "sceneItemEnabled": false}),
         );
-        state_reaches(&mut state, "item hidden", |s| !s.scenes[0].items[0].enabled).await;
+        state_reaches(&mut state, "item hidden", |s| !s.scenes[0].items[1].enabled).await;
+        fake.event(
+            "SceneItemLockStateChanged",
+            json!({"sceneName": "Live", "sceneUuid": LIVE, "sceneItemId": 2, "sceneItemLocked": true}),
+        );
+        state_reaches(&mut state, "item locked", |s| s.scenes[0].items[0].locked).await;
         fake.event(
             "InputMuteStateChanged",
             json!({"inputName": "Mic", "inputUuid": MIC, "inputMuted": true}),
@@ -602,6 +776,50 @@ mod tests {
         .await;
         // Connecting again reads the state again.
         state_reaches(&mut state, "read on reconnect", |s| s.scene.is_some()).await;
+    }
+
+    #[tokio::test]
+    async fn commands_go_through_the_current_connection() {
+        let fake = FakeObs::default();
+        let (mut status, _, control) = run_with_state(start(fake.clone()).await, None);
+        reaches(&mut status, ObsStatus::CONNECTED).await;
+
+        control.switch_scene("BRB").await.unwrap();
+        control.set_item_enabled("Live", 1, false).await.unwrap();
+        control.set_item_locked("Live", 2, true).await.unwrap();
+        assert_eq!(
+            *fake.commands.lock().unwrap(),
+            vec![
+                (
+                    "SetCurrentProgramScene".to_owned(),
+                    json!({"sceneName": "BRB"})
+                ),
+                (
+                    "SetSceneItemEnabled".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 1, "sceneItemEnabled": false})
+                ),
+                (
+                    "SetSceneItemLocked".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemLocked": true})
+                ),
+            ]
+        );
+        assert_eq!(
+            control.switch_scene("Missing").await,
+            Err(StreamingError::NotFound)
+        );
+
+        // Once OBS closes, commands report not connected instead of waiting for it.
+        fake.exit.notify_one();
+        reaches(
+            &mut status,
+            ObsStatus::reconnecting(Some("obs.disconnected")),
+        )
+        .await;
+        assert_eq!(
+            control.switch_scene("Live").await,
+            Err(StreamingError::NotConnected)
+        );
     }
 
     async fn reaches(rx: &mut watch::Receiver<ObsStatus>, expected: ObsStatus) {

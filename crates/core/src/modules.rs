@@ -13,7 +13,9 @@ pub const ALERTS: &str = "alerts";
 pub const REDEMPTION: &str = "redemption";
 pub const CHECKIN: &str = "checkin";
 pub const SOUND: &str = "sound";
-pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND];
+/// OBS scenes and items, through the streaming-software port; the switch only shows or hides its pages.
+pub const SCENE: &str = "scene";
+pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND, SCENE];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {
