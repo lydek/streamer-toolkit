@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { type ChatEvent, type ChatState, type Incoming, apply } from './chat'
+import { type ChatEvent, type ChatState, type Incoming, apply, applyTextSize } from './chat'
 import { loadTemplate, mount, stylesheetsLoaded, textStyle } from './template'
 
 const RETRY_MS = 2000
@@ -65,6 +65,8 @@ function receive(msg: Incoming) {
   if (msg.type === 'snapshot' || (msg.type === 'template.changed' && msg.payload.overlay === 'chat')) {
     void applyTemplate()
   }
+  if (msg.type === 'snapshot') applyTextSize(document.documentElement, msg.payload['chat.text_size']?.at(-1)?.payload.textSize)
+  if (msg.type === 'chat.text_size') applyTextSize(document.documentElement, msg.payload.textSize)
   state = apply(state, msg)
   render?.(state.messages)
 }

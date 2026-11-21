@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
+import Select from 'primevue/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import type { Incoming } from '../overlay/chat/chat'
@@ -26,6 +27,8 @@ vi.mock('./home', async (original) => ({
 }))
 
 beforeEach(() => {
+  // PrimeVue's Select reads matchMedia, which jsdom lacks.
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   calls.get.mockReset()
   calls.get.mockResolvedValue({ selected: 'default', error: null })
   calls.put.mockReset()
@@ -142,6 +145,38 @@ describe('ChatPreview', () => {
     )
     expect(radio(wrapper, 'default').checked).toBe(true)
     expect(radio(wrapper, 'bubble').checked).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('saves the overlay text size, shows the announced one and starts previews with it', async () => {
+    const wrapper = await setup()
+    const select = wrapper.getComponent(Select)
+    expect(select.props('modelValue')).toBeNull()
+    select.vm.$emit('update:modelValue', 32)
+    await flushPromises()
+    expect(calls.put).toHaveBeenCalledWith('/api/admin/templates/chat/text-size', { body: { text_size: 32 } })
+
+    const size: Incoming = { type: 'chat.text_size', id: 's', version: 1, seq: 4, occurredAt: '', source: 'system', payload: { textSize: 32 } }
+    const [frame] = frames(wrapper)
+    const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {})
+    calls.listener!(size)
+    await flushPromises()
+    expect(select.props('modelValue')).toBe(32)
+    expect(post).toHaveBeenLastCalledWith(size, '*')
+    await wrapper.get('iframe').trigger('load')
+    const reloaded = post.mock.calls.at(-1)![0] as Extract<Incoming, { type: 'snapshot' }>
+    expect(reloaded.payload['chat.text_size']).toEqual([size])
+    wrapper.unmount()
+  })
+
+  it('reports a text size the Host refuses', async () => {
+    const wrapper = await setup()
+    calls.put.mockRejectedValueOnce(new ApiError('template.invalid_text_size'))
+    wrapper.getComponent(Select).vm.$emit('update:modelValue', 99)
+    await flushPromises()
+    expect(calls.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: 'error', summary: i18n.global.t('errors.template.invalid_text_size') }),
+    )
     wrapper.unmount()
   })
 })

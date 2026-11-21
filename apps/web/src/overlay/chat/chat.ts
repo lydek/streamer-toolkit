@@ -22,6 +22,16 @@ export type Incoming =
   | components['schemas']['BgmPlayerEvent']
   | components['schemas']['CounterValuesEvent']
   | components['schemas']['MarathonEvent']
+  | components['schemas']['ChatTextSizeEvent']
+
+/**
+ * Sets the chat overlay's text size, which the templates read as the CSS variable `--chat-text-size`; `null` keeps
+ * each template's own size.
+ */
+export function applyTextSize(root: HTMLElement, px: number | null | undefined) {
+  if (px) root.style.setProperty('--chat-text-size', `${px}px`)
+  else root.style.removeProperty('--chat-text-size')
+}
 
 /** The emergency stop (every overlay), or a skip of the item `stage`'s overlay is playing. */
 export const stopsStage = (msg: Incoming, stage: components['schemas']['Stage']) =>

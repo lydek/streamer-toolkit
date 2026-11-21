@@ -3,6 +3,8 @@
   margin: 0;
   padding: 0;
   font-family: sans-serif;
+  /* Sized for a 1080p canvas (the browser's 16 px reads small on stream); the admin UI may set another size. */
+  font-size: var(--chat-text-size, 24px);
   color: #fff;
   text-shadow: 0 1px 2px #000;
 }

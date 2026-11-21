@@ -110,7 +110,7 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
           'chat.message': [],
           'obs.status': [],
           'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
-          'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [],
+          'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [],
         },
       }),
     ),
@@ -130,7 +130,7 @@ async function openWithStream(page: Page, stream: unknown) {
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [status], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [status], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
       }),
     ),
   )
@@ -196,7 +196,7 @@ test('when every connection is fine, a narrower bar shows one "connected" light'
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
   const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
-    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] } })),
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] } })),
   )
   await page.goto('/admin/')
   const all = light(page, zh.nav.connections)

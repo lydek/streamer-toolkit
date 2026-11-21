@@ -1276,6 +1276,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/templates/chat/text-size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once
+         *     (`chat.text_size`).
+         */
+        put: operations["set_chat_text_size"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/text-size": {
         parameters: {
             query?: never;
@@ -1770,6 +1790,31 @@ export interface components {
          * @enum {string}
          */
         ChatTemplate: "default" | "compact" | "bubble" | "custom";
+        /**
+         * @description A `chat.text_size` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one, so a reloaded
+         *     overlay gets the size too.
+         */
+        ChatTextSizeEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ChatTextSizePayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ChatTextSizeType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description The chat overlay sets it as the CSS variable `--chat-text-size` on its page, which the templates' sizes read. */
+        ChatTextSizePayload: {
+            /**
+             * Format: int32
+             * @description In px; `null` keeps each template's own size.
+             */
+            textSize: number | null;
+        };
+        /** @enum {string} */
+        ChatTextSizeType: "chat.text_size";
         CheckBody: {
             enabled: boolean;
         };
@@ -2691,6 +2736,8 @@ export interface components {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
             /** @description The latest removals, oldest first: what was taken down before this snapshot. */
             "chat.removed": components["schemas"]["ChatRemovedEvent"][];
+            /** @description At most one: the chat overlay's text size. */
+            "chat.text_size": components["schemas"]["ChatTextSizeEvent"][];
             /** @description At most one: the latest sub marathon timer. */
             "counter.marathon": components["schemas"]["MarathonEvent"][];
             /** @description At most one: every counter's latest value. */
@@ -2944,6 +2991,19 @@ export interface components {
              */
             error: string | null;
             selected: components["schemas"]["ChatTemplate"];
+            /**
+             * Format: int32
+             * @description The overlay text size in px; `null` keeps each template's own size.
+             */
+            text_size: number | null;
+        };
+        /** @description `PUT /api/admin/templates/chat/text-size`. */
+        TextSizeChoice: {
+            /**
+             * Format: int32
+             * @description 16–48 px, or `null` for each template's own size.
+             */
+            text_size: number | null;
         };
         /** @description One imported track. `title` is broadcaster text: render it as text. Its file is `GET /music/{id}`. */
         Track: {
@@ -6337,6 +6397,45 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_chat_text_size: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TextSizeChoice"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `template.invalid_text_size`: not between 16 and 48 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;
