@@ -17,7 +17,11 @@ pub const SOUND: &str = "sound";
 pub const SCENE: &str = "scene";
 /// Background music: the music library and its playlists.
 pub const BGM: &str = "bgm";
-pub const ALL: &[&str] = &[CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND, SCENE, BGM];
+/// Counters: global counts with chat commands.
+pub const COUNTER: &str = "counter";
+pub const ALL: &[&str] = &[
+    CHAT, ALERTS, REDEMPTION, CHECKIN, SOUND, SCENE, BGM, COUNTER,
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {

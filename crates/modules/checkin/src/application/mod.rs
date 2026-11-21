@@ -124,6 +124,8 @@ impl Config {
             let entry = CommandEntry {
                 name: command.as_str().to_owned(),
                 allowed: Allowed::Everyone,
+                module: modules::CHECKIN.into(),
+                label: None,
             };
             if let Err(e) = commands.set(COMMAND_KEY, entry, |_| {}) {
                 // It keeps working with the old command; the move is tried again at the next start.
@@ -153,6 +155,8 @@ impl Config {
         let entry = CommandEntry {
             name: rules.command.as_str().to_owned(),
             allowed,
+            module: modules::CHECKIN.into(),
+            label: None,
         };
         self.commands
             .set(COMMAND_KEY, entry, |s| s.checkin = settings_of(&rules))?;
@@ -650,6 +654,8 @@ mod tests {
         let bad = CommandEntry {
             name: "two words".into(),
             allowed: Allowed::Vip,
+            module: modules::CHECKIN.into(),
+            label: None,
         };
         let r = rules_or_defaults(&saved, &bad);
         let s = settings_of(&r);

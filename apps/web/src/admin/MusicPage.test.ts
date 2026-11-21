@@ -171,7 +171,7 @@ describe('MusicPage player', () => {
     type: 'snapshot',
     version: 1,
     seq: 1,
-    payload: { 'chat.message': [], 'chat.removed': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [event] },
+    payload: { 'chat.message': [], 'chat.removed': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [event], 'counter.values': [] },
   })
   const receive = async (msg: unknown) => {
     socket.onmessage!({ data: JSON.stringify(msg) })
@@ -283,6 +283,7 @@ describe('MusicPage scene rules', () => {
       'presentation.queue': [],
       'stream.status': [],
       'bgm.player': [],
+      'counter.values': [],
     },
   })
 

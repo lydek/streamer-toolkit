@@ -50,7 +50,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], ...payload },
+  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], ...payload },
 })
 
 afterEach(() => {
@@ -397,8 +397,10 @@ describe('pre-stream checks', () => {
     { id: 'checkin', enabled: false, closed: false },
     { id: 'redemption', enabled: true, closed: false },
     { id: 'bgm', enabled: true, closed: false },
+    // Optional on screen: never a check.
+    { id: 'counter', enabled: true, closed: false },
   ]
-  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 1, other: 1 }
+  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 1, counter: 0, other: 1 }
 
   it('lists Twitch, EventSub, OBS and the overlay of each enabled feature, with where to fix them', () => {
     expect(preStreamChecks(signedIn(true), live('connected'), modules, overlays)).toEqual([

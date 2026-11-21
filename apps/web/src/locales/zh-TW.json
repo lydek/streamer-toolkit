@@ -295,10 +295,6 @@
       "name": "頻道點數",
       "desc": "新增或暫停頻道點數獎勵，退還點數。"
     },
-    "counters": {
-      "name": "計數器",
-      "desc": "死亡次數等計數，可以用聊天指令加減。"
-    },
     "tts": {
       "name": "文字轉語音",
       "desc": "唸出小奇點和兌換的留言。"
@@ -617,7 +613,8 @@
       "checkin": "打卡",
       "sound": "音效",
       "scene": "OBS 場景",
-      "bgm": "背景音樂"
+      "bgm": "背景音樂",
+      "counter": "計數器"
     }
   },
   "settings": {
@@ -763,6 +760,25 @@
     "playInObs": "在 OBS 播放",
     "playedInObs": "已送到 OBS 播放。"
   },
+  "counter": {
+    "heading": "全域計數",
+    "name": "名稱",
+    "command": "聊天指令",
+    "perStream": "每場歸零",
+    "add": "新增計數器",
+    "empty": "還沒有計數器",
+    "line": "{name}：{value}",
+    "plusOne": "加一",
+    "minusOne": "減一",
+    "reset": "歸零",
+    "more": "更多：{name}",
+    "delete": "刪除",
+    "confirmDelete": "確定刪除",
+    "cancel": "取消",
+    "deleteNote": "這個計數和它的聊天指令都會移除。",
+    "deleted": "已刪除「{name}」。",
+    "loadFailed": "無法載入計數器。"
+  },
   "music": {
     "library": "音樂庫",
     "file": "匯入音樂檔",
@@ -900,7 +916,7 @@
   "errors": {
     "unknown": "發生錯誤（{code}）",
     "commands": {
-      "taken": "已被{feature}的「!{name}」使用。"
+      "taken": "已被{feature}的「{label}」使用。"
     },
     "admin": {
       "invalid_client_id": "Client ID 格式不正確（只能是英文字母與數字）。",
@@ -1023,6 +1039,11 @@
       "invalid": "名稱不能空白，音量是 0 到 100%。",
       "save_failed": "無法儲存音效。",
       "unknown_slot": "這裡不能選音效。"
+    },
+    "counter": {
+      "invalid": "名稱不能空白，聊天指令只能是一個詞（最多 25 字）。",
+      "not_found": "找不到這個計數器，可能已經刪除。",
+      "storage_failed": "無法儲存計數器。"
     },
     "music": {
       "unsupported_type": "只能匯入 MP3、WAV、OGG 檔，而且副檔名要和檔案內容相符。",

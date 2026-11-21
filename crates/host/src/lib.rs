@@ -280,8 +280,36 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         sounds.clone(),
         config.checkin_timing,
         presenter,
-        commands,
+        commands.clone(),
     ));
+    let counter_sessions = stream.clone();
+    let counters = counter::start(
+        config.db.clone(),
+        bus.clone(),
+        modules.clone(),
+        commands,
+        move || counter_sessions.session_after_pending(),
+    );
+    // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once).
+    let (_, mut stream_events) = bus.subscribe();
+    let live_counters = counters.clone();
+    tokio::spawn(async move {
+        loop {
+            match stream_events.recv().await {
+                Ok(text) => {
+                    let live = serde_json::from_str::<serde_json::Value>(&text).is_ok_and(|e| {
+                        e["type"] == "stream.status" && e["payload"]["state"] == "live"
+                    });
+                    if live {
+                        live_counters.stream_live().await;
+                    }
+                }
+                // A missed status is repeated by the next check.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    });
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
         modules.clone(),
@@ -348,6 +376,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         alerts,
         redemption.clone(),
         checkin.clone(),
+        counters.clone(),
         sounds.clone(),
         stream,
         activity,
@@ -398,6 +427,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 )),
             )
             .merge(bgm::file_routes(music))
+            .merge(
+                counter::routes(counters).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
             .merge(home_tiles.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

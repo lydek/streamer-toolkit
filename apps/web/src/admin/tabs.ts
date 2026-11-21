@@ -70,7 +70,7 @@ export const GROUPS: TabGroup[] = [
       soon('/card-style', 'cardStyle', 'pi pi-palette'),
       soon('/rewards', 'rewards', 'pi pi-star', true),
       { path: '/redemptions', label: 'modules.names.redemption' },
-      soon('/counters', 'counters', 'pi pi-hashtag', true),
+      { path: '/counters', label: 'modules.names.counter' },
     ],
   },
   {

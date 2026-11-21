@@ -805,6 +805,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "counter"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "toolkit-core",
+ "tower",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1892,6 +1910,7 @@ dependencies = [
  "chat",
  "checkin",
  "chrono",
+ "counter",
  "integrations",
  "mime_guess",
  "redemption",

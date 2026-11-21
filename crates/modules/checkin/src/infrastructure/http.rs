@@ -15,7 +15,7 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
-    commands::{Allowed, CommandError},
+    commands::{Allowed, CommandError, CommandTakenBody},
     settings::CheckinSettings,
 };
 use utoipa::{IntoParams, ToSchema};
@@ -74,16 +74,6 @@ impl CheckinSettingsBody {
 #[derive(Serialize, ToSchema)]
 pub struct ErrorBody {
     code: String,
-}
-
-/// `commands.taken`: which feature's command already has the name.
-#[derive(Serialize, ToSchema)]
-pub struct CommandTakenBody {
-    code: String,
-    /// The module whose command has it.
-    module: String,
-    /// That command's name as saved.
-    name: String,
 }
 
 fn error(status: StatusCode, code: &str) -> Response {
@@ -490,13 +480,9 @@ pub(crate) async fn set_checkin_settings(
     match s.service.config().update(&next, body.allowed) {
         Ok(rules) => Json(CheckinSettingsBody::of(&rules)).into_response(),
         Err(e @ ConfigError::Invalid(_)) => error(StatusCode::BAD_REQUEST, &e.to_string()),
-        Err(ConfigError::Command(CommandError::Taken { module, name })) => (
+        Err(ConfigError::Command(CommandError::Taken { module, label })) => (
             StatusCode::CONFLICT,
-            Json(CommandTakenBody {
-                code: "commands.taken".into(),
-                module: module.into(),
-                name,
-            }),
+            Json(CommandTakenBody::new(module, label)),
         )
             .into_response(),
         Err(ConfigError::Command(e @ CommandError::SaveFailed(_))) => {

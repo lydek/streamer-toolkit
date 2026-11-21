@@ -113,7 +113,7 @@ async fn a_command_name_another_feature_has_is_refused_and_names_it() {
         assert_eq!(status, 409, "{name}");
         assert_eq!(
             body,
-            serde_json::json!({ "code": "commands.taken", "module": "counter", "name": "Deaths" })
+            serde_json::json!({ "code": "commands.taken", "module": "counter", "label": "!Deaths" })
         );
     }
     let (_, body) = send(&app, "GET", None).await;

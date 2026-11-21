@@ -221,6 +221,29 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="counter" :title="moduleName('counter')" full-page="/counters">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('counter')" />
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <p v-if="!live.counters">{{ t('app.loading') }}</p>
+        <p v-else-if="!live.counters.length">{{ t('counter.empty') }}</p>
+        <ul v-else class="plain counter-list">
+          <li v-for="c in live.counters" :key="c.id">
+            <span>{{ c.name }}</span>
+            <output class="counter-value">{{ c.value }}</output>
+            <Button
+              icon="pi pi-plus"
+              :aria-label="`${t('counter.plusOne')}：${c.name}`"
+              outlined
+              @click="stepCounter(c.id, 1).catch(drawerFailed)"
+            />
+          </li>
+        </ul>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
@@ -267,6 +290,7 @@ import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
+import { counterLine, stepCounter } from './counters'
 import MusicPlayer from './MusicPlayer.vue'
 import { playerLine } from './music'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
@@ -396,6 +420,12 @@ const lines = computed<Record<string, Line>>(() => {
         ? { state: 'ready', text: live.value.obsState?.scene ?? t('scene.notConnected') }
         : { state: status },
     bgm: status !== 'open' ? { state: status } : live.value.bgm ? { state: 'ready', text: playerLine(live.value.bgm.payload) } : { state: 'loading' },
+    counter:
+      status !== 'open'
+        ? { state: status }
+        : live.value.counters
+          ? { state: 'ready', text: counterLine(live.value.counters) }
+          : { state: 'loading' },
   }
 })
 const drawerFailed = (e: unknown) =>
@@ -476,7 +506,7 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm' | 'counter') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.
@@ -556,6 +586,19 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.counter-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.counter-value {
+  margin-inline-start: auto;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .sound-list {
   margin: 0;
   overflow-wrap: anywhere;

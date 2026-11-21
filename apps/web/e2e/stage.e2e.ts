@@ -52,6 +52,7 @@ async function open(
           'presentation.queue': [],
           'stream.status': [event(1, stream)],
           'bgm.player': [],
+          'counter.values': [],
         },
       }),
     )

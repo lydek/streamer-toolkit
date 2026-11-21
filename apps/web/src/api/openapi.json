@@ -1003,6 +1003,320 @@
         }
       }
     },
+    "/api/admin/counters": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_counters",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CounterBody"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Adds a counter at 0. A per-stream one counts the stream on now as already reset.",
+        "operationId": "create_counter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CounterInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`counter.invalid`: an empty name, a command that is not one word, or more than 100 counters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`commands.taken`: another command has the name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTakenBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed` or `settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Changes a counter's settings; its value stays. Becoming per-stream counts the stream on now as already reset.",
+        "operationId": "update_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CounterInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`counter.invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`commands.taken`: another command has the name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTakenBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed` or `settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deletes a counter and its chat command.",
+        "operationId": "delete_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/{id}/add": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Adds or takes one.",
+        "operationId": "add_to_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CounterStep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`counter.invalid`: not 1 or -1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/counters/{id}/reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts a counter back to 0.",
+        "operationId": "reset_counter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`counter.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`counter.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/general": {
       "get": {
         "tags": [
@@ -4814,25 +5128,182 @@
       },
       "CommandTakenBody": {
         "type": "object",
-        "description": "`commands.taken`: which feature's command already has the name.",
+        "description": "The admin API's answer to `commands.taken` (409): which command already has the name.",
         "required": [
           "code",
           "module",
-          "name"
+          "label"
         ],
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "`commands.taken`."
+          },
+          "label": {
+            "type": "string",
+            "description": "How to name that command: what the broadcaster calls it (e.g. a counter's name), or `!<name>`."
           },
           "module": {
             "type": "string",
             "description": "The module whose command has it."
+          }
+        }
+      },
+      "CounterBody": {
+        "type": "object",
+        "description": "A counter with its command. `name` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "name",
+          "value",
+          "command",
+          "allowed",
+          "per_stream"
+        ],
+        "properties": {
+          "allowed": {
+            "$ref": "#/components/schemas/Allowed",
+            "description": "Who may use the command; the broadcaster always may."
+          },
+          "command": {
+            "type": "string",
+            "description": "The chat command without its `!`; empty: none."
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "per_stream": {
+            "type": "boolean",
+            "description": "Back to 0 when the next stream starts."
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CounterInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "command",
+          "allowed",
+          "per_stream"
+        ],
+        "properties": {
+          "allowed": {
+            "$ref": "#/components/schemas/Allowed"
+          },
+          "command": {
+            "type": "string",
+            "description": "One word of at most 25 characters, with or without its `!`; empty: no chat command. No other command may\nhave it (ignoring case)."
           },
           "name": {
             "type": "string",
-            "description": "That command's name as saved."
+            "description": "1–100 characters after trimming."
+          },
+          "per_stream": {
+            "type": "boolean"
           }
         }
+      },
+      "CounterStep": {
+        "type": "object",
+        "required": [
+          "delta"
+        ],
+        "properties": {
+          "delta": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`1` or `-1`; a counter never goes below 0."
+          }
+        }
+      },
+      "CounterValue": {
+        "type": "object",
+        "description": "One counter on the overlay. `name` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "name",
+          "value"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CounterValuesEvent": {
+        "type": "object",
+        "description": "A `counter.values` event exactly as `/ws/overlay` sends it after any change; the snapshot keeps only the\nlatest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CounterValuesPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CounterValuesType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CounterValuesPayload": {
+        "type": "object",
+        "description": "The `payload` of a `counter.values` event: every counter, in creation order.",
+        "required": [
+          "counters"
+        ],
+        "properties": {
+          "counters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CounterValue"
+            }
+          }
+        }
+      },
+      "CounterValuesType": {
+        "type": "string",
+        "enum": [
+          "counter.values"
+        ]
       },
       "DeviceLogin": {
         "type": "object",
@@ -5411,6 +5882,7 @@
           "checkin",
           "sound",
           "bgm",
+          "counter",
           "other"
         ],
         "properties": {
@@ -5427,6 +5899,10 @@
             "minimum": 0
           },
           "checkin": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "counter": {
             "type": "integer",
             "minimum": 0
           },
@@ -6452,7 +6928,8 @@
           "obs.state",
           "presentation.queue",
           "stream.status",
-          "bgm.player"
+          "bgm.player",
+          "counter.values"
         ],
         "properties": {
           "bgm.player": {
@@ -6474,6 +6951,13 @@
               "$ref": "#/components/schemas/ChatRemovedEvent"
             },
             "description": "The latest removals, oldest first: what was taken down before this snapshot."
+          },
+          "counter.values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CounterValuesEvent"
+            },
+            "description": "At most one: every counter's latest value."
           },
           "obs.state": {
             "type": "array",

@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -35,6 +35,7 @@ pub(crate) enum OverlayKind {
     Checkin,
     Sound,
     Bgm,
+    Counter,
 }
 
 impl OverlayKind {
@@ -46,6 +47,7 @@ impl OverlayKind {
             "checkin" => Some(Self::Checkin),
             "sound" => Some(Self::Sound),
             "bgm" => Some(Self::Bgm),
+            "counter" => Some(Self::Counter),
             _ => None,
         }
     }
@@ -68,6 +70,7 @@ pub(crate) struct OverlayConnections {
     checkin: AtomicUsize,
     sound: AtomicUsize,
     bgm: AtomicUsize,
+    counter: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -81,6 +84,7 @@ impl Default for OverlayConnections {
             checkin: AtomicUsize::default(),
             sound: AtomicUsize::default(),
             bgm: AtomicUsize::default(),
+            counter: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -95,6 +99,7 @@ impl OverlayConnections {
             Some(OverlayKind::Checkin) => &self.checkin,
             Some(OverlayKind::Sound) => &self.sound,
             Some(OverlayKind::Bgm) => &self.bgm,
+            Some(OverlayKind::Counter) => &self.counter,
             None => &self.other,
         }
     }
@@ -128,6 +133,7 @@ impl OverlayConnections {
             checkin: load(&self.checkin),
             sound: load(&self.sound),
             bgm: load(&self.bgm),
+            counter: load(&self.counter),
             other: load(&self.other),
         }
     }
@@ -178,6 +184,7 @@ pub(crate) struct OverlayCounts {
     checkin: usize,
     sound: usize,
     bgm: usize,
+    counter: usize,
     other: usize,
 }
 
@@ -265,6 +272,9 @@ struct SnapshotPayload {
     /// At most one: the latest background music player status.
     #[serde(rename = "bgm.player")]
     bgm_player: Vec<bgm::BgmPlayerEvent>,
+    /// At most one: every counter's latest value.
+    #[serde(rename = "counter.values")]
+    counter_values: Vec<counter::CounterValuesEvent>,
 }
 
 #[cfg(test)]
@@ -289,6 +299,7 @@ mod tests {
                 checkin: 0,
                 sound: 1,
                 bgm: 1,
+                counter: 0,
                 other: 2
             }
         );
@@ -307,6 +318,7 @@ mod tests {
                 checkin: 0,
                 sound: 0,
                 bgm: 0,
+                counter: 0,
                 other: 0
             }
         );
@@ -346,6 +358,15 @@ mod tests {
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
         bus.retain("stream.status", 1);
         bus.retain("bgm.player", 1);
+        bus.retain("counter.values", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "c".into(),
+            event_type: "counter.values",
+            version: 1,
+            occurred_at: "2026-11-21T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({ "counters": [{ "id": "k", "name": "死亡次數", "value": 3 }] }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "b".into(),
             event_type: "bgm.player",
@@ -431,6 +452,9 @@ mod tests {
         assert_required("BgmPlayerEvent", music);
         assert_required("BgmPlayerPayload", &music["payload"]);
         assert_required("PlayerTrack", &music["payload"]["track"]);
+        let counters = &wire["payload"]["counter.values"][0];
+        assert_required("CounterValuesEvent", counters);
+        assert_required("CounterValue", &counters["payload"]["counters"][0]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

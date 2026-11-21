@@ -84,7 +84,10 @@ export interface Check {
 
 type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm'
 
-/** Each overlay kind, the module that needs it in OBS, and the page with its OBS address. */
+/**
+ * Each overlay kind, the module that needs it in OBS, and the page with its OBS address. The counter and marathon
+ * overlays are left out: they only show numbers on screen, which is optional; counting works without them.
+ */
 const OVERLAYS: { kind: OverlayKind; module: string; page: string }[] = [
   { kind: 'chat', module: 'chat', page: '/chat' },
   { kind: 'alerts', module: 'alerts', page: '/alerts' },
@@ -128,6 +131,8 @@ export interface LiveState {
   stream?: Schemas['StreamStatusPayload']
   /** The background music player, with the time its position was taken. */
   bgm?: Schemas['BgmPlayerEvent']
+  /** Every counter's latest value. */
+  counters?: Schemas['CounterValue'][]
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -143,6 +148,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       queue: msg.payload['presentation.queue'].at(-1)?.payload,
       stream: msg.payload['stream.status'].at(-1)?.payload,
       bgm: msg.payload['bgm.player'].at(-1),
+      counters: msg.payload['counter.values'].at(-1)?.payload.counters,
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -154,6 +160,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'presentation.queue') next.queue = msg.payload
   if (msg.type === 'stream.status') next.stream = msg.payload
   if (msg.type === 'bgm.player') next.bgm = msg
+  if (msg.type === 'counter.values') next.counters = msg.payload.counters
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'chat.removed' && next.lastChat && removes(msg.payload, next.lastChat)) next.lastChat = undefined
   if (msg.type === 'alert') next.lastAlert = msg
@@ -228,6 +235,7 @@ export const TILES: Tile[] = [
   { id: 'sound', group: 'features', icon: 'pi pi-volume-up' },
   { id: 'scene', group: 'features', icon: 'pi pi-images' },
   { id: 'bgm', group: 'features', icon: 'pi pi-headphones' },
+  { id: 'counter', group: 'features', icon: 'pi pi-hashtag' },
 ]
 
 /** Non-empty groups in display order. */

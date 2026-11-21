@@ -10,6 +10,7 @@ alerts = { version = "0.1.0", path = "../modules/alerts" }
 axum = { version = "0.8.9", features = ["ws"] }
 chat = { version = "0.1.0", path = "../modules/chat" }
 checkin = { version = "0.1.0", path = "../modules/checkin" }
+counter = { version = "0.1.0", path = "../modules/counter" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 integrations = { version = "0.1.0", path = "../integrations" }
 mime_guess = "2.0.5"

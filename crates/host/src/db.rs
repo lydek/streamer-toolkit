@@ -36,6 +36,7 @@ fn modules() -> Vec<&'static Migrator> {
         &toolkit_core::outbox::MIGRATOR,
         &redemption::MIGRATOR,
         &checkin::MIGRATOR,
+        &counter::MIGRATOR,
         &stream::MIGRATOR,
         &activity::MIGRATOR,
         &viewers::MIGRATOR,
