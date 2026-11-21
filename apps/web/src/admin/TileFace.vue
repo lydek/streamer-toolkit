@@ -1,8 +1,10 @@
 <template>
   <span class="badge" :class="`tint-${tint}`" aria-hidden="true"><i :class="icon"></i></span>
   <span class="name">{{ name }}</span>
-  <span v-if="num" class="num" :class="{ word: !/^[\d,+]+$/.test(num) }">{{ num }}<small v-if="unit">{{ unit }}</small></span>
-  <span v-if="text" class="line">{{ text }}</span>
+  <span v-if="num" class="num" :class="{ word: !/^[\d,+]+$/.test(num), fixed: rows }">{{ num }}<small v-if="unit">{{ unit }}</small></span>
+  <!-- Small tiles keep all three rows, so every one is the same height: a dash for no number, an empty line kept. -->
+  <span v-else-if="rows" class="num fixed none" aria-hidden="true">—</span>
+  <span v-if="text || rows" class="line" :class="{ fixed: rows }">{{ text }}</span>
 </template>
 
 <script setup lang="ts">
@@ -12,7 +14,8 @@ import type { Line, Tile } from './home'
 
 // What a home tile shows, for the tile button and for the same tile while home is edited. The parent is a two-column
 // grid (`auto minmax(0, 1fr)`).
-const props = defineProps<{ name: string; icon: string; tint: Tile['tint']; line: Line }>()
+// `rows`: a small tile, which always shows the name, number and line rows at fixed heights.
+const props = defineProps<{ name: string; icon: string; tint: Tile['tint']; line: Line; rows?: boolean }>()
 const { t } = useI18n()
 
 const text = computed(() =>
@@ -48,6 +51,21 @@ const unit = computed(() => (props.line.state === 'ready' ? props.line.unit : un
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A small tile's number row is one height whether it holds a count, a word or the dash. */
+.num.fixed {
+  block-size: 2rem;
+  line-height: 2rem;
+}
+
+.num.none {
+  color: var(--p-text-muted-color);
+}
+
+/* An empty line keeps its height on a small tile. */
+.line.fixed {
+  min-block-size: 1.3125rem;
 }
 
 /* A word (a song or scene name) instead of a count. */
