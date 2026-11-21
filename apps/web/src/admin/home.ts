@@ -262,9 +262,20 @@ export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
   return tiles.filter((t) => t.always || enabled.has(t.id))
 }
 
-/** The home's tiles in saved order (`null`: never arranged, the defaults). Unknown and repeated IDs are skipped. */
-export function arrangedTiles(saved: string[] | null, tiles = TILES): Tile[] {
-  if (!saved) return tiles
+/** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). */
+export const STAGE_DEFAULTS: Record<Stage, string[]> = {
+  before: ['checklist', 'scene', 'bgm', 'sound', 'alerts', 'chat'],
+  live: ['pending', 'stats', 'feed', 'queue', 'chat', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+  after: ['summary', 'counter', 'redemption', 'checkin', 'chat'],
+}
+export const stageDefaults = (stage: Stage, tiles = TILES) =>
+  STAGE_DEFAULTS[stage].flatMap((id) => tiles.find((t) => t.id === id) ?? [])
+
+/**
+ * The home's tiles in saved order (`null`: never arranged, `defaults`). Unknown and repeated IDs are skipped.
+ */
+export function arrangedTiles(saved: string[] | null, tiles = TILES, defaults = tiles): Tile[] {
+  if (!saved) return defaults
   const byId = new Map(tiles.map((t) => [t.id, t]))
   return [...new Set(saved)].flatMap((id) => byId.get(id) ?? [])
 }

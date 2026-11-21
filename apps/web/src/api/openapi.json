@@ -1949,8 +1949,25 @@
         "tags": [
           "admin"
         ],
-        "summary": "Tile IDs in display order; `null` when never arranged (the admin UI shows its defaults).",
+        "summary": "A stage's tile IDs in display order; `null` when never arranged (the admin UI shows that stage's defaults).",
         "operationId": "home_tiles",
+        "parameters": [
+          {
+            "name": "stage",
+            "in": "query",
+            "description": "`before`, `live` (the default) or `after`.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Which stage's home.",
+              "enum": [
+                "before",
+                "live",
+                "after"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1966,6 +1983,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`home.invalid_tiles`: unknown stage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -1973,8 +2000,25 @@
         "tags": [
           "admin"
         ],
-        "summary": "Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.\n`null` restores the defaults; `[]` keeps the home empty.",
+        "summary": "Saves a stage's tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.\n`null` restores that stage's defaults; `[]` keeps it empty. The other stages are left as they are.",
         "operationId": "set_home_tiles",
+        "parameters": [
+          {
+            "name": "stage",
+            "in": "query",
+            "description": "`before`, `live` (the default) or `after`.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Which stage's home.",
+              "enum": [
+                "before",
+                "live",
+                "after"
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

@@ -643,11 +643,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Tile IDs in display order; `null` when never arranged (the admin UI shows its defaults). */
+        /** A stage's tile IDs in display order; `null` when never arranged (the admin UI shows that stage's defaults). */
         get: operations["home_tiles"];
         /**
-         * Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
-         *     `null` restores the defaults; `[]` keeps the home empty.
+         * Saves a stage's tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
+         *     `null` restores that stage's defaults; `[]` keeps it empty. The other stages are left as they are.
          */
         put: operations["set_home_tiles"];
         post?: never;
@@ -4767,7 +4767,10 @@ export interface operations {
     };
     home_tiles: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `before`, `live` (the default) or `after`. */
+                stage?: "before" | "live" | "after";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4782,11 +4785,23 @@ export interface operations {
                     "application/json": string[] | null;
                 };
             };
+            /** @description `home.invalid_tiles`: unknown stage */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     set_home_tiles: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `before`, `live` (the default) or `after`. */
+                stage?: "before" | "live" | "after";
+            };
             header?: never;
             path?: never;
             cookie?: never;

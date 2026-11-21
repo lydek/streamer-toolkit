@@ -135,7 +135,8 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
   await page.route('**/api/admin/chat-display', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: null }) : r.fulfill({ status: 204 })))
   await page.route('**/api/admin/chat/badges', get(() => []))
   await page.route('**/api/admin/viewers/avatars**', get(() => ({})))
-  await page.route('**/api/admin/home-tiles', (r) => {
+  // Every stage's order (`?stage=`) is served from the one `homeTiles` here.
+  await page.route('**/api/admin/home-tiles**', (r) => {
     if (r.request().method() !== 'PUT') return r.fulfill({ json: s.homeTiles })
     s.homeTiles = r.request().postDataJSON()
     return r.fulfill({ status: 204 })

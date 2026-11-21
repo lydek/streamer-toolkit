@@ -1,16 +1,22 @@
-//! Admin home tile order, kept in `settings.json`. The Host checks the format only; which IDs exist is the admin
-//! UI's business (it skips unknown ones). Admin routes; the caller adds the token check.
+//! Admin home tile order, one per stream stage (開播前, 直播中, 下播後), kept in `settings.json`. The Host checks the
+//! format only; which IDs exist is the admin UI's business (it skips unknown ones). Admin routes; the caller adds the
+//! token check.
 
 use std::path::PathBuf;
 
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
+    extract::{
+        Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
 };
-use toolkit_core::settings;
+use serde::Deserialize;
+use toolkit_core::settings::{self, Settings};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::admin::{ErrorBody, error};
 
@@ -18,10 +24,41 @@ const MAX_TILES: usize = 50;
 const MAX_ID_LEN: usize = 32;
 /// The tiles of the old 「直播中」 group, which home showed before the others while it grouped its tiles.
 const OLD_LIVE_GROUP: [&str; 3] = ["chat", "alerts", "feed"];
-/// The stage blocks that joined the grid in version 2, in their default order; before, they always showed above it.
-const STAGE_BLOCKS: [&str; 5] = ["pending", "checklist", "stats", "summary", "queue"];
+/// The 直播中 blocks that joined the grid in version 2, in their default order; before, they always showed above
+/// it. The saved list was the only home then, so it became the 直播中 one.
+const STAGE_BLOCKS: [&str; 3] = ["pending", "stats", "queue"];
 /// The home `home_tiles` is saved for now (`Settings::home_tiles_version`).
-const VERSION: u8 = 2;
+const VERSION: u8 = 3;
+
+/// Which stage's home.
+#[derive(Debug, Clone, Copy, Default, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum HomeStage {
+    Before,
+    #[default]
+    Live,
+    After,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct StageQuery {
+    /// `before`, `live` (the default) or `after`.
+    #[param(inline)]
+    stage: Option<HomeStage>,
+}
+
+fn stage_of(query: Result<Query<StageQuery>, QueryRejection>) -> Option<HomeStage> {
+    query.ok().map(|Query(q)| q.stage.unwrap_or_default())
+}
+
+fn saved_for(s: &mut Settings, stage: HomeStage) -> &mut Option<Vec<String>> {
+    match stage {
+        HomeStage::Before => &mut s.home_tiles_before,
+        HomeStage::Live => &mut s.home_tiles,
+        HomeStage::After => &mut s.home_tiles_after,
+    }
+}
 
 pub(crate) fn routes(data_dir: PathBuf) -> Router {
     Router::new()
@@ -29,17 +66,30 @@ pub(crate) fn routes(data_dir: PathBuf) -> Router {
         .with_state(data_dir)
 }
 
-/// Tile IDs in display order; `null` when never arranged (the admin UI shows its defaults).
+/// A stage's tile IDs in display order; `null` when never arranged (the admin UI shows that stage's defaults).
 #[utoipa::path(
     get,
     path = "/api/admin/home-tiles",
     tag = "admin",
-    responses((status = 200, body = Option<Vec<String>>))
+    params(StageQuery),
+    responses(
+        (status = 200, body = Option<Vec<String>>),
+        (status = 400, description = "`home.invalid_tiles`: unknown stage", body = ErrorBody),
+    )
 )]
-pub(crate) async fn home_tiles(State(data_dir): State<PathBuf>) -> Json<Option<Vec<String>>> {
-    let saved = settings::load(&data_dir);
+pub(crate) async fn home_tiles(
+    State(data_dir): State<PathBuf>,
+    query: Result<Query<StageQuery>, QueryRejection>,
+) -> Response {
+    let Some(stage) = stage_of(query) else {
+        return error(StatusCode::BAD_REQUEST, "home.invalid_tiles");
+    };
+    let mut saved = settings::load(&data_dir);
+    if !matches!(stage, HomeStage::Live) {
+        return Json(saved_for(&mut saved, stage).take()).into_response();
+    }
     if saved.home_tiles.is_none() || saved.home_tiles_version >= VERSION {
-        return Json(saved.home_tiles);
+        return Json(saved.home_tiles).into_response();
     }
     // A list saved for an older home: brought up to date and saved, once. If saving fails, the next read tries again.
     let from = saved.home_tiles_version;
@@ -53,7 +103,7 @@ pub(crate) async fn home_tiles(State(data_dir): State<PathBuf>) -> Json<Option<V
     }) {
         shown = now.home_tiles;
     }
-    Json(shown)
+    Json(shown).into_response()
 }
 
 /// `ids` as the current home shows what the home of version `from` showed.
@@ -79,15 +129,21 @@ fn upgraded(ids: Vec<String>, from: u8) -> Vec<String> {
         // only 14 tiles today, those are IDs the admin UI does not know and skips anyway).
         ids.truncate(MAX_TILES);
     }
+    if from == 2 {
+        // Version 2 (one home for every stage) also put 開播前檢查 and 本場摘要 first; they now live in the 開播前 and
+        // 下播後 homes, so the 直播中 one drops them.
+        ids.retain(|id| id != "checklist" && id != "summary");
+    }
     ids
 }
 
-/// Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
-/// `null` restores the defaults; `[]` keeps the home empty.
+/// Saves a stage's tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
+/// `null` restores that stage's defaults; `[]` keeps it empty. The other stages are left as they are.
 #[utoipa::path(
     put,
     path = "/api/admin/home-tiles",
     tag = "admin",
+    params(StageQuery),
     request_body = Option<Vec<String>>,
     responses(
         (status = 204),
@@ -97,10 +153,11 @@ fn upgraded(ids: Vec<String>, from: u8) -> Vec<String> {
 )]
 pub(crate) async fn set_home_tiles(
     State(data_dir): State<PathBuf>,
+    query: Result<Query<StageQuery>, QueryRejection>,
     body: Result<Json<Option<Vec<String>>>, JsonRejection>,
 ) -> Response {
-    // Malformed bodies get the same error code as bad IDs instead of axum's plain-text rejection.
-    let Ok(Json(body)) = body else {
+    // Malformed bodies and stages get the same error code as bad IDs instead of axum's plain-text rejection.
+    let (Some(stage), Ok(Json(body))) = (stage_of(query), body) else {
         return error(StatusCode::BAD_REQUEST, "home.invalid_tiles");
     };
     let tiles = match body.map(checked) {
@@ -109,9 +166,11 @@ pub(crate) async fn set_home_tiles(
         Some(None) => return error(StatusCode::BAD_REQUEST, "home.invalid_tiles"),
     };
     if settings::update(&data_dir, |s| {
-        // Defaults (`None`) have no order to mark, so restoring them still writes nothing.
-        s.home_tiles_version = if tiles.is_some() { VERSION } else { 0 };
-        s.home_tiles = tiles;
+        if matches!(stage, HomeStage::Live) {
+            // Defaults (`None`) have no order to mark, so restoring them still writes nothing.
+            s.home_tiles_version = if tiles.is_some() { VERSION } else { 0 };
+        }
+        *saved_for(s, stage) = tiles;
     })
     .is_err()
     {

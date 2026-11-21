@@ -31,6 +31,10 @@ async function home() {
 }
 const pencil = () => [...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.includes('編輯首頁'))
 const done = () => [...document.querySelectorAll('header button')].find((b) => b.textContent?.includes('完成'))
+const pickStage = async (name: string) => {
+  ;[...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.trim() === name)!.click()
+  await flushPromises()
+}
 const esc = async () => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
   await flushPromises()
@@ -68,23 +72,56 @@ describe('HomeView chat tile', () => {
 })
 
 describe('HomeView stage blocks', () => {
-  it('sit in the tile grid, each only in its stage, and 待處理 only with items', async () => {
+  it('come from the home of each stage, and 待處理 only with items', async () => {
     await home()
-    const headings = [...document.querySelectorAll('#tiles h2')].map((h) => h.textContent)
-    // No stream yet: 開播前.
-    expect(headings).toContain('開播前檢查')
-    // The queue starts as a small tile that opens in place.
+    const headings = () => [...document.querySelectorAll('#tiles h2')].map((h) => h.textContent)
+    // No stream yet: 開播前, whose home leads with the checklist.
+    expect(headings()).toContain('開播前檢查')
+    expect(document.querySelector('#tiles li.size-w h2')?.textContent).toBe('開播前檢查')
+    expect(document.querySelector('[data-expand="queue"]')).toBeNull()
+    // 直播中 has its own home: the queue as a small tile, no checklist; 待處理 has no items yet.
+    await pickStage('直播中')
+    expect(headings()).not.toContain('開播前檢查')
+    expect(headings()).not.toContain('待處理')
     expect(document.querySelector('[data-expand="queue"]')?.getAttribute('aria-expanded')).toBe('false')
-    expect(headings).not.toContain('本場直播')
-    expect(headings).not.toContain('本場摘要')
-    expect(headings).not.toContain('待處理')
-    expect(document.querySelector('#tiles li.size-w [aria-labelledby="checklist-heading"]')).not.toBeNull()
+    await pickStage('下播後')
+    expect(headings()).toContain('本場摘要')
+  })
+})
+
+describe('HomeView stage homes', () => {
+  it('edits the stage picked in edit mode and saves only that one', async () => {
+    // Each stage answers its own order: 開播前 arranged, 直播中 never (its defaults), 下播後 emptied.
+    const orders: Record<string, string[] | null> = { before: ['chat'], live: null, after: [] }
+    vi.mocked(client.GET).mockImplementation(((path: string, init?: { params?: { query?: { stage?: string } } }) =>
+      ok(path === '/api/admin/home-tiles' ? orders[init!.params!.query!.stage!] : responses[path])) as never)
+    await home()
+    const tileIds = () => [...document.querySelectorAll('#tiles [data-drawer-tile], #tiles [data-tile]')].map(
+      (el) => el.getAttribute('data-drawer-tile') ?? el.getAttribute('data-tile'),
+    )
+    expect(tileIds()).toEqual(['chat'])
+    pencil()!.click()
+    await flushPromises()
+    await pickStage('直播中')
+    document.querySelector<HTMLButtonElement>('[data-tile="chat"] [data-action="remove"]')!.click()
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(1)
+    expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
+      params: { query: { stage: 'live' } },
+      body: ['pending', 'stats', 'feed', 'queue', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+    })
+    // The other stages keep their own orders: 開播前 still has its chat tile, 下播後 stays empty.
+    await pickStage('開播前')
+    expect(tileIds()).toEqual(['chat'])
+    await pickStage('下播後')
+    expect(tileIds()).toEqual([])
   })
 })
 
 describe('HomeView blocks that open in place', () => {
   it('opens a small tile into its block and back, with focus kept on the same place, and saves nothing', async () => {
     await home()
+    await pickStage('直播中')
     const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="queue"]')!
     toggle().click()
     await flushPromises()
@@ -128,8 +165,7 @@ describe('HomeView skip link', () => {
   it('focuses the first tile', async () => {
     await home()
     skip().click()
-    // The queue's small tile comes first in the default order.
-    expect(document.activeElement).toBe(document.querySelector('[data-expand="queue"]'))
+    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
   })
 
   it('focuses "Arrange tiles" on an emptied home', async () => {
@@ -173,8 +209,7 @@ describe('HomeView update notice', () => {
     dismiss.click()
     await flushPromises()
     expect(document.querySelector('.update')).toBeNull()
-    // The queue's small tile comes first in the default order.
-    expect(document.activeElement).toBe(document.querySelector('[data-expand="queue"]'))
+    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
   })
 })
 
@@ -236,8 +271,10 @@ describe('HomeView arrange mode', () => {
     document.querySelector<HTMLButtonElement>('[data-tile="chat"] [data-action="remove"]')!.click()
     await flushPromises()
     // The tiles other than chat stay in the order, hidden while their modules are off.
+    // 開播前's home, without the chat tile; the other stages are not sent.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
-      body: ['pending', 'checklist', 'stats', 'summary', 'queue', 'alerts', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+      params: { query: { stage: 'before' } },
+      body: ['checklist', 'scene', 'bgm', 'sound', 'alerts'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()

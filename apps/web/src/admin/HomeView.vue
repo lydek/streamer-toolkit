@@ -7,7 +7,7 @@
       <header class="top">
         <!-- The app bar shows the name; the status lights and settings live there too. -->
         <h1 class="sr-only">{{ t('app.name') }}</h1>
-        <div v-if="!arranging" class="stage-switch">
+        <div class="stage-switch">
           <h2 id="stage-heading" class="sr-only">{{ t('stage.title') }}</h2>
           <SelectButton
             v-model="shownStage"
@@ -36,9 +36,12 @@
 
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+        <!-- One per stage: a save still running for another stage cannot move focus or announce here. -->
         <ArrangeTiles
           v-else-if="arranging"
-          :saved="savedTiles"
+          :key="shownStage"
+          :saved="savedTiles[shownStage]"
+          :defaults="stageDefaults(shownStage)"
           :save="saveTiles"
           :modules="modules"
           :name="moduleName"
@@ -333,7 +336,9 @@ import {
   obsLight,
   successToast,
   EXPANDS,
+  TILES,
   homeTiles,
+  stageDefaults,
   type Stage,
   type Tile,
   useLiveEvents,
@@ -373,7 +378,8 @@ const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
 // Saved tile order (`null`: never arranged). Only this page changes it, so it is read once with the modules.
-const savedTiles = ref<string[] | null>(null)
+// Each stage's saved tile order (`null`: never arranged, its defaults).
+const savedTiles = ref<Record<Stage, string[] | null>>({ before: null, live: null, after: null })
 const arranging = ref(false)
 const arrangeButton = ref<{ $el: HTMLElement }>()
 const doneButton = ref<{ $el: HTMLElement }>()
@@ -462,12 +468,9 @@ const obs = computed(() => obsLight(live.value))
 const dock = useDock()
 const stage = useStage({ live: () => live.value, modules: () => modules.value })
 const shownStage = stage.shown
-// Until each stage has its own home, a stage block shows only in its stage, and 待處理 only with items.
+// 待處理 shows only with items.
 const hiddenNow = computed(() => {
   const hidden = new Set<string>()
-  if (shownStage.value !== 'before') hidden.add('checklist')
-  if (shownStage.value !== 'live') hidden.add('stats')
-  if (shownStage.value !== 'after') hidden.add('summary')
   if (!pending.value.length) hidden.add('pending')
   // The docked chat panel already shows the chat.
   if (dock.docked) hidden.add('chat')
@@ -490,7 +493,9 @@ const closeBlock = (id: string) => setOpened(id, false)
 const tiles = computed(() =>
   homeTiles(
     modules.value ?? [],
-    arrangedTiles(savedTiles.value).filter((t) => !hiddenNow.value.has(t.id)),
+    arrangedTiles(savedTiles.value[shownStage.value], TILES, stageDefaults(shownStage.value)).filter(
+      (t) => !hiddenNow.value.has(t.id),
+    ),
   ),
 )
 const soonTiles = SOON_PAGES.filter((p) => p.soon!.tile)
@@ -611,7 +616,12 @@ async function refreshOverview() {
 
 async function refresh() {
   await refreshOverview()
-  if (!modules.value) savedTiles.value = await api(client.GET('/api/admin/home-tiles'))
+  if (!modules.value) {
+    const [before, live, after] = await Promise.all(
+      STAGES.map((stage) => api(client.GET('/api/admin/home-tiles', { params: { query: { stage } } }))),
+    )
+    savedTiles.value = { before, live, after }
+  }
   modules.value = await api(client.GET('/api/admin/modules'))
   await refreshTemplate()
 }
@@ -703,13 +713,15 @@ async function leaveArrange() {
 function saveTiles(next: string[] | null): Promise<boolean> | undefined {
   if (savingTiles) return
   savingTiles = true
-  const previous = savedTiles.value
-  savedTiles.value = next
-  return api(client.PUT('/api/admin/home-tiles', { body: next }))
+  // The stage being edited now; a failure puts back that stage's order even if another is shown by then.
+  const stage = shownStage.value
+  const previous = savedTiles.value[stage]
+  savedTiles.value = { ...savedTiles.value, [stage]: next }
+  return api(client.PUT('/api/admin/home-tiles', { params: { query: { stage } }, body: next }))
     .then(
       () => true,
       (e) => {
-        savedTiles.value = previous
+        savedTiles.value = { ...savedTiles.value, [stage]: previous }
         notify(e instanceof ApiError ? errorMessage(e.code) : String(e), true)
         return false
       },
