@@ -14,7 +14,7 @@ use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
     events::{ChatMessage, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Shown, Stage, Subject},
+    presentation::{Item, Presenter, Recent, RecentItem, Shown, Stage, Subject},
     settings::{self, CheckinSettings},
 };
 
@@ -367,6 +367,8 @@ enum Job {
 
 pub struct CheckinService {
     tx: mpsc::UnboundedSender<Job>,
+    /// What became of the latest stamp cards.
+    recent: Recent,
     presenter: Arc<Presenter>,
     show_card: ShowCard,
     timing: Timing,
@@ -393,8 +395,13 @@ impl CheckinService {
             timing,
             presenter,
         } = screen;
-        let (card_repo, card_presenter, card_show) =
-            (repo.clone(), presenter.clone(), show_card.clone());
+        let recent = Recent::default();
+        let (card_repo, card_presenter, card_show, card_recent) = (
+            repo.clone(),
+            presenter.clone(),
+            show_card.clone(),
+            recent.clone(),
+        );
         let on_checked_in: OnCheckedIn = Arc::new(move |c| {
             changed(c);
             // The card is built (avatar looked up) while it waits its turn; it shows only once built.
@@ -402,13 +409,15 @@ impl CheckinService {
             let (built, repo, profiles, c) =
                 (card.clone(), card_repo.clone(), profiles.clone(), c.clone());
             let show_card = card_show.clone();
+            let subject = Subject::Card {
+                viewer: c.viewer.name.clone(),
+                stamps: c.stamps,
+                slots: c.slots,
+            };
+            let done = card_recent.record(subject.clone(), Source::Twitch);
             card_presenter.push(Item {
                 stage: Stage::Checkin,
-                subject: Subject::Card {
-                    viewer: c.viewer.name.clone(),
-                    stamps: c.stamps,
-                    slots: c.slots,
-                },
+                subject,
                 show: timing.show,
                 simulated: false,
                 ready: Some(Box::pin(async move {
@@ -421,7 +430,7 @@ impl CheckinService {
                     }
                     None => Shown::No,
                 }),
-                done: None,
+                done: Some(done),
             });
         });
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
@@ -466,6 +475,7 @@ impl CheckinService {
         });
         Self {
             tx,
+            recent,
             presenter,
             show_card,
             timing,
@@ -491,13 +501,15 @@ impl CheckinService {
             source: Source::Simulation,
         };
         let (show_card, show) = (self.show_card.clone(), self.timing.show);
+        let subject = Subject::Card {
+            viewer: card.name.clone(),
+            stamps,
+            slots,
+        };
+        let done = self.recent.record(subject.clone(), Source::Simulation);
         self.presenter.push(Item {
             stage: Stage::Checkin,
-            subject: Subject::Card {
-                viewer: card.name.clone(),
-                stamps,
-                slots,
-            },
+            subject,
             show,
             simulated: true,
             ready: None,
@@ -505,9 +517,15 @@ impl CheckinService {
                 show_card(&card, show);
                 Shown::Yes
             }),
-            done: None,
+            done: Some(done),
         });
         true
+    }
+
+    /// The latest stamp cards queued (this launch only, simulated ones too), newest first, with what became of
+    /// each.
+    pub fn recent(&self) -> Vec<RecentItem> {
+        self.recent.list()
     }
 
     pub(crate) fn config(&self) -> &Arc<Config> {

@@ -393,6 +393,64 @@ async fn play(presenter: Arc<Presenter>) {
     }
 }
 
+/// One item a module queued, and what became of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentItem {
+    /// Unique in this launch.
+    pub id: u64,
+    pub subject: Subject,
+    pub source: crate::events::Source,
+    /// RFC 3339, UTC.
+    pub queued_at: String,
+    /// `None` while it waits or plays.
+    pub outcome: Option<Outcome>,
+}
+
+/// What became of the latest items one module queued (in memory, this launch only), newest first.
+#[derive(Clone, Default)]
+pub struct Recent {
+    items: Arc<Mutex<(u64, VecDeque<RecentItem>)>>,
+}
+
+impl Recent {
+    /// How many it keeps.
+    pub const KEEP: usize = 50;
+
+    /// Records an item as queued; give the returned callback to its [`Item::done`] to record its outcome.
+    pub fn record(
+        &self,
+        subject: Subject,
+        source: crate::events::Source,
+    ) -> Box<dyn FnOnce(Outcome) + Send> {
+        let id = {
+            let mut items = self.items.lock().unwrap();
+            items.0 += 1;
+            let id = items.0;
+            items.1.push_front(RecentItem {
+                id,
+                subject,
+                source,
+                queued_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                outcome: None,
+            });
+            items.1.truncate(Self::KEEP);
+            id
+        };
+        let items = self.items.clone();
+        Box::new(move |outcome| {
+            // An item pushed out of the list meanwhile is simply not found.
+            if let Some(r) = items.lock().unwrap().1.iter_mut().find(|r| r.id == id) {
+                r.outcome = Some(outcome);
+            }
+        })
+    }
+
+    /// Newest first.
+    pub fn list(&self) -> Vec<RecentItem> {
+        self.items.lock().unwrap().1.iter().cloned().collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -421,6 +479,107 @@ mod tests {
             }),
             done: None,
         }
+    }
+
+    /// An item for `stage` that shows as `shown` says, with its outcome recorded in `recent`.
+    fn recorded(stage: Stage, shown: Shown, recent: &Recent, n: u32) -> Item {
+        let subject = Subject::Sound {
+            sound: format!("item {n}"),
+            viewer: "viewer".into(),
+        };
+        Item {
+            stage,
+            show: Duration::from_millis(1000),
+            done: Some(recent.record(subject.clone(), crate::events::Source::Twitch)),
+            subject,
+            simulated: false,
+            ready: None,
+            present: Box::new(move || shown),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn recent_items_record_every_outcome_and_keep_fifty() {
+        let open = Arc::new(AtomicBool::new(true));
+        let on_air = open.clone();
+        let presenter = Presenter::start(Duration::from_millis(100), move |_| {
+            on_air.load(Ordering::Relaxed)
+        });
+        let recent = Recent::default();
+        let outcome_of = |n: u32| {
+            recent
+                .list()
+                .into_iter()
+                .find(|r| {
+                    r.subject
+                        == Subject::Sound {
+                            sound: format!("item {n}"),
+                            viewer: "viewer".into(),
+                        }
+                })
+                .unwrap()
+                .outcome
+        };
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 1));
+        presenter.push(recorded(Stage::Sound, Shown::WithoutSound, &recent, 2));
+        presenter.push(recorded(Stage::Sound, Shown::No, &recent, 3));
+        assert_eq!(outcome_of(1), None, "queued");
+        tokio::time::sleep(Duration::from_millis(3500)).await;
+        assert_eq!(
+            [outcome_of(1), outcome_of(2), outcome_of(3)],
+            [
+                Some(Outcome::Played),
+                Some(Outcome::SoundMissing),
+                Some(Outcome::Declined)
+            ]
+        );
+
+        open.store(false, Ordering::Relaxed);
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 4));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(outcome_of(4), Some(Outcome::OffAir));
+        open.store(true, Ordering::Relaxed);
+
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 5));
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 6));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        presenter.skip(|_| {});
+        presenter.clear();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(
+            [outcome_of(5), outcome_of(6)],
+            [Some(Outcome::Skipped), Some(Outcome::Cleared)]
+        );
+
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 7));
+        presenter.push(recorded(Stage::Sound, Shown::Yes, &recent, 8));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        presenter.stop(|_, _| {});
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(
+            [outcome_of(7), outcome_of(8)],
+            [Some(Outcome::Stopped), Some(Outcome::Stopped)]
+        );
+
+        for n in 100..160 {
+            let _ = recent.record(
+                Subject::Sound {
+                    sound: format!("item {n}"),
+                    viewer: "v".into(),
+                },
+                crate::events::Source::Twitch,
+            );
+        }
+        let all = recent.list();
+        assert_eq!(all.len(), Recent::KEEP);
+        assert_eq!(
+            all[0].subject,
+            Subject::Sound {
+                sound: "item 159".into(),
+                viewer: "v".into()
+            },
+            "newest first"
+        );
     }
 
     #[tokio::test(start_paused = true)]

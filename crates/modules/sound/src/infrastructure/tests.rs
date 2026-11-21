@@ -669,3 +669,104 @@ async fn new_redemptions_of_a_mapped_reward_play_its_sound_once_and_live_only() 
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test(start_paused = true)]
+async fn reward_sounds_record_what_became_of_each() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use toolkit_core::{events::RedemptionChange::Added, presentation::Outcome};
+    let dir = data_dir("recent");
+    let modules = Arc::new(toolkit_core::modules::Modules::load(dir.clone()));
+    let open = Arc::new(AtomicBool::new(true));
+    let on_air = open.clone();
+    let presenter = toolkit_core::presentation::Presenter::start(
+        std::time::Duration::from_millis(100),
+        move |_| on_air.load(Ordering::Relaxed),
+    );
+    let service = Arc::new(SoundService::new(
+        dir.clone(),
+        modules.clone(),
+        Arc::new(EventBus::default()),
+        presenter.clone(),
+    ));
+    let app = routes(service.clone());
+    let bell = json(send(&app, upload("bell.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let gone = json(send(&app, upload("gone.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for (reward, id) in [("r-bell", &bell), ("r-gone", &gone)] {
+        send(
+            &app,
+            choose(&format!("reward.{reward}"), id.as_str().into()),
+        )
+        .await;
+    }
+    std::fs::remove_file(dir.join("sounds").join(format!("{gone}.wav"))).unwrap();
+    let outcomes = || {
+        service
+            .recent()
+            .into_iter()
+            .rev()
+            .map(|r| r.outcome)
+            .collect::<Vec<_>>()
+    };
+    let wait = |ms| tokio::time::sleep(std::time::Duration::from_millis(ms));
+
+    // Unmeasured sounds hold the queue 5 s each.
+    service.receive_redemption(&redemption("r-bell", Added));
+    service.receive_redemption(&redemption("r-gone", Added));
+    service.receive_redemption(&redemption("r-bell", Added));
+    assert_eq!(outcomes(), [None, None, None], "queued");
+    wait(5_500).await;
+    modules
+        .set_enabled(toolkit_core::modules::SOUND, false)
+        .unwrap();
+    wait(11_000).await;
+    modules
+        .set_enabled(toolkit_core::modules::SOUND, true)
+        .unwrap();
+    open.store(false, Ordering::Relaxed);
+    service.receive_redemption(&redemption("r-bell", Added));
+    wait(500).await;
+    open.store(true, Ordering::Relaxed);
+    for _ in 0..4 {
+        service.receive_redemption(&redemption("r-bell", Added));
+    }
+    wait(500).await;
+    presenter.skip(|_| {});
+    wait(500).await;
+    presenter.clear();
+    service.receive_redemption(&redemption("r-bell", Added));
+    service.receive_redemption(&redemption("r-bell", Added));
+    wait(500).await;
+    presenter.stop(|_, _| {});
+    wait(500).await;
+    assert_eq!(
+        outcomes(),
+        [
+            Some(Outcome::Played),
+            Some(Outcome::SoundMissing),
+            Some(Outcome::Declined),
+            Some(Outcome::OffAir),
+            Some(Outcome::Skipped),
+            // The next one was playing by then: 清空排隊 leaves it, the emergency stop ends it.
+            Some(Outcome::Stopped),
+            Some(Outcome::Cleared),
+            Some(Outcome::Cleared),
+            Some(Outcome::Stopped),
+            Some(Outcome::Stopped),
+        ]
+    );
+    let first = service.recent().pop().unwrap();
+    assert_eq!(
+        first.subject,
+        toolkit_core::presentation::Subject::Sound {
+            sound: "bell".into(),
+            viewer: "Viewer".into()
+        }
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
