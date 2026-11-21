@@ -70,7 +70,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music and media. Live use goes\non while it is made; database writes wait only for the snapshot.",
+        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes\non while it is made; database writes wait only for the snapshot.",
         "operationId": "export_backup",
         "responses": {
           "200": {
@@ -476,6 +476,86 @@
         }
       }
     },
+    "/api/admin/checkin/card-style": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "card_style",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardStyleBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the style; the next card on the overlay shows it.",
+        "operationId": "set_card_style",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardStyleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The style as saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardStyleBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.invalid_style`: out of range, or an image the folder does not have",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/card-style/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "在 OBS 試播: shows a sample card in the saved style through the presentation queue (`source=simulation`);\nnothing is recorded.",
+        "operationId": "test_card_style",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/admin/checkin/card/hide": {
       "post": {
         "tags": [
@@ -510,6 +590,78 @@
           },
           "500": {
             "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/images": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Copies a PNG, JPG, GIF or WebP image (at most 5 MB, no SVG) in for the style. The body is the file itself.",
+        "operationId": "import_card_image",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The original file name: its extension must match the content.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The image file",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardImage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.unsupported_image`: not a PNG, JPG, GIF or WebP file (by extension and content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`checkin.image_too_large`: larger than 5 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6084,6 +6236,134 @@
           "screen.break"
         ]
       },
+      "CardImage": {
+        "type": "object",
+        "description": "A stored card image.",
+        "required": [
+          "name",
+          "url"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name to put in the style."
+          },
+          "url": {
+            "type": "string",
+            "description": "`/checkin/{name}`, readable without a token."
+          }
+        }
+      },
+      "CardLook": {
+        "type": "object",
+        "description": "How the card looks; image URLs are `/checkin/{name}`, readable without a token.",
+        "required": [
+          "preset",
+          "backgroundColor",
+          "backgroundUrl",
+          "stampColor",
+          "stampUrl",
+          "perRow",
+          "animation"
+        ],
+        "properties": {
+          "animation": {
+            "type": "string",
+            "description": "`fade`, `slide`, `pop` or `none`."
+          },
+          "backgroundColor": {
+            "type": "string"
+          },
+          "backgroundUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "perRow": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "preset": {
+            "type": "string",
+            "description": "`simple` or `journal`."
+          },
+          "stampColor": {
+            "type": "string"
+          },
+          "stampUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CardStyleBody": {
+        "type": "object",
+        "description": "The stamp card's look. `title` and `description` may hold `#觀眾#`, `#章數#`, `#次數#` and `#格數#`; they are\nbroadcaster text, shown as text.",
+        "required": [
+          "preset",
+          "background_color",
+          "stamp_color",
+          "per_row",
+          "title",
+          "description",
+          "animation",
+          "show_repeat"
+        ],
+        "properties": {
+          "animation": {
+            "type": "string",
+            "description": "`fade`, `slide`, `pop` or `none`."
+          },
+          "background_color": {
+            "type": "string",
+            "description": "`#RRGGBB`."
+          },
+          "background_image": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A name `POST /api/admin/checkin/images` gave; `null`: the color only."
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 100 characters after trimming."
+          },
+          "per_row": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1–20.",
+            "minimum": 0
+          },
+          "preset": {
+            "type": "string",
+            "description": "`simple` or `journal`."
+          },
+          "show_repeat": {
+            "type": "boolean",
+            "description": "A repeat check-in on the same business day shows the card too; nothing is recorded."
+          },
+          "stamp_color": {
+            "type": "string",
+            "description": "`#RRGGBB`."
+          },
+          "stamp_image": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A name `POST /api/admin/checkin/images` gave; `null`: a plain stamp in the color."
+          },
+          "title": {
+            "type": "string",
+            "description": "At most 100 characters after trimming."
+          }
+        }
+      },
       "ChatBadgeName": {
         "type": "string",
         "description": "A role shown by a chat badge (a founder counts as a subscriber).",
@@ -6987,7 +7267,10 @@
           "total",
           "full",
           "durationMs",
-          "sound"
+          "sound",
+          "title",
+          "description",
+          "style"
         ],
         "properties": {
           "avatarUrl": {
@@ -6996,6 +7279,10 @@
               "null"
             ],
             "description": "Twitch profile image (`https://static-cdn.jtvnw.net/` only); `null` when unknown."
+          },
+          "description": {
+            "type": "string",
+            "description": "The style's description with its variables filled in (raw text: render it as text)."
           },
           "durationMs": {
             "type": "integer",
@@ -7028,6 +7315,13 @@
             "format": "int32",
             "description": "Stamps on the current card, out of `slots`.",
             "minimum": 0
+          },
+          "style": {
+            "$ref": "#/components/schemas/CardLook"
+          },
+          "title": {
+            "type": "string",
+            "description": "The style's title with its variables filled in (raw text: render it as text)."
           },
           "total": {
             "type": "integer",

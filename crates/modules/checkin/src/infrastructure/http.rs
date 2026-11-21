@@ -78,7 +78,7 @@ pub struct ErrorBody {
     code: String,
 }
 
-fn error(status: StatusCode, code: &str) -> Response {
+pub(crate) fn error(status: StatusCode, code: &str) -> Response {
     (status, Json(ErrorBody { code: code.into() })).into_response()
 }
 
@@ -109,7 +109,11 @@ pub fn routes(pool: SqlitePool, service: Arc<CheckinService>) -> Router {
             "/api/admin/checkin/import",
             post(apply_import).layer(DefaultBodyLimit::max(IMPORT_MAX_BYTES)),
         )
-        .with_state(Arc::new(HttpState { pool, service }))
+        .with_state(Arc::new(HttpState {
+            pool,
+            service: service.clone(),
+        }))
+        .merge(super::card_style::routes().with_state(service))
 }
 
 /// One viewer with the stamp card derived from the total. `user_login` and `user_name` are raw Twitch text: escape
@@ -482,7 +486,7 @@ pub(crate) async fn manual_check_in(
     };
     let result = match s.service.check_in_manually(&id, day).await {
         Ok(Outcome::CheckedIn { .. }) => ManualCheckInResult::CheckedIn,
-        Ok(Outcome::Repeat) => ManualCheckInResult::AlreadyCheckedIn,
+        Ok(Outcome::Repeat | Outcome::Redelivered) => ManualCheckInResult::AlreadyCheckedIn,
         Err(e @ ManualError::ViewerNotFound) => {
             return error(StatusCode::NOT_FOUND, &e.to_string());
         }
@@ -626,6 +630,8 @@ pub(crate) async fn set_checkin_settings(
         reset_hour: body.reset_hour,
         card_slots: body.card_slots,
         reward_id: body.reward_id.filter(|id| !id.trim().is_empty()),
+        // Kept as saved: the card style has its own route.
+        card: Default::default(),
     };
     match s.service.config().update(&next, body.allowed) {
         Ok(rules) => Json(CheckinSettingsBody::of(&rules)).into_response(),

@@ -671,3 +671,124 @@ async fn an_import_below_what_was_deducted_shows_zero_and_keeps_the_log() {
     let (_, log) = call(&a.app, "GET", "/api/admin/checkin/deductions", None).await;
     assert_eq!(log.as_array().unwrap().len(), 1);
 }
+
+async fn upload_image(app: &axum::Router, name: &str, bytes: &[u8]) -> (u16, serde_json::Value) {
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/admin/checkin/images?name={name}"))
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(bytes.to_vec()))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status().as_u16();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+}
+
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\n rest";
+
+#[tokio::test]
+async fn the_card_style_is_checked_saved_and_its_images_served() {
+    let a = api("card-style").await;
+    let uri = "/api/admin/checkin/card-style";
+    let (status, style) = call(&a.app, "GET", uri, None).await;
+    assert_eq!(
+        (status, &style["preset"], &style["title"]),
+        (200, &"simple".into(), &"#觀眾#".into())
+    );
+
+    let (status, body) = upload_image(&a.app, "bg.svg", b"<svg onload=alert(1)>").await;
+    assert_eq!(
+        (status, &body["code"]),
+        (400, &"checkin.unsupported_image".into())
+    );
+    let (status, body) = upload_image(&a.app, "bg.png", b"GIF89a").await;
+    assert_eq!(
+        (status, &body["code"]),
+        (400, &"checkin.unsupported_image".into())
+    );
+    let (status, body) = upload_image(&a.app, "big.png", &vec![0; 5 * 1024 * 1024 + 1]).await;
+    assert_eq!(
+        (status, &body["code"]),
+        (413, &"checkin.image_too_large".into())
+    );
+    let (status, image) = upload_image(&a.app, "bg.png", PNG).await;
+    assert_eq!(status, 200);
+    let name = image["name"].as_str().unwrap().to_owned();
+
+    let mut next = style.clone();
+    next["preset"] = "journal".into();
+    next["background_image"] = name.clone().into();
+    next["per_row"] = 5.into();
+    next["title"] = " #觀眾# 打卡 ".into();
+    let (status, saved) = call(&a.app, "PUT", uri, Some(next.clone())).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        (&saved["title"], &saved["background_image"]),
+        (&"#觀眾# 打卡".into(), &name.clone().into())
+    );
+    assert_eq!(
+        toolkit_core::settings::load(&a.dir).checkin.card.preset,
+        "journal"
+    );
+
+    for (field, value) in [
+        ("preset", serde_json::json!("fancy")),
+        ("background_color", serde_json::json!("red")),
+        ("per_row", serde_json::json!(0)),
+        (
+            "stamp_image",
+            serde_json::json!("0190a1b2-0000-7000-8000-000000000009.png"),
+        ),
+    ] {
+        let mut bad = saved.clone();
+        bad[field] = value;
+        let (status, body) = call(&a.app, "PUT", uri, Some(bad)).await;
+        assert_eq!(
+            (status, &body["code"]),
+            (400, &"checkin.invalid_style".into()),
+            "{field}"
+        );
+    }
+
+    let files = super::super::card_style::image_routes(a.service.clone());
+    let res = files
+        .clone()
+        .oneshot(
+            Request::get(format!("/checkin/{name}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["content-type"], "image/png");
+    let res = files
+        .oneshot(
+            Request::get("/checkin/..%2Fsettings.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+
+    // A saved style without the image removes it from the folder.
+    let mut plain = saved.clone();
+    plain["background_image"] = serde_json::Value::Null;
+    call(&a.app, "PUT", uri, Some(plain)).await;
+    assert!(!a.dir.join("checkin").join(&name).exists());
+}
+
+#[tokio::test]
+async fn a_test_card_records_nothing() {
+    let a = api("card-test").await;
+    let (status, _) = call(&a.app, "POST", "/api/admin/checkin/card-style/test", None).await;
+    assert_eq!(status, 204);
+    assert_eq!(count(&a.pool).await, 0);
+    let recent = a.service.recent();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0].source, Source::Simulation);
+}

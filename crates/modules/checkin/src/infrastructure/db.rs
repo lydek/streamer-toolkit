@@ -361,11 +361,19 @@ impl CheckinRepository for SqliteCheckins {
         let outcome = if new {
             check_in_tx(&mut tx, viewer, c).await?
         } else {
-            Outcome::Repeat
+            Outcome::Redelivered
         };
         tx.commit().await.map_err(storage)?;
         Ok(outcome)
     }
+    async fn viewer_id(&self, twitch_id: &TwitchUserId) -> Result<Option<String>, RepositoryError> {
+        sqlx::query_scalar("SELECT id FROM checkin_viewers WHERE twitch_user_id = ?")
+            .bind(&twitch_id.0)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)
+    }
+
     async fn total(&self, viewer_id: &str) -> Result<Option<u64>, RepositoryError> {
         let total: Option<i64> = sqlx::query_scalar(
             "SELECT v.baseline_total + (SELECT COUNT(*) FROM checkin_records r WHERE r.viewer_id = v.id) \
@@ -536,7 +544,7 @@ pub(crate) mod tests {
         let c = CheckIn::at(rule, utc(at), Trigger::Chat, utc(at));
         match repo.check_in(&viewer(id), &c).await.unwrap() {
             Outcome::CheckedIn { total, .. } => Some(total),
-            Outcome::Repeat => None,
+            Outcome::Repeat | Outcome::Redelivered => None,
         }
     }
 

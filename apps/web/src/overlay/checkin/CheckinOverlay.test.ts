@@ -68,6 +68,40 @@ describe('CheckinOverlay', () => {
     expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
   })
 
+  it('shows the card style: texts as text, colors, row size, preset and only the Host’s own images', async () => {
+    const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
+    const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }
+    vm.receive({ type: 'snapshot', version: 1, seq: 1, payload: {} })
+    vm.receive(
+      stamped(2, {
+        title: '<b>Ann</b> 打卡',
+        description: '累計 13 次',
+        style: {
+          preset: 'journal',
+          backgroundColor: '#fbf6ee',
+          backgroundUrl: 'https://evil.example/x.png',
+          stampColor: '#c0392b',
+          stampUrl: '/checkin/0190a1b2-0000-7000-8000-000000000001.png',
+          perRow: 5,
+          animation: 'pop',
+        },
+      }),
+    )
+    await nextTick()
+    const card = wrapper.get('[data-checkin-card]')
+    expect(card.get('.name').text()).toBe('<b>Ann</b> 打卡')
+    expect(card.find('.name b').exists()).toBe(false)
+    expect(card.get('.total').text()).toBe('累計 13 次')
+    expect(card.classes()).toEqual(expect.arrayContaining(['preset-journal', 'anim-pop']))
+    const style = (card.element as HTMLElement).style
+    expect(style.getPropertyValue('--per-row')).toBe('5')
+    expect(style.getPropertyValue('--stamp')).toBe('#c0392b')
+    expect(style.getPropertyValue('--card-image')).toBe('none')
+    expect(style.getPropertyValue('--stamp-image')).toContain('/checkin/')
+    // 手帳's paper is light, so its text is dark.
+    expect(style.getPropertyValue('--card-fg')).toBe('#1f1a17')
+  })
+
   it('takes the card away at once on 隱藏畫面卡片', async () => {
     const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
     const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }

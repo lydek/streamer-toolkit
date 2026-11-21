@@ -103,7 +103,16 @@ async fn each_check_in_shows_its_card_once_in_order() {
     assert_eq!(first["source"], "twitch");
     assert_eq!(
         first["payload"],
-        serde_json::json!({ "userName": "<b>Viewer 1</b>", "avatarUrl": AVATAR, "stamps": 1, "slots": 2, "total": 1, "full": false, "durationMs": 80, "sound": null })
+        serde_json::json!({
+            "userName": "<b>Viewer 1</b>", "avatarUrl": AVATAR, "stamps": 1, "slots": 2, "total": 1, "full": false,
+            "durationMs": 80, "sound": null,
+            // The default style: the name and the total filled in as raw text, for the overlay to show as text.
+            "title": "<b>Viewer 1</b>", "description": "累計 1 次",
+            "style": {
+                "preset": "simple", "backgroundColor": "#181624", "backgroundUrl": null, "stampColor": "#d8b7ff",
+                "stampUrl": null, "perRow": 10, "animation": "slide"
+            }
+        })
     );
     assert_eq!(second["payload"]["userName"], "<b>Viewer 2</b>");
     assert_eq!(
@@ -381,5 +390,39 @@ async fn a_pushed_card_shows_without_a_record_and_hide_clears_it() {
     };
     let typed: CheckinHiddenEvent = serde_json::from_value(hidden.clone()).unwrap();
     assert_eq!(serde_json::to_value(typed).unwrap(), hidden);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_repeat_check_in_shows_its_card_only_when_the_style_asks_and_records_nothing() {
+    let pool = pool().await;
+    let dir = data_dir("cards-repeat");
+    let bus = Arc::new(EventBus::default());
+    let (_, mut rx) = bus.subscribe();
+    let service = Arc::new(start_quiet(
+        pool.clone(),
+        bus,
+        Arc::new(Modules::load(dir.clone())),
+        dir.clone(),
+    ));
+    service.receive_chat(&chat("1", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
+    let (first, _) = next_card(&mut rx).await;
+    assert_eq!(first["payload"]["total"], 1);
+
+    // Off by default: a repeat shows nothing.
+    service.receive_chat(&chat("1", "!打卡", "2026-11-16T02:00:00Z"), Source::Twitch);
+    let quiet =
+        tokio::time::timeout(std::time::Duration::from_millis(300), next_card(&mut rx)).await;
+    assert!(quiet.is_err());
+
+    let style = toolkit_core::settings::CardStyle {
+        show_repeat: true,
+        ..Default::default()
+    };
+    service.config().set_style(style).unwrap();
+    service.receive_chat(&chat("1", "!打卡", "2026-11-16T03:00:00Z"), Source::Twitch);
+    let (again, _) = next_card(&mut rx).await;
+    assert_eq!(again["payload"]["total"], 1, "the card as it stands");
+    assert_eq!(count(&pool).await, 1, "a repeat records nothing");
     let _ = std::fs::remove_dir_all(&dir);
 }

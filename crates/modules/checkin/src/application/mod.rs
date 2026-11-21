@@ -18,6 +18,10 @@ use toolkit_core::{
     settings::{self, CheckinSettings},
 };
 
+mod style;
+
+pub(crate) use style::{IMAGE_MAX_BYTES, StyleError};
+
 use crate::domain::{
     BusinessDay, CardSlots, CheckIn, Command, Deduction, ImportedViewer, InvalidSettings, RewardId,
     Rules, Trigger, TwitchUserId, Viewer,
@@ -37,6 +41,8 @@ pub(crate) enum Outcome {
     },
     /// The viewer already checked in on that business day; nothing was written.
     Repeat,
+    /// An outbox event handled before (redelivered); nothing was written and nothing shows.
+    Redelivered,
 }
 
 /// What became of a deduction.
@@ -103,6 +109,12 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
         check_in: &CheckIn,
     ) -> impl Future<Output = Result<Outcome, RepositoryError>> + Send;
 
+    /// A viewer's internal ID by Twitch user ID.
+    fn viewer_id(
+        &self,
+        twitch_id: &TwitchUserId,
+    ) -> impl Future<Output = Result<Option<String>, RepositoryError>> + Send;
+
     /// The viewer's lifetime check-ins; `None` for an unknown viewer.
     fn total(
         &self,
@@ -143,6 +155,9 @@ pub(crate) fn test_commands(dir: &std::path::Path) -> Arc<CommandTable> {
 pub(crate) struct Config {
     commands: Arc<CommandTable>,
     rules: RwLock<Rules>,
+    data_dir: PathBuf,
+    /// The stamp card's look, checked.
+    style: RwLock<toolkit_core::settings::CardStyle>,
 }
 
 impl Config {
@@ -165,9 +180,12 @@ impl Config {
             }
         }
         let rules = rules_or_defaults(&saved, &commands.get(COMMAND_KEY));
+        let style = crate::domain::style::checked(saved.card).unwrap_or_default();
         Self {
             commands,
             rules: RwLock::new(rules),
+            data_dir,
+            style: RwLock::new(style),
         }
     }
 
@@ -190,8 +208,12 @@ impl Config {
             module: modules::CHECKIN.into(),
             label: None,
         };
-        self.commands
-            .set(COMMAND_KEY, entry, |s| s.checkin = settings_of(&rules))?;
+        // The card style is saved on its own; keep it.
+        self.commands.set(COMMAND_KEY, entry, |s| {
+            let card = std::mem::take(&mut s.checkin.card);
+            s.checkin = settings_of(&rules);
+            s.checkin.card = card;
+        })?;
         *current = rules.clone();
         Ok(rules)
     }
@@ -228,6 +250,7 @@ pub(crate) fn settings_of(r: &Rules) -> CheckinSettings {
         reset_hour: r.day.reset_hour(),
         card_slots: r.slots.get(),
         reward_id: r.reward.as_ref().map(|w| w.as_str().to_owned()),
+        card: Default::default(),
     }
 }
 
@@ -382,7 +405,7 @@ pub(crate) fn checked_in(viewer: &Viewer, outcome: &Outcome, rules: &Rules) -> O
             stamps: rules.slots.stamps(*total),
             slots: rules.slots.get(),
         }),
-        Outcome::Repeat => None,
+        Outcome::Repeat | Outcome::Redelivered => None,
     }
 }
 
@@ -430,6 +453,7 @@ pub struct CheckinService {
     modules: Arc<Modules>,
     config: Arc<Config>,
     on_checked_in: OnCheckedIn,
+    queue_card: QueueCard,
 }
 
 impl CheckinService {
@@ -491,7 +515,8 @@ impl CheckinService {
                 done,
             });
         });
-        let queued = queue_card.clone();
+        let (queued, repeat_card, kept) =
+            (queue_card.clone(), queue_card.clone(), queue_card.clone());
         let on_checked_in: OnCheckedIn = Arc::new(move |c| {
             changed(c);
             queued(c, true);
@@ -510,6 +535,11 @@ impl CheckinService {
                         let check_in =
                             CheckIn::at(&rules.day, occurred_at, Trigger::Chat, Utc::now());
                         match repo.check_in(&viewer, &check_in).await {
+                            Ok(Outcome::Repeat) if worker_config.style().show_repeat => {
+                                if let Ok(Some(c)) = repeated(&*repo, &rules, &viewer).await {
+                                    repeat_card(&c, false);
+                                }
+                            }
                             Ok(outcome) => {
                                 if let Some(c) = checked_in(&viewer, &outcome, &rules) {
                                     notify(&c);
@@ -560,7 +590,14 @@ impl CheckinService {
             modules,
             config,
             on_checked_in,
+            queue_card: kept,
         }
+    }
+
+    /// Shows a repeat check-in's card when the style asks for it; nothing is recorded.
+    pub(crate) fn repeat_card(&self) -> OnCheckedIn {
+        let queue = self.queue_card.clone();
+        Arc::new(move |c| queue(c, false))
     }
 
     /// Shows a stamp card on the overlay without recording anything (`source=simulation`); `false` when `stamps`
@@ -691,6 +728,18 @@ impl CheckinService {
     }
 }
 
+/// The card a repeat check-in shows: the viewer's card as it stands, under no record.
+pub(crate) async fn repeated<R: CheckinRepository>(
+    repo: &R,
+    rules: &Rules,
+    viewer: &Viewer,
+) -> Result<Option<CheckedIn>, RepositoryError> {
+    match repo.viewer_id(&viewer.twitch_id).await? {
+        Some(id) => pushed(repo, rules, &id).await,
+        None => Ok(None),
+    }
+}
+
 /// The card a push shows: the viewer's card as of their total, under no record.
 async fn pushed<R: CheckinRepository>(
     repo: &R,
@@ -805,6 +854,7 @@ mod tests {
             reset_hour: 30,
             card_slots: 12,
             reward_id: Some("not valid!".into()),
+            card: Default::default(),
         };
         let bad = CommandEntry {
             name: "two words".into(),

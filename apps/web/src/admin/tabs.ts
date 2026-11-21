@@ -67,7 +67,7 @@ export const GROUPS: TabGroup[] = [
       { path: '/alerts', label: 'modules.names.alerts' },
       soon('/polls', 'polls', 'pi pi-chart-bar', true),
       { path: '/checkin', label: 'modules.names.checkin' },
-      soon('/card-style', 'cardStyle', 'pi pi-palette'),
+      { path: '/card-style', label: 'pages.cardStyle.name' },
       soon('/rewards', 'rewards', 'pi pi-star', true),
       { path: '/redemptions', label: 'modules.names.redemption' },
       { path: '/counters', label: 'modules.names.counter' },

@@ -258,6 +258,8 @@ pub struct CheckinSettings {
     pub card_slots: u32,
     /// Twitch ID of the channel points reward that checks in; `None`: chat only.
     pub reward_id: Option<String>,
+    /// How the stamp card looks on the overlay; the check-in module checks it.
+    pub card: CardStyle,
 }
 
 impl Default for CheckinSettings {
@@ -268,6 +270,48 @@ impl Default for CheckinSettings {
             reset_hour: 0,
             card_slots: 10,
             reward_id: None,
+            card: CardStyle::default(),
+        }
+    }
+}
+
+/// The stamp card's look. Images are file names in the data folder's `checkin/`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CardStyle {
+    /// `simple` or `journal`.
+    pub preset: String,
+    /// `#RRGGBB`.
+    pub background_color: String,
+    pub background_image: Option<String>,
+    /// `#RRGGBB`.
+    pub stamp_color: String,
+    pub stamp_image: Option<String>,
+    /// Slots per row.
+    pub per_row: u32,
+    /// May hold `#觀眾#`, `#章數#`, `#次數#` and `#格數#`.
+    pub title: String,
+    /// May hold the same variables as `title`.
+    pub description: String,
+    /// `fade`, `slide`, `pop` or `none`.
+    pub animation: String,
+    /// A repeat check-in on the same business day shows the card too (nothing is recorded).
+    pub show_repeat: bool,
+}
+
+impl Default for CardStyle {
+    fn default() -> Self {
+        Self {
+            preset: "simple".into(),
+            background_color: "#181624".into(),
+            background_image: None,
+            stamp_color: "#d8b7ff".into(),
+            stamp_image: None,
+            per_row: 10,
+            title: "#觀眾#".into(),
+            description: "累計 #次數# 次".into(),
+            animation: "slide".into(),
+            show_repeat: false,
         }
     }
 }

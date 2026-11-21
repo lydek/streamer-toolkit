@@ -1,5 +1,6 @@
 //! Adapters: the SQLite repository, the admin API, the outbox subscription and the `checkin.changed` screen event.
 
+pub(crate) mod card_style;
 pub(crate) mod db;
 pub(crate) mod http;
 
@@ -17,6 +18,7 @@ use toolkit_core::{
     modules::{self, Modules},
     outbox::{Handled, OutboxEvent, Subscriber, Subscription},
     presentation::Presenter,
+    settings::CardStyle,
 };
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
@@ -26,7 +28,7 @@ use crate::{
         self, COMMAND_KEY, Card, CheckedIn, CheckinService, Config, HideCard, OnCheckedIn,
         ProfileImages, Redeemed, Screen, ShowCard, Timing,
     },
-    domain::{TwitchUserId, Viewer},
+    domain::{TwitchUserId, Viewer, style::fill},
 };
 
 const STAMPED: &str = "checkin.stamped";
@@ -73,10 +75,57 @@ pub struct CheckinStampedPayload {
     /// Played once as the card shows; `null`: silent (the default).
     #[schema(required)]
     pub sound: Option<PlaySound>,
+    /// The style's title with its variables filled in (raw text: render it as text).
+    pub title: String,
+    /// The style's description with its variables filled in (raw text: render it as text).
+    pub description: String,
+    pub style: CardLook,
 }
 
-fn publish_card(bus: &EventBus, sounds: &SoundService, card: &Card, show: std::time::Duration) {
+/// How the card looks; image URLs are `/checkin/{name}`, readable without a token.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CardLook {
+    /// `simple` or `journal`.
+    pub preset: String,
+    pub background_color: String,
+    #[schema(required)]
+    pub background_url: Option<String>,
+    pub stamp_color: String,
+    #[schema(required)]
+    pub stamp_url: Option<String>,
+    pub per_row: u32,
+    /// `fade`, `slide`, `pop` or `none`.
+    pub animation: String,
+}
+
+impl From<&CardStyle> for CardLook {
+    fn from(s: &CardStyle) -> Self {
+        let url = |name: &Option<String>| name.as_ref().map(|n| format!("/checkin/{n}"));
+        Self {
+            preset: s.preset.clone(),
+            background_color: s.background_color.clone(),
+            background_url: url(&s.background_image),
+            stamp_color: s.stamp_color.clone(),
+            stamp_url: url(&s.stamp_image),
+            per_row: s.per_row,
+            animation: s.animation.clone(),
+        }
+    }
+}
+
+fn publish_card(
+    bus: &EventBus,
+    sounds: &SoundService,
+    style: &CardStyle,
+    card: &Card,
+    show: std::time::Duration,
+) {
+    let text = |t: &str| fill(t, &card.name, card.stamps, card.total, card.slots);
     let payload = CheckinStampedPayload {
+        title: text(&style.title),
+        description: text(&style.description),
+        style: style.into(),
         user_name: card.name.clone(),
         avatar_url: card.avatar.clone(),
         stamps: card.stamps,
@@ -199,11 +248,14 @@ pub fn start(
     let (changed_bus, hidden_bus) = (bus.clone(), bus.clone());
     let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
     let hide_card: HideCard = Arc::new(move || publish_hidden(&hidden_bus));
-    let show_card: ShowCard = Arc::new(move |card, show| publish_card(&bus, &sounds, card, show));
+    let config = Arc::new(Config::load(data_dir, commands));
+    let styled = config.clone();
+    let show_card: ShowCard =
+        Arc::new(move |card, show| publish_card(&bus, &sounds, &styled.style(), card, show));
     CheckinService::start(
         db::SqliteCheckins::new(pool),
         modules,
-        Arc::new(Config::load(data_dir, commands)),
+        config,
         Screen {
             changed,
             show_card,
@@ -231,6 +283,7 @@ pub fn subscriptions(pool: SqlitePool, service: &CheckinService) -> Vec<Subscrip
             repo: db::SqliteCheckins::new(pool),
             config: service.config().clone(),
             notify: service.on_checked_in().clone(),
+            repeat: service.repeat_card(),
         }),
     }]
 }
@@ -239,6 +292,7 @@ struct RedemptionCheckins {
     repo: db::SqliteCheckins,
     config: Arc<Config>,
     notify: OnCheckedIn,
+    repeat: OnCheckedIn,
 }
 
 impl Subscriber for RedemptionCheckins {
@@ -260,7 +314,13 @@ impl Subscriber for RedemptionCheckins {
             let outcome = application::redeemed(&self.repo, &rules, &redeemed, Utc::now())
                 .await
                 .map_err(|e| e.to_string())?;
-            if let Some(c) =
+            if outcome == Some(application::Outcome::Repeat) && self.config.style().show_repeat {
+                if let Ok(Some(c)) =
+                    application::repeated(&self.repo, &rules, &redeemed.viewer).await
+                {
+                    (self.repeat)(&c);
+                }
+            } else if let Some(c) =
                 outcome.and_then(|o| application::checked_in(&redeemed.viewer, &o, &rules))
             {
                 (self.notify)(&c);
@@ -282,6 +342,10 @@ impl Subscriber for RedemptionCheckins {
         http::list_deductions,
         http::push_card,
         http::hide_card,
+        card_style::card_style,
+        card_style::set_card_style,
+        card_style::import_card_image,
+        card_style::test_card_style,
         http::preview_import,
         http::apply_import
     ),

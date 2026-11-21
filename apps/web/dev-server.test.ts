@@ -119,7 +119,7 @@ describe('dev server', () => {
   })
 
   it('proxies /sounds and /music to the Host without opening them to the null origin', async () => {
-    for (const path of ['/sounds/x', '/music/x', '/media/x']) {
+    for (const path of ['/sounds/x', '/music/x', '/media/x', '/checkin/x']) {
       const res = await fetch(`${base}${path}`, { headers: { Origin: 'null' } })
       expect(await res.text()).toBe('host')
       expect(res.headers.get('access-control-allow-origin')).toBeNull()

@@ -3,6 +3,8 @@
 
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
+
+pub(crate) mod style;
 use toolkit_core::commands::Allowed;
 use uuid::Uuid;
 

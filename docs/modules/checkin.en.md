@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: e6230771e19564cddec740e984d96c5136b2b6414aa7cd16c9a23ab282fd11b2 -->
+<!-- source: docs/modules/checkin.md source-sha256: ea470d0c541d8d362a42f2c4b44472c569bdfba0d9bb368692c98e78f82af85f -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -27,7 +27,8 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - The full page also shows each viewer's available stamps, which can be spent (e.g. one press when a full card buys a song request), with an optional reason; the change log lists the latest 100 deductions (time, viewer, stamps, reason). See "Stamps" below.
 
 ## OBS stamp card
-- `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing.
+- `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing by default, and the card style can choose to show them (nothing is recorded; a redelivered redemption event never shows again).
+- Card style (the 卡片樣式 tab): a built-in preset (簡約 simple, 手帳 journal), a background color or image, a stamp color or image, slots per row, a title and a description (they may hold `#觀眾#` `#章數#` `#次數#` `#格數#`, filled in by the Host and shown by the overlay as text only), and the entry animation. After saving, the next card uses the new style; 在 OBS 試播 (test in OBS) queues a sample card in the saved style without recording anything. Images may only be PNG, JPG, GIF or WebP (no SVG), the extension must match the start of the file, at most 5 MB; they are stored in the data folder's `checkin/` and backed up and restored with the rest.
 - Each row of the full page can push the viewer's stamp card to the screen (queued on the presentation queue, no check-in recorded); 隱藏畫面卡片 at the top takes the card on screen away at once.
 - The simulator in the drawer tests the overlay without writing records. Details in [architecture.en.md](../architecture.en.md) "Stamp card overlay".
 

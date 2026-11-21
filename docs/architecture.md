@@ -108,13 +108,13 @@ apps/
   - `cfg(dev)` 只在 `apps/desktop` 有效：由 `apps/desktop` 判斷是否為 dev，再把 dev 額外允許的 Vite origin 當成執行期設定傳給 Host；`crates/host` 不讀任何 cfg。
   - `rust-embed` 啟用 `debug-embed` feature，debug 建置也真的把檔案內嵌進執行檔。
   - 使用者自訂的 HTML／CSS 樣板（`custom`）存在資料夾的 `templates/`，由使用者自己放入（見下方「本機 API 安全」的「使用者樣板」）。
-- **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws`、`/templates`、`/sounds`、`/music` 與 `/media` proxy 到 Host：
+- **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws`、`/templates`、`/sounds`、`/music`、`/media` 與 `/checkin` proxy 到 Host：
   - proxy 目標寫 `http://127.0.0.1:<port>`，不寫 `localhost`（Node 可能解析成 IPv6 `::1`，但 Host 只綁 IPv4）。
   - `<port>` 每個請求都重新讀 dev 資料夾（`target\debug\data\`，由 `pnpm tauri dev` 使用，不看 `--data-dir`；有設 `CARGO_TARGET_DIR` 時以它為準，須為絕對路徑）的 `settings.json`，沒有檔案或內容不合法時用預設 port：Vite 比 app 先啟動，資料夾第一次啟動時可能自動換 port，port 修改小頁面也可能存下新的 port。
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
   - Vite 送出和 Host 相同的 CSP：`/overlay/` 下的頁面送 Overlay CSP，其他送 `/admin` 的 CSP（`frame-src` 依請求的 Host 標頭，放行同一 origin 下的聊天室與特效 Overlay 頁；標頭不是單純的主機名稱與 port 時為 `'none'`），讓違規在開發時就出現。CSP 由下一條的 middleware 設定，不用 `server.headers`：Vite 最後才套用它，會蓋掉 Overlay CSP。
-  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates`、`/sounds`、`/music`、`/media` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
+  - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates`、`/sounds`、`/music`、`/media`、`/checkin` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
   - 任何網站的 sandbox iframe 都是 `null` origin，所以依上一條，任何網站都讀得到 Vite 提供的檔案。因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 資料）在裡面，不能經由 Vite 讀到。
 
 ### 本機 API 安全
@@ -146,6 +146,7 @@ apps/
   - 音效：預設音效 `chime.wav` 由 `scripts/generate-chime.mjs` 只用 Node 內建模組合成（不下載外部音檔，記在 `assets/CREDITS.md`），打包進建置產物。每種事件可在特效完整頁各自選內建音效（預設）、音效庫的一個音效或靜音（見「音效庫」）；payload 的 `sound` 告訴 Overlay 要播哪一個（`built_in` 帶 `volume`、`silent`，或 `file` 帶 `url` 與 `volume`），每則特效開始時播放一次。OBS 瀏覽器來源允許自動播放；要在 OBS 混音器調整音量，勾選來源的「透過 OBS 控制音訊」。
 - **集點卡 Overlay**（`/overlay/checkin/`）：每次打卡成功（重複的不算）就把卡片排進同一條呈現佇列，輪到時送出一則 `checkin.stamped`：觀眾名稱、頭像網址、目前的格數與總格數、累計次數、是否剛好集滿、顯示時間（5 秒，之後隔 1 秒才送下一則），不放進快照。頭像向 Twitch（Helix Get Users）查一次後存起來，只接受 `https://static-cdn.jtvnw.net/` 的網址，Overlay 也再檢查一次。名稱以 Vue 的文字插值顯示。打卡設定可為一般打卡與集滿各選音效庫的一個音效（預設靜音），payload 的 `sound`（`url`、`volume`；靜音為 `null`）隨卡片播放一次。只有一款內建樣式（純 CSS，沒有外部素材），集滿時有不同的效果。模擬器（`POST /api/admin/simulate/checkin`，`source=simulation`）只送到 Overlay，不寫入紀錄。
   - 推卡與隱藏：打卡完整頁可把某位觀眾目前的集點卡推到畫面（`POST /api/admin/checkin/viewers/{id}/card`），和打卡的卡片一樣排進呈現佇列，但不寫打卡紀錄，事件流也不列；「隱藏畫面卡片」（`POST /api/admin/checkin/card/hide`）發布 `checkin.hidden`（不放進快照），Overlay 立刻收掉畫面上的卡片與音效。
+  - 卡片樣式：存在 `settings.json` 的 `checkin.card`（內建樣式 `simple`／`journal`、背景顏色與圖片、印章顏色與圖片、每排 1–20 格、標題與說明最多 100 字、進場動畫 `slide`／`fade`／`pop`／`none`、重複打卡是否顯示）；改打卡設定不會動到它。管理 API：`GET`／`PUT /api/admin/checkin/card-style`、`POST /api/admin/checkin/images`（PNG、JPG、GIF、WebP，最多 5 MB，副檔名與 magic bytes 一致，存成 `checkin/<UUID>.<格式>`）、`POST /api/admin/checkin/card-style/test`（試播，`source=simulation`，不寫紀錄）。`checkin.stamped` 多帶代換好的 `title`、`description` 與 `style`（顏色、圖片網址、每排格數、樣式與動畫）；變數由 Host 代換，觀眾名稱最後代換，名稱裡的變數不會被代換；Overlay 以文字插值顯示，圖片只用 `/checkin/` 開頭的網址；卡片樣式的顏色與圖片優先於疊加層主題的底色。`GET /checkin/{name}` 與 `/music/{id}` 相同：唯讀、不需要 token、只提供符合 `<UUID>.<格式>` 且存在的檔案、`nosniff`、`no-store`。存檔時刪掉樣式不再使用的圖片。重複打卡要顯示時，聊天室指令與兌換的重複打卡排一張卡片（不寫紀錄、事件流不列）；重送的兌換事件不會再顯示。
 - **聊天指令**（`core` 的 `commands`，Host 組合）：各功能的聊天指令存在同一張表，`settings.json` 的 `chat_commands`。每筆以指令的 key 對應名稱、「誰能用」、所屬模組，以及實況主取的稱呼（`label`，例如計數器的名稱）；沒存過的用宣告的預設名稱、所有人可用。固定的指令由模組宣告（key、所屬模組、預設名稱），Host 把所有宣告組合成一張表交給各模組；實況主新增的指令（例如計數器的，key `counter.<ID>`）直接存進表，刪除時一併移除。模組只透過這張表存取自己的指令，不讀別的模組的資料。
   - 撞名：存檔時名稱和表裡其他指令（存過的，以及宣告了但沒存過的）相同（英文不分大小寫）就拒絕，不存任何東西；管理 API 回 409 `commands.taken`，並帶 `module`（用到它的模組）與 `label`（它的稱呼，沒有稱呼時是 `!<名稱>`），管理 UI 寫成：已被計數器的「死亡次數」使用。
   - 誰能用：所有人、訂閱者、VIP、管理員，所有功能用同一個判斷（看 Twitch 聊天徽章顯示的身分）。每一級也包含上面的級別（訂閱者 < VIP < 管理員），實況主本人永遠可以用所有指令。
@@ -254,23 +255,23 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 ### 資料夾
 每個資料夾是一個執行單位，以 `instance-id` 識別：設定、記錄檔、快取與 WebView2 資料都在裡面。程式只發可攜版，資料預設放在執行檔旁的 `data` 資料夾。
 - 使用哪個資料夾：命令列 `--data-dir <路徑>` 指定的資料夾；沒有指定就用執行檔旁的 `data` 資料夾（dev 建置也一樣，所以在 `target\debug\data\`）。
-- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`music/`（匯入的背景音樂）、`media/`（兌換時播的影片與 GIF）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前與還原前的備份）；還原時另有暫時的 `restore-staging/`、`restore-pending` 與 `restore-previous/`（見下方「備份檔」）。
+- 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（`custom` 樣板，Host 不會建立）、`sounds/`（匯入的音效）、`music/`（匯入的背景音樂）、`media/`（兌換時播的影片與 GIF）、`checkin/`（集點卡樣式的圖片）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前與還原前的備份）；還原時另有暫時的 `restore-staging/`、`restore-pending` 與 `restore-previous/`（見下方「備份檔」）。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。只有 `instance-id` 不存在時才產生新的（`create_new`，同時啟動的兩份拿到同一個 ID）；其他讀取錯誤會顯示錯誤並結束，不會換成新 ID。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
 
 備份檔（`.stbackup`，設定頁的「備份與還原」）：
-- zip 檔，內含 `settings.json`、資料庫 `toolkit.db`、`templates/`、`sounds/`、`music/`、`media/` 與 `manifest.json`；不含 `logs/`、`cache/`、`WebView2/`、`backups/` 與 `instance-id`。Twitch 登入與 OBS 密碼在 Credential Manager，不在資料夾裡，所以不會進備份檔；Client ID 不是秘密，隨 `settings.json` 備份。
+- zip 檔，內含 `settings.json`、資料庫 `toolkit.db`、`templates/`、`sounds/`、`music/`、`media/`、`checkin/` 與 `manifest.json`；不含 `logs/`、`cache/`、`WebView2/`、`backups/` 與 `instance-id`。Twitch 登入與 OBS 密碼在 Credential Manager，不在資料夾裡，所以不會進備份檔；Client ID 不是秘密，隨 `settings.json` 備份。
 - 資料庫先用 `VACUUM INTO` 存成 `cache/` 裡的快照再放進 zip，不直接讀開啟中的檔案。直播中匯出時聊天室、特效與打卡照常運作，資料庫寫入只在快照期間稍等。
 - `manifest.json`：`format`（`streamer-toolkit-backup`）、`format_version`（目前為 1）、`app_version`、`schema_version`（資料庫最新的 migration 版本，空的資料庫為 0）、`created_at`（UTC，RFC 3339）、`records`（`redemptions`、`checkins`：兌換紀錄與打卡紀錄的筆數）、`files`（每個檔案的 `path`、`size`、`sha256`）。
-- 路徑只能是 `settings.json`、`toolkit.db`，或 `templates/`、`sounds/`、`music/`、`media/` 底下的相對路徑，以 `/` 分隔；每一段不得為空、`.` 或 `..`，不得含 `\`、`:` 等 Windows 不允許的字元，也不得是保留名稱（`CON`、`NUL` 等）。符號連結與 junction 不備份。
+- 路徑只能是 `settings.json`、`toolkit.db`，或 `templates/`、`sounds/`、`music/`、`media/`、`checkin/` 底下的相對路徑，以 `/` 分隔；每一段不得為空、`.` 或 `..`，不得含 `\`、`:` 等 Windows 不允許的字元，也不得是保留名稱（`CON`、`NUL` 等）。符號連結與 junction 不備份。
 - 上限：zip 512 MB、檔案 10,000 個、解壓縮後合計 2 GB。匯出超過上限時整份拒絕（413 `backup.too_large`，管理 UI 列出上限），不會略過任何檔案，所以匯出的檔案一定能還原。
 - 匯出：管理 API `GET /api/admin/backup` 回傳備份檔。管理 UI 先開另存新檔對話方塊（`showSaveFilePicker`）選位置，再把回應寫進去；沒有這個 API 時改由瀏覽器下載。
 - 還原只會整份取代，不合併：
   1. 選檔：管理 UI 把檔案原樣送到 `POST /api/admin/backup/restore/preview`（上限 512 MB，`DefaultBodyLimit`）。寫入任何東西之前，先在記憶體檢查上限、每個路徑、每個檔案的大小與 SHA-256（只讀到 manifest 寫的大小再多 1 byte，不相信 zip 自己記的大小）、zip 裡剛好是 manifest 列的檔案加上 manifest；`format_version` 或 `schema_version` 比這一版新時回 400 `backup.newer_version`，其他不符回 400 `backup.invalid`。通過後解到資料夾的 `restore-staging/`，再檢查資料庫本身（套用過的 migration 都必須是這一版認得、checksum 相同且已完成的；有不認得的也回 `backup.newer_version`）與 `settings.json` 讀得懂，最後才寫入 `manifest.json` 表示暫存完成，回傳預覽（備份時間、程式版本、兌換與打卡紀錄筆數、樣板資料夾數、音效檔數、背景音樂檔數）。任何一步失敗就刪掉 `restore-staging/`；使用中的資料都不動。
   2. 確認：`POST /api/admin/backup/restore`（沒有暫存時回 409 `backup.nothing_staged`）寫入 `restore-pending`（內容是這次還原的新 ID），回 202 後重新啟動程式（`AppHandle::request_restart`，沿用原本的命令列參數）。
-  3. 啟動時（見「啟動順序」）：先把目前的資料存成 `backups/before-restore-<UTC 時間>.stbackup`（之後可以照樣還原回去）；再把目前的 `settings.json`、資料庫（含 `-wal`、`-shm`）、`templates/`、`sounds/`、`music/`、`media/` 搬進 `restore-previous/`，把暫存的搬到原位（都在資料夾內改名；`restore-previous/` 在搬移前先寫入同一個還原 ID）；接著走一般的開資料庫流程（有待套用的 migration 時照樣先備份）。任一步失敗就把 `restore-previous/` 的東西放回原位，顯示原因後照常啟動；成功時顯示提醒：備份不含 Twitch 登入與 OBS 密碼，需要時重新登入、重填。最後刪掉 `restore-pending`、`restore-previous/`、`restore-staging/`；刪除前先刪掉還原 ID 與暫存的 `manifest.json`，所以 `restore-pending` 刪不掉時（顯示錯誤，請使用者手動刪除），下次啟動既不會放回舊資料，也不會再套用一次。
+  3. 啟動時（見「啟動順序」）：先把目前的資料存成 `backups/before-restore-<UTC 時間>.stbackup`（之後可以照樣還原回去）；再把目前的 `settings.json`、資料庫（含 `-wal`、`-shm`）、`templates/`、`sounds/`、`music/`、`media/`、`checkin/` 搬進 `restore-previous/`，把暫存的搬到原位（都在資料夾內改名；`restore-previous/` 在搬移前先寫入同一個還原 ID）；接著走一般的開資料庫流程（有待套用的 migration 時照樣先備份）。任一步失敗就把 `restore-previous/` 的東西放回原位，顯示原因後照常啟動；成功時顯示提醒：備份不含 Twitch 登入與 OBS 密碼，需要時重新登入、重填。最後刪掉 `restore-pending`、`restore-previous/`、`restore-staging/`；刪除前先刪掉還原 ID 與暫存的 `manifest.json`，所以 `restore-pending` 刪不掉時（顯示錯誤，請使用者手動刪除），下次啟動既不會放回舊資料，也不會再套用一次。
   - 程式在搬移途中結束時，下次啟動看到 `restore-pending` 與 `restore-previous/` 同時存在、且還原 ID 相同，就先放回原本的資料並說明還原中斷。ID 不同（或沒有 ID）的 `restore-previous/` 是先前已結束的還原沒清掉的，裡面的資料當時已備份到 `backups/`：絕不放回，套用新的還原前直接刪掉。連放回都失敗時保留兩者、顯示錯誤並結束，下次啟動再試。
   - 暫存後沒有確認：下次啟動直接刪掉 `restore-staging/`。
   - `instance-id` 不在備份裡，還原後不變；Credential Manager 的項目依它命名，所以還原到另一個資料夾或另一台電腦時要重新登入 Twitch、重填 OBS 密碼。
