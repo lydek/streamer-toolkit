@@ -53,10 +53,10 @@ use tokio::net::TcpListener;
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
 style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static-cdn.jtvnw.net; font-src 'self' data:";
 const OVERLAY_CSP: &str = "script-src 'self'; object-src 'none'";
-/// The only pages the admin window may frame: the chat and alert overlays as template previews, which the admin UI
-/// puts in `sandbox="allow-scripts"` iframes. The release IPC capability covers the whole Host origin, so no other
-/// same-origin page may be framed.
-const PREVIEW_PATHS: [&str; 2] = ["/overlay/chat/", "/overlay/alerts/"];
+/// The only pages the admin window may frame: the chat and alert overlays as template previews and the stamp card
+/// overlay as the card style preview, which the admin UI puts in `sandbox="allow-scripts"` iframes. The release IPC
+/// capability covers the whole Host origin, so no other same-origin page may be framed.
+const PREVIEW_PATHS: [&str; 3] = ["/overlay/chat/", "/overlay/alerts/", "/overlay/checkin/"];
 
 fn admin_csp(hosts: &[String]) -> HeaderValue {
     let frames: Vec<String> = hosts

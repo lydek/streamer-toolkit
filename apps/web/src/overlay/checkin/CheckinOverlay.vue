@@ -36,6 +36,10 @@ import { twitchImage } from './checkin'
 type Stamped = components['schemas']['CheckinStampedPayload']
 
 const RETRY_MS = 2000
+// `?preview`: the card style page's live preview (see onPreviewMessage).
+const preview = new URLSearchParams(location.search).has('preview')
+// A day: longer than anyone keeps the card style page open.
+const PREVIEW_HOLD_MS = 86_400_000
 const { t } = useI18n()
 const card = shallowRef<Stamped>()
 // A new key restarts the animations when the next card replaces the current one.
@@ -79,9 +83,13 @@ let stopped = false
 
 /** Shows one card for its duration with its sound; the Host paces them, so a new one only replaces a stale one. */
 function show(p: Stamped) {
+  // A preview's card never reaches its leave animation, so it stays while the style is edited.
+  if (preview) p = { ...p, durationMs: PREVIEW_HOLD_MS }
   clearTimeout(hide)
   card.value = p
   key.value++
+  // A preview keeps its card on screen, silently.
+  if (preview) return
   hide = setTimeout(() => (card.value = undefined), p.durationMs)
   if (p.sound) playSound(p.sound.url, p.sound.volume)
 }
@@ -114,12 +122,21 @@ function connect() {
   }
 }
 
-connect()
+// `?preview`: in a sandbox="allow-scripts" iframe its origin is `null`, so it cannot reach the Host's WebSocket;
+// the admin window posts the messages instead (docs/architecture.md §5). location.origin is still the page URL's
+// origin, which is the admin window's.
+function onPreviewMessage(e: MessageEvent) {
+  if (e.source === window.parent && e.origin === location.origin) receive(e.data as Incoming)
+}
+
+if (preview) window.addEventListener('message', onPreviewMessage)
+else connect()
 onBeforeUnmount(() => {
   stopped = true
   clearTimeout(retry)
   clearTimeout(hide)
   ws?.close()
+  window.removeEventListener('message', onPreviewMessage)
 })
 
 defineExpose({ receive })

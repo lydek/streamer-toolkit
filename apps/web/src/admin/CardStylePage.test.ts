@@ -27,7 +27,8 @@ let put: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
-  vi.spyOn(client, 'GET').mockImplementation((() => ok(structuredClone(style))) as never)
+  vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+    ok(path === '/api/admin/checkin/settings' ? { card_slots: 10 } : structuredClone(style))) as never)
   put = vi.fn((_: string, init: { body: Schemas['CardStyleBody'] }) => ok(init.body))
   post = vi.fn((path: string) => (path === '/api/admin/checkin/images' ? ok({ name: 'img.png', url: '/checkin/img.png' }) : ok()))
   vi.spyOn(client, 'PUT').mockImplementation(put as never)

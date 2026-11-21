@@ -2,83 +2,86 @@
   <FullPage :title="t('pages.cardStyle.name')" tile="checkin" overlay="checkin">
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="!form">{{ t('app.loading') }}</p>
-    <form v-else class="stack" @submit.prevent="save">
-      <div class="field">
-        <span id="cs-preset">{{ t('cardStyle.preset') }}</span>
-        <SelectButton
-          :model-value="form.preset"
-          :options="PRESETS"
-          :option-label="(p: string) => t(`cardStyle.presets.${p}`)"
-          :allow-empty="false"
-          aria-labelledby="cs-preset"
-          @update:model-value="pickPreset"
-        />
-      </div>
-
-      <fieldset class="group">
-        <legend>{{ t('cardStyle.background') }}</legend>
-        <div class="row">
-          <label for="cs-bg-color">{{ t('cardStyle.color') }}</label>
-          <input id="cs-bg-color" v-model="form.background_color" type="color" />
-          <label for="cs-bg-image">{{ t('cardStyle.image') }}</label>
-          <input id="cs-bg-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'background_image')" />
-          <template v-if="form.background_image">
-            <img class="thumb" :src="`/checkin/${form.background_image}`" alt="" />
-            <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.background_image = null" />
-          </template>
+    <div v-else class="split">
+      <form class="stack" @submit.prevent="save">
+        <div class="field">
+          <span id="cs-preset">{{ t('cardStyle.preset') }}</span>
+          <SelectButton
+            :model-value="form.preset"
+            :options="PRESETS"
+            :option-label="(p: string) => t(`cardStyle.presets.${p}`)"
+            :allow-empty="false"
+            aria-labelledby="cs-preset"
+            @update:model-value="pickPreset"
+          />
         </div>
-      </fieldset>
 
-      <fieldset class="group">
-        <legend>{{ t('cardStyle.stamp') }}</legend>
-        <div class="row">
-          <label for="cs-stamp-color">{{ t('cardStyle.color') }}</label>
-          <input id="cs-stamp-color" v-model="form.stamp_color" type="color" />
-          <label for="cs-stamp-image">{{ t('cardStyle.image') }}</label>
-          <input id="cs-stamp-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'stamp_image')" />
-          <template v-if="form.stamp_image">
-            <img class="thumb" :src="`/checkin/${form.stamp_image}`" alt="" />
-            <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.stamp_image = null" />
-          </template>
+        <fieldset class="group">
+          <legend>{{ t('cardStyle.background') }}</legend>
+          <div class="row">
+            <label for="cs-bg-color">{{ t('cardStyle.color') }}</label>
+            <input id="cs-bg-color" v-model="form.background_color" type="color" />
+            <label for="cs-bg-image">{{ t('cardStyle.image') }}</label>
+            <input id="cs-bg-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'background_image')" />
+            <template v-if="form.background_image">
+              <img class="thumb" :src="`/checkin/${form.background_image}`" alt="" />
+              <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.background_image = null" />
+            </template>
+          </div>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>{{ t('cardStyle.stamp') }}</legend>
+          <div class="row">
+            <label for="cs-stamp-color">{{ t('cardStyle.color') }}</label>
+            <input id="cs-stamp-color" v-model="form.stamp_color" type="color" />
+            <label for="cs-stamp-image">{{ t('cardStyle.image') }}</label>
+            <input id="cs-stamp-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'stamp_image')" />
+            <template v-if="form.stamp_image">
+              <img class="thumb" :src="`/checkin/${form.stamp_image}`" alt="" />
+              <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.stamp_image = null" />
+            </template>
+          </div>
+          <div class="field">
+            <label for="cs-per-row">{{ t('cardStyle.perRow') }}</label>
+            <InputNumber v-model="form.per_row" input-id="cs-per-row" :min="1" :max="20" :allow-empty="false" show-buttons />
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="cs-title">{{ t('cardStyle.title') }}</label>
+          <InputText id="cs-title" v-model="form.title" maxlength="100" aria-describedby="cs-vars" />
         </div>
         <div class="field">
-          <label for="cs-per-row">{{ t('cardStyle.perRow') }}</label>
-          <InputNumber v-model="form.per_row" input-id="cs-per-row" :min="1" :max="20" :allow-empty="false" show-buttons />
+          <label for="cs-description">{{ t('cardStyle.description') }}</label>
+          <InputText id="cs-description" v-model="form.description" maxlength="100" aria-describedby="cs-vars" />
+          <small id="cs-vars">{{ t('cardStyle.variables') }}</small>
         </div>
-      </fieldset>
 
-      <div class="field">
-        <label for="cs-title">{{ t('cardStyle.title') }}</label>
-        <InputText id="cs-title" v-model="form.title" maxlength="100" aria-describedby="cs-vars" />
-      </div>
-      <div class="field">
-        <label for="cs-description">{{ t('cardStyle.description') }}</label>
-        <InputText id="cs-description" v-model="form.description" maxlength="100" aria-describedby="cs-vars" />
-        <small id="cs-vars">{{ t('cardStyle.variables') }}</small>
-      </div>
+        <div class="field">
+          <label for="cs-animation">{{ t('cardStyle.animation') }}</label>
+          <Select
+            v-model="form.animation"
+            input-id="cs-animation"
+            :options="ANIMATIONS"
+            :option-label="(a: string) => t(`cardStyle.animations.${a}`)"
+          />
+        </div>
+        <div class="check">
+          <Checkbox v-model="form.show_repeat" input-id="cs-repeat" binary />
+          <label for="cs-repeat">{{ t('cardStyle.showRepeat') }}</label>
+        </div>
 
-      <div class="field">
-        <label for="cs-animation">{{ t('cardStyle.animation') }}</label>
-        <Select
-          v-model="form.animation"
-          input-id="cs-animation"
-          :options="ANIMATIONS"
-          :option-label="(a: string) => t(`cardStyle.animations.${a}`)"
-        />
-      </div>
-      <div class="check">
-        <Checkbox v-model="form.show_repeat" input-id="cs-repeat" binary />
-        <label for="cs-repeat">{{ t('cardStyle.showRepeat') }}</label>
-      </div>
-
-      <ul v-if="uploadError" role="alert" class="plain">
-        <li>{{ uploadError }}</li>
-      </ul>
-      <div class="actions">
-        <Button :label="t('cardStyle.test')" icon="pi pi-play" severity="secondary" :disabled="busy" @click="test" />
-        <Button type="submit" :label="t('cardStyle.save')" :disabled="busy || !dirty" />
-      </div>
-    </form>
+        <ul v-if="uploadError" role="alert" class="plain">
+          <li>{{ uploadError }}</li>
+        </ul>
+        <div class="actions">
+          <Button :label="t('cardStyle.test')" icon="pi pi-play" severity="secondary" :disabled="busy" @click="test" />
+          <Button type="submit" :label="t('cardStyle.save')" :disabled="busy || !dirty" />
+        </div>
+      </form>
+      <CardPreview :style="form" :slots="slots" />
+    </div>
   </FullPage>
 </template>
 
@@ -94,6 +97,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import CardPreview from './CardPreview.vue'
 import { importCardImage, IMAGE_ACCEPT, PRESET_COLORS } from './cardStyle'
 import { onDrawerSubmit } from './drawer'
 import FullPage from './FullPage.vue'
@@ -110,6 +114,7 @@ const form = ref<Style>()
 const failed = ref('')
 const uploadError = ref('')
 const busy = ref(false)
+const slots = ref(10)
 // The style as saved, to know whether the form has changes.
 let saved = ''
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved)
@@ -117,7 +122,11 @@ const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : 
 
 async function load() {
   try {
-    const style = await api(client.GET('/api/admin/checkin/card-style'))
+    const [style, settings] = await Promise.all([
+      api(client.GET('/api/admin/checkin/card-style')),
+      api(client.GET('/api/admin/checkin/settings')),
+    ])
+    slots.value = settings.card_slots
     saved = JSON.stringify(style)
     form.value = style
   } catch (e) {
@@ -184,6 +193,19 @@ void load()
 </script>
 
 <style scoped>
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 32rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (width < 60rem) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .field {
   display: flex;
   flex-direction: column;

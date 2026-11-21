@@ -102,6 +102,31 @@ describe('CheckinOverlay', () => {
     expect(style.getPropertyValue('--card-fg')).toBe('#1f1a17')
   })
 
+  it('in preview, takes only messages from the parent on the same origin and keeps the card', async () => {
+    const socket = vi.fn()
+    vi.stubGlobal('WebSocket', socket)
+    history.replaceState(null, '', '/overlay/checkin/?preview')
+    const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
+    expect(socket).not.toHaveBeenCalled()
+    const post = (data: unknown, init: MessageEventInit = {}) =>
+      window.dispatchEvent(new MessageEvent('message', { data, source: window.parent, origin: location.origin, ...init }))
+    post({ type: 'snapshot', version: 1, seq: 1, payload: {} })
+    post(stamped(2, { userName: 'Evil' }), { origin: 'https://evil.example' })
+    post(stamped(3, { userName: 'Other' }), { source: null })
+    await nextTick()
+    expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
+    post(stamped(4, { title: '小魚' }))
+    await nextTick()
+    expect(wrapper.get('.name').text()).toBe('小魚')
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+    expect(wrapper.find('[data-checkin-card]').exists()).toBe(true)
+    // The CSS leave animation waits for the duration too, so the card does not fade out either.
+    expect(wrapper.get<HTMLElement>('[data-checkin-card]').element.style.getPropertyValue('--duration')).toBe('86400000ms')
+    wrapper.unmount()
+    history.replaceState(null, '', '/')
+  })
+
   it('takes the card away at once on 隱藏畫面卡片', async () => {
     const wrapper = mount(CheckinOverlay, { global: { plugins: [i18n] } })
     const vm = wrapper.vm as unknown as { receive: (m: unknown) => void }

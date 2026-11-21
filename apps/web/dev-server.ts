@@ -8,7 +8,7 @@ export const ADMIN_CSP =
   "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static-cdn.jtvnw.net; font-src 'self' data:"
 export const OVERLAY_CSP = "script-src 'self'; object-src 'none'"
-export const PREVIEW_PATHS = ['/overlay/chat/', '/overlay/alerts/']
+export const PREVIEW_PATHS = ['/overlay/chat/', '/overlay/alerts/', '/overlay/checkin/']
 
 /** The admin CSP for a page served as `host`: only the template preview pages may be framed, as the Host does. */
 export const adminCsp = (host = '') =>
