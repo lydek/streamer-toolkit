@@ -18,6 +18,7 @@ export type Incoming =
   | components['schemas']['RedemptionChangedEvent']
   | components['schemas']['CheckinChangedEvent']
   | components['schemas']['CheckinStampedEvent']
+  | components['schemas']['CheckinHiddenEvent']
   | components['schemas']['SoundPlayEvent']
   | components['schemas']['SoundStoppedEvent']
   | components['schemas']['BgmPlayerEvent']

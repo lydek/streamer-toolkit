@@ -12,6 +12,7 @@
         <label for="cf-date">{{ t('checkin.page.date') }}</label>
         <InputText id="cf-date" v-model="date" type="date" :max="today" />
       </div>
+      <Button :label="t('checkin.push.hide')" icon="pi pi-eye-slash" outlined class="hide" @click="hideCard" />
     </form>
 
     <!-- Always in the DOM, so screen readers announce changes to the count. -->
@@ -35,6 +36,7 @@
           :disabled="busy || !date"
           @click="register(v)"
         />
+        <Button :label="t('checkin.push.show')" size="small" text @click="pushCard(v)" />
         <Button
           v-if="deducting !== v.id"
           :label="t('checkin.deduct.open')"
@@ -177,6 +179,23 @@ async function register(v: Schemas['CheckinViewer']) {
   }
 }
 
+async function pushCard(v: Schemas['CheckinViewer']) {
+  try {
+    await api(client.POST('/api/admin/checkin/viewers/{id}/card', { params: { path: { id: v.id } } }))
+    toast.add(successToast(t('checkin.push.queued', { name: v.user_name })))
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  }
+}
+
+async function hideCard() {
+  try {
+    await api(client.POST('/api/admin/checkin/card/hide'))
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  }
+}
+
 function openDeduct(v: Schemas['CheckinViewer']) {
   deducting.value = v.id
   amount.value = 1
@@ -268,6 +287,10 @@ useLiveEvents(2000, (msg) => {
 .login {
   font-weight: 400;
   color: var(--p-text-muted-color);
+}
+
+.hide {
+  margin-left: auto;
 }
 
 .deduct {

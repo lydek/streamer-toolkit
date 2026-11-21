@@ -741,6 +741,11 @@
       "registered": "已登記 {name}（{date}）。",
       "already": "{name} 在 {date} 已經打過卡了，沒有重複計算。"
     },
+    "push": {
+      "show": "把集點卡推到畫面",
+      "hide": "隱藏畫面卡片",
+      "queued": "{name} 的集點卡已排進呈現佇列。"
+    },
     "deduct": {
       "available": "可用印章 {n}",
       "open": "扣印章",

@@ -25,6 +25,7 @@ pub(crate) fn quiet_screen() -> Screen {
     Screen {
         changed: Arc::new(|_| {}),
         show_card: Arc::new(|_, _| {}),
+        hide_card: Arc::new(|| {}),
         profiles: Arc::new(NoProfiles),
         timing: Timing::default(),
         presenter: presenter(),
