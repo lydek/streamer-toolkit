@@ -6,6 +6,7 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import { useDock } from './dock'
 import { onDrawerSubmit, useDrawer } from './drawer'
+import { UNBUILT_TILES } from './home'
 import HomeView from './HomeView.vue'
 import { testRouter } from './testRouter'
 
@@ -166,6 +167,16 @@ describe('HomeView skip link', () => {
     await home()
     skip().click()
     expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
+  })
+
+  it('leaves the open drawer alone when a grey tile is clicked', async () => {
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(path === '/api/admin/home-tiles' ? ['chat', UNBUILT_TILES[0]!.id] : responses[path])) as never)
+    await home()
+    await drawer.open('chat')
+    ;(document.querySelector('.tile.off') as HTMLElement).click()
+    await flushPromises()
+    expect(drawer.current.value).toBe('chat')
   })
 
   it('focuses "Arrange tiles" on an emptied home', async () => {

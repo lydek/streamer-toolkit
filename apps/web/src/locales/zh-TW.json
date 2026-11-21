@@ -450,6 +450,7 @@
     "connections": "連線與 OBS 來源",
     "chatEmpty": "還沒有訊息",
     "latest": "最新：{text}",
+    "unbuilt": "還沒有這個功能",
     "collapse": "收合",
     "statsLine": "{redemptions} 兌換 · {subs} 訂閱",
     "queueIdle": "沒有正在播的",

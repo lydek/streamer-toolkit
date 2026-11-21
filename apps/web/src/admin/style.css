@@ -78,6 +78,11 @@ code {
   color: var(--p-red-400);
 }
 
+.tint-muted {
+  background: var(--p-surface-800);
+  color: var(--p-text-muted-color);
+}
+
 .tint-blue {
   background: color-mix(in srgb, var(--p-blue-400) 14%, var(--p-surface-900));
   color: var(--p-blue-400);
