@@ -19,6 +19,7 @@ export type Incoming =
   | components['schemas']['CheckinChangedEvent']
   | components['schemas']['CheckinStampedEvent']
   | components['schemas']['SoundPlayEvent']
+  | components['schemas']['SoundStoppedEvent']
   | components['schemas']['BgmPlayerEvent']
   | components['schemas']['CounterValuesEvent']
   | components['schemas']['MarathonEvent']

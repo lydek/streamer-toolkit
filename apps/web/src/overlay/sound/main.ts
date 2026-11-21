@@ -15,7 +15,13 @@ function connect() {
     if (msg.type === 'snapshot') lastSeq = msg.seq
     else if (msg.type === 'sound.play' && msg.seq > lastSeq) {
       lastSeq = msg.seq
-      enqueue(msg.payload)
+      // The test button sends `source=simulation`; reward sounds are `twitch`.
+      enqueue(msg.payload, msg.source === 'simulation')
+    } else if (msg.type === 'sound.stopped' && msg.seq > lastSeq) {
+      // The test button's stop: only test sounds go silent, reward sounds play on. One plays at a time, so stopping
+      // every sound on this page stops just that one.
+      lastSeq = msg.seq
+      if (enqueue.clearTests()) stopSounds()
     } else if (stopsStage(msg, 'sound') && msg.seq > lastSeq) {
       // Emergency stop or skip: nothing waiting plays, and the sound playing goes silent.
       lastSeq = msg.seq

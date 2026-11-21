@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent` and `SoundPlayEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `SoundStoppedEvent` follow in `seq` order.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -3461,6 +3461,18 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/admin/sounds/stop": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stops what 「在 OBS 播放」 sent: the test sound playing on `/overlay/sound/` and the waiting ones\n(`sound.stopped`). Reward sounds play on.",
+        "operationId": "stop_test_sounds",
+        "responses": {
+          "204": {}
         }
       }
     },
@@ -8266,6 +8278,56 @@
         "type": "string",
         "enum": [
           "sound.play"
+        ]
+      },
+      "SoundStoppedEvent": {
+        "type": "object",
+        "description": "A `sound.stopped` event exactly as `/ws/overlay` sends it: `/overlay/sound/` silences the test sound playing\n(`sound.play` with `source=simulation`) and drops the waiting ones; reward sounds play on. Not kept in snapshots.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SoundStoppedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SoundStoppedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "SoundStoppedPayload": {
+        "type": "object",
+        "description": "Empty: the event itself is the stop."
+      },
+      "SoundStoppedType": {
+        "type": "string",
+        "enum": [
+          "sound.stopped"
         ]
       },
       "SoundUpdate": {

@@ -652,6 +652,25 @@ async fn new_redemptions_of_a_mapped_reward_play_its_sound_once_and_live_only() 
     );
     assert_eq!(send(&app, play("nope")).await.0, StatusCode::NOT_FOUND);
 
+    // Its stop reaches the overlay at once, and is never replayed either.
+    let stop = Request::post("/api/admin/sounds/stop")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&app, stop).await.0, StatusCode::NO_CONTENT);
+    let event: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+    assert_eq!(
+        (event["type"].as_str(), event["source"].as_str()),
+        (Some("sound.stopped"), Some("simulation"))
+    );
+    let typed: SoundStoppedEvent = serde_json::from_value(event.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(typed).unwrap(),
+        event,
+        "the schema type matches the bus"
+    );
+    let (snapshot, _) = bus.subscribe();
+    assert!(!snapshot.contains("sound.stopped"));
+
     let library = json(
         send(
             &app,
