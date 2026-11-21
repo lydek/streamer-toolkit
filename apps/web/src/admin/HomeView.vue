@@ -12,10 +12,10 @@
           <Button
             v-else
             ref="arrangeButton"
+            :label="t('home.arrange')"
             icon="pi pi-pencil"
             severity="secondary"
-            text
-            :aria-label="t('home.arrange')"
+            outlined
             :disabled="!modules"
             @click="enterArrange"
           />
@@ -45,28 +45,26 @@
           :save="saveTiles"
           :modules="modules"
           :name="moduleName"
+          :lines="lines"
         />
-        <div v-else-if="!groups.length" class="stack">
+        <div v-else-if="!tiles.length" class="stack">
           <p>{{ t('home.empty') }}</p>
           <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="enterArrange" />
         </div>
-        <template v-for="g in groups" v-else :key="g.group">
-          <h2 :id="`group-${g.group}`">{{ t(`home.groups.${g.group}`) }}</h2>
-          <ul class="plain grid" :aria-labelledby="`group-${g.group}`">
-            <li v-for="tile in g.tiles" :key="tile.id">
-              <HomeTile
-                :id="tile.id"
-                :name="moduleName(tile.id)"
-                :icon="tile.icon"
-                :tint="tile.tint"
-                :line="lines[tile.id] ?? { state: 'loading' }"
-                :attention="attention[tile.id]"
-                :expanded="drawer.current.value === tile.id"
-                @click="toggle(tile.id, $event.currentTarget)"
-              />
-            </li>
-          </ul>
-        </template>
+        <ul v-else class="plain grid">
+          <li v-for="tile in tiles" :key="tile.id">
+            <HomeTile
+              :id="tile.id"
+              :name="moduleName(tile.id)"
+              :icon="tile.icon"
+              :tint="tile.tint"
+              :line="lines[tile.id] ?? { state: 'loading' }"
+              :attention="attention[tile.id]"
+              :expanded="drawer.current.value === tile.id"
+              @click="toggle(tile.id, $event.currentTarget)"
+            />
+          </li>
+        </ul>
       </section>
 
       <!-- Features of the design not built yet: each tile opens its coming-soon page (no drawer). -->
@@ -302,7 +300,7 @@ import {
   errorToast,
   obsLight,
   successToast,
-  tileGroups,
+  homeTiles,
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
@@ -428,8 +426,8 @@ const broadcasterId = computed(() =>
 const obs = computed(() => obsLight(live.value))
 const dock = useDock()
 // The docked chat panel already shows the chat, so its tile steps aside while the panel is beside the page.
-const groups = computed(() =>
-  tileGroups(
+const tiles = computed(() =>
+  homeTiles(
     modules.value ?? [],
     arrangedTiles(savedTiles.value).filter((t) => !(dock.docked && t.id === 'chat')),
   ),

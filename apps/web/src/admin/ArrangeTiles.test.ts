@@ -6,7 +6,7 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
-const extra: Tile[] = [{ id: 'badge', group: 'features', icon: '', tint: 'blue' }]
+const extra: Tile[] = [{ id: 'badge', icon: '', tint: 'blue' }]
 const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', badge: '徽章' }
 
 // What the page's save does: shows `next` at once, puts the previous order back on failure (`outcome` false),
@@ -26,7 +26,7 @@ function arrange(saved: string[] | null, modules = [{ id: 'chat', enabled: true,
     })
   })
   const wrapper = mount(ArrangeTiles, {
-    props: { saved, save: (next: string[] | null) => save(next), modules, name: (id: string) => names[id] ?? id },
+    props: { saved, save: (next: string[] | null) => save(next), modules, name: (id: string) => names[id] ?? id, lines: {} },
     global: { plugins: [i18n, PrimeVue] },
     attachTo: document.body,
   })
@@ -48,7 +48,7 @@ afterEach(() => {
 })
 
 describe('ArrangeTiles', () => {
-  it('moves within the group, keeps focus on the move button (or the other one at the edge) and announces', async () => {
+  it('moves past any neighbour, keeps focus on the move button (or the other one at the edge) and announces', async () => {
     const wrapper = arrange(null)
     expect(button('chat', 'earlier').disabled).toBe(true)
     button('chat', 'later').focus()
@@ -56,13 +56,14 @@ describe('ArrangeTiles', () => {
     await flushPromises()
     expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
     expect(document.activeElement).toBe(button('chat', 'later'))
-    expect(live()).toBe('聊天室移到直播中第 2 個')
+    expect(live()).toBe('聊天室移到第 2 個')
     // At the edge the move button is disabled, so focus goes to the other one.
+    await wrapper.setProps({ saved: ['chat', 'alerts'] })
     button('chat', 'later').click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['alerts', 'feed', 'chat', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'badge'])
+    expect(wrapper.props('saved')).toEqual(['alerts', 'chat'])
     expect(document.activeElement).toBe(button('chat', 'earlier'))
-    expect(live()).toBe('聊天室移到直播中第 3 個')
+    expect(live()).toBe('聊天室移到第 2 個')
   })
 
   it('puts focus back and announces nothing when the save fails', async () => {
@@ -84,12 +85,12 @@ describe('ArrangeTiles', () => {
     expect(document.activeElement).toBe(button('chat', 'remove'))
   })
 
-  it('after Remove focuses the next Remove, else the previous, else the Available heading', async () => {
+  it('after Hide focuses the next Hide, else the previous, else the hidden tiles heading', async () => {
     const wrapper = arrange(['chat', 'alerts'])
     button('chat', 'remove').click()
     await flushPromises()
     expect(document.activeElement).toBe(button('alerts', 'remove'))
-    expect(live()).toBe('已移除聊天室')
+    expect(live()).toBe('已隱藏聊天室')
 
     await wrapper.setProps({ saved: ['chat', 'alerts'] })
     button('alerts', 'remove').click()
@@ -102,14 +103,16 @@ describe('ArrangeTiles', () => {
     expect(document.activeElement?.id).toBe('available-heading')
   })
 
-  it('adds to the end of its group and focuses the first enabled button of the new tile', async () => {
-    const wrapper = arrange(['chat'])
+  it('adds back to the end and focuses the first enabled button of the tile', async () => {
+    const wrapper = arrange([])
     document.querySelector<HTMLButtonElement>('[data-available="badge"] [data-action="add"]')!.click()
     await flushPromises()
-    expect(wrapper.props('saved')).toEqual(['chat', 'badge'])
-    // Alone in its group: both move buttons are disabled.
+    expect(wrapper.props('saved')).toEqual(['badge'])
+    // Alone on home: both move buttons are disabled.
     expect(document.activeElement).toBe(button('badge', 'remove'))
-    expect(live()).toBe('徽章已加到功能第 1 個')
+    expect(live()).toBe('徽章已加回第 1 個')
+
+    await wrapper.setProps({ saved: ['chat', 'badge'] })
 
     document.querySelector<HTMLButtonElement>('[data-available="alerts"] [data-action="add"]')!.click()
     await flushPromises()
@@ -119,7 +122,7 @@ describe('ArrangeTiles', () => {
 
   it('restores the defaults by saving null', async () => {
     const wrapper = arrange([])
-    wrapper.get('button').trigger('click')
+    ;[...document.querySelectorAll('button')].find((b) => b.textContent?.includes('還原預設'))!.click()
     await flushPromises()
     expect(save).toHaveBeenCalledWith(null)
     expect(wrapper.props('saved')).toBeNull()
@@ -132,6 +135,6 @@ describe('ArrangeTiles', () => {
     expect(item.tagName).toBe('LI')
     expect(item.textContent).toContain('未啟用 · 到設定開啟')
     expect(item.querySelector('button button')).toBeNull()
-    expect(button('chat', 'remove').getAttribute('aria-label')).toBe('移除：聊天室')
+    expect(button('chat', 'remove').getAttribute('aria-label')).toBe('隱藏：聊天室')
   })
 })

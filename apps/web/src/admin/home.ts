@@ -223,11 +223,8 @@ export function useThrottled<T>(source: () => T, ms = 3000) {
   return shown
 }
 
-export type Group = 'live' | 'features'
-
 export interface Tile {
   id: string
-  group: Group
   icon: string
   /** The icon's color (prototype tints). */
   tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue'
@@ -237,28 +234,21 @@ export interface Tile {
 
 /** Default home tiles, one per module (and the event feed); a disabled module shows no tile. */
 export const TILES: Tile[] = [
-  { id: 'chat', group: 'live', icon: 'pi pi-comments', tint: 'blue' },
-  { id: 'alerts', group: 'live', icon: 'pi pi-bell', tint: 'yellow' },
-  { id: 'feed', group: 'live', icon: 'pi pi-bolt', tint: 'yellow', always: true },
-  { id: 'redemption', group: 'features', icon: 'pi pi-gift', tint: 'red' },
-  { id: 'checkin', group: 'features', icon: 'pi pi-check-square', tint: 'green' },
-  { id: 'sound', group: 'features', icon: 'pi pi-volume-up', tint: 'primary' },
-  { id: 'scene', group: 'features', icon: 'pi pi-images', tint: 'blue' },
-  { id: 'bgm', group: 'features', icon: 'pi pi-headphones', tint: 'yellow' },
-  { id: 'counter', group: 'features', icon: 'pi pi-hashtag', tint: 'red' },
+  { id: 'chat', icon: 'pi pi-comments', tint: 'blue' },
+  { id: 'alerts', icon: 'pi pi-bell', tint: 'yellow' },
+  { id: 'feed', icon: 'pi pi-bolt', tint: 'yellow', always: true },
+  { id: 'redemption', icon: 'pi pi-gift', tint: 'red' },
+  { id: 'checkin', icon: 'pi pi-check-square', tint: 'green' },
+  { id: 'sound', icon: 'pi pi-volume-up', tint: 'primary' },
+  { id: 'scene', icon: 'pi pi-images', tint: 'blue' },
+  { id: 'bgm', icon: 'pi pi-headphones', tint: 'yellow' },
+  { id: 'counter', icon: 'pi pi-hashtag', tint: 'red' },
 ]
 
-/** Non-empty groups in display order. */
-export function groupTiles(tiles: Tile[]) {
-  return (['live', 'features'] as const)
-    .map((group) => ({ group, tiles: tiles.filter((t) => t.group === group) }))
-    .filter((g) => g.tiles.length > 0)
-}
-
-/** Non-empty groups in display order, each with the tiles of its enabled modules. */
-export function tileGroups(modules: Schemas['ModuleState'][], tiles = TILES) {
+/** The tiles home shows, in order: those of enabled modules, and the ones shown whatever modules are on. */
+export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
   const enabled = new Set(modules.filter((m) => m.enabled).map((m) => m.id))
-  return groupTiles(tiles.filter((t) => t.always || enabled.has(t.id)))
+  return tiles.filter((t) => t.always || enabled.has(t.id))
 }
 
 /** The home's tiles in saved order (`null`: never arranged, the defaults). Unknown and repeated IDs are skipped. */
@@ -274,17 +264,16 @@ export function availableTiles(arranged: Tile[], tiles = TILES): Tile[] {
   return tiles.filter((t) => !shown.has(t.id))
 }
 
-/** IDs with `id` swapped with its nearest tile of the same group (`step` -1: earlier, 1: later). */
+/** IDs with `id` swapped with its neighbour (`step` -1: earlier, 1: later). */
 export function moveTile(arranged: Tile[], id: string, step: -1 | 1): string[] {
   const ids = arranged.map((t) => t.id)
   const from = ids.indexOf(id)
-  let to = from + step
-  while (arranged[to] && arranged[to].group !== arranged[from].group) to += step
+  const to = from + step
   if (from >= 0 && arranged[to]) [ids[from], ids[to]] = [ids[to], ids[from]]
   return ids
 }
 
-/** IDs with `id` dragged onto `target` (same group): it takes the target's place. */
+/** IDs with `id` dragged onto `target`: it takes the target's place. */
 export function dropTile(arranged: Tile[], id: string, target: string): string[] {
   const ids = arranged.map((t) => t.id)
   const from = ids.indexOf(id)
@@ -295,11 +284,8 @@ export function dropTile(arranged: Tile[], id: string, target: string): string[]
   return ids
 }
 
-/** 1-based position of tile `id` within its group, for announcements. */
-export function groupPosition(arranged: Tile[], id: string): number {
-  const group = arranged.find((t) => t.id === id)?.group
-  return arranged.filter((t) => t.group === group).findIndex((t) => t.id === id) + 1
-}
+/** 1-based position of tile `id`, for announcements. */
+export const tilePosition = (arranged: Tile[], id: string) => arranged.findIndex((t) => t.id === id) + 1
 
 /** Toast rules: success dismisses itself; failure stays until the user closes it (no `life`). */
 export const successToast = (summary: string) => ({ severity: 'success' as const, summary, life: 3000 })

@@ -57,7 +57,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
   await page.goto('/admin/')
 
   const tile = page.locator('[data-drawer-tile="checkin"]')
-  const features = page.getByRole('list', { name: zh.home.groups.features })
+  const features = page.getByRole('region', { name: zh.home.tiles })
   await expect(features.locator('[data-drawer-tile="checkin"]')).toContainText(`1${zh.home.units.checkin}`)
   await tile.click()
   const drawer = page.locator('#drawer-checkin')

@@ -66,7 +66,7 @@ test('the tile shows the latest redemption; its drawer lists recent ones as text
   const live = await liveSocket(page)
   await page.goto('/admin/')
 
-  const features = page.getByRole('list', { name: zh.home.groups.features })
+  const features = page.getByRole('region', { name: zh.home.tiles })
   await expect(features.locator('[data-drawer-tile="redemption"]')).toContainText('Viewer2：Hydrate')
   expect(queries[0].get('limit')).toBe('5')
 

@@ -29,7 +29,7 @@ async function home() {
   await flushPromises()
   return wrapper
 }
-const pencil = () => document.querySelector<HTMLButtonElement>('header [aria-label="整理功能磚"]')
+const pencil = () => [...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.includes('編輯首頁'))
 const done = () => [...document.querySelectorAll('header button')].find((b) => b.textContent?.includes('完成'))
 const esc = async () => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))

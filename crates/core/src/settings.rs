@@ -28,6 +28,10 @@ pub struct Settings {
     /// is written); `Some([])`: the broadcaster removed every tile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_tiles: Option<Vec<String>>,
+    /// `home_tiles` is in one flat order. A list saved while home showed its tiles in two groups is put in the
+    /// order it was shown once, the first time it is read (`crates/host/src/home_tiles.rs`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub home_tiles_flat: bool,
     /// The admin UI's docked chat panel. `None`: never changed, the admin UI shows its defaults (closed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_dock: Option<ChatDock>,
@@ -289,6 +293,7 @@ impl Default for Settings {
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,
+            home_tiles_flat: false,
             chat_dock: None,
             chat_display: None,
             tab_bar: None,

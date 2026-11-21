@@ -25,7 +25,7 @@ test('an emptied home stays empty after a reload, and "Arrange tiles" brings the
   const removeAlerts = page.getByRole('button', { name: `${zh.arrange.remove}：${zh.modules.names.alerts}` })
   await expect(removeAlerts).toBeFocused()
   await removeAlerts.click()
-  // The redemption, check-in and sound tiles (features group, modules off in this test) go too, so the home ends up
+  // The redemption, check-in and sound tiles (modules off in this test) go too, so the home ends up
   // empty.
   await expect.poll(() => state.homeTiles).toEqual(['redemption', 'checkin', 'sound'])
   await page.getByRole('button', { name: `${zh.arrange.remove}：${zh.modules.names.redemption}` }).click()
