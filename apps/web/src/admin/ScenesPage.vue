@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.scene')">
+  <FullPage :title="t('modules.names.scene')" tile="scene" :status="state?.scene ? t('scene.current', { scene: state.scene }) : undefined">
     <p v-if="live.status === 'loading'">{{ t('app.loading') }}</p>
     <p v-else-if="!obsReady(state)" role="status">
       {{ t('scene.notConnected') }}

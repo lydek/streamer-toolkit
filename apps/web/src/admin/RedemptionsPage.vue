@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.redemption')">
+  <FullPage :title="t('modules.names.redemption')" tile="redemption">
     <!-- A narrow page folds the filters behind this button (rules below). -->
     <Button
       class="filters-toggle"

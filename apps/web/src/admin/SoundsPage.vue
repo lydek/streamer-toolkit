@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.sound')">
+  <FullPage :title="t('modules.names.sound')" tile="sound" overlay="sound" :status="library ? t('sound.count', { n: library.sounds.length }) : undefined">
     <div class="stack">
       <label for="sound-file">{{ t('sound.file') }}</label>
       <input
@@ -29,7 +29,6 @@
 
     <section class="stack" aria-labelledby="reward-sounds">
       <h2 id="reward-sounds">{{ t('sound.rewards') }}</h2>
-      <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="copy" @click="copyObsUrl" />
       <p v-if="rewardError">{{ rewardError }}</p>
       <SoundSlots
         v-if="library && rewardSlots.length"
@@ -44,7 +43,6 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -117,16 +115,6 @@ async function deleted(s: Schemas['Sound']) {
 }
 
 const report = (e: unknown) => toast.add(errorToast(message(e)))
-
-async function copyObsUrl() {
-  try {
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/sound/`)
-    toast.add(successToast(t('chat.copied')))
-  } catch {
-    report(t('chat.copyFailed'))
-  }
-}
 
 async function loadRewards() {
   try {

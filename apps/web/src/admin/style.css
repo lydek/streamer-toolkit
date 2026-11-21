@@ -57,6 +57,33 @@ code {
   font-size: 0.875rem;
 }
 
+/* Solid tints for a tile or page icon: 14% of the hue over a tile, as in the prototype. */
+.tint-primary {
+  background: color-mix(in srgb, var(--p-primary-400) 14%, var(--p-surface-900));
+  color: var(--p-primary-400);
+}
+
+.tint-green {
+  background: color-mix(in srgb, var(--p-green-400) 14%, var(--p-surface-900));
+  color: var(--p-green-400);
+}
+
+.tint-yellow {
+  background: color-mix(in srgb, var(--p-yellow-400) 14%, var(--p-surface-900));
+  color: var(--p-yellow-400);
+}
+
+.tint-red {
+  background: color-mix(in srgb, var(--p-red-400) 14%, var(--p-surface-900));
+  color: var(--p-red-400);
+}
+
+.tint-blue {
+  background: color-mix(in srgb, var(--p-blue-400) 14%, var(--p-surface-900));
+  color: var(--p-blue-400);
+}
+
+
 a {
   color: var(--p-primary-color);
 }

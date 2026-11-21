@@ -1,8 +1,7 @@
 <template>
-  <FullPage :title="t('modules.names.bgm')">
+  <FullPage :title="t('modules.names.bgm')" tile="bgm" overlay="bgm" :status="live.bgm ? playerLine(live.bgm.payload) : undefined">
     <section class="stack" aria-labelledby="music-player">
       <h2 id="music-player">{{ t('music.player.heading') }}</h2>
-      <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="copy" @click="copyObsUrl" />
       <MusicPlayer :event="live.bgm" :playlists="library?.playlists ?? []" @error="report" />
     </section>
 
@@ -83,7 +82,7 @@ import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
-import { importMusic, measureUnmeasured } from './music'
+import { importMusic, measureUnmeasured, playerLine } from './music'
 import MusicPlayer from './MusicPlayer.vue'
 import MusicRow from './MusicRow.vue'
 import { keepFocus } from './page'
@@ -165,16 +164,6 @@ async function playlistDeleted(p: Schemas['MusicPlaylist']) {
   toast.add(successToast(t('music.deleted', { title: p.name })))
   await load()
   await keepFocus(() => document.getElementById('new-playlist') ?? undefined)
-}
-
-async function copyObsUrl() {
-  try {
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/bgm/`)
-    toast.add(successToast(t('chat.copied')))
-  } catch {
-    report(t('chat.copyFailed'))
-  }
 }
 
 void refresh()
