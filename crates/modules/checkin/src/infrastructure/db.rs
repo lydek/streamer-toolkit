@@ -5,8 +5,8 @@ use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
 use uuid::Uuid;
 
 use crate::{
-    application::{CheckinRepository, Outcome, RepositoryError},
-    domain::{CheckIn, ImportedViewer, Trigger, TwitchUserId, Viewer},
+    application::{CheckinRepository, Deducted, Outcome, RepositoryError},
+    domain::{CheckIn, Deduction, ImportedViewer, Trigger, TwitchUserId, Viewer, available},
 };
 
 /// This module's migrations; the host merges them with the other modules'.
@@ -35,7 +35,50 @@ pub(crate) struct ViewerTotals {
     pub(crate) user_login: String,
     pub(crate) user_name: String,
     pub(crate) total: u64,
+    /// Stamps spent so far.
+    pub(crate) deducted: u64,
     pub(crate) last_day: Option<String>,
+}
+
+/// One deduction for the change log, newest first. `user_name` and `reason` are raw text.
+pub(crate) struct DeductionRow {
+    pub(crate) id: String,
+    pub(crate) viewer_id: String,
+    pub(crate) user_name: String,
+    pub(crate) amount: u32,
+    pub(crate) reason: String,
+    pub(crate) deducted_at: String,
+}
+
+/// The latest `limit` deductions, newest first.
+pub(crate) async fn deductions(
+    pool: &SqlitePool,
+    limit: u32,
+) -> Result<Vec<DeductionRow>, RepositoryError> {
+    let rows: Vec<(String, String, String, i64, String, String)> = sqlx::query_as(
+        "SELECT d.id, d.viewer_id, v.user_name, d.amount, d.reason, d.deducted_at \
+         FROM checkin_deductions d JOIN checkin_viewers v ON v.id = d.viewer_id \
+         ORDER BY d.deducted_at DESC, d.id DESC LIMIT ?",
+    )
+    .bind(i64::from(limit))
+    .fetch_all(pool)
+    .await
+    .map_err(storage)?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, viewer_id, user_name, amount, reason, deducted_at)| DeductionRow {
+                id,
+                viewer_id,
+                user_name,
+                amount: u32::try_from(amount).unwrap_or(0),
+                reason,
+                deducted_at: DateTime::parse_from_rfc3339(&deducted_at)
+                    .map(|t| t.to_utc().to_rfc3339_opts(SecondsFormat::Millis, true))
+                    .unwrap_or(deducted_at),
+            },
+        )
+        .collect())
 }
 
 /// One page of viewers, latest check-in first, and how many match in total. `search` matches part of the login
@@ -59,8 +102,9 @@ pub(crate) async fn list_viewers(
     .fetch_one(pool)
     .await
     .map_err(storage)?;
-    let rows: Vec<(String, String, String, i64, Option<String>)> = sqlx::query_as(
+    let rows: Vec<(String, String, String, i64, i64, Option<String>)> = sqlx::query_as(
         "SELECT v.id, v.user_login, v.user_name, v.baseline_total + COUNT(r.id) AS total, \
+         (SELECT COALESCE(SUM(d.amount), 0) FROM checkin_deductions d WHERE d.viewer_id = v.id) AS deducted, \
          MAX(COALESCE(MAX(r.business_day), v.baseline_last_day), COALESCE(v.baseline_last_day, MAX(r.business_day))) AS last_day \
          FROM checkin_viewers v LEFT JOIN checkin_records r ON r.viewer_id = v.id \
          WHERE (?1 IS NULL OR v.user_login LIKE ?1 ESCAPE '!' OR v.user_name LIKE ?1 ESCAPE '!') \
@@ -75,11 +119,12 @@ pub(crate) async fn list_viewers(
     let items = rows
         .into_iter()
         .map(
-            |(id, user_login, user_name, total, last_day)| ViewerTotals {
+            |(id, user_login, user_name, total, deducted, last_day)| ViewerTotals {
                 id,
                 user_login,
                 user_name,
                 total: u64::try_from(total).unwrap_or(0),
+                deducted: u64::try_from(deducted).unwrap_or(0),
                 last_day,
             },
         )
@@ -320,6 +365,48 @@ impl CheckinRepository for SqliteCheckins {
         };
         tx.commit().await.map_err(storage)?;
         Ok(outcome)
+    }
+    async fn deduct(
+        &self,
+        viewer_id: &str,
+        d: &Deduction,
+        now: DateTime<Utc>,
+    ) -> Result<Deducted, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let totals: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT v.baseline_total + (SELECT COUNT(*) FROM checkin_records r WHERE r.viewer_id = v.id),              (SELECT COALESCE(SUM(d.amount), 0) FROM checkin_deductions d WHERE d.viewer_id = v.id)              FROM checkin_viewers v WHERE v.id = ?",
+        )
+        .bind(viewer_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        let Some((total, deducted)) = totals else {
+            return Ok(Deducted::UnknownViewer);
+        };
+        let now_available = available(
+            u64::try_from(total).unwrap_or(0),
+            u64::try_from(deducted).unwrap_or(0),
+        );
+        if !d.fits(now_available) {
+            return Ok(Deducted::NotEnough {
+                available: now_available,
+            });
+        }
+        sqlx::query(
+            "INSERT INTO checkin_deductions (id, viewer_id, amount, reason, deducted_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(Uuid::now_v7().to_string())
+        .bind(viewer_id)
+        .bind(i64::from(d.amount()))
+        .bind(d.reason())
+        .bind(time_text(now))
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(Deducted::Done {
+            available: now_available - u64::from(d.amount()),
+        })
     }
 }
 

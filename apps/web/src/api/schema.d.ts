@@ -208,6 +208,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/checkin/deductions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The change log: the latest 100 deductions, newest first. */
+        get: operations["list_deductions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/import": {
         parameters: {
             query?: never;
@@ -370,6 +387,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["manual_check_in"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/checkin/viewers/{id}/deductions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Spends a viewer's stamps; the total and the card stay as they are. */
+        post: operations["deduct_stamps"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2189,6 +2223,17 @@ export interface components {
             reward_title?: string | null;
             user_name?: string | null;
         };
+        /** @description One deduction in the change log. `user_name` and `reason` are raw text: escape them when rendering. */
+        CheckinDeduction: {
+            /** Format: int32 */
+            amount: number;
+            /** @description RFC 3339, UTC. */
+            deducted_at: string;
+            id: string;
+            reason: string;
+            user_name: string;
+            viewer_id: string;
+        };
         /** @description Redemptions waiting for the check-in module (while it is paused), and those it failed to take. */
         CheckinOutbox: {
             dead_letters: components["schemas"]["CheckinDeadLetter"][];
@@ -2279,6 +2324,11 @@ export interface components {
          *     them when rendering.
          */
         CheckinViewer: {
+            /**
+             * Format: int64
+             * @description Stamps that can be spent: `total` minus what was deducted, never below 0.
+             */
+            available: number;
             /** Format: int32 */
             card_slots: number;
             id: string;
@@ -2286,10 +2336,13 @@ export interface components {
             last_check_in?: string | null;
             /**
              * Format: int32
-             * @description Stamps on the current card, out of `card_slots`.
+             * @description Stamps on the current card, out of `card_slots`; from `total`.
              */
             stamps: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Lifetime check-ins; deductions never lower it.
+             */
             total: number;
             user_login: string;
             user_name: string;
@@ -2399,6 +2452,22 @@ export interface components {
         };
         /** @enum {string} */
         CounterValuesType: "counter.values";
+        DeductBody: {
+            /**
+             * Format: int32
+             * @description 1 to 1,000,000, and at most what is available.
+             */
+            amount: number;
+            /** @description Optional, at most 100 characters. */
+            reason?: string;
+        };
+        DeductResult: {
+            /**
+             * Format: int64
+             * @description Stamps still available after it.
+             */
+            available: number;
+        };
         DeviceLogin: {
             /** Format: int64 */
             expires_in_secs: number;
@@ -2744,6 +2813,13 @@ export interface components {
             tracks: string[];
             /** @description The names of the scene rules that play it; the admin UI lists them before deleting it. */
             used_by: string[];
+        };
+        /** @description More than is available; nothing was deducted. */
+        NotEnoughStamps: {
+            /** Format: int64 */
+            available: number;
+            /** @description `checkin.not_enough_stamps`. */
+            code: string;
         };
         ObsOverview: {
             host: string;
@@ -4074,6 +4150,34 @@ export interface operations {
             };
         };
     };
+    list_deductions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckinDeduction"][];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     apply_import: {
         parameters: {
             query?: never;
@@ -4498,6 +4602,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deduct_stamps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The viewer's internal ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeductBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeductResult"];
+                };
+            };
+            /** @description `checkin.invalid_deduction`: an amount out of range or a reason too long */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.viewer_not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `checkin.not_enough_stamps` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotEnoughStamps"];
                 };
             };
             /** @description `checkin.storage_failed` */

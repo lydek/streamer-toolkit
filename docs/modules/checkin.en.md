@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 0342a154fa75f4c61516d3549bce5babd3dcfdd7d770881b53820f47f65b75e6 -->
+<!-- source: docs/modules/checkin.md source-sha256: 46c453f95b60dd3484471e8ee5d9da3198046b4651664b8953f44298660fc029 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -23,7 +23,8 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 ## Admin UI
 - The home "check-in" tile and drawer show how many viewers checked in today (the current business day) and the latest few; the full page lists each viewer's total, stamp card and last check-in day, searchable by login or display name.
 - The broadcaster can register a known viewer for today or back-fill a past business day (recorded at the start of that day); future business days are refused. Manual check-ins and back-fills follow the same once-per-business-day rule, and a repeat returns "already checked in" with a notice, not an error.
-- Viewer names are shown as text only. Deleting or editing single records, removing stamps and exporting are not offered.
+- Viewer names are shown as text only. Deleting or editing single records and exporting are not offered; the lifetime total cannot be edited.
+- The full page also shows each viewer's available stamps, which can be spent (e.g. one press when a full card buys a song request), with an optional reason; the change log lists the latest 100 deductions (time, viewer, stamps, reason). See "Stamps" below.
 
 ## OBS stamp card
 - `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing.
@@ -59,6 +60,13 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Not stored; derived from the total: 0 stamps for a total of 0, otherwise `(total - 1) % slots + 1`. A just-completed card shows every slot; the next check-in starts a new card.
 - The number of slots is a setting (1–100, default 10); after it changes, every viewer's card is recalculated at once.
 
+## Stamps
+- Available stamps = lifetime total − stamps deducted, shown as 0 at least. Deducting never changes the lifetime total, and the stamp card is still worked out from the total.
+- Each deduction takes 1 or more and at most what is available, never going below 0; a deduction above that is refused, saying how many are left. Deductions are handled one at a time in order with the check-ins, and the check and the write share one transaction, so two presses at once never go below 0 either.
+- Deductions are stored in `checkin_deductions` (viewer, stamps, reason, time) and backed up with the database; they cannot be deleted or edited.
+- When an import brings the total below what was deducted, the available stamps show 0 and the change log stays as it is.
+- Trading a full card for a song request automatically is not built (done by hand for now).
+
 ## Acceptance
 - Repeated check-ins on the same business day are not counted again; the business day follows the configured time zone and reset hour, judged from the time the event happened.
 - After the time zone or reset hour changes, a viewer who already checked in that day is not counted again.
@@ -68,4 +76,5 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Manual check-ins and back-fills follow the same once-per-business-day rule; a repeat shows a notice and is not counted again. After the number of card slots changes, every viewer's card is recalculated at once.
 - Import: the original file is unchanged; viewers are matched by Twitch user ID, and importing the same data again adds nothing; skipped entries are listed with reasons in the preview; stamp cards are recalculated from `totalCheckIns`; `lastCheckInDate`, when present, becomes the last check-in day, otherwise it stays empty, and checking in that day still works.
 - Simulated events are never written to check-in records; nothing is recorded while the module is disabled.
+- Deductions: never below 0 (two at once included); the lifetime total and the stamp card stay as they are; when an import brings the total below what was deducted, the available stamps show 0 and the change log stays.
 - All of the above are tested (the repository against a real SQLite database).

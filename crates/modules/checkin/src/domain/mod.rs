@@ -142,6 +142,51 @@ impl CardSlots {
     }
 }
 
+/// Stamps a viewer can spend: lifetime check-ins minus what was deducted. Never below 0, which an import that lowers
+/// the total can otherwise cause; the deductions stay as they were.
+pub(crate) fn available(total: u64, deducted: u64) -> u64 {
+    total.saturating_sub(deducted)
+}
+
+/// Spending stamps (e.g. a song for a full card). The total and the card never change; only what is available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Deduction {
+    amount: u32,
+    reason: String,
+}
+
+/// An amount outside 1..=[`Deduction::MAX`], or a reason longer than [`Deduction::REASON_MAX`] characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InvalidDeduction;
+
+impl Deduction {
+    pub(crate) const MAX: u32 = 1_000_000;
+    pub(crate) const REASON_MAX: usize = 100;
+
+    /// The reason is optional; control characters are dropped and it is trimmed.
+    pub(crate) fn new(amount: u32, reason: &str) -> Result<Self, InvalidDeduction> {
+        let reason: String = reason.chars().filter(|c| !c.is_control()).collect();
+        let reason = reason.trim().to_owned();
+        if !(1..=Self::MAX).contains(&amount) || reason.chars().count() > Self::REASON_MAX {
+            return Err(InvalidDeduction);
+        }
+        Ok(Self { amount, reason })
+    }
+
+    pub(crate) fn amount(&self) -> u32 {
+        self.amount
+    }
+
+    pub(crate) fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// Whether it can be taken from `available` without going below 0.
+    pub(crate) fn fits(&self, available: u64) -> bool {
+        u64::from(self.amount) <= available
+    }
+}
+
 /// Twitch's ID of the channel points reward that checks in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RewardId(String);
@@ -287,6 +332,35 @@ impl ImportedViewer {
             total,
             last_day,
         })
+    }
+}
+
+#[cfg(test)]
+mod deduction_tests {
+    use super::*;
+
+    #[test]
+    fn available_never_goes_below_zero() {
+        assert_eq!(available(10, 3), 7);
+        assert_eq!(
+            available(2, 5),
+            0,
+            "an import below what was deducted shows 0"
+        );
+    }
+
+    #[test]
+    fn a_deduction_takes_at_most_what_is_available() {
+        let d = Deduction::new(3, "  換一首歌 ").unwrap();
+        assert_eq!(d.reason(), "換一首歌");
+        assert!(d.fits(3) && !d.fits(2));
+        assert_eq!(Deduction::new(0, ""), Err(InvalidDeduction));
+        assert_eq!(
+            Deduction::new(Deduction::MAX + 1, ""),
+            Err(InvalidDeduction)
+        );
+        assert_eq!(Deduction::new(1, &"字".repeat(101)), Err(InvalidDeduction));
+        assert_eq!(Deduction::new(1, "a\u{0}b").unwrap().reason(), "ab");
     }
 }
 

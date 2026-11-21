@@ -476,6 +476,39 @@
         }
       }
     },
+    "/api/admin/checkin/deductions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The change log: the latest 100 deductions, newest first.",
+        "operationId": "list_deductions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CheckinDeduction"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/import": {
       "post": {
         "tags": [
@@ -986,6 +1019,87 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkin.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/checkin/viewers/{id}/deductions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Spends a viewer's stamps; the total and the card stay as they are.",
+        "operationId": "deduct_stamps",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The viewer's internal ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeductBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeductResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`checkin.invalid_deduction`: an amount out of range or a reason too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`checkin.viewer_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`checkin.not_enough_stamps`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotEnoughStamps"
                 }
               }
             }
@@ -6591,6 +6705,41 @@
           }
         }
       },
+      "CheckinDeduction": {
+        "type": "object",
+        "description": "One deduction in the change log. `user_name` and `reason` are raw text: escape them when rendering.",
+        "required": [
+          "id",
+          "viewer_id",
+          "user_name",
+          "amount",
+          "reason",
+          "deducted_at"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "deducted_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "viewer_id": {
+            "type": "string"
+          }
+        }
+      },
       "CheckinOutbox": {
         "type": "object",
         "description": "Redemptions waiting for the check-in module (while it is paused), and those it failed to take.",
@@ -6828,10 +6977,17 @@
           "user_login",
           "user_name",
           "total",
+          "available",
           "stamps",
           "card_slots"
         ],
         "properties": {
+          "available": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stamps that can be spent: `total` minus what was deducted, never below 0.",
+            "minimum": 0
+          },
           "card_slots": {
             "type": "integer",
             "format": "int32",
@@ -6850,12 +7006,13 @@
           "stamps": {
             "type": "integer",
             "format": "int32",
-            "description": "Stamps on the current card, out of `card_slots`.",
+            "description": "Stamps on the current card, out of `card_slots`; from `total`.",
             "minimum": 0
           },
           "total": {
             "type": "integer",
             "format": "int64",
+            "description": "Lifetime check-ins; deductions never lower it.",
             "minimum": 0
           },
           "user_login": {
@@ -7148,6 +7305,38 @@
         "enum": [
           "counter.values"
         ]
+      },
+      "DeductBody": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 1,000,000, and at most what is available.",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "description": "Optional, at most 100 characters."
+          }
+        }
+      },
+      "DeductResult": {
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stamps still available after it.",
+            "minimum": 0
+          }
+        }
       },
       "DeviceLogin": {
         "type": "object",
@@ -8115,6 +8304,25 @@
               "type": "string"
             },
             "description": "The names of the scene rules that play it; the admin UI lists them before deleting it."
+          }
+        }
+      },
+      "NotEnoughStamps": {
+        "type": "object",
+        "description": "More than is available; nothing was deducted.",
+        "required": [
+          "code",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "code": {
+            "type": "string",
+            "description": "`checkin.not_enough_stamps`."
           }
         }
       },

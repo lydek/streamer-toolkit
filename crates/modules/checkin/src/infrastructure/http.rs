@@ -21,8 +21,8 @@ use toolkit_core::{
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    application::{self, CheckinService, ConfigError, ManualError, Outcome, settings_of},
-    domain::{ImportEntry, ImportedViewer, Rules, SkipReason},
+    application::{self, CheckinService, ConfigError, Deducted, ManualError, Outcome, settings_of},
+    domain::{Deduction, ImportEntry, ImportedViewer, Rules, SkipReason},
     infrastructure::db,
 };
 
@@ -33,6 +33,8 @@ const DEFAULT_LIMIT: u32 = 50;
 const MAX_LIMIT: u32 = 100;
 /// Latest check-ins of the day shown in the drawer.
 const RECENT: u32 = 5;
+/// How many deductions the change log lists.
+const DEDUCTIONS_LISTED: u32 = 100;
 
 pub(crate) struct HttpState {
     pool: SqlitePool,
@@ -93,6 +95,11 @@ pub fn routes(pool: SqlitePool, service: Arc<CheckinService>) -> Router {
             post(manual_check_in),
         )
         .route(
+            "/api/admin/checkin/viewers/{id}/deductions",
+            post(deduct_stamps),
+        )
+        .route("/api/admin/checkin/deductions", get(list_deductions))
+        .route(
             "/api/admin/checkin/import/preview",
             post(preview_import).layer(DefaultBodyLimit::max(IMPORT_MAX_BYTES)),
         )
@@ -110,8 +117,11 @@ pub struct CheckinViewer {
     pub id: String,
     pub user_login: String,
     pub user_name: String,
+    /// Lifetime check-ins; deductions never lower it.
     pub total: u64,
-    /// Stamps on the current card, out of `card_slots`.
+    /// Stamps that can be spent: `total` minus what was deducted, never below 0.
+    pub available: u64,
+    /// Stamps on the current card, out of `card_slots`; from `total`.
     pub stamps: u32,
     pub card_slots: u32,
     /// Business day (`YYYY-MM-DD`) of the latest check-in; `null` when there is none.
@@ -162,6 +172,41 @@ pub struct ManualCheckInBody {
     /// A past business day to back-fill (`YYYY-MM-DD`); omitted or `null` registers today.
     #[serde(default)]
     pub date: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DeductBody {
+    /// 1 to 1,000,000, and at most what is available.
+    pub amount: u32,
+    /// Optional, at most 100 characters.
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DeductResult {
+    /// Stamps still available after it.
+    pub available: u64,
+}
+
+/// More than is available; nothing was deducted.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct NotEnoughStamps {
+    /// `checkin.not_enough_stamps`.
+    pub code: String,
+    pub available: u64,
+}
+
+/// One deduction in the change log. `user_name` and `reason` are raw text: escape them when rendering.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CheckinDeduction {
+    pub id: String,
+    pub viewer_id: String,
+    pub user_name: String,
+    pub amount: u32,
+    pub reason: String,
+    /// RFC 3339, UTC.
+    pub deducted_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -363,6 +408,7 @@ pub(crate) async fn list_viewers(
                     user_login: r.user_login,
                     user_name: r.user_name,
                     total: r.total,
+                    available: crate::domain::available(r.total, r.deducted),
                     last_check_in: r.last_day,
                 })
                 .collect(),
@@ -442,6 +488,76 @@ pub(crate) async fn manual_check_in(
         Err(ManualError::Storage(e)) => return storage_error(e),
     };
     Json(ManualCheckIn { result }).into_response()
+}
+
+/// Spends a viewer's stamps; the total and the card stay as they are.
+#[utoipa::path(
+    post,
+    path = "/api/admin/checkin/viewers/{id}/deductions",
+    tag = "admin",
+    params(("id" = String, Path, description = "The viewer's internal ID")),
+    request_body = DeductBody,
+    responses(
+        (status = 200, body = DeductResult),
+        (status = 400, description = "`checkin.invalid_deduction`: an amount out of range or a reason too long", body = ErrorBody),
+        (status = 404, description = "`checkin.viewer_not_found`", body = ErrorBody),
+        (status = 409, description = "`checkin.not_enough_stamps`", body = NotEnoughStamps),
+        (status = 500, description = "`checkin.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn deduct_stamps(
+    State(s): State<Arc<HttpState>>,
+    Path(id): Path<String>,
+    body: Result<Json<DeductBody>, JsonRejection>,
+) -> Response {
+    let Some(deduction) = body
+        .ok()
+        .and_then(|Json(b)| Deduction::new(b.amount, &b.reason).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, "checkin.invalid_deduction");
+    };
+    match s.service.deduct(&id, deduction).await {
+        Ok(Deducted::Done { available }) => Json(DeductResult { available }).into_response(),
+        Ok(Deducted::NotEnough { available }) => (
+            StatusCode::CONFLICT,
+            Json(NotEnoughStamps {
+                code: "checkin.not_enough_stamps".into(),
+                available,
+            }),
+        )
+            .into_response(),
+        Ok(Deducted::UnknownViewer) => error(StatusCode::NOT_FOUND, "checkin.viewer_not_found"),
+        Err(e) => storage_error(e),
+    }
+}
+
+/// The change log: the latest 100 deductions, newest first.
+#[utoipa::path(
+    get,
+    path = "/api/admin/checkin/deductions",
+    tag = "admin",
+    responses(
+        (status = 200, body = Vec<CheckinDeduction>),
+        (status = 500, description = "`checkin.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn list_deductions(State(s): State<Arc<HttpState>>) -> Response {
+    match db::deductions(&s.pool, DEDUCTIONS_LISTED).await {
+        Ok(rows) => Json(
+            rows.into_iter()
+                .map(|d| CheckinDeduction {
+                    id: d.id,
+                    viewer_id: d.viewer_id,
+                    user_name: d.user_name,
+                    amount: d.amount,
+                    reason: d.reason,
+                    deducted_at: d.deducted_at,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => storage_error(e),
+    }
 }
 
 #[utoipa::path(

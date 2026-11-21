@@ -551,3 +551,123 @@ async fn import_refuses_what_is_not_an_object_or_too_large() {
     );
     let _ = std::fs::remove_dir_all(&a.dir);
 }
+
+#[tokio::test]
+async fn deductions_take_from_what_is_available_never_below_zero() {
+    let a = api("deduct").await;
+    for at in [
+        "2026-11-10T01:00:00Z",
+        "2026-11-11T01:00:00Z",
+        "2026-11-12T01:00:00Z",
+    ] {
+        seed(&a.pool, "1", "Ann", at).await;
+    }
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    let ann = viewer_named(&page, "Ann").clone();
+    assert_eq!((&ann["total"], &ann["available"]), (&3.into(), &3.into()));
+    let id = ann["id"].as_str().unwrap();
+    let uri = format!("/api/admin/checkin/viewers/{id}/deductions");
+
+    let (status, body) = call(
+        &a.app,
+        "POST",
+        &uri,
+        Some(serde_json::json!({"amount": 2, "reason": " 換一首歌 "})),
+    )
+    .await;
+    assert_eq!((status, &body["available"]), (200, &1.into()));
+    let (status, body) = call(&a.app, "POST", &uri, Some(serde_json::json!({"amount": 2}))).await;
+    assert_eq!(status, 409);
+    assert_eq!(
+        body,
+        serde_json::json!({"code": "checkin.not_enough_stamps", "available": 1})
+    );
+    for bad in [
+        serde_json::json!({"amount": 0}),
+        serde_json::json!({"amount": 1, "reason": "字".repeat(101)}),
+    ] {
+        let (status, body) = call(&a.app, "POST", &uri, Some(bad)).await;
+        assert_eq!(
+            (status, &body["code"]),
+            (400, &"checkin.invalid_deduction".into())
+        );
+    }
+    let (status, body) = call(
+        &a.app,
+        "POST",
+        "/api/admin/checkin/viewers/nobody/deductions",
+        Some(serde_json::json!({"amount": 1})),
+    )
+    .await;
+    assert_eq!(
+        (status, &body["code"]),
+        (404, &"checkin.viewer_not_found".into())
+    );
+
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    let ann = viewer_named(&page, "Ann");
+    assert_eq!(
+        (&ann["total"], &ann["available"], &ann["stamps"]),
+        (&3.into(), &1.into(), &3.into()),
+        "the total and the card stay"
+    );
+
+    let (status, log) = call(&a.app, "GET", "/api/admin/checkin/deductions", None).await;
+    assert_eq!(status, 200);
+    assert_eq!(log.as_array().unwrap().len(), 1);
+    assert_eq!(
+        (&log[0]["user_name"], &log[0]["amount"], &log[0]["reason"]),
+        (&"Ann".into(), &2.into(), &"換一首歌".into())
+    );
+}
+
+#[tokio::test]
+async fn two_deductions_at_once_never_go_below_zero() {
+    let a = api("deduct-race").await;
+    seed(&a.pool, "1", "Ann", "2026-11-10T01:00:00Z").await;
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    let id = viewer_named(&page, "Ann")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uri = format!("/api/admin/checkin/viewers/{id}/deductions");
+    let body = Some(serde_json::json!({"amount": 1}));
+    let (first, second) = tokio::join!(
+        call(&a.app, "POST", &uri, body.clone()),
+        call(&a.app, "POST", &uri, body.clone())
+    );
+    let mut statuses = [first.0, second.0];
+    statuses.sort();
+    assert_eq!(statuses, [200, 409]);
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    assert_eq!(viewer_named(&page, "Ann")["available"], 0);
+}
+
+#[tokio::test]
+async fn an_import_below_what_was_deducted_shows_zero_and_keeps_the_log() {
+    let a = api("deduct-import").await;
+    let file = serde_json::json!({ "1": { "totalCheckIns": 10, "name": "Ann" } }).to_string();
+    post_raw(&a.app, "/api/admin/checkin/import", file).await;
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    let id = viewer_named(&page, "Ann")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, _) = call(
+        &a.app,
+        "POST",
+        &format!("/api/admin/checkin/viewers/{id}/deductions"),
+        Some(serde_json::json!({"amount": 8})),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let file = serde_json::json!({ "1": { "totalCheckIns": 5, "name": "Ann" } }).to_string();
+    let (status, _) = post_raw(&a.app, "/api/admin/checkin/import", file).await;
+    assert_eq!(status, 200);
+    let (_, page) = call(&a.app, "GET", "/api/admin/checkin/viewers", None).await;
+    let ann = viewer_named(&page, "Ann");
+    assert_eq!((&ann["total"], &ann["available"]), (&5.into(), &0.into()));
+    let (_, log) = call(&a.app, "GET", "/api/admin/checkin/deductions", None).await;
+    assert_eq!(log.as_array().unwrap().len(), 1);
+}

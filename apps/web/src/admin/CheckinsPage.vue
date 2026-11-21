@@ -25,6 +25,7 @@
           {{ v.user_name }} <span class="login">{{ v.user_login }}</span>
         </span>
         <span>{{ t('checkin.page.totalOf', { n: v.total }) }}</span>
+        <span>{{ t('checkin.deduct.available', { n: v.available }) }}</span>
         <span>{{ t('checkin.page.card', { stamps: v.stamps, slots: v.card_slots }) }}</span>
         <span>{{ v.last_check_in ? t('checkin.page.last', { date: v.last_check_in }) : t('checkin.page.never') }}</span>
         <Button
@@ -34,6 +35,29 @@
           :disabled="busy || !date"
           @click="register(v)"
         />
+        <Button
+          v-if="deducting !== v.id"
+          :label="t('checkin.deduct.open')"
+          size="small"
+          text
+          :disabled="!v.available"
+          @click="openDeduct(v)"
+        />
+        <form v-else class="deduct" :aria-label="t('checkin.deduct.for', { name: v.user_name })" @submit.prevent="deduct(v)">
+          <label :for="`deduct-amount-${v.id}`">{{ t('checkin.deduct.amount') }}</label>
+          <InputNumber
+            v-model="amount"
+            :input-id="`deduct-amount-${v.id}`"
+            :min="1"
+            :max="v.available"
+            :allow-empty="false"
+            :use-grouping="false"
+          />
+          <label :for="`deduct-reason-${v.id}`">{{ t('checkin.deduct.reason') }}</label>
+          <InputText :id="`deduct-reason-${v.id}`" v-model="reason" maxlength="100" autocomplete="off" />
+          <Button type="submit" :label="t('checkin.deduct.confirm')" size="small" :disabled="busy" />
+          <Button :label="t('checkin.deduct.cancel')" size="small" text @click="deducting = undefined" />
+        </form>
       </li>
     </ul>
 
@@ -50,18 +74,21 @@
       />
     </nav>
 
+    <CheckinDeductions ref="log" />
     <CheckinImport @imported="load" />
   </FullPage>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import CheckinDeductions from './CheckinDeductions.vue'
 import CheckinImport from './CheckinImport.vue'
 import { changesCheckins, localDate, viewerQuery } from './checkins'
 import FullPage from './FullPage.vue'
@@ -82,6 +109,11 @@ const page = shallowRef<Schemas['CheckinViewerPage']>()
 const failed = ref('')
 const busy = ref(false)
 let request = 0
+// The viewer whose deduction form is open.
+const deducting = ref<string>()
+const amount = ref(1)
+const reason = ref('')
+const log = ref<InstanceType<typeof CheckinDeductions>>()
 
 const pages = computed(() => pageCount(page.value?.total ?? 0))
 
@@ -140,6 +172,33 @@ async function register(v: Schemas['CheckinViewer']) {
     await load()
   } catch (e) {
     toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  } finally {
+    busy.value = false
+  }
+}
+
+function openDeduct(v: Schemas['CheckinViewer']) {
+  deducting.value = v.id
+  amount.value = 1
+  reason.value = ''
+}
+
+async function deduct(v: Schemas['CheckinViewer']) {
+  busy.value = true
+  try {
+    const { available } = await api(
+      client.POST('/api/admin/checkin/viewers/{id}/deductions', {
+        params: { path: { id: v.id } },
+        body: { amount: amount.value, reason: reason.value },
+      }),
+    )
+    toast.add(successToast(t('checkin.deduct.done', { name: v.user_name, n: amount.value, left: available })))
+    deducting.value = undefined
+    await Promise.all([load(), log.value?.load()])
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+    // Another deduction may have spent them meanwhile.
+    await load()
   } finally {
     busy.value = false
   }
@@ -209,6 +268,17 @@ useLiveEvents(2000, (msg) => {
 .login {
   font-weight: 400;
   color: var(--p-text-muted-color);
+}
+
+.deduct {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.deduct :deep(.p-inputnumber-input) {
+  width: 5rem;
 }
 
 .pager {
