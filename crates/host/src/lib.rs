@@ -416,7 +416,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 Router::new()
                     .route("/ws/overlay", get(overlay::ws))
                     .with_state(overlay::OverlayState {
-                        bus,
+                        bus: bus.clone(),
                         connections: overlays.clone(),
                     }),
             )
@@ -445,12 +445,9 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 )),
             )
             .merge(sound::file_routes(sounds))
-            .merge(
-                bgm::routes(music.clone(), player).layer(middleware::from_fn_with_state(
-                    admin.clone(),
-                    admin::require_token,
-                )),
-            )
+            .merge(bgm::routes(music.clone(), player, bus.clone()).layer(
+                middleware::from_fn_with_state(admin.clone(), admin::require_token),
+            ))
             .merge(bgm::file_routes(music))
             .merge(
                 counter::routes(counters).layer(middleware::from_fn_with_state(

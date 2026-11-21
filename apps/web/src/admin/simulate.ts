@@ -16,6 +16,9 @@ export const simulateCheckin = (body: Schemas['SimulatedCheckin']) =>
 export const testOverlay = (overlay: Schemas['TestOverlay']) =>
   api(client.POST('/api/admin/simulate/overlay-test', { body: { overlay } }))
 
+/** Plays the first playable track of the playlist chosen last on the music overlay for 5 seconds; the player stays as it is. */
+export const testMusic = () => api(client.POST('/api/admin/music/player/test'))
+
 /** Plays a library sound on the sound overlay. */
 export const testSound = (id: string) => api(client.POST('/api/admin/sounds/{id}/play', { params: { path: { id } } }))
 

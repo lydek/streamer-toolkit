@@ -435,3 +435,69 @@ async fn without_rules_or_with_the_feature_off_scenes_leave_the_player_alone() {
     scene(&rig, Some("Chat"));
     assert_eq!(rig.last().state, PlayState::Stopped);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_test_picks_the_first_playable_track_of_the_last_playlist_and_changes_nothing() {
+    let rig = Rig::new("test", &[None, Some(1000), Some(2000)], true);
+    let test = || {
+        let mut sent = None;
+        rig.player.test(|t| sent = Some(t)).map(|()| sent.unwrap())
+    };
+    assert!(
+        matches!(test(), Err(BgmError::NothingToPlay)),
+        "no playlist chosen yet"
+    );
+    rig.play().unwrap();
+    assert!(matches!(test(), Err(BgmError::Playing)));
+    rig.player.command(Command::Pause).unwrap();
+    let before = rig.statuses.lock().unwrap().len();
+    let sent = test().unwrap();
+    // The unmeasured first track cannot play.
+    assert_eq!(sent.track.id, rig.tracks[1]);
+    assert_eq!(sent.volume, rig.last().volume);
+    assert_eq!(
+        rig.statuses.lock().unwrap().len(),
+        before,
+        "nothing published"
+    );
+    assert_eq!(rig.last().state, PlayState::Paused);
+
+    rig.player.command(Command::Stop).unwrap();
+    assert_eq!(
+        test().unwrap().track.id,
+        rig.tracks[1],
+        "the playlist is kept after a stop"
+    );
+    rig.modules.set_enabled(modules::BGM, false).unwrap();
+    assert!(matches!(test(), Err(BgmError::Off)));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_play_command_waits_until_the_test_is_sent() {
+    let rig = Rig::new("test-lock", &[Some(1000)], true);
+    rig.play().unwrap();
+    rig.player.command(Command::Stop).unwrap();
+    let played = Arc::new(AtomicBool::new(false));
+    let mut play = None;
+    rig.player
+        .test(|_| {
+            let (player, done, playlist) =
+                (rig.player.clone(), played.clone(), rig.playlist.clone());
+            play = Some(std::thread::spawn(move || {
+                player
+                    .command(Command::Play {
+                        playlist: Some(playlist),
+                    })
+                    .unwrap();
+                done.store(true, Ordering::SeqCst);
+            }));
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            assert!(
+                !played.load(Ordering::SeqCst),
+                "play got in before the test was sent"
+            );
+        })
+        .unwrap();
+    play.unwrap().join().unwrap();
+    assert!(played.load(Ordering::SeqCst));
+}

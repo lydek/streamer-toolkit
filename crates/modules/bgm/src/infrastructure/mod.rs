@@ -36,6 +36,10 @@ use crate::{
 
 const PLAYER: &str = "bgm.player";
 const PLAYER_VERSION: u32 = 1;
+const TEST: &str = "bgm.test";
+const TEST_VERSION: u32 = 1;
+/// How long a test plays.
+const TEST_MS: u32 = 5000;
 
 /// Same shape as the host's admin error body: a stable `<area>.<reason>` code.
 #[derive(Serialize, ToSchema)]
@@ -52,7 +56,7 @@ fn bgm_error(e: BgmError) -> Response {
         BgmError::UnsupportedType | BgmError::Invalid => StatusCode::BAD_REQUEST,
         BgmError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         BgmError::NotFound => StatusCode::NOT_FOUND,
-        BgmError::NothingToPlay | BgmError::Off => StatusCode::CONFLICT,
+        BgmError::NothingToPlay | BgmError::Off | BgmError::Playing => StatusCode::CONFLICT,
         BgmError::SaveFailed(io) => {
             tracing::error!(code = "music.save_failed", error = %io, "music library not saved");
             StatusCode::INTERNAL_SERVER_ERROR
@@ -337,6 +341,37 @@ pub enum BgmPlayerType {
     BgmPlayer,
 }
 
+/// The `payload` of a `bgm.test` event: the music overlay plays `track` from its start at `volume` for `durationMs`,
+/// on its own and not as the player, and stops early when the player starts playing.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BgmTestPayload {
+    pub track: PlayerTrack,
+    /// 0–100 (%).
+    pub volume: u8,
+    pub duration_ms: u32,
+}
+
+/// A `bgm.test` event exactly as `/ws/overlay` sends it; never kept in snapshots.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BgmTestEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: BgmTestType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: BgmTestPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum BgmTestType {
+    #[serde(rename = "bgm.test")]
+    BgmTest,
+}
+
 /// Starts the player, publishing every status as `bgm.player` (kept in snapshots); needs a Tokio runtime.
 /// `on_air` says whether a music overlay is open, re-read whenever `changes` ticks.
 pub fn start(
@@ -361,7 +396,7 @@ pub fn start(
 }
 
 /// The admin API.
-pub fn routes(service: Arc<BgmService>, player: Arc<BgmPlayer>) -> Router {
+pub fn routes(service: Arc<BgmService>, player: Arc<BgmPlayer>, bus: Arc<EventBus>) -> Router {
     Router::new()
         .route(
             "/api/admin/music",
@@ -386,7 +421,12 @@ pub fn routes(service: Arc<BgmService>, player: Arc<BgmPlayer>) -> Router {
             Router::new()
                 .route("/api/admin/music/player", post(control_player))
                 .route("/api/admin/music/player/options", put(set_player_options))
-                .with_state(player),
+                .with_state(player.clone()),
+        )
+        .merge(
+            Router::new()
+                .route("/api/admin/music/player/test", post(test_player))
+                .with_state((player, bus)),
         )
 }
 
@@ -723,6 +763,47 @@ pub(crate) async fn set_player_options(
     }
 }
 
+/// Plays the first playable track of the playlist chosen last on the music overlay for 5 seconds, as a `bgm.test`
+/// event (`source=simulation`, not kept in snapshots). The player, its track and its position do not change.
+#[utoipa::path(
+    post,
+    path = "/api/admin/music/player/test",
+    tag = "admin",
+    responses(
+        (status = 204),
+        (status = 409, description = "`music.nothing_to_play`: no playlist chosen yet, or none of its tracks can play; `music.playing`: the music is playing; `music.off`: the feature is turned off", body = ErrorBody),
+    )
+)]
+pub(crate) async fn test_player(
+    State((player, bus)): State<(Arc<BgmPlayer>, Arc<EventBus>)>,
+) -> Response {
+    // Published under the player's lock (see `BgmPlayer::test`).
+    let sent = player.test(|test| {
+        let payload = BgmTestPayload {
+            track: PlayerTrack {
+                url: format!("/music/{}", test.track.id),
+                id: test.track.id,
+                title: test.track.title,
+                duration_ms: test.track.duration_ms,
+            },
+            volume: test.volume,
+            duration_ms: TEST_MS,
+        };
+        bus.publish(Event {
+            id: uuid::Uuid::now_v7().to_string(),
+            event_type: TEST,
+            version: TEST_VERSION,
+            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            source: Source::Simulation,
+            payload: serde_json::to_value(payload).expect("test payload serializes"),
+        });
+    });
+    if let Err(e) = sent {
+        return bgm_error(e);
+    }
+    StatusCode::NO_CONTENT.into_response()
+}
+
 /// One `bytes=` range as `[start, end)` within `size`; `None` when it cannot be served.
 // shortcut: a single range only, which is what browsers ask for when playing media.
 fn byte_range(value: &str, size: u64) -> Option<(u64, u64)> {
@@ -812,9 +893,10 @@ async fn music_file(
         delete_playlist,
         set_scene_rules,
         control_player,
-        set_player_options
+        set_player_options,
+        test_player
     ),
-    components(schemas(BgmPlayerEvent))
+    components(schemas(BgmPlayerEvent, BgmTestEvent))
 )]
 struct BgmApi;
 

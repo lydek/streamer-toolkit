@@ -740,6 +740,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/music/player/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plays the first playable track of the playlist chosen last on the music overlay for 5 seconds, as a `bgm.test`
+         *     event (`source=simulation`, not kept in snapshots). The player, its track and its position do not change.
+         */
+        post: operations["test_player"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/music/playlists": {
         parameters: {
             query?: never;
@@ -1659,6 +1679,34 @@ export interface components {
         };
         /** @enum {string} */
         BgmPlayerType: "bgm.player";
+        /** @description A `bgm.test` event exactly as `/ws/overlay` sends it; never kept in snapshots. */
+        BgmTestEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["BgmTestPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["BgmTestType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description The `payload` of a `bgm.test` event: the music overlay plays `track` from its start at `volume` for `durationMs`,
+         *     on its own and not as the player, and stops early when the player starts playing.
+         */
+        BgmTestPayload: {
+            /** Format: int32 */
+            durationMs: number;
+            track: components["schemas"]["PlayerTrack"];
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
+        /** @enum {string} */
+        BgmTestType: "bgm.test";
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
          * @enum {string}
@@ -5115,6 +5163,32 @@ export interface operations {
             };
             /** @description `music.save_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    test_player: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.nothing_to_play`: no playlist chosen yet, or none of its tracks can play; `music.playing`: the music is playing; `music.off`: the feature is turned off */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

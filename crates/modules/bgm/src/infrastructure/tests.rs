@@ -26,11 +26,11 @@ fn app_on(dir: &std::path::Path, bus: Arc<EventBus>) -> Router {
     let player = start(
         service.clone(),
         modules,
-        bus,
+        bus.clone(),
         || false,
         watch::channel(()).1,
     );
-    routes(service.clone(), player).merge(file_routes(service))
+    routes(service.clone(), player, bus).merge(file_routes(service))
 }
 
 async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Response) {
@@ -578,5 +578,97 @@ async fn scene_rules_are_saved_listed_by_what_they_use_and_lose_a_deleted_playli
         (Value::Null, json!(false))
     );
     assert_eq!(lib["tracks"][0]["used_by"], json!([]));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_test_reaches_the_music_overlay_as_simulation_and_leaves_the_player_alone() {
+    let dir = data_dir("test");
+    let bus = Arc::new(EventBus::default());
+    let app = app_on(&dir, bus.clone());
+    let test = || {
+        Request::post("/api/admin/music/player/test")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let player = |body: Value| with_json("POST", "/api/admin/music/player", body);
+    let (status, res) = send(&app, test()).await;
+    assert_eq!(
+        (status, json(res).await["code"].clone()),
+        (StatusCode::CONFLICT, json!("music.nothing_to_play")),
+        "no playlist chosen yet"
+    );
+
+    let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let playlist = json(
+        send(
+            &app,
+            with_json(
+                "POST",
+                "/api/admin/music/playlists",
+                json!({"name": "Chat"}),
+            ),
+        )
+        .await
+        .1,
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for (uri, body) in [
+        (
+            format!("/api/admin/music/{id}/playlists"),
+            json!({"playlists": [playlist]}),
+        ),
+        (
+            format!("/api/admin/music/{id}/duration"),
+            json!({"duration_ms": 60_000}),
+        ),
+    ] {
+        send(&app, with_json("PUT", &uri, body)).await;
+    }
+    send(
+        &app,
+        player(json!({"action": "play", "playlist": playlist})),
+    )
+    .await;
+    let (status, res) = send(&app, test()).await;
+    assert_eq!(
+        (status, json(res).await["code"].clone()),
+        (StatusCode::CONFLICT, json!("music.playing"))
+    );
+    send(&app, player(json!({"action": "stop"}))).await;
+
+    let (_, mut events) = bus.subscribe();
+    assert_eq!(send(&app, test()).await.0, StatusCode::NO_CONTENT);
+    let event: Value = serde_json::from_str(&events.try_recv().unwrap()).unwrap();
+    assert_eq!(
+        (event["type"].clone(), event["source"].clone()),
+        (json!("bgm.test"), json!("simulation"))
+    );
+    assert_eq!(
+        event["payload"],
+        json!({
+            "track": {"id": id, "title": "a", "url": format!("/music/{id}"), "durationMs": 60_000},
+            "volume": 50,
+            "durationMs": 5000,
+        })
+    );
+    let typed: BgmTestEvent = serde_json::from_value(event.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(typed).unwrap(),
+        event,
+        "the schema type matches the bus"
+    );
+    assert!(events.try_recv().is_err(), "the player publishes nothing");
+    let (snapshot, _) = bus.subscribe();
+    assert!(
+        !snapshot.contains("bgm.test"),
+        "never replayed to an overlay that connects later"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }

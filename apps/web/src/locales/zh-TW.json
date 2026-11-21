@@ -977,7 +977,8 @@
         "sound": "音效",
         "checkin": "打卡卡片",
         "counter": "計數器",
-        "marathon": "訂閱馬拉松計時器"
+        "marathon": "訂閱馬拉松計時器",
+        "bgm": "背景音樂"
       },
       "sendMessage": "送一則訊息",
       "chatText": "這是一則測試訊息",
@@ -986,6 +987,10 @@
       "checkin": "一般打卡",
       "fullCard": "集滿",
       "showTest": "顯示測試值",
+      "playTest": "播 5 秒",
+      "bgmPlaying": "背景音樂正在播",
+      "noPlaylist": "還沒選過歌單",
+      "nothingToPlay": "歌單裡沒有能播的歌",
       "sent": "已送出測試：{row} · {button}",
       "connected": "OBS 已連上",
       "notInObs": "還沒放進 OBS",
@@ -1177,6 +1182,7 @@
       "invalid": "名稱不能空白，音量是 0 到 100%。",
       "nothing_to_play": "這個歌單沒有能播的歌：檔案不見了，或還沒量到長度。",
       "off": "背景音樂功能已關閉。",
+      "playing": "背景音樂正在播，請先暫停或停止再測試。",
       "save_failed": "無法儲存音樂庫。"
     },
     "backup": {

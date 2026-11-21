@@ -29,6 +29,9 @@ pub enum BgmError {
     /// The background music feature is turned off.
     #[error("music.off")]
     Off,
+    /// The music is playing, so a test would play over it.
+    #[error("music.playing")]
+    Playing,
     #[error("music.save_failed")]
     SaveFailed(#[from] io::Error),
 }
