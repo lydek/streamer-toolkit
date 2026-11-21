@@ -1,6 +1,6 @@
-//! Backup files (`.stbackup`, docs/architecture.md §6 資料夾): a zip of `settings.json`, a `VACUUM INTO` snapshot
-//! of the database, `templates/`, `sounds/`, `music/`, `media/` and `checkin/`, plus `manifest.json` with every
-//! file's size and SHA-256.
+//! Backup files (`.stbackup`, docs/architecture.md §6 資料夾): a zip of data (`settings.json` and a `VACUUM INTO`
+//! snapshot of the database), media (`templates/`, `sounds/`, `music/`, `media/` and `checkin/`) or both, plus
+//! `manifest.json` with what it holds and every file's size and SHA-256. A restore replaces only the kinds it holds.
 //! Credentials live in the Windows Credential Manager, never in the data folder, so no backup holds them.
 //! A restore uploads the file in parts (`upload`), is checked and staged by the admin API, then applied on the next
 //! start before the database opens. Admin routes; the caller adds the token check.
@@ -16,7 +16,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -31,10 +31,12 @@ use crate::{
 };
 
 const FORMAT: &str = "streamer-toolkit-backup";
-const FORMAT_VERSION: u32 = 1;
+/// The newest format this version reads. A backup of both kinds is written as 1, which older versions read too; one
+/// of a single kind is 2, which they refuse as newer rather than take for a whole backup.
+const FORMAT_VERSION: u32 = 2;
 const MANIFEST: &str = "manifest.json";
 const SETTINGS: &str = "settings.json";
-/// Data folder subfolders taken whole. Never `logs/`, `cache/`, `WebView2/`, `backups/` or `instance-id`.
+/// Data folder subfolders taken whole (the media). Never `logs/`, `cache/`, `WebView2/`, `backups/` or `instance-id`.
 const FOLDERS: [&str; 5] = ["templates", "sounds", "music", "media", "checkin"];
 /// What a restore accepts (unpacked size and files); an export beyond these is refused, so every backup restores.
 const MAX_EXPANDED_BYTES: u64 = 20 * 1024 * 1024 * 1024;
@@ -57,28 +59,50 @@ const RESTORE_ID: &str = ".restore-id";
 /// In `restore-previous/` once every current item is in it; from then on, items without a copy there came from
 /// the backup.
 const MOVED: &str = ".moved";
-/// What a restore replaces. The database's WAL files go too: SQLite would apply a stale WAL to the restored file.
-const REPLACED: [&str; 9] = [
-    SETTINGS,
-    db::DB_FILE,
-    "toolkit.db-wal",
-    "toolkit.db-shm",
-    "templates",
-    "sounds",
-    "music",
-    "media",
-    "checkin",
-];
-/// What a backup puts in place.
-const RESTORED: [&str; 7] = [
-    SETTINGS,
-    db::DB_FILE,
-    "templates",
-    "sounds",
-    "music",
-    "media",
-    "checkin",
-];
+/// In `restore-previous/` before anything moves: the kinds the restore replaces (JSON), so putting back touches only
+/// those. Absent: both.
+const CONTENTS: &str = ".contents";
+
+/// What a backup holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Content {
+    /// `settings.json` and the database.
+    Data,
+    /// Sounds, templates, music, videos and GIFs, card images and animation packs.
+    Media,
+}
+
+const BOTH: [Content; 2] = [Content::Data, Content::Media];
+
+fn both() -> Vec<Content> {
+    BOTH.to_vec()
+}
+
+impl Content {
+    /// The data folder items of this kind a restore replaces. The database's WAL files go too: SQLite would apply a
+    /// stale WAL to the restored file.
+    fn items(self) -> &'static [&'static str] {
+        match self {
+            Self::Data => &[SETTINGS, db::DB_FILE, "toolkit.db-wal", "toolkit.db-shm"],
+            Self::Media => &FOLDERS,
+        }
+    }
+
+    /// The kind a backup path (checked by [`allowed_path`]) belongs to: data files sit at the top.
+    fn of(path: &str) -> Self {
+        if path.contains('/') {
+            Self::Media
+        } else {
+            Self::Data
+        }
+    }
+}
+
+/// Every item the kinds in `contents` replace.
+fn items(contents: &[Content]) -> impl Iterator<Item = &'static str> + '_ {
+    contents.iter().flat_map(|c| c.items().iter().copied())
+}
 
 pub(crate) struct BackupState {
     pub db: SqlitePool,
@@ -98,6 +122,9 @@ pub(crate) struct BackupState {
 struct Manifest {
     format: String,
     format_version: u32,
+    /// Absent in backups made before kinds existed (format 1): both.
+    #[serde(default = "both")]
+    contents: Vec<Content>,
     app_version: String,
     /// The newest migration applied to the database; 0 for an empty one.
     schema_version: i64,
@@ -134,6 +161,22 @@ pub(crate) struct RestorePreview {
     pub sounds: usize,
     pub music: usize,
     pub media: usize,
+    /// The kinds it holds: a restore replaces only these.
+    pub contents: Vec<Content>,
+}
+
+/// How large the data and the media in this folder are now, in bytes.
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub(crate) struct BackupSizes {
+    pub data: u64,
+    pub media: u64,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct ExportQuery {
+    /// Only this kind; both when absent.
+    contents: Option<Content>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -215,6 +258,7 @@ fn restore_failed(e: impl std::fmt::Display) -> BackupError {
 pub(crate) fn routes(state: BackupState) -> Router {
     Router::new()
         .route("/api/admin/backup", get(export_backup))
+        .route("/api/admin/backup/sizes", get(sizes))
         .route("/api/admin/backup/restore/upload", post(upload::start))
         .route(
             "/api/admin/backup/restore/upload/{id}",
@@ -262,12 +306,14 @@ fn room(needed: u64, free: Option<u64>) -> Result<(), BackupError> {
     }
 }
 
-/// A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes
-/// on while it is made; database writes wait only for the snapshot.
+/// A `.stbackup` file of this data folder: its data (settings and the database), its media (custom templates, sounds,
+/// music, videos and GIFs, card images) or both. Live use goes on while it is made; database writes wait only for the
+/// snapshot.
 #[utoipa::path(
     get,
     path = "/api/admin/backup",
     tag = "admin",
+    params(ExportQuery),
     responses(
         (status = 200, description = "The backup file", content_type = "application/octet-stream", body = String),
         (status = 413, description = "`backup.too_large`: more than a restore accepts (20 GB unpacked, 100,000 files)", body = ErrorBody),
@@ -275,8 +321,12 @@ fn room(needed: u64, free: Option<u64>) -> Result<(), BackupError> {
         (status = 507, description = "`backup.no_space`, with `needed` (bytes): not enough free disk space", body = ErrorBody),
     )
 )]
-pub(crate) async fn export_backup(State(s): State<Arc<BackupState>>) -> Response {
-    match export_file(&s.db, &s.data_dir, &s.app_version).await {
+pub(crate) async fn export_backup(
+    State(s): State<Arc<BackupState>>,
+    Query(q): Query<ExportQuery>,
+) -> Response {
+    let contents = q.contents.map_or_else(both, |c| vec![c]);
+    match export_file(&s.db, &s.data_dir, &s.app_version, &contents).await {
         // The file's name goes now; the open handle streams it and the file is gone once closed.
         Ok(file) => (
             [
@@ -292,8 +342,42 @@ pub(crate) async fn export_backup(State(s): State<Arc<BackupState>>) -> Response
     }
 }
 
-/// Restores the staged backup: the app restarts, backs up the current data to `backups/`, then puts the backup
-/// in place before the database opens.
+/// How large the data and the media are now, for choosing what to back up.
+#[utoipa::path(
+    get,
+    path = "/api/admin/backup/sizes",
+    tag = "admin",
+    responses(
+        (status = 200, body = BackupSizes),
+        (status = 500, description = "`backup.export_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn sizes(State(s): State<Arc<BackupState>>) -> Response {
+    let data_dir = s.data_dir.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let size = |path: &Path| fs::metadata(path).map_or(0, |m| m.len());
+        let data = Content::Data
+            .items()
+            .iter()
+            .map(|item| size(&data_dir.join(item)))
+            .sum();
+        let mut files = Vec::new();
+        for folder in FOLDERS {
+            collect(&data_dir.join(folder), folder, &mut files)?;
+        }
+        let media = files.iter().map(|(_, path)| size(path)).sum();
+        Ok::<_, BackupError>(BackupSizes { data, media })
+    })
+    .await;
+    match result {
+        Ok(Ok(sizes)) => Json(sizes).into_response(),
+        Ok(Err(e)) => e.response(),
+        Err(e) => export_failed(e).response(),
+    }
+}
+
+/// Restores the staged backup: the app restarts, backs up the current data of the kinds it holds to `backups/`,
+/// then puts the backup in place before the database opens.
 #[utoipa::path(
     post,
     path = "/api/admin/backup/restore",
@@ -322,17 +406,18 @@ pub(crate) async fn confirm_restore(State(s): State<Arc<BackupState>>) -> Respon
     StatusCode::ACCEPTED.into_response()
 }
 
-/// The backup file, in `cache/` until it is dropped or persisted. The snapshot goes to `cache/` too and is removed
-/// afterwards.
+/// The backup file of the kinds in `contents`, in `cache/` until it is dropped or persisted. The snapshot goes to
+/// `cache/` too and is removed afterwards.
 async fn export_file(
     pool: &SqlitePool,
     data_dir: &Path,
     app_version: &str,
+    contents: &[Content],
 ) -> Result<tempfile::NamedTempFile, BackupError> {
     let cache = data_dir.join("cache");
     std::fs::create_dir_all(&cache).map_err(export_failed)?;
     let snapshot = cache.join(format!("backup-{}.db", uuid::Uuid::now_v7()));
-    let result = export_snapshot(pool, data_dir, app_version, &snapshot).await;
+    let result = export_snapshot(pool, data_dir, app_version, contents, &snapshot).await;
     let _ = std::fs::remove_file(&snapshot);
     result
 }
@@ -341,21 +426,35 @@ async fn export_snapshot(
     pool: &SqlitePool,
     data_dir: &Path,
     app_version: &str,
+    contents: &[Content],
     snapshot: &Path,
 ) -> Result<tempfile::NamedTempFile, BackupError> {
-    db::snapshot(pool, snapshot).await.map_err(export_failed)?;
-    let (schema_version, records) = describe(snapshot).await.map_err(export_failed)?;
+    let with_data = contents.contains(&Content::Data);
+    let (schema_version, records) = if with_data {
+        db::snapshot(pool, snapshot).await.map_err(export_failed)?;
+        describe(snapshot).await.map_err(export_failed)?
+    } else {
+        (
+            0,
+            Records {
+                redemptions: 0,
+                checkins: 0,
+            },
+        )
+    };
     let manifest = Manifest {
         format: FORMAT.into(),
-        format_version: FORMAT_VERSION,
+        format_version: if contents.len() == BOTH.len() { 1 } else { 2 },
+        contents: contents.to_vec(),
         app_version: app_version.into(),
         schema_version,
         created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         records,
         files: Vec::new(),
     };
-    let (data_dir, snapshot) = (data_dir.to_owned(), snapshot.to_owned());
-    tokio::task::spawn_blocking(move || write_archive(&data_dir, &snapshot, manifest))
+    let data_dir = data_dir.to_owned();
+    let snapshot = with_data.then(|| snapshot.to_owned());
+    tokio::task::spawn_blocking(move || write_archive(&data_dir, snapshot.as_deref(), manifest))
         .await
         .map_err(export_failed)?
 }
@@ -384,19 +483,24 @@ async fn describe(snapshot: &Path) -> Result<(i64, Records), sqlx::Error> {
     result
 }
 
+/// Writes the archive: the data when `snapshot` is given, the media when the manifest lists it.
 fn write_archive(
     data_dir: &Path,
-    snapshot: &Path,
+    snapshot: Option<&Path>,
     mut manifest: Manifest,
 ) -> Result<tempfile::NamedTempFile, BackupError> {
     let mut files = Vec::new();
-    let settings = data_dir.join(SETTINGS);
-    if settings.is_file() {
-        files.push((SETTINGS.to_owned(), settings));
+    if let Some(snapshot) = snapshot {
+        let settings = data_dir.join(SETTINGS);
+        if settings.is_file() {
+            files.push((SETTINGS.to_owned(), settings));
+        }
+        files.push((db::DB_FILE.to_owned(), snapshot.to_owned()));
     }
-    files.push((db::DB_FILE.to_owned(), snapshot.to_owned()));
-    for folder in FOLDERS {
-        collect(&data_dir.join(folder), folder, &mut files)?;
+    if manifest.contents.contains(&Content::Media) {
+        for folder in FOLDERS {
+            collect(&data_dir.join(folder), folder, &mut files)?;
+        }
     }
     if files.len() >= MAX_ENTRIES {
         return Err(BackupError::TooLarge);
@@ -500,8 +604,18 @@ async fn export(
     data_dir: &Path,
     app_version: &str,
 ) -> Result<Vec<u8>, BackupError> {
+    export_of(pool, data_dir, app_version, &BOTH).await
+}
+
+#[cfg(test)]
+async fn export_of(
+    pool: &SqlitePool,
+    data_dir: &Path,
+    app_version: &str,
+    contents: &[Content],
+) -> Result<Vec<u8>, BackupError> {
     let mut bytes = Vec::new();
-    export_file(pool, data_dir, app_version)
+    export_file(pool, data_dir, app_version, contents)
         .await?
         .read_to_end(&mut bytes)
         .map_err(export_failed)?;
@@ -635,10 +749,22 @@ fn validate(path: &Path) -> Result<(Manifest, Archive), BackupError> {
     if manifest.format_version > FORMAT_VERSION || manifest.schema_version > db::latest_version() {
         return Err(NewerVersion);
     }
+    // At least one kind, each once; format 1 is always both.
+    let contents = &manifest.contents;
+    let kinds = BOTH.iter().filter(|c| contents.contains(c)).count();
+    if kinds == 0
+        || kinds != contents.len()
+        || (manifest.format_version == 1 && kinds != BOTH.len())
+    {
+        return Err(Invalid);
+    }
     let mut paths = HashSet::new();
     let mut expanded = 0u64;
     for file in &manifest.files {
-        if !allowed_path(&file.path) || !paths.insert(file.path.as_str()) {
+        if !allowed_path(&file.path)
+            || !contents.contains(&Content::of(&file.path))
+            || !paths.insert(file.path.as_str())
+        {
             return Err(Invalid);
         }
         expanded = expanded.saturating_add(file.size);
@@ -647,7 +773,8 @@ fn validate(path: &Path) -> Result<(Manifest, Archive), BackupError> {
         return Err(TooLarge);
     }
     // Exactly the listed files plus the manifest: nothing unlisted, nothing twice.
-    if !paths.contains(db::DB_FILE) || zip.len() != manifest.files.len() + 1 {
+    let with_data = contents.contains(&Content::Data);
+    if with_data != paths.contains(db::DB_FILE) || zip.len() != manifest.files.len() + 1 {
         return Err(Invalid);
     }
     for file in &manifest.files {
@@ -674,13 +801,15 @@ async fn stage_into(staging: &Path, file: PathBuf) -> Result<RestorePreview, Bac
         .await
         .map_err(stage_failed)??;
     // The database itself, not only the manifest's claim: every applied migration must be one this build knows.
-    match db::fit(&staging.join(db::DB_FILE))
-        .await
-        .map_err(|_| BackupError::Invalid)?
-    {
-        db::Fit::Known => {}
-        db::Fit::Newer => return Err(BackupError::NewerVersion),
-        db::Fit::Changed => return Err(BackupError::Invalid),
+    if manifest.contents.contains(&Content::Data) {
+        match db::fit(&staging.join(db::DB_FILE))
+            .await
+            .map_err(|_| BackupError::Invalid)?
+        {
+            db::Fit::Known => {}
+            db::Fit::Newer => return Err(BackupError::NewerVersion),
+            db::Fit::Changed => return Err(BackupError::Invalid),
+        }
     }
     // Last: only a complete staging has a manifest.
     let text = serde_json::to_vec_pretty(&manifest).map_err(stage_failed)?;
@@ -691,6 +820,8 @@ async fn stage_into(staging: &Path, file: PathBuf) -> Result<RestorePreview, Bac
 fn extract(file: &Path, staging: &Path) -> Result<Manifest, BackupError> {
     let (manifest, mut zip) = validate(file)?;
     remove(staging).map_err(stage_failed)?;
+    // A media-only backup of a folder with no media holds no files, but its manifest still goes here.
+    fs::create_dir_all(staging).map_err(stage_failed)?;
     for file in &manifest.files {
         // Checked by `allowed_path`: plain relative segments, so the target stays inside the staging folder.
         let target = staging.join(&file.path);
@@ -725,6 +856,7 @@ fn preview(m: &Manifest) -> RestorePreview {
         sounds: under("sounds").count(),
         music: under("music").count(),
         media: under("media").count(),
+        contents: m.contents.clone(),
     }
 }
 
@@ -789,16 +921,19 @@ async fn apply(
     id: &str,
     app_version: &str,
 ) -> Result<(), BackupError> {
-    if !staging.join(MANIFEST).is_file() {
+    let Ok(text) = fs::read(staging.join(MANIFEST)) else {
         return Err(BackupError::NothingStaged);
-    }
+    };
+    let contents = serde_json::from_slice::<Manifest>(&text)
+        .map_err(restore_failed)?
+        .contents;
     // Left by an earlier restore that finished but could not clean up; what it holds was saved to `backups/`
     // before that restore. Never put back.
     remove(previous)
         .map_err(|e| restore_failed(format!("removing an old {PREVIOUS_DIR}/: {e}")))?;
-    back_up_current(data_dir, app_version).await?;
+    back_up_current(data_dir, app_version, &contents).await?;
     let result = async {
-        swap(data_dir, staging, previous, id).map_err(restore_failed)?;
+        swap(data_dir, staging, previous, id, &contents).map_err(restore_failed)?;
         // The normal start path: pending migrations run, after their own backup.
         db::open(data_dir)
             .await
@@ -815,15 +950,20 @@ async fn apply(
     Ok(())
 }
 
-/// Saves the current data as a `.stbackup` in `backups/`, so the admin UI can restore it again.
-async fn back_up_current(data_dir: &Path, app_version: &str) -> Result<PathBuf, BackupError> {
+/// Saves the current data of the kinds about to be replaced as a `.stbackup` in `backups/`, so the admin UI can
+/// restore it again.
+async fn back_up_current(
+    data_dir: &Path,
+    app_version: &str,
+    contents: &[Content],
+) -> Result<PathBuf, BackupError> {
     let db_file = data_dir.join(db::DB_FILE);
     if !db_file.exists() {
         // An empty file is an empty database.
         fs::write(&db_file, b"").map_err(restore_failed)?;
     }
     let pool = db::open_file(&db_file).await.map_err(restore_failed)?;
-    let archive = export_file(&pool, data_dir, app_version).await;
+    let archive = export_file(&pool, data_dir, app_version, contents).await;
     pool.close().await;
     let archive = archive.map_err(|e| match e {
         // Same limits as an export; the restore stops before anything moves.
@@ -839,19 +979,26 @@ async fn back_up_current(data_dir: &Path, app_version: &str) -> Result<PathBuf, 
     Ok(path)
 }
 
-/// Moves the current items into `restore-previous/`, then the staged ones into place; renames only, all inside the
-/// data folder.
-fn swap(data_dir: &Path, staging: &Path, previous: &Path, id: &str) -> io::Result<()> {
+/// Moves the current items of the kinds in `contents` into `restore-previous/`, then the staged ones into place;
+/// renames only, all inside the data folder. Items of other kinds are never touched.
+fn swap(
+    data_dir: &Path,
+    staging: &Path,
+    previous: &Path,
+    id: &str,
+    contents: &[Content],
+) -> io::Result<()> {
     fs::create_dir_all(previous)?;
+    fs::write(previous.join(CONTENTS), serde_json::to_vec(contents)?)?;
     fs::write(previous.join(RESTORE_ID), id)?;
-    for item in REPLACED {
+    for item in items(contents) {
         let current = data_dir.join(item);
         if fs::symlink_metadata(&current).is_ok() {
             fs::rename(&current, previous.join(item))?;
         }
     }
     fs::write(previous.join(MOVED), b"")?;
-    for item in RESTORED {
+    for item in items(contents) {
         let staged = staging.join(item);
         if staged.exists() {
             fs::rename(&staged, data_dir.join(item))?;
@@ -860,10 +1007,15 @@ fn swap(data_dir: &Path, staging: &Path, previous: &Path, id: &str) -> io::Resul
     Ok(())
 }
 
-/// Undoes [`swap`], also one cut short: what came from the backup goes, the replaced items come back.
+/// Undoes [`swap`], also one cut short: what came from the backup goes, the replaced items come back. Only the kinds
+/// that restore replaced.
 fn put_back(data_dir: &Path, previous: &Path) -> io::Result<()> {
     let all_moved = previous.join(MOVED).exists();
-    for item in REPLACED {
+    let contents = fs::read(previous.join(CONTENTS))
+        .ok()
+        .and_then(|text| serde_json::from_slice::<Vec<Content>>(&text).ok())
+        .unwrap_or_else(both);
+    for item in items(&contents) {
         let (current, kept) = (data_dir.join(item), previous.join(item));
         let has_kept = fs::symlink_metadata(&kept).is_ok();
         // Before every item was moved, one without a copy is still the original.

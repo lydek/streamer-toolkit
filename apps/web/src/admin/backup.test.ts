@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { ApiError, client } from './api'
-import { PART_BYTES, type RestoreProgress, backupError, formatSize, previewRestore } from './backup'
+import { PART_BYTES, type RestoreProgress, backupError, backupFileName, formatSize, previewRestore } from './backup'
 
 const ok = (data: unknown) => Promise.resolve({ data, response: new Response(null, { status: 200 }) })
 
@@ -41,4 +41,11 @@ it('says how much free space a restore needs', () => {
   expect(formatSize(3.4 * 1024 ** 3)).toBe('3.4 GB')
   expect(formatSize(350 * 1024 ** 2)).toBe('350.0 MB')
   expect(backupError(new ApiError('backup.no_space', { needed: 2 * 1024 ** 3 }))).toContain('2.0 GB')
+})
+
+it('names each kind of backup apart, in local time', () => {
+  const d = new Date(2026, 10, 22, 9, 5)
+  expect(backupFileName('all', d)).toBe('streamer-toolkit-20261122-0905.stbackup')
+  expect(backupFileName('data', d)).toBe('streamer-toolkit-20261122-0905-data.stbackup')
+  expect(backupFileName('media', d)).toBe('streamer-toolkit-20261122-0905-media.stbackup')
 })

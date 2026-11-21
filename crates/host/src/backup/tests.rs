@@ -457,8 +457,37 @@ async fn damaged_or_foreign_files_are_refused_and_nothing_changes() {
         ),
         (
             "newer format",
-            with_manifest(&good, |m| m["format_version"] = 2.into()),
+            with_manifest(&good, |m| m["format_version"] = 3.into()),
             "backup.newer_version",
+        ),
+        (
+            "format 1 with one kind",
+            with_manifest(&good, |m| m["contents"] = serde_json::json!(["data"])),
+            "backup.invalid",
+        ),
+        (
+            "no kinds",
+            with_manifest(&good, |m| {
+                m["format_version"] = 2.into();
+                m["contents"] = serde_json::json!([]);
+            }),
+            "backup.invalid",
+        ),
+        (
+            "data only, holding media",
+            with_manifest(&good, |m| {
+                m["format_version"] = 2.into();
+                m["contents"] = serde_json::json!(["data"]);
+            }),
+            "backup.invalid",
+        ),
+        (
+            "media only, holding the database",
+            with_manifest(&good, |m| {
+                m["format_version"] = 2.into();
+                m["contents"] = serde_json::json!(["media"]);
+            }),
+            "backup.invalid",
         ),
         (
             "newer schema",
@@ -944,4 +973,263 @@ fn room_needs_the_bytes_free_and_lets_an_unknown_amount_through() {
     assert!(room(10, Some(10)).is_ok());
     assert!(matches!(room(11, Some(10)), Err(BackupError::NoSpace(11))));
     assert!(room(u64::MAX, None).is_ok());
+}
+
+/// The `before-restore-*.stbackup` a restore saved.
+fn saved_before_restore(dir: &Path) -> PathBuf {
+    let [saved] = fs::read_dir(dir.join(db::BACKUP_DIR))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.to_string_lossy().contains("before-restore-"))
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    saved
+}
+
+fn manifest_of(bytes: &[u8]) -> Manifest {
+    let entries = entries(bytes);
+    let (_, text) = entries.iter().find(|(n, _)| n == MANIFEST).unwrap();
+    serde_json::from_slice(text).unwrap()
+}
+
+/// Changes the settings, a database row and the media, so a restore of either kind shows.
+async fn change_everything(dir: &Path, pool: &SqlitePool) {
+    toolkit_core::settings::update(dir, |s| s.twitch_client_id = "changed".into()).unwrap();
+    sqlx::query("DELETE FROM redemption_records WHERE id = 'r1'")
+        .execute(pool)
+        .await
+        .unwrap();
+    fs::write(dir.join("sounds/new.mp3"), "new").unwrap();
+    fs::remove_dir_all(dir.join("music")).unwrap();
+}
+
+async fn restore_bytes(dir: &Path, bytes: Vec<u8>) -> RestorePreview {
+    let preview = stage_bytes(dir, bytes).await.unwrap();
+    fs::write(dir.join(PENDING), b"id").unwrap();
+    assert!(apply_pending(dir, "1.2.4").await.unwrap());
+    preview
+}
+
+#[tokio::test]
+async fn a_data_only_restore_keeps_the_media_and_backs_up_only_the_data() {
+    let (dir, pool) = sample_folder("data-only").await;
+    let bytes = export_of(&pool, &dir, "1.2.3", &[Content::Data])
+        .await
+        .unwrap();
+    let mut names: Vec<_> = entries(&bytes).into_iter().map(|(n, _)| n).collect();
+    names.sort();
+    assert_eq!(names, [MANIFEST, SETTINGS, db::DB_FILE]);
+    let manifest = manifest_of(&bytes);
+    // Older versions read format 1 only: they refuse this one as newer instead of taking it for a whole backup.
+    assert_eq!(
+        (manifest.format_version, manifest.contents.as_slice()),
+        (2, &[Content::Data][..])
+    );
+    let before = state_of(&dir).await;
+    change_everything(&dir, &pool).await;
+    let changed = state_of(&dir).await;
+    pool.close().await;
+
+    let preview = restore_bytes(&dir, bytes).await;
+    assert_eq!(preview.contents, [Content::Data]);
+    let after = state_of(&dir).await;
+    assert_eq!(
+        (&after.settings, &after.rows),
+        (&before.settings, &before.rows),
+        "the data is back"
+    );
+    assert_eq!(after.files, changed.files, "the media is untouched");
+    let saved = manifest_of(&fs::read(saved_before_restore(&dir)).unwrap());
+    assert_eq!(saved.contents, [Content::Data]);
+    assert!(
+        saved.files.iter().all(|f| !f.path.contains('/')),
+        "only the data was backed up"
+    );
+    assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_media_only_restore_keeps_the_data_and_backs_up_only_the_media() {
+    let (dir, pool) = sample_folder("media-only").await;
+    let bytes = export_of(&pool, &dir, "1.2.3", &[Content::Media])
+        .await
+        .unwrap();
+    assert!(
+        entries(&bytes)
+            .iter()
+            .all(|(n, _)| n == MANIFEST || n.contains('/'))
+    );
+    assert_eq!(manifest_of(&bytes).format_version, 2);
+    let before = state_of(&dir).await;
+    change_everything(&dir, &pool).await;
+    let changed = state_of(&dir).await;
+    pool.close().await;
+
+    let preview = restore_bytes(&dir, bytes).await;
+    assert_eq!(
+        (preview.contents.as_slice(), preview.redemptions),
+        (&[Content::Media][..], 0)
+    );
+    let after = state_of(&dir).await;
+    assert_eq!(after.files, before.files, "the media is back");
+    assert_eq!(
+        (&after.settings, &after.rows),
+        (&changed.settings, &changed.rows),
+        "the data is untouched"
+    );
+    let saved = manifest_of(&fs::read(saved_before_restore(&dir)).unwrap());
+    assert_eq!(saved.contents, [Content::Media]);
+    assert!(
+        saved.files.iter().all(|f| f.path.contains('/')),
+        "only the media was backed up"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_backup_from_before_kinds_restores_as_both() {
+    let (dir, pool) = sample_folder("format-1").await;
+    let whole = export(&pool, &dir, "1.2.3").await.unwrap();
+    assert_eq!(
+        manifest_of(&whole).format_version,
+        1,
+        "a whole backup stays readable by older versions"
+    );
+    let old = with_manifest(&whole, |m| {
+        m.as_object_mut().unwrap().remove("contents");
+    });
+    let preview = stage_bytes(&dir, old).await.unwrap();
+    assert_eq!(preview.contents, BOTH);
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn putting_back_a_media_restore_never_touches_the_data() {
+    let (dir, pool) = sample_folder("put-back-media").await;
+    pool.close().await;
+    let before = state_of(&dir).await;
+    let (staging, previous) = (dir.join(STAGING_DIR), dir.join(PREVIOUS_DIR));
+    fs::create_dir_all(&staging).unwrap();
+    swap(&dir, &staging, &previous, "id", &[Content::Media]).unwrap();
+    assert!(
+        dir.join(SETTINGS).exists() && dir.join(db::DB_FILE).exists(),
+        "the data stays in place"
+    );
+    assert!(!dir.join("sounds").exists());
+    put_back(&dir, &previous).unwrap();
+    assert_eq!(state_of(&dir).await, before);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn sizes_count_the_data_and_the_media_apart() {
+    let (dir, pool) = sample_folder("sizes").await;
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| None));
+    let (status, sizes) = send(&app, "GET", "/api/admin/backup/sizes", Body::empty()).await;
+    assert_eq!(status, StatusCode::OK);
+    let media: u64 = ["templates", "sounds", "music", "media", "checkin"]
+        .iter()
+        .flat_map(|f| walk(&dir.join(f)))
+        .sum();
+    assert_eq!(sizes["media"].as_u64(), Some(media));
+    assert!(sizes["data"].as_u64().unwrap() > fs::metadata(dir.join(SETTINGS)).unwrap().len());
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Sizes of every file under `dir`.
+fn walk(dir: &Path) -> Vec<u64> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(dir).unwrap().flatten() {
+        if entry.file_type().unwrap().is_dir() {
+            out.extend(walk(&entry.path()));
+        } else {
+            out.push(entry.metadata().unwrap().len());
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn a_media_only_backup_of_no_media_still_restores() {
+    let (dir, pool) = sample_folder("no-media").await;
+    for folder in ["templates", "sounds", "music", "media", "checkin"] {
+        let _ = fs::remove_dir_all(dir.join(folder));
+    }
+    let bytes = export_of(&pool, &dir, "1.2.3", &[Content::Media])
+        .await
+        .unwrap();
+    assert_eq!(entries(&bytes).len(), 1, "only the manifest");
+    pool.close().await;
+    let preview = restore_bytes(&dir, bytes).await;
+    assert_eq!(preview.contents, [Content::Media]);
+    assert!(
+        dir.join(SETTINGS).exists() && dir.join(db::DB_FILE).exists(),
+        "the data stays"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_manifest_cap_fits_every_file_the_entry_cap_allows() {
+    // The longest path allowed: segments of at most 255 bytes.
+    let mut path = String::from("media");
+    while path.len() < MAX_PATH_BYTES {
+        let n = (MAX_PATH_BYTES - path.len() - 1).min(255);
+        path += &format!("/{}", "a".repeat(n));
+    }
+    assert!(allowed_path(&path) && path.len() == MAX_PATH_BYTES);
+    let manifest = |n: usize| Manifest {
+        format: FORMAT.into(),
+        format_version: FORMAT_VERSION,
+        contents: BOTH.to_vec(),
+        app_version: "999.999.999".into(),
+        schema_version: i64::MAX,
+        created_at: "2026-11-22T00:00:00Z".into(),
+        records: Records {
+            redemptions: i64::MAX,
+            checkins: i64::MAX,
+        },
+        files: (0..n)
+            .map(|_| FileEntry {
+                path: path.clone(),
+                size: u64::MAX,
+                sha256: "f".repeat(64),
+            })
+            .collect(),
+    };
+    let size = |n| serde_json::to_vec_pretty(&manifest(n)).unwrap().len() as u64;
+    let (one, two) = (size(1), size(2));
+    let largest = one + (two - one) * (MAX_ENTRIES as u64 - 1);
+    assert!(
+        largest <= MAX_MANIFEST_BYTES,
+        "{largest} > {MAX_MANIFEST_BYTES}"
+    );
+}
+
+/// Writes a 4 GiB file (zeros, so the backup stays small) and checks it back; slow, so run it by hand.
+#[tokio::test]
+#[ignore = "writes 4 GiB to disk"]
+async fn a_file_of_4_gib_or_more_backs_up_and_checks_out() {
+    let (dir, pool) = sample_folder("zip64").await;
+    let big = fs::File::create(dir.join("media/big.webm")).unwrap();
+    big.set_len(u64::from(u32::MAX) + 1).unwrap();
+    drop(big);
+    let bytes = export_of(&pool, &dir, "1.2.3", &[Content::Media])
+        .await
+        .unwrap();
+    pool.close().await;
+    let file = tempfile::NamedTempFile::new().unwrap();
+    fs::write(file.path(), bytes).unwrap();
+    let (manifest, _) = validate(file.path()).unwrap();
+    let big = manifest
+        .files
+        .iter()
+        .find(|f| f.path == "media/big.webm")
+        .unwrap();
+    assert_eq!(big.size, u64::from(u32::MAX) + 1);
+    let _ = fs::remove_dir_all(dir);
 }

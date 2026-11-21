@@ -46,8 +46,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A `.stbackup` file of this data folder: settings, the database, custom templates, sounds, music, media and card images. Live use goes
-         *     on while it is made; database writes wait only for the snapshot.
+         * A `.stbackup` file of this data folder: its data (settings and the database), its media (custom templates, sounds,
+         *     music, videos and GIFs, card images) or both. Live use goes on while it is made; database writes wait only for the
+         *     snapshot.
          */
         get: operations["export_backup"];
         put?: never;
@@ -68,8 +69,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Restores the staged backup: the app restarts, backs up the current data to `backups/`, then puts the backup
-         *     in place before the database opens.
+         * Restores the staged backup: the app restarts, backs up the current data of the kinds it holds to `backups/`,
+         *     then puts the backup in place before the database opens.
          */
         post: operations["confirm_restore"];
         delete?: never;
@@ -130,6 +131,23 @@ export interface paths {
          *     The uploaded file is removed either way.
          */
         post: operations["check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/backup/sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How large the data and the media are now, for choosing what to back up. */
+        get: operations["sizes"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2189,6 +2207,13 @@ export interface components {
             /** @enum {string} */
             state: "failed";
         };
+        /** @description How large the data and the media in this folder are now, in bytes. */
+        BackupSizes: {
+            /** Format: int64 */
+            data: number;
+            /** Format: int64 */
+            media: number;
+        };
         /** @description One Twitch chat badge version and its image. */
         BadgeImage: {
             id: string;
@@ -2800,6 +2825,11 @@ export interface components {
             twitch_latency_ms?: number | null;
             twitch_signed_in: boolean;
         };
+        /**
+         * @description What a backup holds.
+         * @enum {string}
+         */
+        Content: "data" | "media";
         /** @description A counter with its command. `name` is broadcaster text: render it as text. */
         CounterBody: {
             /** @description Who may use the command; the broadcaster always may. */
@@ -3692,6 +3722,8 @@ export interface components {
             app_version: string;
             /** Format: int64 */
             checkins: number;
+            /** @description The kinds it holds: a restore replaces only these. */
+            contents: components["schemas"]["Content"][];
             /** @description When the backup was made (RFC 3339, UTC). */
             created_at: string;
             media: number;
@@ -4382,7 +4414,10 @@ export interface operations {
     };
     export_backup: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only this kind; both when absent. */
+                contents?: components["schemas"]["Content"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4675,6 +4710,34 @@ export interface operations {
                 };
             };
             /** @description `backup.restore_failed`: could not be staged */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sizes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSizes"];
+                };
+            };
+            /** @description `backup.export_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

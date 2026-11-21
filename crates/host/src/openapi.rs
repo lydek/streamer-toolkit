@@ -35,6 +35,7 @@ use crate::{
         admin::simulate::simulate_checkin,
         overlay_test::test_overlay,
         backup::export_backup,
+        backup::sizes,
         backup::upload::start,
         backup::upload::part,
         backup::upload::check,

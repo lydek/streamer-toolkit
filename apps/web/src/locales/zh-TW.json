@@ -720,6 +720,18 @@
     "records": "兌換紀錄 {redemptions} 筆、打卡紀錄 {checkins} 筆",
     "files": "樣板 {templates} 個、音效 {sounds} 個、背景音樂 {music} 首、影片與 GIF {media} 個",
     "restoreNote": "目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
+    "restoreOnly": {
+      "data": "只會取代資料（設定與紀錄），媒體不動。目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
+      "media": "只會取代媒體，設定與紀錄不動。目前的媒體會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。"
+    },
+    "sizes": "目前資料 {data}、媒體 {media}",
+    "choice": "匯出內容",
+    "choices": {
+      "all": "全部",
+      "data": "資料",
+      "media": "媒體"
+    },
+    "contains": "包含：{kinds}",
     "restore": "還原並重新啟動",
     "restarting": "正在重新啟動……",
     "uploading": "上傳中 {sent} / {total}",
