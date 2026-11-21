@@ -354,6 +354,29 @@
         }
       }
     },
+    "/api/admin/chat/bots": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The chat bots the leaderboard leaves out and the chat log can hide (lowercase logins).",
+        "operationId": "bots",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/chat/log": {
       "get": {
         "tags": [
@@ -2490,6 +2513,35 @@
             }
           },
           "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/leaderboard": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "leaderboard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardPayload"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`leaderboard.storage_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6301,6 +6353,56 @@
           "bgm.test"
         ]
       },
+      "Board": {
+        "type": "object",
+        "required": [
+          "board",
+          "period",
+          "entries"
+        ],
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/BoardKind"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BoardEntry"
+            },
+            "description": "Most first, at most 10."
+          },
+          "period": {
+            "$ref": "#/components/schemas/Period"
+          }
+        }
+      },
+      "BoardEntry": {
+        "type": "object",
+        "description": "One viewer on a board. `name` is viewer text: render it as text.",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "BoardKind": {
+        "type": "string",
+        "enum": [
+          "bits",
+          "gifts",
+          "chat",
+          "checkins"
+        ]
+      },
       "BreakEvent": {
         "type": "object",
         "description": "A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only\nthe latest one.",
@@ -8298,6 +8400,67 @@
           }
         }
       },
+      "LeaderboardEvent": {
+        "type": "object",
+        "description": "A `leaderboard.update` event exactly as `/ws/overlay` sends it when the boards change (checked every 30 s); the\nsnapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LeaderboardPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaderboardType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "LeaderboardPayload": {
+        "type": "object",
+        "description": "Every board for every period.",
+        "required": [
+          "boards"
+        ],
+        "properties": {
+          "boards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Board"
+            }
+          }
+        }
+      },
+      "LeaderboardType": {
+        "type": "string",
+        "enum": [
+          "leaderboard.update"
+        ]
+      },
       "LogEvent": {
         "type": "object",
         "description": "A follow, sub, resub, gift, cheer, raid or redemption, placed among the messages by its time. Fields the kind\ndoes not have are left out; names and texts are raw viewer text.",
@@ -9133,6 +9296,7 @@
           "marathon",
           "break",
           "warnings",
+          "leaderboard",
           "other"
         ],
         "properties": {
@@ -9157,6 +9321,10 @@
             "minimum": 0
           },
           "counter": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "leaderboard": {
             "type": "integer",
             "minimum": 0
           },
@@ -9255,6 +9423,14 @@
             "type": "string"
           }
         }
+      },
+      "Period": {
+        "type": "string",
+        "enum": [
+          "stream",
+          "month",
+          "all"
+        ]
       },
       "PeriodKind": {
         "type": "string",
@@ -10426,6 +10602,7 @@
           "screen.break",
           "screen.warnings",
           "screen.appearance",
+          "leaderboard.update",
           "chat.text_size"
         ],
         "properties": {
@@ -10469,6 +10646,13 @@
               "$ref": "#/components/schemas/CounterValuesEvent"
             },
             "description": "At most one: every counter's latest value."
+          },
+          "leaderboard.update": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEvent"
+            },
+            "description": "At most one: the latest leaderboard."
           },
           "obs.state": {
             "type": "array",

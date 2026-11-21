@@ -13,7 +13,7 @@ const chat = (seq: number): ChatEvent => ({
 
 describe('apply', () => {
   it('starts from the snapshot and skips events it already contains', () => {
-    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.removed': [], 'chat.message': [chat(1), chat(2)], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'chat.text_size': [] } })
+    let state = apply({ messages: [], lastSeq: 0 }, { type: 'snapshot', version: 1, seq: 2, payload: { 'chat.removed': [], 'chat.message': [chat(1), chat(2)], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] } })
     state = apply(state, chat(2))
     state = apply(state, chat(3))
     expect(state.messages.map((m) => m.seq)).toEqual([1, 2, 3])
@@ -21,7 +21,7 @@ describe('apply', () => {
   })
 
   it('replaces everything on a new snapshot after a reconnect', () => {
-    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'chat.text_size': [] } })
+    const before = apply({ messages: [chat(1)], lastSeq: 9 }, { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] } })
     expect(before).toEqual({ messages: [], lastSeq: 0 })
   })
 

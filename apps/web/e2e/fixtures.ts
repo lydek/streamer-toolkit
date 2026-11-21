@@ -152,7 +152,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     type: 'snapshot',
     version: 1,
     seq: 0,
-    payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'chat.text_size': [] },
+    payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] },
   }
   await page.routeWebSocket(hostPath, (ws) => ws.send(JSON.stringify(snapshot)))
   return s

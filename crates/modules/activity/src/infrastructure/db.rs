@@ -103,6 +103,47 @@ pub async fn activity_between(
     .await
 }
 
+/// What a leaderboard ranks from the activity records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ranking {
+    /// Bits cheered.
+    Bits,
+    /// Subs gifted (the gifts, not the subs they hand out).
+    Gifts,
+}
+
+/// The top `limit` viewers from `from` until `until` (open ends when `None`), most first: name and amount. Logins in
+/// `exclude` (lowercase) and anonymous gifts or cheers are left out; simulated events are never stored.
+pub async fn ranking(
+    pool: &SqlitePool,
+    by: Ranking,
+    from: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    exclude: &[&str],
+    limit: u32,
+) -> Result<Vec<(String, u64)>, sqlx::Error> {
+    // Static queries: one per ranking.
+    let sql = match by {
+        Ranking::Bits => {
+            "SELECT LOWER(COALESCE(user_login, '')), COALESCE(MAX(user_name), ''), SUM(COALESCE(bits, 0)) AS total              FROM activity_events WHERE kind = 'cheer' AND user_id IS NOT NULL              AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)              GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
+        }
+        Ranking::Gifts => {
+            "SELECT LOWER(COALESCE(user_login, '')), COALESCE(MAX(user_name), ''), SUM(COALESCE(count, 0)) AS total              FROM activity_events WHERE kind = 'gift' AND user_id IS NOT NULL              AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)              GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
+        }
+    };
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(sql)
+        .bind(from.map(time_text))
+        .bind(until.map(time_text))
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .filter(|(login, _, total)| *total > 0 && !exclude.contains(&login.as_str()))
+        .take(limit as usize)
+        .map(|(_, name, total)| (name, u64::try_from(total).unwrap_or(0)))
+        .collect())
+}
+
 /// What `session_id`'s stats count, one entry each, oldest first: follows, subs and resubs (each sub a gift hands
 /// out included; the gift itself is left out, as the stats do), cheers and raids.
 pub async fn session_entries(

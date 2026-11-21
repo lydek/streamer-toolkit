@@ -814,3 +814,29 @@ async fn a_pack_preset_needs_the_pack_installed() {
         (200, &format!("pack:{id}").into())
     );
 }
+
+#[tokio::test]
+async fn the_month_starts_with_the_business_day() {
+    let a = api("month-start").await;
+    let utc = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+    // Asia/Taipei, reset at 0: 11/22 09:00 local belongs to November, which began 10/31 16:00 UTC.
+    assert_eq!(
+        a.service.month_start(utc("2026-11-22T01:00:00Z")),
+        utc("2026-10-31T16:00:00Z")
+    );
+    // 11/01 07:00 local with a reset hour of 8 still belongs to October 31.
+    call(
+        &a.app,
+        "PUT",
+        "/api/admin/checkin/settings",
+        Some(serde_json::json!({
+            "command": "打卡", "allowed": "everyone", "time_zone": "Asia/Taipei", "reset_hour": 8,
+            "card_slots": 10, "reward_id": null
+        })),
+    )
+    .await;
+    assert_eq!(
+        a.service.month_start(utc("2026-10-31T23:00:00Z")),
+        utc("2026-10-01T00:00:00Z")
+    );
+}

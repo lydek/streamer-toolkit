@@ -10,7 +10,7 @@ pub use infrastructure::{
     COMMANDS, CheckinChangedEvent, CheckinChangedPayload, CheckinStampedEvent,
     CheckinStampedPayload,
     card_style::image_routes,
-    db::{CheckedInEntry, MIGRATOR, checked_in_between, record_count},
+    db::{CheckedInEntry, MIGRATOR, checked_in_between, record_count, top_checkins},
     http::{CheckinSettingsBody, routes},
     openapi, start, subscriptions,
 };

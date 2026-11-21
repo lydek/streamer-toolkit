@@ -8,8 +8,8 @@ mod infrastructure;
 pub use application::ActivityService;
 pub use infrastructure::{
     db::{
-        ActivityEntry, MIGRATOR, OtherRecords, SessionCounts, activity_between, session_counts,
-        session_entries,
+        ActivityEntry, MIGRATOR, OtherRecords, Ranking, SessionCounts, activity_between, ranking,
+        session_counts, session_entries,
     },
     http::routes,
     openapi, start,

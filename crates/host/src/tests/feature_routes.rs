@@ -482,7 +482,7 @@ async fn overlay_counts_need_the_token() {
     let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
-        serde_json::json!({"chat": 0, "alerts": 0, "checkin": 0, "sound": 0, "bgm": 0, "counter": 0, "marathon": 0, "break": 0, "warnings": 0, "other": 0})
+        serde_json::json!({"chat": 0, "alerts": 0, "checkin": 0, "sound": 0, "bgm": 0, "counter": 0, "marathon": 0, "break": 0, "warnings": 0, "leaderboard": 0, "other": 0})
     );
     let unauthorized = get_req("/api/admin/overlays", "127.0.0.1:47810")
         .body(Body::empty())
@@ -654,5 +654,117 @@ async fn a_rehearsal_script_records_nothing_whatever_its_source_says() {
         res.status(),
         StatusCode::NOT_FOUND,
         "nothing is running any more"
+    );
+}
+
+#[tokio::test]
+async fn the_leaderboard_ranks_each_module_s_records_without_bots() {
+    let mut config = test_config();
+    let pool = db::memory_migrated().await;
+    config.db = pool.clone();
+    let now = chrono::Utc::now();
+    let at = |mins: i64| {
+        (now - chrono::TimeDelta::minutes(mins))
+            .to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+    };
+    for (id, login, name, bits) in [
+        ("a1", "fish", "小魚", 100),
+        ("a2", "fish", "小魚", 50),
+        ("a3", "berry", "莓莓", 120),
+        ("a4", "nightbot", "Nightbot", 9999),
+        ("a5", "kiwi", "Kiwi", 10),
+    ] {
+        sqlx::query(
+            "INSERT INTO activity_events (id, twitch_message_id, kind, user_id, user_login, user_name, bits, occurred_at) \
+             VALUES (?, ?, 'cheer', ?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(format!("m-{id}"))
+        .bind(format!("u-{login}"))
+        .bind(login)
+        .bind(name)
+        .bind(bits)
+        .bind(at(if id == "a5" { 45 } else { 1 }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (i, login) in ["fish", "fish", "berry", "nightbot", "nightbot", "nightbot"]
+        .iter()
+        .enumerate()
+    {
+        sqlx::query("INSERT INTO chat_messages (id, twitch_message_id, user_id, payload, sent_at) VALUES (?, ?, ?, ?, ?)")
+            .bind(format!("c{i}"))
+            .bind(format!("t{i}"))
+            .bind(format!("u-{login}"))
+            .bind(serde_json::json!({ "userLogin": login, "userName": login.to_uppercase() }).to_string())
+            .bind(at(1))
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let app = router(config).unwrap();
+    let fetch = || async {
+        let res = app
+            .clone()
+            .oneshot(
+                get_req("/api/admin/leaderboard", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(res.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        move |board: &str, period: &str| {
+            body["boards"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|b| b["board"] == board && b["period"] == period)
+                .unwrap()["entries"]
+                .clone()
+        }
+    };
+    let board = fetch().await;
+    assert_eq!(
+        board("bits", "all"),
+        serde_json::json!([
+            { "name": "小魚", "value": 150 },
+            { "name": "莓莓", "value": 120 },
+            { "name": "Kiwi", "value": 10 }
+        ]),
+        "the bot's bits are left out"
+    );
+    assert_eq!(
+        board("chat", "month"),
+        serde_json::json!([{ "name": "FISH", "value": 2 }, { "name": "BERRY", "value": 1 }])
+    );
+    assert_eq!(
+        board("bits", "stream"),
+        serde_json::json!([]),
+        "this launch began after them, with no stream yet"
+    );
+    assert_eq!(board("gifts", "all"), serde_json::json!([]));
+
+    // The latest stream ended half an hour ago; only Kiwi's cheer was during it.
+    sqlx::query(
+        "INSERT INTO stream_sessions (id, twitch_stream_id, started_at, ended_at) VALUES ('s1', 't1', ?, ?)",
+    )
+    .bind(at(60))
+    .bind(at(30))
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        fetch().await("bits", "stream"),
+        serde_json::json!([{ "name": "Kiwi", "value": 10 }]),
+        "what came after the latest stream ended is not counted for it"
     );
 }
