@@ -62,6 +62,7 @@ use crate::{
         obs::update_item,
         templates::chat_template,
         templates::select_chat_template,
+        templates::set_chat_text_size,
         templates::alert_template,
         templates::select_alert_template,
         update::update,
@@ -85,6 +86,7 @@ use crate::{
         chat_log::ChatPeriod,
         chat_log::ChatLogBody,
         templates::TemplateChangedEvent,
+        templates::ChatTextSizeEvent,
         checkin::CheckinChangedEvent,
         checkin::CheckinStampedEvent
     )),

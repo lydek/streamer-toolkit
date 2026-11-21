@@ -28,7 +28,7 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
         type: 'snapshot',
         version: 1,
         seq: 2,
-        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
       }),
     ),
   )
@@ -133,7 +133,7 @@ test('events lists every alert that arrived, even one no OBS overlay plays', asy
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
       }),
     )
     ws.send(JSON.stringify(received))
@@ -164,7 +164,7 @@ test('chat from before a restart shows first, and a message a moderator deletes 
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
       }),
     )
   })
@@ -207,7 +207,7 @@ test('badge images, shared chat with 只看本頻道, and display settings that 
         type: 'snapshot',
         version: 1,
         seq: 2,
-        payload: { 'chat.message': [mod, shared], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+        payload: { 'chat.message': [mod, shared], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
       }),
     ),
   )

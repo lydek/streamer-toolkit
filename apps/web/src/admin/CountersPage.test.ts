@@ -98,6 +98,7 @@ describe('CountersPage', () => {
           'bgm.player': [],
           'counter.values': [{ id: 'v', type: 'counter.values', version: 1, seq: 1, occurredAt: '', source: 'system', payload: { counters: [{ id: 'c1', name: '死亡次數', value: 13 }] } }],
           'counter.marathon': [],
+          'chat.text_size': [],
         },
       }),
     })
@@ -227,6 +228,7 @@ describe('CountersPage marathon timer', () => {
           'bgm.player': [],
           'counter.values': [],
           'counter.marathon': [event],
+          'chat.text_size': [],
         },
       }),
     })

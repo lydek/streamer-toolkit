@@ -7,6 +7,8 @@
   align-items: flex-start;
   gap: 0.5em;
   font-family: sans-serif;
+  /* Sized for a 1080p canvas (the browser's 16 px reads small on stream); the admin UI may set another size. */
+  font-size: var(--chat-text-size, 24px);
 }
 
 .message {

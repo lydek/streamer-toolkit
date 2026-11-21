@@ -26,7 +26,7 @@ const snapshot = (...ns: number[]): Incoming => ({
   type: 'snapshot',
   version: 1,
   seq: 0,
-  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] },
+  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [] },
 })
 const post = (data: Incoming, init: MessageEventInit = {}) =>
   window.dispatchEvent(new MessageEvent('message', { data, source: window.parent, origin: location.origin, ...init }))
@@ -73,6 +73,27 @@ describe('ChatOverlay preview mode', () => {
       expect(bases).toEqual([`${location.origin}${base}`])
       wrapper.unmount()
     }
+  })
+
+  it('sets the text size from the snapshot and from later changes, and clears it for the template default', async () => {
+    vi.stubGlobal('WebSocket', vi.fn())
+    history.replaceState(null, '', '/overlay/chat/?preview')
+    const wrapper = mount(ChatOverlay, { global: { plugins: [i18n] } })
+    const size = (textSize: number | null): Extract<Incoming, { type: 'chat.text_size' }> =>
+      ({ type: 'chat.text_size', id: 's', version: 1, seq: 1, occurredAt: '', source: 'system', payload: { textSize } })
+    const variable = () => document.documentElement.style.getPropertyValue('--chat-text-size')
+    const first = snapshot()
+    if (first.type === 'snapshot') first.payload['chat.text_size'] = [size(32)]
+    post(first)
+    await flushPromises()
+    expect(variable()).toBe('32px')
+    post(size(20))
+    await flushPromises()
+    expect(variable()).toBe('20px')
+    post(size(null))
+    await flushPromises()
+    expect(variable()).toBe('')
+    wrapper.unmount()
   })
 
   it('connects to the Host outside preview mode', () => {

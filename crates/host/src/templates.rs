@@ -14,7 +14,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, put},
 };
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
@@ -111,6 +111,41 @@ const MAX_ENTRY_BYTES: u64 = 1024 * 1024;
 const POLL: Duration = Duration::from_secs(1);
 const CHANGED_EVENT: &str = "template.changed";
 const CHANGED_VERSION: u32 = 1;
+const TEXT_SIZE_EVENT: &str = "chat.text_size";
+const TEXT_SIZE_VERSION: u32 = 1;
+/// The chat overlay text sizes the admin UI may choose, in px.
+const TEXT_SIZES: std::ops::RangeInclusive<u16> = 16..=48;
+
+/// A `chat.text_size` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one, so a reloaded
+/// overlay gets the size too.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatTextSizeEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: ChatTextSizeType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: ChatTextSizePayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum ChatTextSizeType {
+    #[serde(rename = "chat.text_size")]
+    ChatTextSize,
+}
+
+/// The chat overlay sets it as the CSS variable `--chat-text-size` on its page, which the templates' sizes read.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatTextSizePayload {
+    /// In px; `null` keeps each template's own size.
+    #[schema(required)]
+    text_size: Option<u16>,
+}
 
 /// A `template.changed` event exactly as `/ws/overlay` sends it; not kept in snapshots.
 // The bus serializes its own envelope; a test keeps this type in step with it.
@@ -147,6 +182,17 @@ pub(crate) struct TemplateStatus {
     /// get the default template instead of the user's; otherwise `null`.
     #[schema(required)]
     error: Option<String>,
+    /// The overlay text size in px; `null` keeps each template's own size.
+    #[schema(required)]
+    text_size: Option<u16>,
+}
+
+/// `PUT /api/admin/templates/chat/text-size`.
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct TextSizeChoice {
+    /// 16–48 px, or `null` for each template's own size.
+    #[schema(required)]
+    text_size: Option<u16>,
 }
 
 /// `PUT /api/admin/templates/chat`.
@@ -166,6 +212,7 @@ pub(crate) struct Templates {
     dir: PathBuf,
     bus: Arc<EventBus>,
     selected: RwLock<ChatTemplate>,
+    text_size: RwLock<Option<u16>>,
     alert_selected: RwLock<AlertTemplate>,
     switching: Mutex<()>,
     /// Why the user template is not usable (an error code), or `None` when it is.
@@ -179,9 +226,14 @@ impl Templates {
         // Fingerprint before the check, so an edit in between is caught by the first poll.
         let seen = fingerprint(&dir);
         let saved = settings::load(data_dir);
+        // A size outside the range (an edited file) means the templates' own.
+        let text_size = saved.chat_text_size.filter(|n| TEXT_SIZES.contains(n));
+        bus.retain(TEXT_SIZE_EVENT, 1);
+        publish_text_size(&bus, text_size);
         let templates = Arc::new(Self {
             data_dir: data_dir.to_path_buf(),
             selected: RwLock::new(ChatTemplate::from_id(&saved.chat_template)),
+            text_size: RwLock::new(text_size),
             alert_selected: RwLock::new(AlertTemplate::from_id(&saved.alert_template)),
             switching: Mutex::new(()),
             error: RwLock::new(check(&dir).err()),
@@ -245,6 +297,10 @@ pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
             get(chat_template).put(select_chat_template),
         )
         .route(
+            "/api/admin/templates/chat/text-size",
+            put(set_chat_text_size),
+        )
+        .route(
             "/api/admin/templates/alerts",
             get(alert_template).put(select_alert_template),
         )
@@ -306,7 +362,45 @@ pub(crate) async fn chat_template(State(t): State<Arc<Templates>>) -> Json<Templ
     Json(TemplateStatus {
         selected: t.selected(),
         error: t.error().map(Into::into),
+        text_size: *t.text_size.read().unwrap(),
     })
+}
+
+/// Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once
+/// (`chat.text_size`).
+#[utoipa::path(
+    put,
+    path = "/api/admin/templates/chat/text-size",
+    tag = "admin",
+    request_body = TextSizeChoice,
+    responses(
+        (status = 204),
+        (status = 400, description = "`template.invalid_text_size`: not between 16 and 48", body = ErrorBody),
+        (status = 500, description = "`settings.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_chat_text_size(
+    State(t): State<Arc<Templates>>,
+    body: Result<Json<TextSizeChoice>, JsonRejection>,
+) -> Response {
+    let Ok(Json(TextSizeChoice { text_size })) = body else {
+        return error(StatusCode::BAD_REQUEST, "template.invalid_text_size");
+    };
+    if text_size.is_some_and(|n| !TEXT_SIZES.contains(&n)) {
+        return error(StatusCode::BAD_REQUEST, "template.invalid_text_size");
+    }
+    let saved = tokio::task::spawn_blocking(move || {
+        let _turn = t.switching.lock().unwrap();
+        settings::update(&t.data_dir, |s| s.chat_text_size = text_size)?;
+        *t.text_size.write().unwrap() = text_size;
+        publish_text_size(&t.bus, text_size);
+        std::io::Result::Ok(())
+    })
+    .await;
+    match saved {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        _ => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
+    }
 }
 
 /// Switches the chat overlay template and saves the choice; overlays reload it at once (`template.changed`).
@@ -534,6 +628,17 @@ async fn watch(t: Arc<Templates>, mut last: Vec<FileStamp>) {
         }
         last = now;
     }
+}
+
+fn publish_text_size(bus: &EventBus, text_size: Option<u16>) {
+    bus.publish(Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type: TEXT_SIZE_EVENT,
+        version: TEXT_SIZE_VERSION,
+        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        source: Source::System,
+        payload: serde_json::json!({ "textSize": text_size }),
+    });
 }
 
 fn publish_changed(bus: &EventBus, overlay: &str) {

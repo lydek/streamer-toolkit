@@ -50,7 +50,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], ...payload },
+  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'chat.text_size': [], ...payload },
 })
 
 afterEach(() => {

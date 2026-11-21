@@ -54,6 +54,7 @@ async function open(
           'bgm.player': [],
           'counter.values': [],
           'counter.marathon': [],
+          'chat.text_size': [],
         },
       }),
     )

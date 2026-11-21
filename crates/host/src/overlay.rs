@@ -285,6 +285,9 @@ struct SnapshotPayload {
     /// At most one: the latest sub marathon timer.
     #[serde(rename = "counter.marathon")]
     counter_marathon: Vec<counter::MarathonEvent>,
+    /// At most one: the chat overlay's text size.
+    #[serde(rename = "chat.text_size")]
+    chat_text_size: Vec<crate::templates::ChatTextSizeEvent>,
 }
 
 #[cfg(test)]
@@ -372,6 +375,15 @@ mod tests {
         bus.retain("bgm.player", 1);
         bus.retain("counter.values", 1);
         bus.retain("counter.marathon", 1);
+        bus.retain("chat.text_size", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "t".into(),
+            event_type: "chat.text_size",
+            version: 1,
+            occurred_at: "2026-11-21T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({ "textSize": 32 }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "m".into(),
             event_type: "counter.marathon",
@@ -482,6 +494,9 @@ mod tests {
         let marathon = &wire["payload"]["counter.marathon"][0];
         assert_required("MarathonEvent", marathon);
         assert_required("MarathonPayload", &marathon["payload"]);
+        let size = &wire["payload"]["chat.text_size"][0];
+        assert_required("ChatTextSizeEvent", size);
+        assert_required("ChatTextSizePayload", &size["payload"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

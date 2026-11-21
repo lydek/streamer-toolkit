@@ -3967,6 +3967,48 @@
         }
       }
     },
+    "/api/admin/templates/chat/text-size": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once\n(`chat.text_size`).",
+        "operationId": "set_chat_text_size",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextSizeChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`template.invalid_text_size`: not between 16 and 48",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/text-size": {
       "get": {
         "tags": [
@@ -5307,6 +5349,70 @@
           "compact",
           "bubble",
           "custom"
+        ]
+      },
+      "ChatTextSizeEvent": {
+        "type": "object",
+        "description": "A `chat.text_size` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one, so a reloaded\noverlay gets the size too.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatTextSizePayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChatTextSizeType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatTextSizePayload": {
+        "type": "object",
+        "description": "The chat overlay sets it as the CSS variable `--chat-text-size` on its page, which the templates' sizes read.",
+        "required": [
+          "textSize"
+        ],
+        "properties": {
+          "textSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "In px; `null` keeps each template's own size.",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatTextSizeType": {
+        "type": "string",
+        "enum": [
+          "chat.text_size"
         ]
       },
       "CheckBody": {
@@ -7948,7 +8054,8 @@
           "stream.status",
           "bgm.player",
           "counter.values",
-          "counter.marathon"
+          "counter.marathon",
+          "chat.text_size"
         ],
         "properties": {
           "bgm.player": {
@@ -7970,6 +8077,13 @@
               "$ref": "#/components/schemas/ChatRemovedEvent"
             },
             "description": "The latest removals, oldest first: what was taken down before this snapshot."
+          },
+          "chat.text_size": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatTextSizeEvent"
+            },
+            "description": "At most one: the chat overlay's text size."
           },
           "counter.marathon": {
             "type": "array",
@@ -8662,7 +8776,8 @@
         "description": "`GET /api/admin/templates/chat`.",
         "required": [
           "selected",
-          "error"
+          "error",
+          "text_size"
         ],
         "properties": {
           "error": {
@@ -8674,6 +8789,33 @@
           },
           "selected": {
             "$ref": "#/components/schemas/ChatTemplate"
+          },
+          "text_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The overlay text size in px; `null` keeps each template's own size.",
+            "minimum": 0
+          }
+        }
+      },
+      "TextSizeChoice": {
+        "type": "object",
+        "description": "`PUT /api/admin/templates/chat/text-size`.",
+        "required": [
+          "text_size"
+        ],
+        "properties": {
+          "text_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "16–48 px, or `null` for each template's own size.",
+            "minimum": 0
           }
         }
       },

@@ -46,6 +46,9 @@ pub struct Settings {
     /// The chat overlay template: a built-in ID, or `custom` for the data folder's `templates/chat/`. The Host
     /// checks it; an unknown value means the default.
     pub chat_template: String,
+    /// The chat overlay's text size in px (16–48); `None` keeps each template's own size.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_text_size: Option<u16>,
     /// The alert overlay's built-in template. The Host checks it; an unknown value means the default.
     pub alert_template: String,
     /// Check-in rules; the check-in module validates them and falls back to defaults for values it cannot use.
@@ -292,6 +295,7 @@ impl Default for Settings {
             text_size: None,
             record_retention: None,
             chat_template: "default".into(),
+            chat_text_size: None,
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
             chat_commands: BTreeMap::new(),
