@@ -103,7 +103,7 @@ const snapshot = (...ns: number[]): Extract<Incoming, { type: 'snapshot' }> => (
   type: 'snapshot',
   version: 1,
   seq: 0,
-  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'chat.text_size': [] },
+  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'chat.text_size': [] },
 })
 const ids = (log: { messages: ChatEvent[] }) => log.messages.map((m) => m.seq)
 

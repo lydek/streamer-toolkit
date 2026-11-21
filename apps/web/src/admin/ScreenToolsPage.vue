@@ -7,6 +7,14 @@
       </div>
       <BreakCardSettings :card="live.breakCard" @error="report" />
     </section>
+
+    <section class="stack" aria-labelledby="warnings-heading">
+      <div class="sec-head">
+        <h2 id="warnings-heading">{{ t('screenTools.warnings.heading') }}</h2>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('warnings')" />
+      </div>
+      <WarningSettings :warnings="live.warnings" :inputs="live.obsState?.inputs ?? []" />
+    </section>
   </FullPage>
 </template>
 
@@ -20,6 +28,7 @@ import { ApiError } from './api'
 import BreakCardSettings from './BreakCardSettings.vue'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
+import WarningSettings from './WarningSettings.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -33,7 +42,7 @@ const status = computed(() => {
 const report = (e: unknown) =>
   toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)))
 
-async function copyObsUrl(overlay: 'break') {
+async function copyObsUrl(overlay: 'break' | 'warnings') {
   try {
     // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
     await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)

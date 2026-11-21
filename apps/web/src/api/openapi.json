@@ -3441,6 +3441,73 @@
         }
       }
     },
+    "/api/admin/screen-tools/warnings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The warnings now (also kept current by `screen.warnings`).",
+        "operationId": "get_warnings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarningsPayload"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_warnings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarningSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarningsPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`overlays.invalid`: out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`overlays.storage_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/simulate/alert": {
       "post": {
         "tags": [
@@ -7495,6 +7562,7 @@
           "counter",
           "marathon",
           "break",
+          "warnings",
           "other"
         ],
         "properties": {
@@ -7531,6 +7599,10 @@
             "minimum": 0
           },
           "sound": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "warnings": {
             "type": "integer",
             "minimum": 0
           }
@@ -8687,6 +8759,7 @@
           "counter.values",
           "counter.marathon",
           "screen.break",
+          "screen.warnings",
           "chat.text_size"
         ],
         "properties": {
@@ -8758,6 +8831,13 @@
               "$ref": "#/components/schemas/BreakEvent"
             },
             "description": "At most one: the break card."
+          },
+          "screen.warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WarningsEvent"
+            },
+            "description": "At most one: the on-stream warnings."
           },
           "stream.status": {
             "type": "array",
@@ -9762,6 +9842,140 @@
             "$ref": "#/components/schemas/Subject"
           }
         }
+      },
+      "WarningSettingsBody": {
+        "type": "object",
+        "required": [
+          "chat_overlay",
+          "twitch",
+          "mic",
+          "mic_seconds"
+        ],
+        "properties": {
+          "chat_overlay": {
+            "type": "boolean"
+          },
+          "mic": {
+            "type": "boolean"
+          },
+          "mic_input": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An OBS audio input name; `null` or blank: the mic is not checked."
+          },
+          "mic_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1–3600.",
+            "minimum": 0
+          },
+          "twitch": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WarningsEvent": {
+        "type": "object",
+        "description": "A `screen.warnings` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps\nonly the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WarningsPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WarningsType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "WarningsPayload": {
+        "type": "object",
+        "description": "Which warnings are on and what was last seen. The overlay shows a warning that is on and down; the mic one only\nonce `micMutedSince` is `micSeconds` old.",
+        "required": [
+          "chatOverlay",
+          "twitch",
+          "mic",
+          "micSeconds",
+          "chatOverlayDown",
+          "twitchDown",
+          "micMissing"
+        ],
+        "properties": {
+          "chatOverlay": {
+            "type": "boolean"
+          },
+          "chatOverlayDown": {
+            "type": "boolean",
+            "description": "No chat overlay is open in OBS."
+          },
+          "mic": {
+            "type": "boolean"
+          },
+          "micInput": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The OBS audio input watched; `null`: the mic is not checked."
+          },
+          "micMissing": {
+            "type": "boolean",
+            "description": "The watched input is no longer in OBS: pick another."
+          },
+          "micMutedSince": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UTC, RFC 3339: since when the watched input has been muted."
+          },
+          "micSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "twitch": {
+            "type": "boolean"
+          },
+          "twitchDown": {
+            "type": "boolean",
+            "description": "The Twitch event connection is down."
+          }
+        }
+      },
+      "WarningsType": {
+        "type": "string",
+        "enum": [
+          "screen.warnings"
+        ]
       }
     }
   },

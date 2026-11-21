@@ -31,7 +31,7 @@ beforeEach(() => {
   }
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   answers = {
-    '/api/admin/overlays': { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, other: 0 },
+    '/api/admin/overlays': { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, other: 0 },
     '/api/admin/sounds': { sounds: [{ id: 's1', label: '叮咚' }], slots: {}, volume: 100 },
     '/api/admin/checkin/settings': { card_slots: 7 },
     '/api/admin/music': {

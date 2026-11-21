@@ -1,6 +1,10 @@
-//! Adapters: the admin API (behind the admin token, added by the host), the `screen.break` event and storage.
+//! Adapters: the admin API (behind the admin token, added by the host), the `screen.break` and `screen.warnings`
+//! events and storage.
 
 pub mod db;
+mod warnings;
+
+pub use warnings::WarningsEvent;
 
 use std::sync::Arc;
 
@@ -110,21 +114,35 @@ pub enum BreakType {
 }
 
 /// Starts the screen tools in `pool`, which must already have [`db::MIGRATOR`] applied, announcing the break card
-/// as `screen.break` on `bus` now and after every change. Needs a Tokio runtime.
+/// as `screen.break` and the warnings as `screen.warnings` on `bus` now and after every change. The host feeds the
+/// warnings what it sees ([`OverlayService::see`]). Needs a Tokio runtime.
 pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> Arc<Overlays> {
     bus.retain(BREAK, 1);
+    bus.retain(warnings::WARNINGS, 1);
+    let warnings_bus = bus.clone();
+    let event = |event_type, version, payload| Event {
+        id: uuid::Uuid::now_v7().to_string(),
+        event_type,
+        version,
+        occurred_at: db::rfc3339(Utc::now()),
+        source: Source::System,
+        payload,
+    };
     let service = Arc::new(OverlayService::new(
         db::SqliteOverlays::new(pool),
         Box::new(move |card| {
-            bus.publish(Event {
-                id: uuid::Uuid::now_v7().to_string(),
-                event_type: BREAK,
-                version: BREAK_VERSION,
-                occurred_at: db::rfc3339(Utc::now()),
-                source: Source::System,
-                payload: serde_json::to_value(BreakPayload::from(card))
-                    .expect("break card serializes"),
-            });
+            let payload =
+                serde_json::to_value(BreakPayload::from(card)).expect("break card serializes");
+            bus.publish(event(BREAK, BREAK_VERSION, payload));
+        }),
+        Box::new(move |settings, now| {
+            let payload = serde_json::to_value(warnings::WarningsPayload::new(settings, now))
+                .expect("warnings serialize");
+            warnings_bus.publish(event(
+                warnings::WARNINGS,
+                warnings::WARNINGS_VERSION,
+                payload,
+            ));
         }),
     ));
     let first = service.clone();
@@ -188,6 +206,7 @@ pub fn routes(service: Arc<Overlays>) -> Router {
         )
         .route("/api/admin/screen-tools/break/show", post(show_break))
         .route("/api/admin/screen-tools/break/hide", post(hide_break))
+        .merge(warnings::routes())
         .with_state(service)
 }
 
@@ -286,8 +305,15 @@ pub(crate) async fn hide_break(State(s): State<Arc<Overlays>>) -> Response {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_break, set_break_settings, show_break, hide_break),
-    components(schemas(BreakEvent))
+    paths(
+        get_break,
+        set_break_settings,
+        show_break,
+        hide_break,
+        warnings::get_warnings,
+        warnings::set_warnings
+    ),
+    components(schemas(BreakEvent, WarningsEvent))
 )]
 struct OverlayApi;
 

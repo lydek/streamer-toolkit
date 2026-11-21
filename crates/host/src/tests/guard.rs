@@ -193,6 +193,7 @@ async fn overlay_gets_overlay_csp_and_assets_get_cors() {
         "/overlay/counter",
         "/overlay/marathon",
         "/overlay/break",
+        "/overlay/warnings",
     ] {
         let res = app()
             .oneshot(

@@ -20,7 +20,7 @@ async function openWithQueue(page: Page, queue: unknown) {
           'obs.status': [],
           'obs.state': [],
           'presentation.queue': [{ id: 'q', type: 'presentation.queue', version: 1, seq: 1, occurredAt: '', source: 'system', payload: queue }],
-          'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'chat.text_size': [],
+          'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'chat.text_size': [],
         },
       }),
     ),

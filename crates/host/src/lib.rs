@@ -188,6 +188,37 @@ impl Guard {
     }
 }
 
+/// Feeds the on-stream warnings what the host sees: whether a chat overlay is open, Twitch's event connection and
+/// OBS's audio inputs, twice a second so a change shows within a second (the screen tools announce only changes).
+fn watch_warnings(
+    screen_tools: &Arc<overlays::Overlays>,
+    connections: &Arc<overlay::OverlayConnections>,
+    admin: &Arc<admin::AdminState>,
+    obs: tokio::sync::watch::Receiver<toolkit_core::streaming::StreamingState>,
+) {
+    let (screen_tools, connections, admin) =
+        (screen_tools.clone(), connections.clone(), admin.clone());
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
+        loop {
+            tick.tick().await;
+            let inputs = {
+                let state = obs.borrow();
+                // A connected OBS always has a scene; without one, no input can be said to be gone.
+                (!state.scenes.is_empty()).then(|| state.inputs.clone())
+            };
+            screen_tools.see(
+                overlays::Conditions {
+                    chat_overlay_open: connections.count(overlay::OverlayKind::Chat) > 0,
+                    twitch_connected: admin.eventsub_up(),
+                    inputs,
+                },
+                chrono::Utc::now(),
+            );
+        }
+    });
+}
+
 pub fn router(config: HostConfig) -> Result<Router, HostError> {
     router_with_chat(config).map(|(router, _)| router)
 }
@@ -410,6 +441,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         outbox,
         modules,
     ));
+    watch_warnings(&screen_tools, &overlays, &admin, obs.states());
     let router =
         Router::new()
             .route("/api/health", get(|| async { "ok" }))

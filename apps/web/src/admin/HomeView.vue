@@ -307,6 +307,8 @@
             />
           </div>
         </template>
+        <h3>{{ t('screenTools.warnings.heading') }}</h3>
+        <WarningSettings :warnings="live.warnings" :inputs="live.obsState?.inputs ?? []" />
       </template>
     </AppDrawer>
 
@@ -367,6 +369,7 @@ import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
 import { counterTile, stepCounter } from './counters'
 import { hideBreak, showBreak } from './screenTools'
+import WarningSettings from './WarningSettings.vue'
 import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
 import MusicPlayer from './MusicPlayer.vue'
 import { playerLine } from './music'

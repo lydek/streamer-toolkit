@@ -55,6 +55,7 @@ async function open(
           'counter.values': [],
           'counter.marathon': [],
           'screen.break': [],
+          'screen.warnings': [],
           'chat.text_size': [],
         },
       }),

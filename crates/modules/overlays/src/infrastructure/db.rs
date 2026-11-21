@@ -1,11 +1,11 @@
-//! Screen tools in SQLite (`overlays_break_card`).
+//! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`).
 
 use chrono::{DateTime, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{OverlayRepository, RepositoryError},
-    domain::{BreakCard, BreakSettings, CountdownMode},
+    domain::{BreakCard, BreakSettings, CountdownMode, warnings::WarningSettings},
 };
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -71,6 +71,43 @@ impl OverlayRepository for SqliteOverlays {
         .bind(&s.until_time)
         .bind(card.shown)
         .bind(card.ends_at.map(rfc3339))
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn warning_settings(&self) -> Result<Option<WarningSettings>, RepositoryError> {
+        let row: Option<(bool, bool, bool, i64, Option<String>)> = sqlx::query_as(
+            "SELECT chat_overlay, twitch, mic, mic_seconds, mic_input FROM overlays_warnings",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        row.map(|(chat_overlay, twitch, mic, mic_seconds, mic_input)| {
+            Ok(WarningSettings {
+                chat_overlay,
+                twitch,
+                mic,
+                mic_seconds: u32::try_from(mic_seconds).map_err(storage)?,
+                mic_input,
+            })
+        })
+        .transpose()
+    }
+
+    async fn save_warning_settings(&self, s: &WarningSettings) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO overlays_warnings (id, chat_overlay, twitch, mic, mic_seconds, mic_input)
+             VALUES (1, ?, ?, ?, ?, ?)
+             ON CONFLICT (id) DO UPDATE SET chat_overlay = excluded.chat_overlay, twitch = excluded.twitch,
+               mic = excluded.mic, mic_seconds = excluded.mic_seconds, mic_input = excluded.mic_input",
+        )
+        .bind(s.chat_overlay)
+        .bind(s.twitch)
+        .bind(s.mic)
+        .bind(i64::from(s.mic_seconds))
+        .bind(&s.mic_input)
         .execute(&self.pool)
         .await
         .map_err(storage)?;

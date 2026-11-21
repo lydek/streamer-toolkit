@@ -892,6 +892,18 @@
       "shownShort": "顯示中",
       "hidden": "休息卡片沒有顯示",
       "forMinutes": "{n} 分鐘"
+    },
+    "warnings": {
+      "heading": "警語覆蓋層",
+      "chatOverlay": "聊天室 Overlay 沒連上",
+      "mic": "麥克風靜音超過",
+      "seconds": "秒數",
+      "secondsUnit": "秒",
+      "input": "麥克風來源",
+      "pickInput": "選擇麥克風",
+      "noInput": "還沒選麥克風，不會檢查靜音。",
+      "inputMissing": "OBS 裡已經沒有「{name}」，請重新選擇麥克風。",
+      "twitch": "Twitch 連線中斷"
     }
   },
   "music": {
@@ -1046,6 +1058,11 @@
     },
     "counter": {
       "test": "測試"
+    },
+    "warnings": {
+      "chatOverlay": "聊天室沒有連上",
+      "mic": "麥克風靜音中",
+      "twitch": "Twitch 連線中斷"
     },
     "status": {
       "connecting": "連線中……",
