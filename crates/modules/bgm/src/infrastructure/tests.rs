@@ -488,3 +488,95 @@ async fn the_player_is_controlled_over_the_api_and_reports_on_the_bus() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn scene_rules_are_saved_listed_by_what_they_use_and_lose_a_deleted_playlist() {
+    let dir = data_dir("rules");
+    let app = app(&dir);
+    let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let new_playlist = |name: &str| {
+        with_json(
+            "POST",
+            "/api/admin/music/playlists",
+            json!({ "name": name }),
+        )
+    };
+    let chat = json(send(&app, new_playlist("Chat")).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(
+        &app,
+        with_json(
+            "PUT",
+            &format!("/api/admin/music/{id}/playlists"),
+            json!({ "playlists": [chat] }),
+        ),
+    )
+    .await;
+    let rule = |playlist: Value, enabled: bool| {
+        json!({
+            "id": "", "name": " Chatting ", "scenes": [" Chat ", "chat", "", "Break"], "playlist": playlist,
+            "shuffle": true, "volume": 60, "autoplay": true, "stop_on_leave": false, "enabled": enabled
+        })
+    };
+    let save = |rules: Value| with_json("PUT", "/api/admin/music/scene-rules", rules);
+    let mut loud = rule(json!(chat), true);
+    loud["volume"] = json!(101);
+    let mut blank = rule(json!(chat), true);
+    blank["name"] = json!(" ");
+    // An enabled rule needs a playlist.
+    for bad in [
+        json!([rule(Value::Null, true)]),
+        json!([loud]),
+        json!([blank]),
+    ] {
+        assert_eq!(send(&app, save(bad)).await.0, StatusCode::BAD_REQUEST);
+    }
+    let (status, res) = send(&app, save(json!([rule(json!("nope"), true)]))).await;
+    assert_eq!(
+        (status, json(res).await["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("music.not_found"))
+    );
+
+    let (status, res) = send(&app, save(json!([rule(json!(chat), true)]))).await;
+    assert_eq!(status, StatusCode::OK);
+    let saved = json(res).await;
+    let rule_id = saved[0]["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        uuid::Uuid::parse_str(&rule_id).unwrap().get_version_num(),
+        7
+    );
+    assert_eq!(saved[0]["name"], "Chatting");
+    assert_eq!(
+        saved[0]["scenes"],
+        json!(["Chat", "Break"]),
+        "trimmed, blank and repeated ones dropped"
+    );
+
+    let lib = library(&app).await;
+    assert_eq!(lib["scene_rules"][0]["id"], rule_id.as_str());
+    assert_eq!(lib["tracks"][0]["used_by"], json!(["Chatting"]));
+    assert_eq!(lib["playlists"][0]["used_by"], json!(["Chatting"]));
+
+    // Deleting the playlist leaves the rule without one, disabled; the track is no longer used.
+    let (status, _) = send(
+        &app,
+        Request::delete(format!("/api/admin/music/playlists/{chat}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let lib = library(&app).await;
+    let r = &lib["scene_rules"][0];
+    assert_eq!(
+        (r["playlist"].clone(), r["enabled"].clone()),
+        (Value::Null, json!(false))
+    );
+    assert_eq!(lib["tracks"][0]["used_by"], json!([]));
+    let _ = std::fs::remove_dir_all(dir);
+}

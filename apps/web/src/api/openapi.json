@@ -1486,7 +1486,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Deletes a playlist; its tracks stay in the library.",
+        "summary": "Deletes a playlist; its tracks stay in the library. The scene rules that played it lose it and are disabled.",
         "operationId": "delete_playlist",
         "parameters": [
           {
@@ -1502,6 +1502,72 @@
           "204": {},
           "404": {
             "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/scene-rules": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Replaces every scene rule, in order: the first enabled rule naming a scene plays on it. Saving does not apply\nthem to the scene on air; the next scene switch does.",
+        "operationId": "set_scene_rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SceneRuleBody"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SceneRuleBody"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`music.invalid`: an empty name, a volume over 100, a scene name over 256 characters, an enabled rule without a playlist, or more than 100 rules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`: no such playlist",
             "content": {
               "application/json": {
                 "schema": {
@@ -5047,13 +5113,20 @@
         "type": "object",
         "required": [
           "tracks",
-          "playlists"
+          "playlists",
+          "scene_rules"
         ],
         "properties": {
           "playlists": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MusicPlaylist"
+            }
+          },
+          "scene_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneRuleBody"
             }
           },
           "tracks": {
@@ -5071,7 +5144,8 @@
         "required": [
           "id",
           "name",
-          "tracks"
+          "tracks",
+          "used_by"
         ],
         "properties": {
           "id": {
@@ -5086,6 +5160,13 @@
               "type": "string"
             },
             "description": "Track IDs in play order."
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The names of the scene rules that play it; the admin UI lists them before deleting it."
           }
         }
       },
@@ -6109,6 +6190,65 @@
           }
         }
       },
+      "SceneRuleBody": {
+        "type": "object",
+        "description": "A playlist that plays on some OBS scenes. `name` and `scenes` are broadcaster text: render them as text.",
+        "required": [
+          "id",
+          "name",
+          "scenes",
+          "playlist",
+          "shuffle",
+          "volume",
+          "autoplay",
+          "stop_on_leave",
+          "enabled"
+        ],
+        "properties": {
+          "autoplay": {
+            "type": "boolean",
+            "description": "Switching to one of its scenes starts its playlist."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "description": "Empty for a new rule; the Host gives it one."
+          },
+          "name": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
+          },
+          "playlist": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` once its playlist was deleted; an enabled rule needs one."
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "OBS scene names, compared without regard to case; at most 256 characters each."
+          },
+          "shuffle": {
+            "type": "boolean"
+          },
+          "stop_on_leave": {
+            "type": "boolean",
+            "description": "Switching away to a scene whose rule does not autoplay stops the music."
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
       "SharedChannelPayload": {
         "type": "object",
         "description": "Another channel in a shared chat.",
@@ -6960,7 +7100,8 @@
           "id",
           "title",
           "duration_ms",
-          "missing"
+          "missing",
+          "used_by"
         ],
         "properties": {
           "duration_ms": {
@@ -6981,6 +7122,13 @@
           },
           "title": {
             "type": "string"
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The names of the scene rules whose playlist has it; the admin UI lists them before deleting it."
           }
         }
       },

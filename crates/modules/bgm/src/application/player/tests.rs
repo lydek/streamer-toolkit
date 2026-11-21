@@ -280,3 +280,158 @@ async fn play_needs_a_known_playlist_and_the_feature_on() {
         "stops at the end of the track"
     );
 }
+
+/// Saves `rules`, each `(name, scenes, playlist, autoplay, stop_on_leave)`, shuffle off at 70%.
+fn set_rules(rig: &Rig, rules: &[(&str, &[&str], &str, bool, bool)]) {
+    let rules = rules
+        .iter()
+        .map(|(name, scenes, playlist, autoplay, stop_on_leave)| {
+            toolkit_core::settings::SceneRule {
+                id: (*name).into(),
+                name: (*name).into(),
+                scenes: scenes.iter().map(|s| (*s).into()).collect(),
+                playlist: Some((*playlist).into()),
+                shuffle: false,
+                volume: 70,
+                autoplay: *autoplay,
+                stop_on_leave: *stop_on_leave,
+                enabled: true,
+            }
+        })
+        .collect();
+    settings::update(&rig.dir, |s| s.bgm.scene_rules = rules).unwrap();
+}
+
+fn scene(rig: &Rig, name: Option<&str>) {
+    rig.player.scene_changed(name.map(Into::into));
+}
+
+#[tokio::test(start_paused = true)]
+async fn obs_connecting_applies_the_scene_on_air_and_the_same_scene_does_nothing() {
+    let rig = Rig::new("scene-start", &[Some(10_000), Some(10_000)], true);
+    let chat = rig.playlist.clone();
+    set_rules(&rig, &[("Chat", &["Chat"], &chat, true, true)]);
+    scene(&rig, Some("Chat"));
+    let status = rig.last();
+    assert_eq!(status.state, PlayState::Playing);
+    assert_eq!(status.playlist.as_ref(), Some(&chat));
+    assert_eq!(rig.playing().as_ref(), Some(&rig.tracks[0]));
+    assert_eq!(
+        (status.volume, status.shuffle),
+        (70, false),
+        "the rule's options"
+    );
+
+    rig.player.command(Command::Pause).unwrap();
+    scene(&rig, Some("CHAT"));
+    assert_eq!(
+        rig.last().state,
+        PlayState::Paused,
+        "the same scene, by any case"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_track_in_both_playlists_plays_on_uninterrupted() {
+    let rig = Rig::new(
+        "scene-keep",
+        &[Some(10_000), Some(10_000), Some(10_000)],
+        true,
+    );
+    let (chat, t) = (rig.playlist.clone(), rig.tracks.clone());
+    let game = rig.service.create_playlist("Game").unwrap().id;
+    rig.service
+        .set_playlists(&t[1], &[chat.clone(), game.clone()])
+        .unwrap();
+    rig.service
+        .set_playlists(&t[2], std::slice::from_ref(&game))
+        .unwrap();
+    set_rules(
+        &rig,
+        &[
+            ("Chat", &["Chat"], &chat, true, true),
+            ("Game", &["Game"], &game, true, true),
+        ],
+    );
+    scene(&rig, Some("Chat"));
+    rig.player.command(Command::Next).unwrap();
+    sleep(ms(4000)).await;
+    assert_eq!(rig.playing().as_ref(), Some(&t[1]));
+
+    scene(&rig, Some("Game"));
+    let status = rig.last();
+    assert_eq!(status.playlist.as_ref(), Some(&game));
+    assert_eq!(
+        (rig.playing().as_ref(), status.position_ms),
+        (Some(&t[1]), 4000)
+    );
+    sleep(ms(6001)).await;
+    assert_eq!(
+        rig.playing().as_ref(),
+        Some(&t[2]),
+        "goes on in the new playlist"
+    );
+
+    // A track the new playlist does not have: it starts from its first track.
+    scene(&rig, Some("Chat"));
+    assert_eq!(
+        (rig.playing().as_ref(), rig.last().position_ms),
+        (Some(&t[0]), 0)
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn unmapped_scenes_stop_and_autoplay_off_follows_the_scene_left() {
+    let rig = Rig::new("scene-rules", &[Some(60_000)], true);
+    let chat = rig.playlist.clone();
+    set_rules(
+        &rig,
+        &[
+            ("Chat", &["Chat"], &chat, true, false),
+            ("Talk", &["Talk"], &chat, true, true),
+            ("Quiet", &["Game"], &chat, false, false),
+        ],
+    );
+    scene(&rig, Some("Chat"));
+    scene(&rig, Some("Game"));
+    assert_eq!(
+        rig.last().state,
+        PlayState::Playing,
+        "Chat does not stop on leaving"
+    );
+    scene(&rig, Some("Talk"));
+    scene(&rig, Some("Game"));
+    assert_eq!(
+        rig.last().state,
+        PlayState::Stopped,
+        "Talk stops on leaving"
+    );
+    scene(&rig, Some("Chat"));
+    scene(&rig, Some("Singing"));
+    assert_eq!(rig.last().state, PlayState::Stopped, "no rule: stop");
+    scene(&rig, Some("Chat"));
+    scene(&rig, None);
+    assert_eq!(rig.last().state, PlayState::Stopped, "OBS went away");
+}
+
+#[tokio::test(start_paused = true)]
+async fn without_rules_or_with_the_feature_off_scenes_leave_the_player_alone() {
+    let rig = Rig::new("scene-none", &[Some(60_000)], true);
+    rig.play().unwrap();
+    scene(&rig, Some("Chat"));
+    scene(&rig, None);
+    assert_eq!(
+        rig.last().state,
+        PlayState::Playing,
+        "no rules: used by hand"
+    );
+
+    set_rules(
+        &rig,
+        &[("Chat", &["Chat"], &rig.playlist.clone(), true, true)],
+    );
+    rig.player.command(Command::Stop).unwrap();
+    rig.modules.set_enabled(modules::BGM, false).unwrap();
+    scene(&rig, Some("Chat"));
+    assert_eq!(rig.last().state, PlayState::Stopped);
+}

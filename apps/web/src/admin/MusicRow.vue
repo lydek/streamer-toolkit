@@ -41,6 +41,12 @@
     <Button ref="deleteButton" :label="t('music.delete')" icon="pi pi-trash" severity="danger" text @click="ask" />
     <div v-if="confirming" class="confirm" role="group" :aria-label="t('music.delete')">
       <p>{{ t('music.deleteNote') }}</p>
+      <template v-if="track.used_by.length">
+        <p>{{ t('music.trackUsedBy') }}</p>
+        <ul>
+          <li v-for="(u, i) in track.used_by" :key="i">{{ u }}</li>
+        </ul>
+      </template>
       <div class="buttons">
         <Button ref="confirmButton" :label="t('music.confirmDelete')" severity="danger" :disabled="busy" @click="remove" />
         <Button :label="t('music.cancel')" text @click="cancel" />
@@ -167,7 +173,8 @@ async function remove() {
   flex-basis: 100%;
 }
 
-.confirm p {
+.confirm p,
+.confirm ul {
   margin: 0 0 0.5rem;
 }
 </style>

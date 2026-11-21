@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use toolkit_core::settings::{self, BgmSettings, MusicEntry, Playlist};
+use toolkit_core::settings::{self, BgmSettings, MusicEntry, Playlist, SceneRule};
 use uuid::Uuid;
 
 use crate::domain::{self, Format};
@@ -172,15 +172,73 @@ impl BgmService {
         found.ok_or(BgmError::NotFound)
     }
 
-    /// Removes the playlist only; its tracks stay in the library.
+    /// Removes the playlist only; its tracks stay in the library. The scene rules that played it lose it and are
+    /// disabled, never moved to another playlist.
     pub fn delete_playlist(&self, id: &str) -> Result<(), BgmError> {
         let mut found = false;
         settings::update(&self.data_dir, |s| {
             let before = s.bgm.playlists.len();
             s.bgm.playlists.retain(|p| p.id != id);
             found = s.bgm.playlists.len() != before;
+            for r in s
+                .bgm
+                .scene_rules
+                .iter_mut()
+                .filter(|r| r.playlist.as_deref() == Some(id))
+            {
+                r.playlist = None;
+                r.enabled = false;
+            }
         })?;
         found.then_some(()).ok_or(BgmError::NotFound)
+    }
+
+    /// Replaces every scene rule; a rule without a valid ID gets a new one. Scene names are trimmed, and blank or
+    /// repeated ones (by any case) dropped.
+    pub fn set_scene_rules(&self, rules: Vec<SceneRule>) -> Result<Vec<SceneRule>, BgmError> {
+        if rules.len() > domain::SCENE_RULES_MAX {
+            return Err(BgmError::Invalid);
+        }
+        let rules = rules
+            .into_iter()
+            .map(|mut r| {
+                r.name = domain::clean_label(&r.name).ok_or(BgmError::Invalid)?;
+                let mut scenes: Vec<String> = Vec::new();
+                for scene in r.scenes.iter().map(|s| s.trim()) {
+                    if !scene.is_empty()
+                        && !scenes
+                            .iter()
+                            .any(|t| domain::same_scene(Some(t), Some(scene)))
+                    {
+                        scenes.push(scene.to_owned());
+                    }
+                }
+                r.scenes = scenes;
+                if r.volume > 100
+                    || r.scenes
+                        .iter()
+                        .any(|s| s.chars().count() > domain::SCENE_NAME_MAX)
+                    || (r.enabled && r.playlist.is_none())
+                {
+                    return Err(BgmError::Invalid);
+                }
+                if Uuid::try_parse(&r.id).is_err() {
+                    r.id = Uuid::now_v7().to_string();
+                }
+                Ok(r)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut known = false;
+        settings::update(&self.data_dir, |s| {
+            known = rules
+                .iter()
+                .filter_map(|r| r.playlist.as_ref())
+                .all(|p| s.bgm.playlists.iter().any(|q| q.id == *p));
+            if known {
+                s.bgm.scene_rules = rules.clone();
+            }
+        })?;
+        known.then_some(rules).ok_or(BgmError::NotFound)
     }
 
     /// The library lists it but its file is gone from the music folder (deleted outside the app).

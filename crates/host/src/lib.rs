@@ -301,6 +301,17 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let chat_routes = chat::routes(config.db.clone()).merge(chat_log::routes(config.db.clone()));
     let stream_summary = stream_summary::routes(config.db.clone(), chrono::Utc::now());
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
+    // Background music follows the scene on air: applied when OBS connects, stopped when it goes away.
+    let (mut states, music_player) = (obs.states(), player.clone());
+    tokio::spawn(async move {
+        loop {
+            let scene = states.borrow_and_update().scene.clone();
+            music_player.scene_changed(scene);
+            if states.changed().await.is_err() {
+                return;
+            }
+        }
+    });
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
