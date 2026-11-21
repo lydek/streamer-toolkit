@@ -1,0 +1,136 @@
+// @vitest-environment jsdom
+import { flushPromises, mount } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { i18n } from '../i18n'
+import SimulateDialog from './SimulateDialog.vue'
+
+const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), modules: { value: undefined as unknown } }))
+
+vi.mock('./api', async (original) => ({
+  ...(await original<typeof import('./api')>()),
+  client: { GET: calls.get, POST: calls.post },
+  api: (p: Promise<unknown>) => p,
+}))
+vi.mock('./features', async (original) => ({
+  ...(await original<typeof import('./features')>()),
+  useModules: () => ({ modules: calls.modules }),
+}))
+
+const on = (ids: string[]) => ids.map((id) => ({ id, enabled: true, closed: false }))
+let answers: Record<string, unknown>
+
+beforeEach(() => {
+  // jsdom has no modal dialogs.
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.open = true
+  }
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.open = false
+    this.dispatchEvent(new Event('close'))
+  }
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
+  answers = {
+    '/api/admin/overlays': { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, other: 0 },
+    '/api/admin/sounds': { sounds: [{ id: 's1', label: '叮咚' }], slots: {}, volume: 100 },
+    '/api/admin/checkin/settings': { card_slots: 7 },
+  }
+  calls.get.mockReset()
+  calls.get.mockImplementation((path: string) => Promise.resolve(answers[path]))
+  calls.post.mockReset()
+  calls.post.mockResolvedValue(undefined)
+  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin'])
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
+async function opened() {
+  const wrapper = mount(SimulateDialog, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
+  await (wrapper.vm as unknown as { open: () => Promise<void> }).open()
+  await flushPromises()
+  return wrapper
+}
+const row = (id: string) => document.querySelector(`[data-row="${id}"]`)!
+const press = async (id: string, label: string) => {
+  ;[...row(id).querySelectorAll('button')].find((b) => b.textContent?.trim() === label)!.click()
+  await flushPromises()
+}
+
+describe('SimulateDialog', () => {
+  it('sends one test event per row through the shared routes and says so', async () => {
+    const wrapper = await opened()
+    await press('chat', '送一則訊息')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/chat', { body: { text: '這是一則測試訊息' } })
+    expect(wrapper.get('[role="status"]').text()).toBe('已送出測試：聊天室 · 送一則訊息')
+    await press('alerts', '送禮訂閱')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/alert', { body: { kind: 'gift', amount: 5 } })
+    await press('alerts', '追隨')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/alert', { body: { kind: 'follow', amount: null } })
+    await press('sound', '播放')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 's1' } } })
+    // 集滿 uses the card's own slot count.
+    await press('checkin', '集滿')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/checkin', { body: { stamps: 7 } })
+    wrapper.unmount()
+  })
+
+  it('shows each overlay connection in words, and 無法確認 when it cannot be read', async () => {
+    const wrapper = await opened()
+    expect(row('chat').textContent).toContain('OBS 已連上')
+    expect(row('alerts').textContent).toContain('還沒放進 OBS')
+    wrapper.unmount()
+    answers['/api/admin/overlays'] = undefined
+    calls.get.mockImplementation((path: string) =>
+      path === '/api/admin/overlays' ? Promise.reject(new Error('offline')) : Promise.resolve(answers[path]),
+    )
+    const again = await opened()
+    expect(row('chat').textContent).toContain('無法確認')
+    again.unmount()
+  })
+
+  it('cannot send for a feature turned off or with an empty sound library, and reports a failure', async () => {
+    calls.modules.value = on(['chat', 'alerts', 'checkin'])
+    answers['/api/admin/sounds'] = { sounds: [], slots: {}, volume: 100 }
+    calls.post.mockRejectedValue(new Error('boom'))
+    const wrapper = await opened()
+    expect(row('sound').textContent).toContain('功能已關閉')
+    expect([...row('sound').querySelectorAll('button')].every((b) => b.disabled)).toBe(true)
+    await press('chat', '送一則訊息')
+    expect(wrapper.get('[role="status"]').text()).toContain('boom')
+    wrapper.unmount()
+  })
+
+  it('puts focus on 關閉 when it opens and tells the bar when it closes', async () => {
+    const wrapper = await opened()
+    expect(document.activeElement?.textContent?.trim()).toBe('關閉')
+    ;(document.activeElement as HTMLButtonElement).click()
+    expect(wrapper.emitted('closed')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('offers only sounds still in the library, and 集滿 only once the card size is known', async () => {
+    let slots: (v: unknown) => void = () => {}
+    calls.get.mockImplementation((path: string) =>
+      path === '/api/admin/checkin/settings' ? new Promise((r) => (slots = r)) : Promise.resolve(answers[path]),
+    )
+    const wrapper = await opened()
+    const full = () => [...row('checkin').querySelectorAll('button')].find((b) => b.textContent?.trim() === '集滿')!
+    expect(full().disabled).toBe(true)
+    slots({ card_slots: 7 })
+    await flushPromises()
+    expect(full().disabled).toBe(false)
+
+    // Reopened after the chosen sound was deleted: the next one is picked; an unreadable card size turns 集滿 off.
+    ;(document.querySelector('dialog') as HTMLDialogElement).close()
+    answers['/api/admin/sounds'] = { sounds: [{ id: 's2', label: '鈴聲' }], slots: {}, volume: 100 }
+    calls.get.mockImplementation((path: string) =>
+      path === '/api/admin/checkin/settings' ? Promise.reject(new Error('offline')) : Promise.resolve(answers[path]),
+    )
+    await (wrapper.vm as unknown as { open: () => Promise<void> }).open()
+    await flushPromises()
+    await press('sound', '播放')
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 's2' } } })
+    expect(full().disabled).toBe(true)
+    wrapper.unmount()
+  })
+})

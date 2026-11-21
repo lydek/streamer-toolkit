@@ -50,6 +50,15 @@
           @click="openConnections(problems[0].section, $event.currentTarget)"
         />
         <Button
+          ref="simulateButton"
+          class="simulate-open"
+          icon="pi pi-wrench"
+          :label="t('simulate.dialog.title')"
+          text
+          :aria-label="t('simulate.dialog.title')"
+          @click="simulate?.open()"
+        />
+        <Button
           v-if="!hidden.has('/chat')"
           icon="pi pi-comments"
           text
@@ -119,6 +128,7 @@
     </nav>
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
+    <SimulateDialog ref="simulate" @closed="simulateButton?.$el.focus()" />
     <nav
       v-if="group && subPages.length > 1"
       ref="subTabsEl"
@@ -154,6 +164,7 @@ import { saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
+import SimulateDialog from './SimulateDialog.vue'
 import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 
 const { t } = useI18n()
@@ -249,6 +260,8 @@ function toggleChat() {
   dock.open = !dock.open
   saveDock().catch((e) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e))))
 }
+const simulate = ref<InstanceType<typeof SimulateDialog>>()
+const simulateButton = ref<{ $el: HTMLElement }>()
 const groups = computed(() => GROUPS.filter((g) => g.pages.some((p) => !hidden.value.has(p.path))))
 // The user's tab bar: pinned groups in their order are in the bar; the others are always in "More".
 const tabBar = useTabBar()
@@ -483,6 +496,11 @@ onBeforeUnmount(() => {
 
 @container top (max-width: 70rem) {
   .healthy {
+    display: none;
+  }
+
+  /* A narrower bar shows only the icon; the button keeps its name. */
+  .simulate-open :deep(.p-button-label) {
     display: none;
   }
 

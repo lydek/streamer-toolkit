@@ -969,6 +969,26 @@
     }
   },
   "simulate": {
+    "dialog": {
+      "title": "模擬事件",
+      "rows": {
+        "chat": "聊天室",
+        "alerts": "特效",
+        "sound": "音效",
+        "checkin": "打卡卡片"
+      },
+      "sendMessage": "送一則訊息",
+      "chatText": "這是一則測試訊息",
+      "pickSound": "選一個音效",
+      "play": "播放",
+      "checkin": "一般打卡",
+      "fullCard": "集滿",
+      "sent": "已送出測試：{row} · {button}",
+      "connected": "OBS 已連上",
+      "notInObs": "還沒放進 OBS",
+      "unknown": "無法確認",
+      "featureOff": "功能已關閉"
+    },
     "heading": "事件模擬器",
     "hint": "送出的事件標記為模擬（source=simulation），只顯示在 Overlay，不寫入任何正式紀錄。",
     "userName": "名稱",
