@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.counter')">
+  <FullPage :title="t('modules.names.counter')" tile="counter">
     <section class="stack" aria-labelledby="marathon-heading">
       <h2 id="marathon-heading">{{ t('counter.marathon.heading') }}</h2>
       <MarathonTimer :event="live.marathon" @copy="copyObsUrl('marathon')" @error="report" />

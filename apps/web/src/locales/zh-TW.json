@@ -939,6 +939,7 @@
     "notConnected": "OBS 未連線",
     "connect": "前往連線設定",
     "scenes": "場景",
+    "current": "目前場景：{scene}",
     "onAir": "直播中",
     "items": "「{scene}」的物件",
     "order": "由上到下＝由前到後",

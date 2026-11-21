@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.alerts')">
+  <FullPage :title="t('modules.names.alerts')" tile="alerts" overlay="alerts">
     <TemplatePicker overlay="alerts" :ids="BUILT_IN" :label="(id) => t(`alerts.templates.${id}`)" :start="start" />
     <section aria-labelledby="alert-sounds">
       <h2 id="alert-sounds">{{ t('modules.names.sound') }}</h2>

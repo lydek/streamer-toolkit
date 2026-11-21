@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.checkin')">
+  <FullPage :title="t('modules.names.checkin')" tile="checkin" overlay="checkin">
     <form class="filters" :aria-label="t('checkin.page.filters')" @submit.prevent="apply">
       <div class="field">
         <label for="cf-search">{{ t('checkin.page.search') }}</label>

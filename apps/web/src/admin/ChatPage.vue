@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.chatTemplates.name')">
+  <FullPage :title="t('pages.chatTemplates.name')" tile="chat" overlay="chat">
     <ChatPreview />
   </FullPage>
 </template>
