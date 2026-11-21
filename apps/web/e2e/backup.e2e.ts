@@ -85,6 +85,7 @@ const PREVIEW = {
   checkins: 34,
   templates: 1,
   sounds: 5,
+  music: 3,
 }
 
 test('restore previews the chosen file, then confirms it to restart', async ({ page }) => {
@@ -106,7 +107,7 @@ test('restore previews the chosen file, then confirms it to restart', async ({ p
   })
   await expect(page.getByText(zh.backup.appVersion.replace('{version}', '0.1.0'))).toBeVisible()
   await expect(page.getByText('兌換紀錄 12 筆、打卡紀錄 34 筆')).toBeVisible()
-  await expect(page.getByText('樣板 1 個、音效 5 個')).toBeVisible()
+  await expect(page.getByText('樣板 1 個、音效 5 個、背景音樂 3 首')).toBeVisible()
   expect(uploads).toEqual([BACKUP.length])
   expect(confirms).toBe(0)
   for (const width of [640, 320]) {

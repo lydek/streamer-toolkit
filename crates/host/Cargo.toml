@@ -19,6 +19,7 @@ activity = { version = "0.1.0", path = "../modules/activity" }
 viewers = { version = "0.1.0", path = "../modules/viewers" }
 rust-embed = { version = "8.14.0", features = ["debug-embed"] }
 sound = { version = "0.1.0", path = "../modules/sound" }
+bgm = { version = "0.1.0", path = "../modules/bgm" }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

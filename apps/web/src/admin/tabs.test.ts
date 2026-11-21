@@ -42,7 +42,9 @@ describe('firstPage', () => {
 
   it('skips coming-soon pages for the first built one, and hidden ones too', () => {
     expect(firstPage(media)).toBe('/scenes')
-    // Hidden scenes, then the coming-soon music page, are skipped.
-    expect(firstPage(media, new Set(['/scenes']))).toBe('/sounds')
+    expect(firstPage(media, new Set(['/scenes']))).toBe('/music')
+    // Hidden alerts, then the coming-soon polls page, are skipped.
+    const interact = GROUPS.find((g) => g.id === 'interact')!
+    expect(firstPage(interact, new Set(['/alerts']))).toBe('/checkin')
   })
 })

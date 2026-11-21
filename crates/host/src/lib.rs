@@ -227,6 +227,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         bus.clone(),
         presenter.clone(),
     ));
+    let music = Arc::new(bgm::BgmService::new(config.data_dir.clone()));
     let alerts = Arc::new(alerts::AlertsService::new(
         bus.clone(),
         modules.clone(),
@@ -365,6 +366,13 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 )),
             )
             .merge(sound::file_routes(sounds))
+            .merge(
+                bgm::routes(music.clone()).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(bgm::file_routes(music))
             .merge(home_tiles.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,

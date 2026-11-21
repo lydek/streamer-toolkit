@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     strictPort: true,
-    // Replaced by devServer(): only the null origin, and never on /api, /ws, /templates or /sounds.
+    // Replaced by devServer(): only the null origin, and never on /api, /ws, /templates, /sounds or /music.
     cors: false,
     proxy: hostProxy(devDataDir()),
     fs: {

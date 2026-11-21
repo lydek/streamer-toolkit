@@ -70,7 +70,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates and sounds. Live use goes\non while it is made; database writes wait only for the snapshot.",
+        "summary": "A `.stbackup` file of this data folder: settings, the database, custom templates, sounds and music. Live use goes\non while it is made; database writes wait only for the snapshot.",
         "operationId": "export_backup",
         "responses": {
           "200": {
@@ -1169,6 +1169,489 @@
             }
           },
           "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_music",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicLibrary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Copies an MP3, WAV or OGG file (at most 50 MB) into the music library. The body is the file itself.",
+        "operationId": "import_music",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The original file name: its extension must match the content; the rest becomes the title.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The music file",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Track"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`music.unsupported_type`: not an MP3, WAV or OGG file (by extension and content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`music.too_large`: larger than 50 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/playlists": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Adds an empty playlist at the end.",
+        "operationId": "create_playlist",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaylistName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicPlaylist"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`music.invalid`: an empty name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/playlists/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Renames a playlist.",
+        "operationId": "rename_playlist",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaylistName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicPlaylist"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`music.invalid`: an empty name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deletes a playlist; its tracks stay in the library.",
+        "operationId": "delete_playlist",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Renames a track.",
+        "operationId": "update_track",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Track"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`music.invalid`: an empty title",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deletes a track, takes it out of every playlist, and deletes its file.",
+        "operationId": "delete_track",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/{id}/duration": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Records how long a track plays; the admin window measures each track after import, and unmeasured ones when\nthe music page opens.",
+        "operationId": "set_duration",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackDuration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`music.invalid`: not between 1 ms and 24 hours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/{id}/playlists": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Chooses which playlists a track is in.",
+        "operationId": "set_playlists",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackPlaylists"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`music.invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`: no such track or playlist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4317,6 +4800,52 @@
           }
         }
       },
+      "MusicLibrary": {
+        "type": "object",
+        "required": [
+          "tracks",
+          "playlists"
+        ],
+        "properties": {
+          "playlists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MusicPlaylist"
+            }
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Track"
+            },
+            "description": "In import order."
+          }
+        }
+      },
+      "MusicPlaylist": {
+        "type": "object",
+        "description": "A playlist. `name` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "name",
+          "tracks"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Track IDs in play order."
+          }
+        }
+      },
       "ObsOverview": {
         "type": "object",
         "required": [
@@ -4636,6 +5165,18 @@
           },
           "subject": {
             "$ref": "#/components/schemas/Subject"
+          }
+        }
+      },
+      "PlaylistName": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
           }
         }
       },
@@ -5048,7 +5589,8 @@
           "redemptions",
           "checkins",
           "templates",
-          "sounds"
+          "sounds",
+          "music"
         ],
         "properties": {
           "app_version": {
@@ -5062,6 +5604,10 @@
           "created_at": {
             "type": "string",
             "description": "When the backup was made (RFC 3339, UTC)."
+          },
+          "music": {
+            "type": "integer",
+            "minimum": 0
           },
           "redemptions": {
             "type": "integer",
@@ -5969,6 +6515,78 @@
           },
           "selected": {
             "$ref": "#/components/schemas/ChatTemplate"
+          }
+        }
+      },
+      "Track": {
+        "type": "object",
+        "description": "One imported track. `title` is broadcaster text: render it as text. Its file is `GET /music/{id}`.",
+        "required": [
+          "id",
+          "title",
+          "duration_ms",
+          "missing"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How long it plays; `null` until the admin window has measured it (`PUT /api/admin/music/{id}/duration`).",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "boolean",
+            "description": "Its file is gone from the music folder (deleted outside the app)."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "TrackDuration": {
+        "type": "object",
+        "required": [
+          "duration_ms"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How long the track plays, 1 ms to 24 hours.",
+            "minimum": 0
+          }
+        }
+      },
+      "TrackPlaylists": {
+        "type": "object",
+        "required": [
+          "playlists"
+        ],
+        "properties": {
+          "playlists": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every playlist the track should be in; it joins the end of new ones and leaves the others."
+          }
+        }
+      },
+      "TrackUpdate": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "1–100 characters after trimming."
           }
         }
       },

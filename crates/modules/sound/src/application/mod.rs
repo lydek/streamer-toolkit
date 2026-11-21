@@ -193,7 +193,7 @@ impl SoundService {
         let format = Format::detect(file_name, bytes).ok_or(SoundError::UnsupportedType)?;
         let entry = SoundEntry {
             id: Uuid::now_v7().to_string(),
-            label: domain::label_from_file_name(file_name),
+            label: toolkit_core::audio::label_from_file_name(file_name, "sound"),
             volume: 100,
             format: format.extension().into(),
             duration_ms: None,

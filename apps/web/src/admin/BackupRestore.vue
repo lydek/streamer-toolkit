@@ -11,7 +11,7 @@
         </li>
         <li>{{ t('backup.appVersion', { version: preview.app_version }) }}</li>
         <li>{{ t('backup.records', { redemptions: preview.redemptions, checkins: preview.checkins }) }}</li>
-        <li>{{ t('backup.files', { templates: preview.templates, sounds: preview.sounds }) }}</li>
+        <li>{{ t('backup.files', { templates: preview.templates, sounds: preview.sounds, music: preview.music }) }}</li>
       </ul>
       <p>{{ t('backup.restoreNote') }}</p>
       <Button :label="t('backup.restore')" icon="pi pi-replay" :disabled="busy" @click="restore" />

@@ -118,10 +118,12 @@ describe('dev server', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull()
   })
 
-  it('proxies /sounds to the Host without opening it to the null origin', async () => {
-    const res = await fetch(`${base}/sounds/x`, { headers: { Origin: 'null' } })
-    expect(await res.text()).toBe('host')
-    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  it('proxies /sounds and /music to the Host without opening them to the null origin', async () => {
+    for (const path of ['/sounds/x', '/music/x']) {
+      const res = await fetch(`${base}${path}`, { headers: { Origin: 'null' } })
+      expect(await res.text()).toBe('host')
+      expect(res.headers.get('access-control-allow-origin')).toBeNull()
+    }
   })
 
   it('leaves the CSP to devServer()', () => {

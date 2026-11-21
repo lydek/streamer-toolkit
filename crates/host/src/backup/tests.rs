@@ -41,6 +41,10 @@ pub(super) async fn sample_folder(name: &str) -> (PathBuf, SqlitePool) {
         "sounds/0190a1b2-0000-7000-8000-000000000001.mp3",
         "ID3 sound",
     );
+    write(
+        "music/0190a1b2-0000-7000-8000-000000000002.ogg",
+        "OggS music",
+    );
     write("logs/streamer-toolkit.2026-11-17.log", "log line");
     write("cache/thing", "cached");
     write("WebView2/Default/Cookies", "cookies");
@@ -83,7 +87,7 @@ fn entries(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
 }
 
 #[tokio::test]
-async fn export_takes_settings_database_templates_and_sounds_only() {
+async fn export_takes_settings_database_templates_sounds_and_music_only() {
     let (dir, pool) = sample_folder("export").await;
     let bytes = export(&pool, &dir, "1.2.3").await.unwrap();
     let entries = entries(&bytes);
@@ -93,6 +97,7 @@ async fn export_takes_settings_database_templates_and_sounds_only() {
         names,
         [
             MANIFEST,
+            "music/0190a1b2-0000-7000-8000-000000000002.ogg",
             SETTINGS,
             "sounds/0190a1b2-0000-7000-8000-000000000001.mp3",
             "templates/chat/template.html",
@@ -112,7 +117,7 @@ async fn export_takes_settings_database_templates_and_sounds_only() {
         (manifest.records.redemptions, manifest.records.checkins),
         (2, 0)
     );
-    assert_eq!(manifest.files.len(), 4);
+    assert_eq!(manifest.files.len(), 5);
     for file in &manifest.files {
         let (_, content) = entries.iter().find(|(n, _)| *n == file.path).unwrap();
         assert_eq!(file.size, content.len() as u64);
@@ -153,6 +158,7 @@ fn only_plain_paths_in_known_places_are_allowed() {
         "toolkit.db",
         "templates/chat/style.css",
         "sounds/a.mp3",
+        "music/a.ogg",
         "templates/chat/圖片/貓.png",
     ] {
         assert!(allowed_path(ok), "{ok}");
@@ -167,6 +173,7 @@ fn only_plain_paths_in_known_places_are_allowed() {
         "templates//x",
         "templates",
         "sounds/",
+        "music/",
         "templates\\x",
         "logs/a.log",
         "instance-id",
@@ -182,7 +189,7 @@ fn only_plain_paths_in_known_places_are_allowed() {
     }
 }
 
-/// What a restore must bring back: settings, templates and sounds, and database rows.
+/// What a restore must bring back: settings, templates, sounds and music, and database rows.
 #[derive(Debug, PartialEq)]
 struct FolderState {
     settings: Vec<u8>,
@@ -288,6 +295,7 @@ async fn export_then_restore_brings_back_the_same_settings_and_rows() {
         .unwrap();
     fs::remove_dir_all(dir.join("templates")).unwrap();
     fs::write(dir.join("sounds/new.mp3"), "new").unwrap();
+    fs::remove_dir_all(dir.join("music")).unwrap();
     let changed = state_of(&dir).await;
     assert_ne!(changed, before);
 
@@ -298,9 +306,10 @@ async fn export_then_restore_brings_back_the_same_settings_and_rows() {
             preview.redemptions,
             preview.checkins,
             preview.templates,
-            preview.sounds
+            preview.sounds,
+            preview.music
         ),
-        (2, 0, 1, 1)
+        (2, 0, 1, 1, 1)
     );
     assert_eq!(
         state_of(&dir).await,
