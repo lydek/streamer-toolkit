@@ -50,6 +50,8 @@ pub struct Settings {
     pub alert_template: String,
     /// Check-in rules; the check-in module validates them and falls back to defaults for values it cannot use.
     pub checkin: CheckinSettings,
+    /// Every feature's chat commands by key (`commands::Declared`); a key not here has its declared default.
+    pub chat_commands: BTreeMap<String, crate::commands::CommandEntry>,
     /// Imported sound files; the sound module checks them.
     pub sound: SoundSettings,
     /// Imported background music and its playlists; the bgm module checks them.
@@ -232,7 +234,9 @@ pub struct Playlist {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CheckinSettings {
-    /// The chat command without its `!`.
+    /// The chat command without its `!`. Only read: it moved to `chat_commands` (key `checkin`), and the
+    /// check-in module carries an older file's value over once.
+    #[serde(skip_serializing)]
     pub command: String,
     /// IANA time zone the business day is judged in.
     pub time_zone: String,
@@ -290,6 +294,7 @@ impl Default for Settings {
             chat_template: "default".into(),
             alert_template: "default".into(),
             checkin: CheckinSettings::default(),
+            chat_commands: BTreeMap::new(),
             sound: SoundSettings::default(),
             bgm: BgmSettings::default(),
             update_check: true,

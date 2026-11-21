@@ -11,6 +11,7 @@ use std::{
 use chrono::{DateTime, NaiveDate, Utc};
 use tokio::sync::{mpsc, oneshot};
 use toolkit_core::{
+    commands::{Allowed, CommandEntry, CommandError, CommandTable},
     events::{ChatMessage, Source},
     modules::{self, Modules},
     presentation::{Item, Presenter, Shown, Stage, Subject},
@@ -89,22 +90,49 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
 pub(crate) enum ConfigError {
     #[error(transparent)]
     Invalid(#[from] InvalidSettings),
-    #[error("settings.save_failed")]
-    SaveFailed(#[from] std::io::Error),
+    #[error(transparent)]
+    Command(#[from] CommandError),
 }
 
-/// The check-in settings in force, kept in `settings.json` and in memory so chat never waits on the file.
+/// The check-in command's key in the command table.
+pub const COMMAND_KEY: &str = "checkin";
+
+/// A command table with only this module's command, for tests.
+#[cfg(test)]
+pub(crate) fn test_commands(dir: &std::path::Path) -> Arc<CommandTable> {
+    Arc::new(CommandTable::load(
+        dir.to_path_buf(),
+        crate::COMMANDS.to_vec(),
+    ))
+}
+
+/// The check-in settings in force, kept in `settings.json` (the command in the shared command table) and in
+/// memory so chat never waits on the file.
 pub(crate) struct Config {
-    data_dir: PathBuf,
+    commands: Arc<CommandTable>,
     rules: RwLock<Rules>,
 }
 
 impl Config {
-    /// Values in `settings.json` that cannot be used fall back to their defaults one by one.
-    pub(crate) fn load(data_dir: PathBuf) -> Self {
-        let rules = rules_or_defaults(&settings::load(&data_dir).checkin);
+    /// Values in `settings.json` that cannot be used fall back to their defaults one by one. A command saved by
+    /// an older version (in the check-in settings) moves to the command table first.
+    pub(crate) fn load(data_dir: PathBuf, commands: Arc<CommandTable>) -> Self {
+        let saved = settings::load(&data_dir).checkin;
+        if commands.saved(COMMAND_KEY).is_none()
+            && let Ok(command) = Command::new(&saved.command)
+        {
+            let entry = CommandEntry {
+                name: command.as_str().to_owned(),
+                allowed: Allowed::Everyone,
+            };
+            if let Err(e) = commands.set(COMMAND_KEY, entry, |_| {}) {
+                // It keeps working with the old command; the move is tried again at the next start.
+                tracing::warn!(code = %e, "check-in command not moved to the command table");
+            }
+        }
+        let rules = rules_or_defaults(&saved, &commands.get(COMMAND_KEY));
         Self {
-            data_dir,
+            commands,
             rules: RwLock::new(rules),
         }
     }
@@ -113,29 +141,41 @@ impl Config {
         self.rules.read().unwrap().clone()
     }
 
-    /// Validates, saves, then applies; nothing changes when either step fails.
-    pub(crate) fn update(&self, next: &CheckinSettings) -> Result<Rules, ConfigError> {
-        let rules = rules(next)?;
+    /// Validates, saves, then applies; nothing changes when either step fails, or when another feature's command
+    /// has the name.
+    pub(crate) fn update(
+        &self,
+        next: &CheckinSettings,
+        allowed: Allowed,
+    ) -> Result<Rules, ConfigError> {
+        let rules = rules(next, allowed)?;
         let mut current = self.rules.write().unwrap();
-        settings::update(&self.data_dir, |s| s.checkin = settings_of(&rules))?;
+        let entry = CommandEntry {
+            name: rules.command.as_str().to_owned(),
+            allowed,
+        };
+        self.commands
+            .set(COMMAND_KEY, entry, |s| s.checkin = settings_of(&rules))?;
         *current = rules.clone();
         Ok(rules)
     }
 }
 
-pub(crate) fn rules(s: &CheckinSettings) -> Result<Rules, InvalidSettings> {
+pub(crate) fn rules(s: &CheckinSettings, allowed: Allowed) -> Result<Rules, InvalidSettings> {
     Ok(Rules {
         command: Command::new(&s.command)?,
+        allowed,
         reward: s.reward_id.as_deref().map(RewardId::new).transpose()?,
         day: BusinessDay::new(&s.time_zone, s.reset_hour)?,
         slots: CardSlots::new(s.card_slots)?,
     })
 }
 
-fn rules_or_defaults(s: &CheckinSettings) -> Rules {
+fn rules_or_defaults(s: &CheckinSettings, command: &CommandEntry) -> Rules {
     let d = CheckinSettings::default();
     Rules {
-        command: Command::new(&s.command).unwrap_or_else(|_| Command::new(&d.command).unwrap()),
+        command: Command::new(&command.name).unwrap_or_else(|_| Command::new(&d.command).unwrap()),
+        allowed: command.allowed,
         reward: s.reward_id.as_deref().and_then(|id| RewardId::new(id).ok()),
         day: BusinessDay::new(&s.time_zone, s.reset_hour)
             .or_else(|_| BusinessDay::new(&s.time_zone, d.reset_hour))
@@ -480,16 +520,11 @@ impl CheckinService {
         if source == Source::Simulation || !self.modules.is_enabled(modules::CHECKIN) {
             return;
         }
-        if !self
-            .config
-            .rules
-            .read()
-            .unwrap()
-            .command
-            .matches(&message.text)
-        {
+        let rules = self.config.rules.read().unwrap();
+        if !rules.command.matches(&message.text) || !rules.allowed.permits(message) {
             return;
         }
+        drop(rules);
         let _ = self.tx.send(Job::Chat {
             viewer: Viewer {
                 twitch_id: TwitchUserId(message.user_id.clone()),
@@ -583,6 +618,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_command_saved_by_an_older_version_moves_to_the_command_table() {
+        let dir = std::env::temp_dir().join(format!("st-checkin-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("settings.json"),
+            r#"{"checkin":{"command":"!簽到","card_slots":12}}"#,
+        )
+        .unwrap();
+        let config = Config::load(dir.clone(), test_commands(&dir));
+        assert_eq!(config.rules().command.as_str(), "簽到");
+        let saved = settings::load(&dir);
+        assert_eq!(saved.chat_commands[COMMAND_KEY].name, "簽到");
+        assert_eq!(saved.checkin.card_slots, 12);
+        // The old place is no longer written.
+        let text = std::fs::read_to_string(dir.join("settings.json")).unwrap();
+        assert!(!text.contains("\"command\""), "{text}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn unusable_saved_values_fall_back_one_by_one() {
         let saved = CheckinSettings {
             command: "two words".into(),
@@ -591,14 +647,18 @@ mod tests {
             card_slots: 12,
             reward_id: Some("not valid!".into()),
         };
-        let r = rules_or_defaults(&saved);
+        let bad = CommandEntry {
+            name: "two words".into(),
+            allowed: Allowed::Vip,
+        };
+        let r = rules_or_defaults(&saved, &bad);
         let s = settings_of(&r);
-        assert_eq!(s.command, "打卡");
+        assert_eq!((s.command.as_str(), r.allowed), ("打卡", Allowed::Vip));
         assert_eq!((s.time_zone.as_str(), s.reset_hour), ("Europe/Berlin", 0));
         assert_eq!(s.card_slots, 12);
         assert_eq!(s.reward_id, None);
         assert!(
-            rules(&saved).is_err(),
+            rules(&saved, Allowed::Everyone).is_err(),
             "an update with the same values is refused"
         );
     }

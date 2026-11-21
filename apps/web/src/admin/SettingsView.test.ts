@@ -17,7 +17,7 @@ const GETS: Record<string, unknown> = {
   '/api/admin/obs': { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'error', reason: null } },
   '/api/admin/twitch': { client_id: '', status: { state: 'signed_out' } },
   '/api/admin/modules': [{ id: 'chat', enabled: true, closed: false }],
-  '/api/admin/checkin/settings': { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+  '/api/admin/checkin/settings': { command: '打卡', allowed: 'everyone', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
   '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
   '/api/admin/checkin/outbox': { pending: 0, oldest_pending_at: null, dead_letters: [] },
   '/api/admin/sounds': { sounds: [], slots: {} },
@@ -210,8 +210,8 @@ describe('SettingsView', () => {
     await wrapper.get('#checkin-slots').trigger('keydown', { key: 'Enter' })
     await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(2))
     expect(client.PUT.mock.calls.map(([, init]) => init.body)).toEqual([
-      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
-      { command: 'sign', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 12, reward_id: null },
+      { command: 'sign', allowed: 'everyone', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+      { command: 'sign', allowed: 'everyone', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 12, reward_id: null },
     ])
     // The "!" is shown in front of the field, so a typed one is dropped.
     expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('sign')
@@ -220,6 +220,28 @@ describe('SettingsView', () => {
     await wrapper.get('#checkin-slots').trigger('blur')
     await vi.waitFor(() => expect(wrapper.get<HTMLInputElement>('#checkin-slots').element.value).toBe('12'))
     expect(client.PUT).toHaveBeenCalledTimes(2) // refused before it reaches the Host
+    wrapper.unmount()
+  })
+
+  it('chooses who may check in, and says which feature already has a command name', async () => {
+    client.PUT.mockImplementation(async (_: string, init: { body: { command: string } }) =>
+      init.body.command === 'deaths'
+        ? { error: { code: 'commands.taken', module: 'checkin', name: 'Deaths' }, response: new Response(null, { status: 409 }) }
+        : ok(init.body),
+    )
+    const wrapper = await mountSettings()
+    await vi.waitFor(() => expect(wrapper.find('#checkin-command').exists()).toBe(true))
+    const select = wrapper.findAllComponents({ name: 'Select' }).find((s) => s.props('inputId') === 'checkin-allowed')!
+    select.vm.$emit('update:modelValue', 'vip')
+    await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(1))
+    expect(client.PUT.mock.calls[0][1].body).toMatchObject({ command: '打卡', allowed: 'vip' })
+
+    await wrapper.get('#checkin-command').setValue('deaths')
+    await wrapper.get('#checkin-command').trigger('blur')
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain(i18n.global.t('errors.commands.taken', { feature: i18n.global.t('modules.names.checkin'), name: 'Deaths' })),
+    )
+    expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('打卡')
     wrapper.unmount()
   })
 

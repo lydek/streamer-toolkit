@@ -8,7 +8,11 @@ export type Schemas = components['schemas']
 let token: Promise<string> | undefined
 
 export class ApiError extends Error {
-  constructor(public code: string) {
+  /** `params`: the rest of the error body, e.g. who has a command name. */
+  constructor(
+    public code: string,
+    public params: Record<string, unknown> = {},
+  ) {
     super(code)
   }
 }
@@ -32,8 +36,8 @@ client.use({
 export async function api<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
   const { data, error, response } = await call
   if (!response.ok) {
-    const code = (error as { code?: unknown } | undefined)?.code
-    throw new ApiError(typeof code === 'string' ? code : `http.${response.status}`)
+    const { code, ...params } = (error ?? {}) as { code?: unknown }
+    throw new ApiError(typeof code === 'string' ? code : `http.${response.status}`, params)
   }
   return data as T
 }

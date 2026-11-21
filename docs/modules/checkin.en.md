@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: 19d19210ffce889adfcdecdfe6475f8100bd32b7d3a43642c4af329c4a75bf14 -->
+<!-- source: docs/modules/checkin.md source-sha256: 0342a154fa75f4c61516d3549bce5babd3dcfdd7d770881b53820f47f65b75e6 -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -6,7 +6,7 @@
 A complex module (see [architecture.en.md](../architecture.en.md) §3). This document covers only rules and acceptance.
 
 ## Rules
-- A viewer checks in by typing `!<command>` in chat: only the first word of the message counts, and ASCII letters ignore case. The command is a setting (default `打卡`), stored without the `!`.
+- A viewer checks in by typing `!<command>` in chat: only the first word of the message counts, and ASCII letters ignore case. The command (default `打卡`, stored without the `!`) and who may use it (default everyone) live in the shared chat command table ([architecture.md](../architecture.en.md) "Chat commands"); a name another feature's command has is refused when saving, saying who has it. Someone not allowed typing the command does not check in; the broadcaster always may.
 - A channel points reward can also be chosen in the settings (its Twitch reward ID is stored; the list is read from Twitch): redeeming it checks the viewer in. The check-in module receives redemption records' `RedemptionRecorded` through the outbox; with no reward set, or for any other reward, nothing is checked in. A refunded redemption does not undo the check-in.
 - One redemption checks in only once: handled event IDs are kept in an inbox, written in the same transaction as the check-in, so redelivery changes nothing.
 - A viewer counts once per business day, whether the command or the redemption came first. A unique constraint in the database (viewer + business day) also blocks repeats, not just the code.

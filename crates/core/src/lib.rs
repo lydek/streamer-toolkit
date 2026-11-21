@@ -4,6 +4,7 @@
 
 pub mod audio;
 pub mod bus;
+pub mod commands;
 pub mod events;
 pub mod modules;
 pub mod outbox;

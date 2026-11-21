@@ -36,29 +36,39 @@ async fn settings_are_validated_saved_and_applied() {
     assert_eq!(status, 200);
     assert_eq!(
         body,
-        serde_json::json!({ "command": "打卡", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 10, "reward_id": null })
+        serde_json::json!({ "command": "打卡", "allowed": "everyone", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 10, "reward_id": null })
     );
 
-    let next = serde_json::json!({ "command": " !Sign ", "time_zone": "Europe/Berlin", "reset_hour": 6, "card_slots": 8 });
+    let next = serde_json::json!({ "command": " !Sign ", "allowed": "subscriber", "time_zone": "Europe/Berlin", "reset_hour": 6, "card_slots": 8 });
     let (status, body) = send(&app, "PUT", Some(next)).await;
     assert_eq!(status, 200);
     assert_eq!(body["command"], "Sign", "stored without its !");
-    let saved = toolkit_core::settings::load(&dir).checkin;
+    assert_eq!(body["allowed"], "subscriber");
+    let all = toolkit_core::settings::load(&dir);
+    let (saved, command) = (all.checkin, &all.chat_commands["checkin"]);
     assert_eq!(
         (
-            saved.command.as_str(),
+            command.name.as_str(),
+            command.allowed,
             saved.time_zone.as_str(),
             saved.reset_hour,
             saved.card_slots
         ),
-        ("Sign", "Europe/Berlin", 6, 8)
+        (
+            "Sign",
+            toolkit_core::commands::Allowed::Subscriber,
+            "Europe/Berlin",
+            6,
+            8
+        ),
+        "the command in the command table"
     );
 
     for bad in [
-        serde_json::json!({ "command": "two words", "time_zone": "UTC", "reset_hour": 0, "card_slots": 10 }),
-        serde_json::json!({ "command": "x", "time_zone": "Nowhere/City", "reset_hour": 0, "card_slots": 10 }),
-        serde_json::json!({ "command": "x", "time_zone": "UTC", "reset_hour": 24, "card_slots": 10 }),
-        serde_json::json!({ "command": "x", "time_zone": "UTC", "reset_hour": 0, "card_slots": 0 }),
+        serde_json::json!({ "command": "two words", "allowed": "everyone", "time_zone": "UTC", "reset_hour": 0, "card_slots": 10 }),
+        serde_json::json!({ "command": "x", "allowed": "everyone", "time_zone": "Nowhere/City", "reset_hour": 0, "card_slots": 10 }),
+        serde_json::json!({ "command": "x", "allowed": "everyone", "time_zone": "UTC", "reset_hour": 24, "card_slots": 10 }),
+        serde_json::json!({ "command": "x", "allowed": "everyone", "time_zone": "UTC", "reset_hour": 0, "card_slots": 0 }),
     ] {
         let (status, body) = send(&app, "PUT", Some(bad.clone())).await;
         assert_eq!(
@@ -69,6 +79,45 @@ async fn settings_are_validated_saved_and_applied() {
     }
     let (_, body) = send(&app, "GET", None).await;
     assert_eq!(body["command"], "Sign", "a refused update changes nothing");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_command_name_another_feature_has_is_refused_and_names_it() {
+    use toolkit_core::commands::{CommandTable, Declared};
+    let dir = data_dir("http-taken");
+    let declared = [
+        crate::COMMANDS,
+        &[Declared {
+            key: "counter.deaths",
+            module: "counter",
+            default_name: "Deaths",
+        }],
+    ]
+    .concat();
+    let service = crate::start(
+        pool().await,
+        Arc::new(EventBus::default()),
+        Arc::new(Modules::load(dir.clone())),
+        dir.clone(),
+        Arc::new(NoProfiles),
+        sounds(&dir),
+        Timing::default(),
+        presenter(),
+        Arc::new(CommandTable::load(dir.clone(), declared)),
+    );
+    let app = http::routes(pool().await, Arc::new(service));
+    for name in ["Deaths", "!DEATHS"] {
+        let body = serde_json::json!({ "command": name, "allowed": "everyone", "time_zone": "UTC", "reset_hour": 0, "card_slots": 10 });
+        let (status, body) = send(&app, "PUT", Some(body)).await;
+        assert_eq!(status, 409, "{name}");
+        assert_eq!(
+            body,
+            serde_json::json!({ "code": "commands.taken", "module": "counter", "name": "Deaths" })
+        );
+    }
+    let (_, body) = send(&app, "GET", None).await;
+    assert_eq!(body["command"], "打卡", "nothing changed");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -214,7 +263,7 @@ async fn viewers_are_listed_with_totals_cards_and_search() {
     }
 
     // A new card size recomputes every card at once.
-    let settings = serde_json::json!({ "command": "打卡", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 2, "reward_id": null });
+    let settings = serde_json::json!({ "command": "打卡", "allowed": "everyone", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": 2, "reward_id": null });
     assert_eq!(
         call(&a.app, "PUT", "/api/admin/checkin/settings", Some(settings))
             .await

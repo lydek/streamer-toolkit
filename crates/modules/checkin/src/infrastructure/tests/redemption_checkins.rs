@@ -21,10 +21,13 @@ async fn wired(name: &str) -> Wired {
     );
     service
         .config()
-        .update(&CheckinSettings {
-            reward_id: Some("w-1".into()),
-            ..CheckinSettings::default()
-        })
+        .update(
+            &CheckinSettings {
+                reward_id: Some("w-1".into()),
+                ..CheckinSettings::default()
+            },
+            toolkit_core::commands::Allowed::Everyone,
+        )
         .unwrap();
     let outbox = Outbox::new(
         pool.clone(),
@@ -212,7 +215,10 @@ async fn other_rewards_or_no_reward_never_check_in() {
     w.outbox.dispatch(Utc::now()).await.unwrap();
     w.service
         .config()
-        .update(&CheckinSettings::default())
+        .update(
+            &CheckinSettings::default(),
+            toolkit_core::commands::Allowed::Everyone,
+        )
         .unwrap();
     redeem(&w, "e2", "7", "w-1", "2026-11-16T01:00:00Z").await;
     w.outbox.dispatch(Utc::now()).await.unwrap();

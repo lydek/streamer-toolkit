@@ -266,6 +266,11 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         http.clone(),
         twitch.clone(),
     );
+    // Every module's chat commands in one table; a name belongs to one of them.
+    let commands = Arc::new(toolkit_core::commands::CommandTable::load(
+        config.data_dir.clone(),
+        checkin::COMMANDS.to_vec(),
+    ));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
         bus.clone(),
@@ -275,6 +280,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         sounds.clone(),
         config.checkin_timing,
         presenter,
+        commands,
     ));
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),

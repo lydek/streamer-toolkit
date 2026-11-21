@@ -7,7 +7,8 @@ mod infrastructure;
 
 pub use application::{CheckinService, ProfileImages, Timing};
 pub use infrastructure::{
-    CheckinChangedEvent, CheckinChangedPayload, CheckinStampedEvent, CheckinStampedPayload,
+    COMMANDS, CheckinChangedEvent, CheckinChangedPayload, CheckinStampedEvent,
+    CheckinStampedPayload,
     db::{MIGRATOR, record_count},
     http::{CheckinSettingsBody, routes},
     openapi, start, subscriptions,

@@ -808,6 +808,16 @@
               }
             }
           },
+          "409": {
+            "description": "`commands.taken`: another feature's command has the name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTakenBody"
+                }
+              }
+            }
+          },
           "500": {
             "description": "`settings.save_failed`",
             "content": {
@@ -3652,6 +3662,16 @@
           "alert"
         ]
       },
+      "Allowed": {
+        "type": "string",
+        "description": "Who may use a chat command. Each level also lets in the ones above it (subscriber, then VIP, then moderator),\nand the broadcaster may always use every command.",
+        "enum": [
+          "everyone",
+          "subscriber",
+          "vip",
+          "moderator"
+        ]
+      },
       "AuthStatus": {
         "oneOf": [
           {
@@ -4525,11 +4545,16 @@
         "description": "The check-in settings. `command` is stored without its `!`; a leading one is accepted and dropped.",
         "required": [
           "command",
+          "allowed",
           "time_zone",
           "reset_hour",
           "card_slots"
         ],
         "properties": {
+          "allowed": {
+            "$ref": "#/components/schemas/Allowed",
+            "description": "Who may check in with the command; the broadcaster always may."
+          },
           "card_slots": {
             "type": "integer",
             "format": "int32",
@@ -4538,7 +4563,7 @@
           },
           "command": {
             "type": "string",
-            "description": "One word, at most 25 characters."
+            "description": "One word, at most 25 characters; no other feature's command may have it (ignoring case)."
           },
           "reset_hour": {
             "type": "integer",
@@ -4784,6 +4809,28 @@
         "properties": {
           "client_id": {
             "type": "string"
+          }
+        }
+      },
+      "CommandTakenBody": {
+        "type": "object",
+        "description": "`commands.taken`: which feature's command already has the name.",
+        "required": [
+          "code",
+          "module",
+          "name"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string",
+            "description": "The module whose command has it."
+          },
+          "name": {
+            "type": "string",
+            "description": "That command's name as saved."
           }
         }
       },

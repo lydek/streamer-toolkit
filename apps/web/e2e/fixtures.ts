@@ -102,7 +102,7 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
     general: { ask_before_close: true },
     obs: { host: '127.0.0.1', port: 4455, password_set: false, status: { state: 'reconnecting', reason: null } },
     homeTiles: null,
-    checkin: { command: '打卡', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
+    checkin: { command: '打卡', allowed: 'everyone', time_zone: 'Asia/Taipei', reset_hour: 0, card_slots: 10, reward_id: null },
     update: { current: '0.1.0', available: null, check: true },
     streamSummary: null,
     ...state,

@@ -74,14 +74,18 @@ async fn each_check_in_shows_its_card_once_in_order() {
         sounds(&dir),
         quick(),
         presenter(),
+        crate::application::test_commands(&dir),
     );
     full_card_sound(&dir);
     service
         .config()
-        .update(&CheckinSettings {
-            card_slots: 2,
-            ..CheckinSettings::default()
-        })
+        .update(
+            &CheckinSettings {
+                card_slots: 2,
+                ..CheckinSettings::default()
+            },
+            toolkit_core::commands::Allowed::Everyone,
+        )
         .unwrap();
 
     // Viewer 1 twice on one day (shown once), then on the next day (fills the 2-slot card); viewer 2 once.
@@ -155,6 +159,7 @@ async fn only_twitch_images_reach_the_overlay() {
         sounds(&dir),
         quick(),
         presenter(),
+        crate::application::test_commands(&dir),
     );
     service.receive_chat(&chat("1", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
     let (card, _) = next_card(&mut rx).await;

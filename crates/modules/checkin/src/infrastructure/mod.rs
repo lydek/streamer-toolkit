@@ -12,6 +12,7 @@ use sound::{PlaySound, SoundService};
 use sqlx::SqlitePool;
 use toolkit_core::{
     bus::{Event, EventBus},
+    commands::{CommandTable, Declared},
     events::Source,
     modules::{self, Modules},
     outbox::{Handled, OutboxEvent, Subscriber, Subscription},
@@ -22,8 +23,8 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        self, Card, CheckedIn, CheckinService, Config, OnCheckedIn, ProfileImages, Redeemed,
-        Screen, ShowCard, Timing,
+        self, COMMAND_KEY, Card, CheckedIn, CheckinService, Config, OnCheckedIn, ProfileImages,
+        Redeemed, Screen, ShowCard, Timing,
     },
     domain::{TwitchUserId, Viewer},
 };
@@ -155,6 +156,7 @@ pub fn start(
     sounds: Arc<SoundService>,
     timing: Timing,
     presenter: Arc<Presenter>,
+    commands: Arc<CommandTable>,
 ) -> CheckinService {
     let changed_bus = bus.clone();
     let changed: OnCheckedIn = Arc::new(move |c| publish_changed(&changed_bus, c));
@@ -162,7 +164,7 @@ pub fn start(
     CheckinService::start(
         db::SqliteCheckins::new(pool),
         modules,
-        Arc::new(Config::load(data_dir)),
+        Arc::new(Config::load(data_dir, commands)),
         Screen {
             changed,
             show_card,
@@ -172,6 +174,13 @@ pub fn start(
         },
     )
 }
+
+/// The chat commands this module answers, for the host's command table.
+pub const COMMANDS: &[Declared] = &[Declared {
+    key: COMMAND_KEY,
+    module: modules::CHECKIN,
+    default_name: "打卡",
+}];
 
 /// What this module takes from the outbox: redemptions, to check in with the configured reward.
 pub fn subscriptions(pool: SqlitePool, service: &CheckinService) -> Vec<Subscription> {

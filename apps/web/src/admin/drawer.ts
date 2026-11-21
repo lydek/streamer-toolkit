@@ -128,7 +128,7 @@ export function useDrawerSetting<T>(saved: Ref<T>, save: (value: T) => Promise<u
       return true
     } catch (e) {
       value.value = saved.value
-      error.value = shown = e instanceof ApiError ? errorMessage(e.code) : String(e)
+      error.value = shown = e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)
       unreported = true
       return false
     }
