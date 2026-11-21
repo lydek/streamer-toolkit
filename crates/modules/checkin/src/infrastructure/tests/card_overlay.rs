@@ -207,3 +207,101 @@ async fn simulated_cards_show_and_record_nothing() {
     assert_eq!(viewers, 0);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Waits until the recorded outcomes, oldest first, pass `done`.
+async fn until(
+    service: &CheckinService,
+    done: impl Fn(&[Option<toolkit_core::presentation::Outcome>]) -> bool,
+) {
+    for _ in 0..300 {
+        let outcomes: Vec<_> = service
+            .recent()
+            .into_iter()
+            .rev()
+            .map(|r| r.outcome)
+            .collect();
+        if done(&outcomes) {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("never got there: {:?}", service.recent());
+}
+
+#[tokio::test]
+async fn stamp_cards_record_what_became_of_each() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use toolkit_core::presentation::{Outcome, Subject};
+    let pool = pool().await;
+    let dir = data_dir("recent-cards");
+    let open = Arc::new(AtomicBool::new(true));
+    let on_air = open.clone();
+    let presenter = Presenter::start(GAP, move |_| on_air.load(Ordering::Relaxed));
+    let service = start(
+        pool.clone(),
+        Arc::new(EventBus::default()),
+        Arc::new(Modules::load(dir.clone())),
+        dir.clone(),
+        Arc::new(NoProfiles),
+        sounds(&dir),
+        Timing {
+            show: std::time::Duration::from_millis(400),
+        },
+        presenter.clone(),
+        crate::application::test_commands(&dir),
+    );
+    let outcomes = || {
+        service
+            .recent()
+            .into_iter()
+            .rev()
+            .map(|r| r.outcome)
+            .collect::<Vec<_>>()
+    };
+    let check_in = |user: &str| {
+        service.receive_chat(&chat(user, "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch)
+    };
+
+    check_in("1");
+    until(&service, |o| o == [Some(Outcome::Played)]).await;
+    open.store(false, Ordering::Relaxed);
+    check_in("2");
+    until(&service, |o| o.len() == 2 && o[1] == Some(Outcome::OffAir)).await;
+    open.store(true, Ordering::Relaxed);
+    for user in ["3", "4", "5"] {
+        check_in(user);
+    }
+    until(&service, |o| o.len() == 5).await;
+    assert_eq!(&outcomes()[2..], [None, None, None], "queued");
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    presenter.skip(|_| {});
+    presenter.clear();
+    check_in("6");
+    until(&service, |o| o.len() == 6).await;
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    presenter.stop(|_, _| {});
+    until(&service, |o| o.iter().all(Option::is_some)).await;
+    assert_eq!(
+        outcomes(),
+        [
+            Some(Outcome::Played),
+            Some(Outcome::OffAir),
+            Some(Outcome::Skipped),
+            Some(Outcome::Cleared),
+            Some(Outcome::Cleared),
+            Some(Outcome::Stopped),
+        ]
+    );
+    assert_eq!(
+        service.recent().last().unwrap().subject,
+        Subject::Card {
+            viewer: "<b>Viewer 1</b>".into(),
+            stamps: 1,
+            slots: 10
+        }
+    );
+
+    // A simulated card is listed too, marked as such.
+    assert!(service.simulate_card("Kai", 3));
+    assert_eq!(service.recent()[0].source, Source::Simulation);
+}

@@ -12,7 +12,7 @@ use std::{
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Shown, Stage, Subject},
+    presentation::{Item, Presenter, Recent, RecentItem, Shown, Stage, Subject},
     settings::{self, SoundEntry},
 };
 use uuid::Uuid;
@@ -50,6 +50,8 @@ pub struct SoundService {
     modules: Arc<Modules>,
     presenter: Arc<Presenter>,
     play: Play,
+    /// What became of the latest reward sounds.
+    recent: Recent,
 }
 
 impl SoundService {
@@ -64,6 +66,7 @@ impl SoundService {
             modules,
             presenter,
             play: Arc::new(play),
+            recent: Recent::default(),
         }
     }
 
@@ -87,12 +90,14 @@ impl SoundService {
             self.modules.clone(),
             self.file_missing(&id),
         );
+        let subject = Subject::Sound {
+            sound: entry.map(|e| e.label).unwrap_or_default(),
+            viewer: r.user_name.clone(),
+        };
+        let done = self.recent.record(subject.clone(), Source::Twitch);
         self.presenter.push(Item {
             stage: Stage::Sound,
-            subject: Subject::Sound {
-                sound: entry.map(|e| e.label).unwrap_or_default(),
-                viewer: r.user_name.clone(),
-            },
+            subject,
             show,
             simulated: false,
             ready: None,
@@ -108,8 +113,13 @@ impl SoundService {
                 play(&id, volume, Source::Twitch);
                 Shown::Yes
             }),
-            done: None,
+            done: Some(done),
         });
+    }
+
+    /// The latest reward sounds queued (this launch only), newest first, with what became of each.
+    pub fn recent(&self) -> Vec<RecentItem> {
+        self.recent.list()
     }
 
     /// The test button: plays a library sound on `/overlay/sound/` right away, as `source=simulation`, without
