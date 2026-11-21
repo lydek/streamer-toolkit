@@ -22,7 +22,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     modules::Modules,
-    settings::{MusicEntry, Playlist},
+    settings::{BgmSettings, MusicEntry, Playlist, SceneRule},
 };
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
@@ -71,15 +71,33 @@ pub struct Track {
     pub duration_ms: Option<u32>,
     /// Its file is gone from the music folder (deleted outside the app).
     pub missing: bool,
+    /// The names of the scene rules whose playlist has it; the admin UI lists them before deleting it.
+    pub used_by: Vec<String>,
 }
 
-fn track(s: &BgmService, e: MusicEntry) -> Track {
+fn track(s: &BgmService, bgm: &BgmSettings, e: MusicEntry) -> Track {
+    let lists: Vec<&str> = bgm
+        .playlists
+        .iter()
+        .filter(|p| p.tracks.contains(&e.id))
+        .map(|p| p.id.as_str())
+        .collect();
     Track {
         missing: s.file_missing(&e),
+        used_by: rules_using(bgm, |p| lists.contains(&p)),
         id: e.id,
         title: e.title,
         duration_ms: e.duration_ms,
     }
+}
+
+/// The names of the scene rules whose playlist passes `playlist`.
+fn rules_using(bgm: &BgmSettings, playlist: impl Fn(&str) -> bool) -> Vec<String> {
+    bgm.scene_rules
+        .iter()
+        .filter(|r| r.playlist.as_deref().is_some_and(&playlist))
+        .map(|r| r.name.clone())
+        .collect()
 }
 
 /// A playlist. `name` is broadcaster text: render it as text.
@@ -89,14 +107,69 @@ pub struct MusicPlaylist {
     pub name: String,
     /// Track IDs in play order.
     pub tracks: Vec<String>,
+    /// The names of the scene rules that play it; the admin UI lists them before deleting it.
+    pub used_by: Vec<String>,
 }
 
-impl From<Playlist> for MusicPlaylist {
-    fn from(p: Playlist) -> Self {
+fn playlist(bgm: &BgmSettings, p: Playlist) -> MusicPlaylist {
+    MusicPlaylist {
+        used_by: rules_using(bgm, |id| id == p.id),
+        id: p.id,
+        name: p.name,
+        tracks: p.tracks,
+    }
+}
+
+/// A playlist that plays on some OBS scenes. `name` and `scenes` are broadcaster text: render them as text.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SceneRuleBody {
+    /// Empty for a new rule; the Host gives it one.
+    pub id: String,
+    /// 1–100 characters after trimming.
+    pub name: String,
+    /// OBS scene names, compared without regard to case; at most 256 characters each.
+    pub scenes: Vec<String>,
+    /// `null` once its playlist was deleted; an enabled rule needs one.
+    #[schema(required)]
+    pub playlist: Option<String>,
+    pub shuffle: bool,
+    /// 0–100 (%).
+    pub volume: u8,
+    /// Switching to one of its scenes starts its playlist.
+    pub autoplay: bool,
+    /// Switching away to a scene whose rule does not autoplay stops the music.
+    pub stop_on_leave: bool,
+    pub enabled: bool,
+}
+
+impl From<SceneRule> for SceneRuleBody {
+    fn from(r: SceneRule) -> Self {
         Self {
-            id: p.id,
-            name: p.name,
-            tracks: p.tracks,
+            id: r.id,
+            name: r.name,
+            scenes: r.scenes,
+            playlist: r.playlist,
+            shuffle: r.shuffle,
+            volume: r.volume,
+            autoplay: r.autoplay,
+            stop_on_leave: r.stop_on_leave,
+            enabled: r.enabled,
+        }
+    }
+}
+
+impl From<SceneRuleBody> for SceneRule {
+    fn from(r: SceneRuleBody) -> Self {
+        Self {
+            id: r.id,
+            name: r.name,
+            scenes: r.scenes,
+            playlist: r.playlist,
+            shuffle: r.shuffle,
+            volume: r.volume,
+            autoplay: r.autoplay,
+            stop_on_leave: r.stop_on_leave,
+            enabled: r.enabled,
         }
     }
 }
@@ -106,6 +179,7 @@ pub struct MusicLibrary {
     /// In import order.
     pub tracks: Vec<Track>,
     pub playlists: Vec<MusicPlaylist>,
+    pub scene_rules: Vec<SceneRuleBody>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -302,6 +376,7 @@ pub fn routes(service: Arc<BgmService>, player: Arc<BgmPlayer>) -> Router {
         .route("/api/admin/music/{id}/duration", put(set_duration))
         .route("/api/admin/music/{id}/playlists", put(set_playlists))
         .route("/api/admin/music/playlists", post(create_playlist))
+        .route("/api/admin/music/scene-rules", put(set_scene_rules))
         .route(
             "/api/admin/music/playlists/{id}",
             put(rename_playlist).delete(delete_playlist),
@@ -329,10 +404,21 @@ pub fn file_routes(service: Arc<BgmService>) -> Router {
     responses((status = 200, body = MusicLibrary))
 )]
 pub(crate) async fn list_music(State(s): State<Arc<BgmService>>) -> Json<MusicLibrary> {
-    let library = s.library();
+    let bgm = s.library();
     Json(MusicLibrary {
-        tracks: library.library.into_iter().map(|e| track(&s, e)).collect(),
-        playlists: library.playlists.into_iter().map(Into::into).collect(),
+        tracks: bgm
+            .library
+            .iter()
+            .cloned()
+            .map(|e| track(&s, &bgm, e))
+            .collect(),
+        playlists: bgm
+            .playlists
+            .iter()
+            .cloned()
+            .map(|p| playlist(&bgm, p))
+            .collect(),
+        scene_rules: bgm.scene_rules.into_iter().map(Into::into).collect(),
     })
 }
 
@@ -366,7 +452,7 @@ pub(crate) async fn import_music(
         Err(_) => return error(StatusCode::BAD_REQUEST, "music.unsupported_type"),
     };
     match s.import(&q.name, &bytes) {
-        Ok(entry) => Json(track(&s, entry)).into_response(),
+        Ok(entry) => Json(track(&s, &s.library(), entry)).into_response(),
         Err(e) => bgm_error(e),
     }
 }
@@ -394,7 +480,7 @@ pub(crate) async fn update_track(
         return error(StatusCode::BAD_REQUEST, "music.invalid");
     };
     match s.rename(&id, &b.title) {
-        Ok(entry) => Json(track(&s, entry)).into_response(),
+        Ok(entry) => Json(track(&s, &s.library(), entry)).into_response(),
         Err(e) => bgm_error(e),
     }
 }
@@ -498,7 +584,7 @@ pub(crate) async fn create_playlist(
         return error(StatusCode::BAD_REQUEST, "music.invalid");
     };
     match s.create_playlist(&b.name) {
-        Ok(p) => Json(MusicPlaylist::from(p)).into_response(),
+        Ok(p) => Json(playlist(&s.library(), p)).into_response(),
         Err(e) => bgm_error(e),
     }
 }
@@ -526,12 +612,12 @@ pub(crate) async fn rename_playlist(
         return error(StatusCode::BAD_REQUEST, "music.invalid");
     };
     match s.rename_playlist(&id, &b.name) {
-        Ok(p) => Json(MusicPlaylist::from(p)).into_response(),
+        Ok(p) => Json(playlist(&s.library(), p)).into_response(),
         Err(e) => bgm_error(e),
     }
 }
 
-/// Deletes a playlist; its tracks stay in the library.
+/// Deletes a playlist; its tracks stay in the library. The scene rules that played it lose it and are disabled.
 #[utoipa::path(
     delete,
     path = "/api/admin/music/playlists/{id}",
@@ -549,6 +635,39 @@ pub(crate) async fn delete_playlist(
 ) -> Response {
     match s.delete_playlist(&id) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => bgm_error(e),
+    }
+}
+
+/// Replaces every scene rule, in order: the first enabled rule naming a scene plays on it. Saving does not apply
+/// them to the scene on air; the next scene switch does.
+#[utoipa::path(
+    put,
+    path = "/api/admin/music/scene-rules",
+    tag = "admin",
+    request_body = Vec<SceneRuleBody>,
+    responses(
+        (status = 200, body = Vec<SceneRuleBody>),
+        (status = 400, description = "`music.invalid`: an empty name, a volume over 100, a scene name over 256 characters, an enabled rule without a playlist, or more than 100 rules", body = ErrorBody),
+        (status = 404, description = "`music.not_found`: no such playlist", body = ErrorBody),
+        (status = 500, description = "`music.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_scene_rules(
+    State(s): State<Arc<BgmService>>,
+    body: Result<Json<Vec<SceneRuleBody>>, JsonRejection>,
+) -> Response {
+    let Ok(Json(rules)) = body else {
+        return error(StatusCode::BAD_REQUEST, "music.invalid");
+    };
+    match s.set_scene_rules(rules.into_iter().map(Into::into).collect()) {
+        Ok(saved) => Json(
+            saved
+                .into_iter()
+                .map(SceneRuleBody::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
         Err(e) => bgm_error(e),
     }
 }
@@ -691,6 +810,7 @@ async fn music_file(
         create_playlist,
         rename_playlist,
         delete_playlist,
+        set_scene_rules,
         control_player,
         set_player_options
     ),

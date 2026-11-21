@@ -182,6 +182,11 @@ impl ObsLink {
         link
     }
 
+    /// Follows the streaming state, the scene on air included.
+    pub(crate) fn states(&self) -> watch::Receiver<StreamingState> {
+        self.state.subscribe()
+    }
+
     /// Starts a connection with the saved settings and stops the previous one.
     fn restart(&self) {
         // Held while reading settings too, so concurrent restarts end with the task for the latest settings.

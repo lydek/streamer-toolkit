@@ -524,8 +524,28 @@ export interface paths {
         /** Renames a playlist. */
         put: operations["rename_playlist"];
         post?: never;
-        /** Deletes a playlist; its tracks stay in the library. */
+        /** Deletes a playlist; its tracks stay in the library. The scene rules that played it lose it and are disabled. */
         delete: operations["delete_playlist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/scene-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replaces every scene rule, in order: the first enabled rule naming a scene plays on it. Saving does not apply
+         *     them to the scene on air; the next scene switch does.
+         */
+        put: operations["set_scene_rules"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1755,6 +1775,7 @@ export interface components {
         };
         MusicLibrary: {
             playlists: components["schemas"]["MusicPlaylist"][];
+            scene_rules: components["schemas"]["SceneRuleBody"][];
             /** @description In import order. */
             tracks: components["schemas"]["Track"][];
         };
@@ -1764,6 +1785,8 @@ export interface components {
             name: string;
             /** @description Track IDs in play order. */
             tracks: string[];
+            /** @description The names of the scene rules that play it; the admin UI lists them before deleting it. */
+            used_by: string[];
         };
         ObsOverview: {
             host: string;
@@ -2107,6 +2130,28 @@ export interface components {
             /** @description The source the item shows. */
             source: string;
         };
+        /** @description A playlist that plays on some OBS scenes. `name` and `scenes` are broadcaster text: render them as text. */
+        SceneRuleBody: {
+            /** @description Switching to one of its scenes starts its playlist. */
+            autoplay: boolean;
+            enabled: boolean;
+            /** @description Empty for a new rule; the Host gives it one. */
+            id: string;
+            /** @description 1–100 characters after trimming. */
+            name: string;
+            /** @description `null` once its playlist was deleted; an enabled rule needs one. */
+            playlist: string | null;
+            /** @description OBS scene names, compared without regard to case; at most 256 characters each. */
+            scenes: string[];
+            shuffle: boolean;
+            /** @description Switching away to a scene whose rule does not autoplay stops the music. */
+            stop_on_leave: boolean;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
         /** @description Another channel in a shared chat. */
         SharedChannelPayload: {
             userId: string;
@@ -2420,6 +2465,8 @@ export interface components {
             /** @description Its file is gone from the music folder (deleted outside the app). */
             missing: boolean;
             title: string;
+            /** @description The names of the scene rules whose playlist has it; the admin UI lists them before deleting it. */
+            used_by: string[];
         };
         TrackDuration: {
             /**
@@ -3728,6 +3775,56 @@ export interface operations {
                 content?: never;
             };
             /** @description `music.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_scene_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneRuleBody"][];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneRuleBody"][];
+                };
+            };
+            /** @description `music.invalid`: an empty name, a volume over 100, a scene name over 256 characters, an enabled rule without a playlist, or more than 100 rules */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found`: no such playlist */
             404: {
                 headers: {
                     [name: string]: unknown;

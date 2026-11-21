@@ -803,7 +803,27 @@
       "stopped": "已停止",
       "playing": "播放中：{title}",
       "paused": "已暫停：{title}"
-    }
+    },
+    "rules": {
+      "heading": "場景對應",
+      "name": "名稱",
+      "scenes": "場景",
+      "playlist": "歌單",
+      "order": "播放方式",
+      "inOrder": "依序",
+      "shuffle": "隨機",
+      "volume": "音量",
+      "autoplay": "進場自動播",
+      "stopOnLeave": "離開時停止",
+      "enabled": "啟用",
+      "add": "新增對應",
+      "delete": "刪除對應",
+      "newName": "場景對應 {n}",
+      "playlistGone": "歌單不見了",
+      "unmapped": "「{scene}」沒有對應，切過去會停止播放"
+    },
+    "trackUsedBy": "這些場景對應的歌單裡有這首歌：",
+    "playlistUsedBy": "這些場景對應會停用，並顯示「歌單不見了」："
   },
   "scene": {
     "notConnected": "OBS 未連線",

@@ -17,9 +17,7 @@ const t = i18n.global.t
 const ok = (data?: unknown) => Promise.resolve({ data, response: new Response(null, { status: data ? 200 : 204 }) })
 const fail = (code: string, status: number) => Promise.resolve({ error: { code }, response: new Response(null, { status }) })
 
-type Track = { id: string; title: string; duration_ms: number | null; missing: boolean }
-type Playlist = { id: string; name: string; tracks: string[] }
-let library: { tracks: Track[]; playlists: Playlist[] }
+let library: Schemas['MusicLibrary']
 // Lengths in seconds that the fake `<audio>` reads per URL.
 let lengths: Record<string, number>
 let get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>
@@ -40,10 +38,11 @@ function chooseFiles(wrapper: Awaited<ReturnType<typeof page>>, files: File[]) {
 beforeEach(() => {
   library = {
     tracks: [
-      { id: 't1', title: 'Lo-fi Morning', duration_ms: 188_000, missing: false },
-      { id: 't2', title: 'Gone', duration_ms: 60_000, missing: true },
+      { id: 't1', title: 'Lo-fi Morning', duration_ms: 188_000, missing: false, used_by: [] },
+      { id: 't2', title: 'Gone', duration_ms: 60_000, missing: true, used_by: [] },
     ],
-    playlists: [{ id: 'p1', name: '聊天時段', tracks: ['t1'] }],
+    playlists: [{ id: 'p1', name: '聊天時段', tracks: ['t1'], used_by: [] }],
+    scene_rules: [],
   }
   lengths = {}
   vi.stubGlobal(
@@ -77,11 +76,11 @@ beforeEach(() => {
   get = vi.fn((path: string) => (path === '/api/admin/sounds' ? ok({ sounds: [], slots: {}, volume: 80 }) : ok(structuredClone(library))))
   post = vi.fn((path: string, init: { params?: { query: { name: string } }; body: { name: string } }) => {
     if (path === '/api/admin/music/playlists') {
-      const p = { id: `p${library.playlists.length + 1}`, name: init.body.name, tracks: [] }
+      const p = { id: `p${library.playlists.length + 1}`, name: init.body.name, tracks: [], used_by: [] }
       library.playlists.push(p)
       return ok(p)
     }
-    const track = { id: `t${library.tracks.length + 1}`, title: init.params!.query.name.replace(/\.\w+$/, ''), duration_ms: null, missing: false }
+    const track = { id: `t${library.tracks.length + 1}`, title: init.params!.query.name.replace(/\.\w+$/, ''), duration_ms: null, missing: false, used_by: [] }
     library.tracks.push(track)
     return ok(track)
   })
@@ -246,5 +245,91 @@ describe('formatLength', () => {
     expect(formatLength(188_000)).toBe('3:08')
     expect(formatLength(59_600)).toBe('1:00')
     expect(formatLength(36_000_000)).toBe('10:00:00')
+  })
+})
+
+describe('MusicPage scene rules', () => {
+  const rule = (p: Partial<Schemas['SceneRuleBody']> = {}): Schemas['SceneRuleBody'] => ({
+    id: 'r1',
+    name: '聊天',
+    scenes: ['Chat'],
+    playlist: 'p1',
+    shuffle: false,
+    volume: 60,
+    autoplay: true,
+    stop_on_leave: true,
+    enabled: true,
+    ...p,
+  })
+  const obsSnapshot = (scenes: string[]) => ({
+    type: 'snapshot',
+    version: 1,
+    seq: 1,
+    payload: {
+      'chat.message': [],
+      'chat.removed': [],
+      'obs.status': [],
+      'obs.state': [
+        {
+          id: 'o',
+          type: 'obs.state',
+          version: 1,
+          seq: 1,
+          occurredAt: '',
+          source: 'system',
+          payload: { scene: scenes[0], scenes: scenes.map((name) => ({ name, items: [] })), inputs: [], streaming: false, recording: false },
+        },
+      ],
+      'presentation.queue': [],
+      'stream.status': [],
+      'bgm.player': [],
+    },
+  })
+
+  it('lists the scenes without a rule, saves every change and adds rules', async () => {
+    library.scene_rules = [rule()]
+    const wrapper = await page()
+    socket.onmessage!({ data: JSON.stringify(obsSnapshot(['Chat', 'Singing'])) })
+    await flushPromises()
+    expect(wrapper.text()).toContain(t('music.rules.unmapped', { scene: 'Singing' }))
+    expect(wrapper.text()).not.toContain(t('music.rules.unmapped', { scene: 'Chat' }))
+
+    const volume = wrapper.get<HTMLInputElement>('#rule-volume-0')
+    await volume.setValue(35)
+    await volume.trigger('change')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/music/scene-rules', { body: [rule({ volume: 35 })] })
+
+    await wrapper.get('#rule-leave-0').setValue(false)
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/music/scene-rules', { body: [rule({ stop_on_leave: false })] })
+
+    const add = wrapper.findAll('button').find((b) => b.text() === t('music.rules.add'))!
+    await add.trigger('click')
+    await flushPromises()
+    expect(put.mock.lastCall![1].body[1]).toEqual(
+      rule({ id: '', name: t('music.rules.newName', { n: 2 }), scenes: [], volume: 50 }),
+    )
+  })
+
+  it('shows a rule whose playlist is gone, which cannot be enabled', async () => {
+    library.scene_rules = [rule({ playlist: null, enabled: false })]
+    const wrapper = await page()
+    expect(wrapper.text()).toContain(t('music.rules.playlistGone'))
+    expect(wrapper.get('#rule-enabled-0').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain(t('scene.notConnected'))
+  })
+
+  it('lists the rules a playlist or track deletion affects', async () => {
+    library.playlists[0].used_by = ['聊天']
+    library.tracks[0].used_by = ['聊天']
+    const wrapper = await page()
+    const deleteIn = (row: string) =>
+      wrapper.get(row).findAll('button').find((b) => b.text() === t('music.delete'))!.trigger('click')
+    await deleteIn('li.playlist')
+    expect(wrapper.get('li.playlist').text()).toContain(t('music.playlistUsedBy'))
+    expect(wrapper.get('li.playlist .confirm li').text()).toBe('聊天')
+    await deleteIn('li.track')
+    expect(wrapper.get('li.track').text()).toContain(t('music.trackUsedBy'))
   })
 })

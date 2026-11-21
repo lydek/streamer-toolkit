@@ -6,6 +6,18 @@
       <MusicPlayer :event="live.bgm" :playlists="library?.playlists ?? []" @error="report" />
     </section>
 
+    <section class="stack" aria-labelledby="music-rules">
+      <h2 id="music-rules">{{ t('music.rules.heading') }}</h2>
+      <SceneRules
+        v-if="library"
+        :rules="library.scene_rules"
+        :playlists="library.playlists"
+        :obs-scenes="live.obsState?.scenes.map((s) => s.name) ?? []"
+        @saved="load"
+        @error="report"
+      />
+    </section>
+
     <section class="stack" aria-labelledby="music-library">
       <h2 id="music-library">{{ t('music.library') }}</h2>
       <label for="music-file">{{ t('music.file') }}</label>
@@ -76,6 +88,7 @@ import MusicPlayer from './MusicPlayer.vue'
 import MusicRow from './MusicRow.vue'
 import { keepFocus } from './page'
 import PlaylistRow from './PlaylistRow.vue'
+import SceneRules from './SceneRules.vue'
 
 const { t } = useI18n()
 const toast = useToast()

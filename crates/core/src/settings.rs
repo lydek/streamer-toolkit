@@ -170,6 +170,8 @@ pub struct BgmSettings {
     pub volume: u8,
     /// The player plays playlists in random order instead of their own.
     pub shuffle: bool,
+    /// What plays on which OBS scene; with none, switching scenes leaves the player alone.
+    pub scene_rules: Vec<SceneRule>,
 }
 
 impl Default for BgmSettings {
@@ -179,8 +181,29 @@ impl Default for BgmSettings {
             playlists: Vec::new(),
             volume: 50,
             shuffle: false,
+            scene_rules: Vec::new(),
         }
     }
+}
+
+/// A playlist that plays on some OBS scenes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SceneRule {
+    /// UUID v7.
+    pub id: String,
+    pub name: String,
+    /// Scene names, compared without regard to case.
+    pub scenes: Vec<String>,
+    /// `None` once its playlist was deleted; the rule is then disabled.
+    pub playlist: Option<String>,
+    pub shuffle: bool,
+    /// 0–100 (%).
+    pub volume: u8,
+    /// Switching to one of its scenes starts its playlist.
+    pub autoplay: bool,
+    /// Switching away to a scene whose rule does not autoplay stops the music.
+    pub stop_on_leave: bool,
+    pub enabled: bool,
 }
 
 /// One imported track; its file is `music/<id>.<format>` in the data folder.

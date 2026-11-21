@@ -20,6 +20,7 @@ use toolkit_core::{
 };
 
 use super::{BgmError, BgmService};
+use crate::domain::{self, SceneAction};
 
 /// Pressing "previous" this far into a track starts it over instead.
 const RESTART_AFTER_MS: u64 = 3000;
@@ -80,6 +81,8 @@ struct Inner {
     /// When the clock started; `None` while it stands still.
     since: Option<Instant>,
     on_air: bool,
+    /// The OBS scene on air last time it changed; `None` while OBS is not connected.
+    scene: Option<String>,
 }
 
 impl Inner {
@@ -144,6 +147,7 @@ impl BgmPlayer {
                 offset_ms: 0,
                 since: None,
                 on_air: on_air(),
+                scene: None,
             }),
             wake: Notify::new(),
             publish: Box::new(publish),
@@ -276,14 +280,83 @@ impl BgmPlayer {
         }
         let bgm = settings::load(self.service.data_dir()).bgm;
         let order = play_order(&bgm, &chosen).ok_or(BgmError::NotFound)?;
+        match self.start_playlist(inner, chosen, order, now) {
+            true => Ok(()),
+            false => Err(BgmError::NothingToPlay),
+        }
+    }
+
+    /// Plays `playlist` in `order` from its first playable track; stops when none can play.
+    fn start_playlist(
+        &self,
+        inner: &mut Inner,
+        playlist: String,
+        order: Vec<String>,
+        now: Instant,
+    ) -> bool {
         inner.stop();
-        inner.playlist = Some(chosen);
+        inner.playlist = Some(playlist);
         inner.order = order;
         inner.state = PlayState::Playing;
-        if !self.start_at(inner, 0, true, now) {
-            return Err(BgmError::NothingToPlay);
+        self.start_at(inner, 0, true, now)
+    }
+
+    /// Follows the OBS scene on air (`None`: OBS not connected) by the scene rules. With no rules at all the
+    /// player is left alone, so it can still be used by hand.
+    pub fn scene_changed(&self, scene: Option<String>) {
+        let mut inner = self.lock();
+        let from = std::mem::replace(&mut inner.scene, scene.clone());
+        if domain::same_scene(from.as_deref(), scene.as_deref())
+            || !self.modules.is_enabled(modules::BGM)
+        {
+            return;
         }
-        Ok(())
+        let bgm = settings::load(self.service.data_dir()).bgm;
+        if bgm.scene_rules.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        match domain::scene_action(&bgm.scene_rules, from.as_deref(), scene.as_deref()) {
+            SceneAction::Keep => return,
+            SceneAction::Stop => inner.stop(),
+            SceneAction::Play(rule) => {
+                let (volume, shuffle) = (rule.volume.min(100), rule.shuffle);
+                let Some(playlist) = rule.playlist.clone() else {
+                    return;
+                };
+                if let Err(e) = settings::update(self.service.data_dir(), |s| {
+                    s.bgm.volume = volume;
+                    s.bgm.shuffle = shuffle;
+                }) {
+                    // It still plays, at the volume and in the order saved before.
+                    tracing::warn!(code = "music.save_failed", error = %e, "scene rule options not saved");
+                }
+                self.switch_to(&mut inner, playlist, now);
+            }
+        }
+        self.publish(&inner);
+    }
+
+    /// Plays `playlist`; the track playing goes on uninterrupted when the playlist has it too.
+    fn switch_to(&self, inner: &mut Inner, playlist: String, now: Instant) {
+        let bgm = settings::load(self.service.data_dir()).bgm;
+        let Some(mut order) = play_order(&bgm, &playlist) else {
+            inner.stop();
+            return;
+        };
+        let playing = inner.track.as_ref().map(|t| t.id.clone());
+        match playing.filter(|id| order.contains(id)) {
+            Some(id) => {
+                inner.index = order_around(&mut order, &id, bgm.shuffle);
+                inner.order = order;
+                inner.playlist = Some(playlist);
+                inner.state = PlayState::Playing;
+                inner.sync(now);
+            }
+            None => {
+                self.start_playlist(inner, playlist, order, now);
+            }
+        }
     }
 
     /// Plays the first playable track from `index` on (backwards unless `forward`), wrapping around; stops when
@@ -381,20 +454,24 @@ impl BgmPlayer {
             && let Some(track) = inner.track.clone()
             && let Some(mut order) = inner.playlist.as_deref().and_then(|p| play_order(&bgm, p))
         {
-            match order.iter().position(|id| *id == track.id) {
-                // In order: go on from the track playing.
-                Some(i) if !shuffle => inner.index = i,
-                // Shuffled (or the track left the playlist): the track playing first, the rest after it.
-                _ => {
-                    order.retain(|id| *id != track.id);
-                    order.insert(0, track.id);
-                    inner.index = 0;
-                }
-            }
+            inner.index = order_around(&mut order, &track.id, shuffle);
             inner.order = order;
         }
         self.publish(&inner);
         Ok(())
+    }
+}
+
+/// Where `id` is in `order` from now on: in order, where the playlist has it; shuffled (or not in the playlist), moved
+/// first with the rest after it.
+fn order_around(order: &mut Vec<String>, id: &str, shuffle: bool) -> usize {
+    match order.iter().position(|t| t == id) {
+        Some(i) if !shuffle => i,
+        _ => {
+            order.retain(|t| t != id);
+            order.insert(0, id.to_owned());
+            0
+        }
     }
 }
 
