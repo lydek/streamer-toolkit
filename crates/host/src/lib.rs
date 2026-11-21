@@ -313,7 +313,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         profiles,
         sounds.clone(),
         config.checkin_timing,
-        presenter,
+        presenter.clone(),
         commands.clone(),
     ));
     let counter_sessions = stream.clone();
@@ -358,7 +358,17 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             }
         }
     });
-    let screen_tools = overlays::start(config.db.clone(), bus.clone(), &config.data_dir);
+    let master = sounds.clone();
+    let screen_tools = overlays::start(
+        config.db.clone(),
+        bus.clone(),
+        overlays::Deps {
+            data_dir: config.data_dir.clone(),
+            presenter: presenter.clone(),
+            modules: modules.clone(),
+            master_volume: Box::new(move || master.volume()),
+        },
+    );
     let outbox = toolkit_core::outbox::Outbox::new(
         config.db.clone(),
         modules.clone(),
@@ -390,6 +400,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         alerts: alerts.clone(),
         sounds: sounds.clone(),
         checkin: checkin.clone(),
+        screen_tools: screen_tools.clone(),
     });
     let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
     // Background music follows the scene on air: applied when OBS connects, stopped when it goes away.
@@ -435,6 +446,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         checkin.clone(),
         counters.clone(),
         sounds.clone(),
+        screen_tools.clone(),
         stream,
         activity,
         viewers,

@@ -9,6 +9,6 @@ mod infrastructure;
 
 pub use domain::warnings::Conditions;
 pub use infrastructure::{
-    AppearanceEvent, BreakEvent, Overlays, WarningsEvent, db::MIGRATOR, media_file_routes, openapi,
-    routes, start,
+    AppearanceEvent, BreakEvent, Deps, MediaPlayEvent, Overlays, WarningsEvent, db::MIGRATOR,
+    media_file_routes, openapi, routes, start,
 };

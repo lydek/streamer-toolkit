@@ -26,8 +26,14 @@ export function feedResult(item: FeedItem): string {
   const { t } = i18n.global
   const r = item.result
   if (!r) return ''
-  const what = r.triggered === 'sound' ? t('feed.triggered.sound', { sound: r.sound ?? '' }) : t(`feed.triggered.${r.triggered}`)
-  return t('feed.result', { what, outcome: t(`feed.outcome.${r.outcome}`) })
+  const what =
+    r.triggered === 'sound'
+      ? t('feed.triggered.sound', { sound: r.sound ?? '' })
+      : r.triggered === 'media'
+        ? t('feed.triggered.media', { media: r.media ?? '' })
+        : t(`feed.triggered.${r.triggered}`)
+  const outcome = t(`feed.outcome.${r.outcome}`)
+  return t('feed.result', { what, outcome: r.reason ? t('feed.because', { outcome, reason: t(`feed.reason.${r.reason}`) }) : outcome })
 }
 
 /** The home tile's line: how many, and the latest. */

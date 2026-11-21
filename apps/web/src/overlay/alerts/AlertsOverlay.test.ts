@@ -128,6 +128,44 @@ describe('AlertsOverlay', () => {
     wrapper.unmount()
   })
 
+  it('shows a reward video at its place and volume for its time, and drops it on a skip', async () => {
+    vi.useFakeTimers()
+    const sockets: { onmessage?: (e: { data: string }) => void }[] = []
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        onmessage?: (e: { data: string }) => void
+        constructor() {
+          sockets.push(this)
+        }
+        close() {}
+      },
+    )
+    history.replaceState(null, '', '/overlay/alerts/')
+    const wrapper = mount(AlertsOverlay, { global: { plugins: [i18n] }, attachTo: document.body })
+    const send = async (m: unknown) => {
+      sockets[0].onmessage!({ data: JSON.stringify(m) })
+      await flushPromises()
+    }
+    const media = (seq: number, format: string, durationMs: number) => ({
+      id: `m${seq}`, type: 'screen.media', version: 1, seq, occurredAt: '', source: 'twitch',
+      payload: { url: '/media/m1', format, position: 'bottom_right', volume: 40, durationMs },
+    })
+    await send({ type: 'snapshot', version: 1, seq: 0, payload: {} })
+    await send(media(1, 'webm', 3000))
+    const shown = wrapper.get('[data-media]')
+    expect(shown.classes()).toContain('at-bottom_right')
+    expect((shown.get('video').element as HTMLVideoElement).volume).toBeCloseTo(0.4)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(wrapper.find('[data-media]').exists()).toBe(false)
+
+    await send(media(2, 'gif', 5000))
+    expect(wrapper.get('[data-media] img').attributes('src')).toBe('/media/m1')
+    await send({ type: 'presentation.skipped', id: 'k', version: 1, seq: 3, occurredAt: '', source: 'system', payload: { stage: 'alerts' } })
+    expect(wrapper.find('[data-media]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('in preview, takes only messages from the parent on the same origin', async () => {
     const wrapper = preview()
     loads[0].release('a')

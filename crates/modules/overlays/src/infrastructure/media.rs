@@ -11,16 +11,136 @@ use axum::{
     },
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
+use toolkit_core::events::Source;
 use utoipa::{IntoParams, ToSchema};
 
 use super::{ErrorBody, Overlays, error};
 use crate::{
-    application::MediaError,
-    domain::media::{MAX_BYTES, MediaEntry},
+    application::{MediaError, MediaShow},
+    domain::media::{MAX_BYTES, MediaEntry, MediaRule, Position},
 };
+
+pub(crate) const MEDIA_PLAY: &str = "screen.media";
+pub(crate) const MEDIA_PLAY_VERSION: u32 = 1;
+
+/// Where the alerts overlay shows a media item.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaPosition {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Center,
+    Full,
+}
+
+impl From<Position> for MediaPosition {
+    fn from(p: Position) -> Self {
+        match p {
+            Position::TopLeft => Self::TopLeft,
+            Position::TopRight => Self::TopRight,
+            Position::BottomLeft => Self::BottomLeft,
+            Position::BottomRight => Self::BottomRight,
+            Position::Center => Self::Center,
+            Position::Full => Self::Full,
+        }
+    }
+}
+
+impl From<MediaPosition> for Position {
+    fn from(p: MediaPosition) -> Self {
+        match p {
+            MediaPosition::TopLeft => Self::TopLeft,
+            MediaPosition::TopRight => Self::TopRight,
+            MediaPosition::BottomLeft => Self::BottomLeft,
+            MediaPosition::BottomRight => Self::BottomRight,
+            MediaPosition::Center => Self::Center,
+            MediaPosition::Full => Self::Full,
+        }
+    }
+}
+
+/// The `payload` of a `screen.media` event: the alerts overlay shows `url` at `position` for `durationMs`, a video
+/// at `volume`. Not kept in snapshots, so a reload never shows it again.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaPlayPayload {
+    pub url: String,
+    /// `gif`, `webm` or `mp4`.
+    pub format: String,
+    pub position: MediaPosition,
+    /// Percent.
+    pub volume: u8,
+    pub duration_ms: u32,
+}
+
+impl From<&MediaShow> for MediaPlayPayload {
+    fn from(s: &MediaShow) -> Self {
+        Self {
+            url: format!("/media/{}", s.media_id),
+            format: s.format.extension().into(),
+            position: s.position.into(),
+            volume: s.volume,
+            duration_ms: s.duration_ms,
+        }
+    }
+}
+
+/// A `screen.media` event exactly as `/ws/overlay` sends it when its turn on the presentation queue comes, or at
+/// once for 試播 (`source=simulation`).
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaPlayEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: MediaPlayType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: MediaPlayPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum MediaPlayType {
+    #[serde(rename = "screen.media")]
+    ScreenMedia,
+}
+
+/// What a channel points reward shows when redeemed.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MediaRuleBody {
+    pub reward_id: String,
+    /// A media library item.
+    pub media_id: String,
+    pub position: MediaPosition,
+    /// 0–100 %; `null` follows the sound master volume.
+    pub volume: Option<u8>,
+}
+
+impl From<MediaRule> for MediaRuleBody {
+    fn from(r: MediaRule) -> Self {
+        Self {
+            reward_id: r.reward_id,
+            media_id: r.media_id,
+            position: r.position.into(),
+            volume: r.volume,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MediaRuleInput {
+    pub media_id: String,
+    pub position: MediaPosition,
+    /// 0–100 %; `null` follows the sound master volume.
+    pub volume: Option<u8>,
+}
 
 /// One media item. `title` is broadcaster text: render it as text.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -88,6 +208,102 @@ pub(crate) fn routes() -> Router<Arc<Overlays>> {
             "/api/admin/screen-tools/media/{id}",
             put(update_media).delete(delete_media),
         )
+        .route("/api/admin/screen-tools/media-rules", get(list_rules))
+        .route(
+            "/api/admin/screen-tools/media-rules/{reward_id}",
+            put(set_rule).delete(delete_rule),
+        )
+        .route(
+            "/api/admin/screen-tools/media-rules/{reward_id}/test",
+            post(test_rule),
+        )
+}
+
+/// What each reward shows.
+#[utoipa::path(
+    get,
+    path = "/api/admin/screen-tools/media-rules",
+    tag = "admin",
+    responses((status = 200, body = Vec<MediaRuleBody>))
+)]
+pub(crate) async fn list_rules(State(s): State<Arc<Overlays>>) -> Json<Vec<MediaRuleBody>> {
+    Json(s.media_rules().into_iter().map(Into::into).collect())
+}
+
+/// Sets what a reward shows.
+#[utoipa::path(
+    put,
+    path = "/api/admin/screen-tools/media-rules/{reward_id}",
+    tag = "admin",
+    params(("reward_id" = String, Path)),
+    request_body = MediaRuleInput,
+    responses(
+        (status = 200, body = MediaRuleBody),
+        (status = 400, description = "`media.invalid`: a volume above 100", body = ErrorBody),
+        (status = 404, description = "`media.not_found`: no such media item", body = ErrorBody),
+        (status = 500, description = "`media.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_rule(
+    State(s): State<Arc<Overlays>>,
+    Path(reward_id): Path<String>,
+    body: Result<Json<MediaRuleInput>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "media.invalid");
+    };
+    let rule = MediaRule {
+        reward_id,
+        media_id: b.media_id,
+        position: b.position.into(),
+        volume: b.volume,
+    };
+    match s.set_media_rule(rule).await {
+        Ok(rule) => Json(MediaRuleBody::from(rule)).into_response(),
+        Err(e) => media_error(e),
+    }
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/admin/screen-tools/media-rules/{reward_id}",
+    tag = "admin",
+    params(("reward_id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`media.not_found`: the reward has no rule", body = ErrorBody),
+        (status = 500, description = "`media.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn delete_rule(
+    State(s): State<Arc<Overlays>>,
+    Path(reward_id): Path<String>,
+) -> Response {
+    match s.delete_media_rule(&reward_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => media_error(e),
+    }
+}
+
+/// 試播: shows the reward's media on the alerts overlay at once, as `source=simulation`; nothing is recorded.
+#[utoipa::path(
+    post,
+    path = "/api/admin/screen-tools/media-rules/{reward_id}/test",
+    tag = "admin",
+    params(("reward_id" = String, Path)),
+    responses(
+        (status = 204),
+        (status = 404, description = "`media.not_found`: no rule, its item is gone, or a video's length is not read yet", body = ErrorBody),
+    )
+)]
+pub(crate) async fn test_rule(
+    State(s): State<Arc<Overlays>>,
+    Path(reward_id): Path<String>,
+) -> Response {
+    match s.test_media(&reward_id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => media_error(e),
+    }
 }
 
 /// The read-only media file route for the alerts overlay and the admin UI; it needs no token.

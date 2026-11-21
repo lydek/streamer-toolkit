@@ -72,6 +72,7 @@ pub(crate) struct AdminState {
     checkin: Arc<CheckinService>,
     counters: Arc<counter::Counters>,
     sounds: Arc<SoundService>,
+    screen_tools: Arc<overlays::Overlays>,
     stream: Arc<StreamService>,
     activity: Arc<ActivityService>,
     viewers: Arc<ViewerService>,
@@ -104,6 +105,7 @@ impl AdminState {
         checkin: Arc<CheckinService>,
         counters: Arc<counter::Counters>,
         sounds: Arc<SoundService>,
+        screen_tools: Arc<overlays::Overlays>,
         stream: Arc<StreamService>,
         activity: Arc<ActivityService>,
         viewers: Arc<ViewerService>,
@@ -124,6 +126,7 @@ impl AdminState {
             checkin,
             counters,
             sounds,
+            screen_tools,
             stream,
             activity,
             viewers,
@@ -156,6 +159,7 @@ impl AdminState {
         let counters = self.counters.clone();
         let marathon = self.counters.clone();
         let sounds = self.sounds.clone();
+        let media = self.screen_tools.clone();
         // One handle per delivery: chat, alerts and redemptions each record their viewer.
         let (chat_viewers, alert_viewers, redemption_viewers) = (
             self.viewers.clone(),
@@ -215,6 +219,7 @@ impl AdminState {
             deliver_redemption: Arc::new(move |r| {
                 redemption_viewers.receive_redemption(&r, Source::Twitch);
                 sounds.receive_redemption(&r);
+                media.receive_redemption(&r);
                 redemption.receive(r, Source::Twitch)
             }),
             deliver_stream: Arc::new(move |c| stream.receive(c)),

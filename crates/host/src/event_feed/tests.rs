@@ -142,6 +142,7 @@ fn this_launch() -> Remembered {
                 6,
             ),
         ],
+        media: Vec::new(),
     }
 }
 
@@ -150,7 +151,65 @@ fn empty() -> Remembered {
         alerts: Vec::new(),
         sounds: Vec::new(),
         cards: Vec::new(),
+        media: Vec::new(),
     }
+}
+
+#[test]
+fn a_reward_video_shows_when_there_is_no_sound_with_why_it_was_declined() {
+    let media = |file_missing| RecentMedia {
+        item: remembered_item(
+            Some("r1"),
+            Subject::Media {
+                media: "貓咪跳舞".into(),
+                viewer: "橘子".into(),
+            },
+            Source::Twitch,
+            Some(Outcome::Declined),
+            2,
+        ),
+        file_missing,
+    };
+    let records = || Records {
+        activity: Vec::new(),
+        redemptions: vec![redemption("r1", 2)],
+        checkins: Vec::new(),
+    };
+    let feed = compose(
+        at(0),
+        records(),
+        Remembered {
+            media: vec![media(true)],
+            ..empty()
+        },
+    );
+    assert_eq!(
+        feed[0].result,
+        Some(FeedResult {
+            triggered: Triggered::Media,
+            sound: None,
+            media: Some("貓咪跳舞".into()),
+            outcome: FeedOutcome::Declined,
+            reason: Some(FeedReason::FileMissing),
+        })
+    );
+    let feed = compose(
+        at(0),
+        records(),
+        Remembered {
+            media: vec![media(false)],
+            ..this_launch()
+        },
+    );
+    let redeemed = feed
+        .iter()
+        .find(|i| matches!(i.event, FeedEvent::Redemption { .. }))
+        .unwrap();
+    assert_eq!(
+        redeemed.result.as_ref().map(|r| r.triggered),
+        Some(Triggered::Sound),
+        "a reward's sound comes first"
+    );
 }
 
 #[test]

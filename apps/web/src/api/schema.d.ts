@@ -1136,6 +1136,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/screen-tools/media-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What each reward shows. */
+        get: operations["list_rules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/media-rules/{reward_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets what a reward shows. */
+        put: operations["set_rule"];
+        post?: never;
+        delete: operations["delete_rule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/screen-tools/media-rules/{reward_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 試播: shows the reward's media on the alerts overlay at once, as `source=simulation`; nothing is recorded. */
+        post: operations["test_rule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/screen-tools/media/{id}": {
         parameters: {
             query?: never;
@@ -2404,8 +2455,16 @@ export interface components {
          * @enum {string}
          */
         FeedOutcome: "queued" | "played" | "sound_missing" | "off_air" | "declined" | "skipped" | "cleared" | "stopped";
+        /**
+         * @description Why its module turned it down, when the Host knows.
+         * @enum {string}
+         */
+        FeedReason: "file_missing";
         FeedResult: {
+            /** @description The media item's title (raw text), for a video or GIF. */
+            media: string | null;
             outcome: components["schemas"]["FeedOutcome"];
+            reason: components["schemas"]["FeedReason"] | null;
             /** @description The reward sound's name (raw text), for a sound. */
             sound: string | null;
             triggered: components["schemas"]["Triggered"];
@@ -2584,6 +2643,66 @@ export interface components {
             title: string;
             /** @description `/media/{id}`, readable without a token. */
             url: string;
+        };
+        /**
+         * @description A `screen.media` event exactly as `/ws/overlay` sends it when its turn on the presentation queue comes, or at
+         *     once for 試播 (`source=simulation`).
+         */
+        MediaPlayEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["MediaPlayPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["MediaPlayType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description The `payload` of a `screen.media` event: the alerts overlay shows `url` at `position` for `durationMs`, a video
+         *     at `volume`. Not kept in snapshots, so a reload never shows it again.
+         */
+        MediaPlayPayload: {
+            /** Format: int32 */
+            durationMs: number;
+            /** @description `gif`, `webm` or `mp4`. */
+            format: string;
+            position: components["schemas"]["MediaPosition"];
+            url: string;
+            /**
+             * Format: int32
+             * @description Percent.
+             */
+            volume: number;
+        };
+        /** @enum {string} */
+        MediaPlayType: "screen.media";
+        /**
+         * @description Where the alerts overlay shows a media item.
+         * @enum {string}
+         */
+        MediaPosition: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "center" | "full";
+        /** @description What a channel points reward shows when redeemed. */
+        MediaRuleBody: {
+            /** @description A media library item. */
+            media_id: string;
+            position: components["schemas"]["MediaPosition"];
+            reward_id: string;
+            /**
+             * Format: int32
+             * @description 0–100 %; `null` follows the sound master volume.
+             */
+            volume?: number | null;
+        };
+        MediaRuleInput: {
+            media_id: string;
+            position: components["schemas"]["MediaPosition"];
+            /**
+             * Format: int32
+             * @description 0–100 %; `null` follows the sound master volume.
+             */
+            volume?: number | null;
         };
         MediaUpdate: {
             /**
@@ -3342,6 +3461,11 @@ export interface components {
             kind: "sound";
             sound: string;
             viewer: string;
+        } | {
+            /** @enum {string} */
+            kind: "media";
+            media: string;
+            viewer: string;
         };
         /**
          * @description Which tab groups the admin UI pins in its tab bar, in order (the rest go into "More"; `[]` pins none), and
@@ -3435,7 +3559,7 @@ export interface components {
          * @description What it set off.
          * @enum {string}
          */
-        Triggered: "alert" | "sound" | "card";
+        Triggered: "alert" | "sound" | "card" | "media";
         /** @description A chat badge as Twitch names it. */
         TwitchBadgePayload: {
             /** @description The version within the set (e.g. a subscriber badge's tier and months). */
@@ -6535,6 +6659,142 @@ export interface operations {
             };
             /** @description `media.save_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaRuleBody"][];
+                };
+            };
+        };
+    };
+    set_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reward_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaRuleInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaRuleBody"];
+                };
+            };
+            /** @description `media.invalid`: a volume above 100 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.not_found`: no such media item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reward_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `media.not_found`: the reward has no rule */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `media.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    test_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reward_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `media.not_found`: no rule, its item is gone, or a video's length is not read yet */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

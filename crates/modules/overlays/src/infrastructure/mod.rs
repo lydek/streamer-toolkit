@@ -6,12 +6,12 @@ pub mod db;
 mod media;
 mod warnings;
 
-pub use media::file_routes as media_file_routes;
+pub use media::{MediaPlayEvent, file_routes as media_file_routes};
 
 pub use appearance::AppearanceEvent;
 pub use warnings::WarningsEvent;
 
-use std::{path::Path, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -26,11 +26,13 @@ use sqlx::SqlitePool;
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
+    modules::Modules,
+    presentation::Presenter,
 };
 use utoipa::{OpenApi, ToSchema};
 
 use crate::{
-    application::{OverlayError, OverlayService, Publishers, RepositoryError},
+    application::{OverlayError, OverlayService, PlaybackDeps, Publishers, RepositoryError},
     domain::{BreakCard, BreakSettings, Countdown, CountdownMode},
 };
 
@@ -121,12 +123,22 @@ pub enum BreakType {
 /// Starts the screen tools in `pool`, which must already have [`db::MIGRATOR`] applied, announcing the break card
 /// as `screen.break` and the warnings as `screen.warnings` on `bus` now and after every change. The host feeds the
 /// warnings what it sees ([`OverlayService::see`]). Needs a Tokio runtime.
-/// Media files live in `data_dir`'s `media/`.
-pub fn start(pool: SqlitePool, bus: Arc<EventBus>, data_dir: &Path) -> Arc<Overlays> {
+/// What the screen tools need from the rest of the app.
+pub struct Deps {
+    pub data_dir: PathBuf,
+    /// Queues reward videos and GIFs with the other overlay items.
+    pub presenter: Arc<Presenter>,
+    pub modules: Arc<Modules>,
+    /// The sound module's master volume, in percent: a reward video plays at it unless its rule sets its own.
+    pub master_volume: Box<dyn Fn() -> u8 + Send + Sync>,
+}
+
+/// Media files live in the data folder's `media/`.
+pub fn start(pool: SqlitePool, bus: Arc<EventBus>, deps: Deps) -> Arc<Overlays> {
     bus.retain(BREAK, 1);
     bus.retain(warnings::WARNINGS, 1);
     bus.retain(appearance::APPEARANCE, 1);
-    let (warnings_bus, appearance_bus) = (bus.clone(), bus.clone());
+    let (warnings_bus, appearance_bus, media_bus) = (bus.clone(), bus.clone(), bus.clone());
     let event = |event_type, version, payload| Event {
         id: uuid::Uuid::now_v7().to_string(),
         event_type,
@@ -137,7 +149,7 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>, data_dir: &Path) -> Arc<Overl
     };
     let service = Arc::new(OverlayService::new(
         db::SqliteOverlays::new(pool),
-        data_dir.join("media"),
+        deps.data_dir.join("media"),
         Publishers {
             break_card: Box::new(move |card| {
                 let payload =
@@ -162,6 +174,19 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>, data_dir: &Path) -> Arc<Overl
                     payload,
                 ));
             }),
+            media: Arc::new(move |show, source| {
+                let payload = serde_json::to_value(media::MediaPlayPayload::from(show))
+                    .expect("media play serializes");
+                media_bus.publish(Event {
+                    source,
+                    ..event(media::MEDIA_PLAY, media::MEDIA_PLAY_VERSION, payload)
+                });
+            }),
+        },
+        PlaybackDeps {
+            presenter: deps.presenter,
+            modules: deps.modules,
+            master_volume: deps.master_volume,
         },
     ));
     let first = service.clone();
@@ -338,9 +363,13 @@ pub(crate) async fn hide_break(State(s): State<Arc<Overlays>>) -> Response {
         media::list_media,
         media::import_media,
         media::update_media,
-        media::delete_media
+        media::delete_media,
+        media::list_rules,
+        media::set_rule,
+        media::delete_rule,
+        media::test_rule
     ),
-    components(schemas(BreakEvent, WarningsEvent, AppearanceEvent))
+    components(schemas(BreakEvent, WarningsEvent, AppearanceEvent, MediaPlayEvent))
 )]
 struct OverlayApi;
 

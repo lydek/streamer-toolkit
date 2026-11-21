@@ -71,6 +71,61 @@ impl MediaEntry {
     }
 }
 
+/// Where on the alerts overlay a media item shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Center,
+    Full,
+}
+
+impl Position {
+    const ALL: [Self; 6] = [
+        Self::TopLeft,
+        Self::TopRight,
+        Self::BottomLeft,
+        Self::BottomRight,
+        Self::Center,
+        Self::Full,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TopLeft => "top_left",
+            Self::TopRight => "top_right",
+            Self::BottomLeft => "bottom_left",
+            Self::BottomRight => "bottom_right",
+            Self::Center => "center",
+            Self::Full => "full",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.as_str() == s)
+    }
+}
+
+/// What a reward shows when redeemed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaRule {
+    pub reward_id: String,
+    pub media_id: String,
+    pub position: Position,
+    /// Percent, 0–100; `None` follows the sound master volume. A GIF has no sound.
+    pub volume: Option<u8>,
+}
+
+impl MediaRule {
+    pub(crate) fn valid(&self) -> bool {
+        !self.reward_id.trim().is_empty()
+            && self.reward_id.len() <= 64
+            && self.volume.is_none_or(|v| v <= 100)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +152,20 @@ mod tests {
         assert_eq!(MediaFormat::detect("a.gif", b"\0\0\0\x18ftypmp42"), None);
         assert_eq!(MediaFormat::detect("a.mov", b"\0\0\0\x18ftypqt  "), None);
         assert_eq!(MediaFormat::detect("noext", b"GIF89a"), None);
+    }
+
+    #[test]
+    fn positions_round_trip_and_rules_are_checked() {
+        for p in Position::ALL {
+            assert_eq!(Position::parse(p.as_str()), Some(p));
+        }
+        let rule = |reward_id: &str, volume| MediaRule {
+            reward_id: reward_id.into(),
+            media_id: "m".into(),
+            position: Position::Center,
+            volume,
+        };
+        assert!(rule("r", None).valid() && rule("r", Some(100)).valid());
+        assert!(!rule(" ", None).valid() && !rule("r", Some(101)).valid());
     }
 }

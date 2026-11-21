@@ -8,7 +8,7 @@ use crate::{
     domain::{
         BreakCard, BreakSettings, CountdownMode,
         appearance::{Appearance, Theme},
-        media::{MediaEntry, MediaFormat},
+        media::{MediaEntry, MediaFormat, MediaRule, Position},
         warnings::WarningSettings,
     },
 };
@@ -193,12 +193,63 @@ impl OverlayRepository for SqliteOverlays {
     }
 
     async fn delete_media(&self, id: &str) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        sqlx::query("DELETE FROM overlays_media_rules WHERE media_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         sqlx::query("DELETE FROM overlays_media WHERE id = ?")
             .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        tx.commit().await.map_err(storage)
+    }
+
+    async fn media_rules(&self) -> Result<Vec<MediaRule>, RepositoryError> {
+        let rows: Vec<(String, String, String, Option<i64>)> = sqlx::query_as(
+            "SELECT reward_id, media_id, position, volume FROM overlays_media_rules ORDER BY reward_id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter()
+            .map(|(reward_id, media_id, position, volume)| {
+                Ok(MediaRule {
+                    reward_id,
+                    media_id,
+                    position: Position::parse(&position)
+                        .ok_or_else(|| storage("unknown position"))?,
+                    volume: volume.map(u8::try_from).transpose().map_err(storage)?,
+                })
+            })
+            .collect()
+    }
+
+    async fn save_media_rule(&self, r: &MediaRule) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO overlays_media_rules (reward_id, media_id, position, volume) VALUES (?, ?, ?, ?)
+             ON CONFLICT (reward_id) DO UPDATE SET media_id = excluded.media_id,
+               position = excluded.position, volume = excluded.volume",
+        )
+        .bind(&r.reward_id)
+        .bind(&r.media_id)
+        .bind(r.position.as_str())
+        .bind(r.volume.map(i64::from))
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
+    async fn delete_media_rule(&self, reward_id: &str) -> Result<bool, RepositoryError> {
+        let done = sqlx::query("DELETE FROM overlays_media_rules WHERE reward_id = ?")
+            .bind(reward_id)
             .execute(&self.pool)
             .await
             .map_err(storage)?;
-        Ok(())
+        Ok(done.rows_affected() > 0)
     }
 }
 

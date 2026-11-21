@@ -67,7 +67,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import { MEDIA_ACCEPT, importMedia, measureUnmeasured, saveMedia } from './media'
 import { formatLength } from './music'
 
-const emit = defineEmits<{ error: [unknown]; imported: [number] }>()
+const emit = defineEmits<{ error: [unknown]; imported: [number]; loaded: [Schemas['MediaItem'][]] }>()
 const { t } = useI18n()
 const input = ref<HTMLInputElement>()
 const items = shallowRef<Schemas['MediaItem'][]>()
@@ -83,6 +83,7 @@ async function load() {
   try {
     items.value = await api(client.GET('/api/admin/screen-tools/media'))
     failed.value = ''
+    emit('loaded', items.value)
   } catch (e) {
     failed.value = message(e)
   }

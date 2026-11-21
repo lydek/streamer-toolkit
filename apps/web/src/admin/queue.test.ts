@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { waitMs } from './queue'
+import { subjectText, waitMs } from './queue'
 
 const start = Date.parse('2026-11-19T10:00:00.000Z')
 
@@ -28,5 +28,11 @@ describe('waitMs', () => {
   it('is zero for an empty or unknown queue', () => {
     expect(waitMs(undefined, start)).toBe(0)
     expect(waitMs({ current: null, waiting: [], gapMs: 1000 }, start)).toBe(0)
+  })
+})
+
+describe('subjectText', () => {
+  it('names a reward video with who redeemed it', () => {
+    expect(subjectText({ kind: 'media', media: '貓咪跳舞', viewer: '橘子' })).toBe('影片：貓咪跳舞（橘子兌換）')
   })
 })
