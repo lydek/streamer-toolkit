@@ -174,8 +174,9 @@ async fn admin_gets_csp_and_spa_fallback() {
             res.headers()[header::CONTENT_SECURITY_POLICY],
             format!(
                 "{ADMIN_CSP}; frame-src http://127.0.0.1:47810/overlay/chat/ \
-                 http://127.0.0.1:47810/overlay/alerts/ http://localhost:47810/overlay/chat/ \
-                 http://localhost:47810/overlay/alerts/"
+                 http://127.0.0.1:47810/overlay/alerts/ http://127.0.0.1:47810/overlay/checkin/ \
+                 http://localhost:47810/overlay/chat/ http://localhost:47810/overlay/alerts/ \
+                 http://localhost:47810/overlay/checkin/"
             )
         );
     }

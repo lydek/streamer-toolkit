@@ -923,7 +923,12 @@
     "test": "在 OBS 試播",
     "save": "儲存",
     "saved": "已儲存卡片樣式。",
-    "uploadFailed": "{file}：{reason}"
+    "uploadFailed": "{file}：{reason}",
+    "preview": "預覽",
+    "previews": {
+      "stamped": "打卡成功 +1",
+      "repeat": "今天已打過"
+    }
   },
   "screenTools": {
     "break": {

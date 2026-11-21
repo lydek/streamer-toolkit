@@ -40,7 +40,7 @@ it('PREVIEW_PATHS matches the Host', () => {
 })
 
 it('picks the CSP the Host sends for each page', () => {
-  const admin = `${ADMIN_CSP}; frame-src http://localhost:5173/overlay/chat/ http://localhost:5173/overlay/alerts/`
+  const admin = `${ADMIN_CSP}; frame-src http://localhost:5173/overlay/chat/ http://localhost:5173/overlay/alerts/ http://localhost:5173/overlay/checkin/`
   expect(devCsp('/admin/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/port/', 'localhost:5173')).toBe(admin)
   expect(devCsp('/overlay/chat/', 'localhost:5173')).toBe(OVERLAY_CSP)
