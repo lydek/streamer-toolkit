@@ -97,6 +97,7 @@ describe('CountersPage', () => {
           'stream.status': [],
           'bgm.player': [],
           'counter.values': [{ id: 'v', type: 'counter.values', version: 1, seq: 1, occurredAt: '', source: 'system', payload: { counters: [{ id: 'c1', name: '死亡次數', value: 13 }] } }],
+          'counter.marathon': [],
         },
       }),
     })
@@ -129,11 +130,11 @@ describe('CountersPage', () => {
     const wrapper = await page()
     await wrapper.get('#new-counter-name').setValue('被抓包')
     await wrapper.get('#new-counter-command').setValue('!打卡')
-    await wrapper.get('form').trigger('submit')
+    await wrapper.get('#new-counter-name').element.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
     expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: '已被打卡的「!打卡」使用。' }))
     await wrapper.get('#new-counter-command').setValue('抓包')
-    await wrapper.get('form').trigger('submit')
+    await wrapper.get('#new-counter-name').element.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
     expect(post).toHaveBeenLastCalledWith('/api/admin/counters', {
       body: { name: '被抓包', command: '抓包', allowed: 'moderator', per_stream: false },
@@ -194,9 +195,67 @@ describe('CountersPage per-viewer counts', () => {
     expect(wrapper.findAll('ol.viewers li').map((r) => r.get('.value').text())).toEqual(['3', '2'])
 
     await wrapper.get('#new-viewer-counter-name').setValue('猜中')
-    await wrapper.findAll('form')[1].trigger('submit')
+    await wrapper.get('#new-viewer-counter-name').element.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
     expect(post).toHaveBeenCalledWith('/api/admin/counters/viewers', { body: { name: '猜中' } })
+  })
+})
+
+describe('CountersPage marathon timer', () => {
+  const marathon = (p: Partial<Schemas['MarathonPayload']>) => ({
+    id: 'm',
+    type: 'counter.marathon',
+    version: 1,
+    seq: 1,
+    occurredAt: new Date().toISOString(),
+    source: 'system',
+    payload: { remainingMs: 3_725_000, running: false, paused: true, live: true, subMinutes: 5, bitsMinutes: 2, maxHours: 24, ...p },
+  })
+  const receive = async (event: ReturnType<typeof marathon>) => {
+    socket.onmessage!({
+      data: JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: {
+          'chat.message': [],
+          'chat.removed': [],
+          'obs.status': [],
+          'obs.state': [],
+          'presentation.queue': [],
+          'stream.status': [],
+          'bgm.player': [],
+          'counter.values': [],
+          'counter.marathon': [event],
+        },
+      }),
+    })
+    await flushPromises()
+  }
+
+  it('shows the remaining time and state, pauses, resumes, adds time and saves the options', async () => {
+    const wrapper = await page()
+    await receive(marathon({}))
+    expect(wrapper.get('.remaining').text()).toContain('1:02:05')
+    expect(wrapper.get('.remaining').text()).toContain(t('counter.marathon.paused'))
+    const button = (label: string) => wrapper.findAll('button').find((b) => b.text() === label)!
+    await button(t('counter.marathon.resume')).trigger('click')
+    expect(post).toHaveBeenCalledWith('/api/admin/counters/marathon/pause', { body: { paused: false } })
+
+    await wrapper.get('#marathon-add-minutes').element.closest('form')!.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/counters/marathon/add', { body: { minutes: 10 } })
+
+    const hours = wrapper.get('#marathon-hours')
+    await hours.setValue('12')
+    await hours.trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/counters/marathon/options', {
+      body: { sub_minutes: 5, bits_minutes: 2, max_hours: 12 },
+    })
+
+    await receive(marathon({ paused: false, live: false }))
+    expect(wrapper.get('.remaining').text()).toContain(t('counter.marathon.waiting'))
   })
 })
 

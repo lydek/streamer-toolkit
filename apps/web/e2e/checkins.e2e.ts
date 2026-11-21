@@ -27,7 +27,7 @@ async function liveSocket(page: Page) {
   let socket: WebSocketRoute | undefined
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
     socket = ws
-    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [] } }))
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [] } }))
   })
   return async (seq: number) => {
     await expect.poll(() => socket).toBeDefined()

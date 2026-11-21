@@ -290,18 +290,32 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         commands,
         move || counter_sessions.session_after_pending(),
     );
-    // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once).
+    // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once),
+    // and the marathon clock runs only while live.
     let (_, mut stream_events) = bus.subscribe();
     let live_counters = counters.clone();
     tokio::spawn(async move {
         loop {
             match stream_events.recv().await {
                 Ok(text) => {
-                    let live = serde_json::from_str::<serde_json::Value>(&text).is_ok_and(|e| {
-                        e["type"] == "stream.status" && e["payload"]["state"] == "live"
-                    });
-                    if live {
-                        live_counters.stream_live().await;
+                    let Ok(e) = serde_json::from_str::<serde_json::Value>(&text) else {
+                        continue;
+                    };
+                    if e["type"] != "stream.status" {
+                        continue;
+                    }
+                    let state = match e["payload"]["state"].as_str() {
+                        Some("live") => e["payload"]["startedAt"]
+                            .as_str()
+                            .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                            .map(|t| counter::StreamState::Live {
+                                started_at: t.to_utc(),
+                            }),
+                        Some("offline") => Some(counter::StreamState::Offline),
+                        _ => None,
+                    };
+                    if let Some(state) = state {
+                        live_counters.stream_status(state).await;
                     }
                 }
                 // A missed status is repeated by the next check.

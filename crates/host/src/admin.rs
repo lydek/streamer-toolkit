@@ -149,6 +149,7 @@ impl AdminState {
         let redemption = self.redemption.clone();
         let checkin = self.checkin.clone();
         let counters = self.counters.clone();
+        let marathon = self.counters.clone();
         let sounds = self.sounds.clone();
         // One handle per delivery: chat, alerts and redemptions each record their viewer.
         let (chat_viewers, alert_viewers, redemption_viewers) = (
@@ -201,6 +202,7 @@ impl AdminState {
             }),
             deliver_alert: Arc::new(move |a| {
                 alert_viewers.receive_alert(&a, Source::Twitch);
+                marathon.receive_alert(&a, Source::Twitch);
                 activity.receive(a.clone(), Source::Twitch);
                 alerts.receive(a, Source::Twitch)
             }),

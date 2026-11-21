@@ -21,6 +21,7 @@ export type Incoming =
   | components['schemas']['SoundPlayEvent']
   | components['schemas']['BgmPlayerEvent']
   | components['schemas']['CounterValuesEvent']
+  | components['schemas']['MarathonEvent']
 
 /** The emergency stop (every overlay), or a skip of the item `stage`'s overlay is playing. */
 export const stopsStage = (msg: Incoming, stage: components['schemas']['Stage']) =>

@@ -18,7 +18,7 @@ crates/
     checkin/       # 打卡簽到（複雜）：訂閱 RedemptionRecorded 與聊天指令事件
     sound/         # 音效管理（薄）
     bgm/           # 背景音樂：音樂庫、歌單、播放器與場景對應（薄）
-    counter/       # 計數器：全域計數與聊天指令（薄）
+    counter/       # 計數器：全域計數、每人計數與訂閱馬拉松計時器（薄）
     stream/        # 直播狀態與場次（薄）
     activity/      # 活動紀錄：追隨、訂閱、小奇點、揪團（薄）
     viewers/       # 觀眾名冊（薄）
@@ -94,7 +94,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
@@ -160,6 +160,11 @@ apps/
   - 每場歸零：每次收到直播中的 `stream.status`（開播、每分鐘的檢查、重新啟動後都會再送），向 stream 模組的公開 service 取得目前場次 ID（`session_after_pending()`），每場歸零的計數器如果還沒為這一場歸零過，就歸零並記下這一場；所以每場只歸零一次，重新啟動或開播後才啟動工具（由每分鐘的檢查補上場次）都一樣。新增計數器，或把它改成每場歸零時，先記下目前的場次（直播中就是這一場），不會馬上歸零；還沒有任何場次時記成沒有，第一場開播時歸零。
   - 每次變動都發布 `counter.values`（所有計數器的 ID、名稱與數字，依新增順序），快照只保留最新一則。Overlay 列出每個計數器的名稱與數字（名稱以文字顯示）；計數器頁、首頁的計數器磚（顯示第一個計數器）與抽屜（可以加一）也依它更新數字。
   - 每位觀眾各自的計數（例如「猜中死亡次數」）：`counter_viewer_counters`（名稱）與 `counter_viewer_counts`（計數、Twitch 使用者 ID、數字）。觀眾名稱由 viewers 模組的公開查詢提供（`viewers::search` 依登入名稱或顯示名稱找，英文不分大小寫，最多 20 位、最近出現的在前；`viewers::names` 依 ID 查），不跨模組 join 資料表。管理 API：`GET`／`POST /api/admin/counters/viewers`（每個計數帶總和與前三名）、`PUT`／`DELETE /api/admin/counters/viewers/{id}`（改名；刪除時連同每位觀眾的數字）、`GET /api/admin/counters/viewers/{id}/counts`（數字大於 0 的每個人，多的在前）、`GET /api/admin/counters/viewers/{id}/search?q=`（搜尋觀眾，附上他在這個計數的數字）、`POST /api/admin/counters/viewers/{id}/add`（`twitch_user_id` 與 `delta`，`delta` 只能是 1 或 -1；觀眾目錄裡沒有的觀眾回 404 `counter.viewer_not_found`）。數字不會小於 0；名稱以文字顯示。目前只能在計數器頁按按鈕加減，沒有聊天指令與 Overlay。
+  - 訂閱馬拉松計時器（`/overlay/marathon/`，`?kind=marathon`）：存在 `counter_marathon`（一筆：剩餘時間、它是哪個時間點的值、是否手動暫停、計時用的場次 ID、每個訂閱加幾分鐘、每 100 小奇點加幾分鐘、最長幾小時）。管理 API：`GET /api/admin/counters/marathon`、`PUT /api/admin/counters/marathon/options`（分鐘 0–1440、最長 1–168 小時）、`POST /api/admin/counters/marathon/pause`（`paused`）、`POST /api/admin/counters/marathon/add`（`minutes` -1440 到 1440，不能是 0）。預設每個訂閱與每 100 小奇點都是 0 分鐘、最長 24 小時，設定前不會自己累積時間。
+    - 加時：Host 在交給 activity 模組的同一處，也把特效事件交給計數器。訂閱與續訂各算一次；送禮訂閱只看送禮那一則的份數（`Gift.count`），Twitch 為每份另外送的 `Subscribe { gifted: true }` 不算，所以不會重複計算；小奇點依比例（50 小奇點算一半）。追隨、揪團不加時。模擬事件不加時；同一則（依 ID）重送只算一次；模組停用時直接丟棄。剩餘時間介於 0 和上限之間。
+    - 時鐘：Host 擁有時鐘（Overlay 不回報）。剩餘時間記成「某個時間點的值」，只有在直播中、沒有手動暫停、還有時間時才往下扣；手動暫停不會因開播而解除。每次收到直播中的 `stream.status`（約每分鐘一次）就扣到現在並存檔；存下的時間點，也就是最後一次確認直播中的時候。
+    - 重新啟動：記憶體裡先當作不知道是否直播中。第一個直播中的狀態如果還是同一場（場次 ID 相同），表示工具關著期間一直在直播，從存下的時間點扣到現在；如果是新的一場，就從它的開播時間扣起，前一場只扣到最後一次確認直播中的時間。第一個狀態是下播時，不扣關著的期間。工具開著時看到同一場先下播又回到直播中，中間的時間不扣。
+    - 每次變動與每個直播中的狀態都發布 `counter.marathon`（剩餘時間、是否在倒數、是否暫停、是否直播中與三個設定），快照只保留最新一則；`occurredAt` 是剩餘時間的時間點，Overlay 與計數器頁在倒數中時自己往下算。倒數到 0 不會自動下播或切場景。
 - **背景音樂庫**（bgm 模組）：和音效庫分開。管理 API `GET`／`POST /api/admin/music`、`PUT`／`DELETE /api/admin/music/{id}`（`PUT` 改曲名）。
   - 匯入與檔案比照音效庫：上限 50 MB（超過回 413 `music.too_large`），副檔名與 magic bytes 不一致回 400 `music.unsupported_type`（兩個模組共用 `core` 的 `audio` 檢查）；檔案複製到資料夾的 `music/`，以 UUID v7 命名。曲名、格式、長度與歌單記在 `settings.json` 的 `bgm`。刪除時先從 `settings.json`（含所有歌單）移除，再刪檔案。
   - `GET /music/{id}` 與 `/sounds/{id}` 相同：唯讀、不需要 token、只提供音樂庫裡有的 ID、`Content-Type` 依格式固定、`nosniff`、`no-store`，不送 `Access-Control-Allow-Origin`。另外支援單一的 byte range（回 206；格式不對或超出檔案回 416），Overlay 才能從歌曲中間開始播。

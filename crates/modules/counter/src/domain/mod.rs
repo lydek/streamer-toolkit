@@ -1,5 +1,7 @@
 //! What a counter is (thin module: a struct and simple checks).
 
+pub mod marathon;
+
 pub(crate) use toolkit_core::audio::clean_label as clean_name;
 
 /// The most counters kept.

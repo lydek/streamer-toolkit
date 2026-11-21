@@ -25,8 +25,10 @@ use toolkit_core::{
 use utoipa::{OpenApi, ToSchema};
 
 use crate::{
-    application::{CounterError, CounterService, CounterSettings, ViewerCounterSummary},
-    domain::{Counter, ViewerCount},
+    application::{
+        CounterError, CounterService, CounterSettings, MarathonStatus, ViewerCounterSummary,
+    },
+    domain::{Counter, ViewerCount, marathon::MarathonOptions},
 };
 
 /// The counter service the host runs.
@@ -34,6 +36,62 @@ pub type Counters = CounterService<db::SqliteCounters>;
 
 const VALUES: &str = "counter.values";
 const VALUES_VERSION: u32 = 1;
+const MARATHON: &str = "counter.marathon";
+const MARATHON_VERSION: u32 = 1;
+
+/// The sub marathon timer. The remaining time is as of the event's `occurredAt` and goes on counting down from
+/// there only while `running`.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MarathonPayload {
+    pub remaining_ms: i64,
+    /// Counting down: live, not paused and time left.
+    pub running: bool,
+    /// Paused by hand; a stream starting does not resume it.
+    pub paused: bool,
+    /// The toolkit has seen the stream live.
+    pub live: bool,
+    pub sub_minutes: u32,
+    pub bits_minutes: u32,
+    pub max_hours: u32,
+}
+
+impl From<&MarathonStatus> for MarathonPayload {
+    fn from(s: &MarathonStatus) -> Self {
+        let m = &s.marathon;
+        Self {
+            remaining_ms: m.remaining_ms,
+            running: s.running,
+            paused: m.paused,
+            live: s.live,
+            sub_minutes: m.options.sub_minutes,
+            bits_minutes: m.options.bits_minutes,
+            max_hours: m.options.max_hours,
+        }
+    }
+}
+
+/// A `counter.marathon` event exactly as `/ws/overlay` sends it after any change and at each live status; the
+/// snapshot keeps only the latest one.
+// The bus serializes its own envelope; a test keeps this type in step with it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MarathonEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: MarathonType,
+    pub version: u32,
+    pub seq: u64,
+    pub occurred_at: String,
+    pub source: Source,
+    pub payload: MarathonPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum MarathonType {
+    #[serde(rename = "counter.marathon")]
+    CounterMarathon,
+}
 
 /// One counter on the overlay. `name` is broadcaster text: render it as text.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -84,6 +142,8 @@ where
     F: Future<Output = Option<String>> + Send + 'static,
 {
     bus.retain(VALUES, 1);
+    bus.retain(MARATHON, 1);
+    let marathon_bus = bus.clone();
     CounterService::start(
         db::SqliteCounters::new(pool),
         commands,
@@ -108,6 +168,21 @@ where
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
                 source: Source::System,
                 payload: serde_json::to_value(payload).expect("counter values serialize"),
+            });
+        }),
+        Box::new(move |status| {
+            // Its anchor is the time its remaining time was worked out.
+            marathon_bus.publish(Event {
+                id: uuid::Uuid::now_v7().to_string(),
+                event_type: MARATHON,
+                version: MARATHON_VERSION,
+                occurred_at: status
+                    .marathon
+                    .anchor
+                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                source: Source::System,
+                payload: serde_json::to_value(MarathonPayload::from(status))
+                    .expect("marathon serializes"),
             });
         }),
     )
@@ -254,6 +329,27 @@ pub struct ViewerStep {
     pub delta: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MarathonOptionsBody {
+    /// Minutes added per sub, resub or gifted sub, 0–1440.
+    pub sub_minutes: u32,
+    /// Minutes added per 100 bits (in proportion), 0–1440.
+    pub bits_minutes: u32,
+    /// The remaining time never goes above this many hours, 1–168.
+    pub max_hours: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MarathonPause {
+    pub paused: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MarathonAdd {
+    /// -1440 to 1440, not 0; the remaining time stays between 0 and the cap.
+    pub minutes: i64,
+}
+
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct ViewerSearch {
@@ -281,6 +377,13 @@ pub fn routes(service: Arc<Counters>) -> Router {
             get(search_viewers),
         )
         .route("/api/admin/counters/viewers/{id}/add", post(add_for_viewer))
+        .route("/api/admin/counters/marathon", get(get_marathon))
+        .route(
+            "/api/admin/counters/marathon/options",
+            put(set_marathon_options),
+        )
+        .route("/api/admin/counters/marathon/pause", post(pause_marathon))
+        .route("/api/admin/counters/marathon/add", post(add_to_marathon))
         .route(
             "/api/admin/counters",
             get(list_counters).post(create_counter),
@@ -631,9 +734,106 @@ pub(crate) async fn add_for_viewer(
     }
 }
 
+fn marathon_body(result: Result<MarathonStatus, CounterError>) -> Response {
+    match result {
+        Ok(status) => Json(MarathonPayload::from(&status)).into_response(),
+        Err(e) => counter_error(e),
+    }
+}
+
+/// The sub marathon timer now (also kept current by `counter.marathon`).
+#[utoipa::path(
+    get,
+    path = "/api/admin/counters/marathon",
+    tag = "admin",
+    responses(
+        (status = 200, body = MarathonPayload),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn get_marathon(State(s): State<Arc<Counters>>) -> Response {
+    marathon_body(s.marathon().await.map_err(Into::into))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/counters/marathon/options",
+    tag = "admin",
+    request_body = MarathonOptionsBody,
+    responses(
+        (status = 200, body = MarathonPayload),
+        (status = 400, description = "`counter.invalid`: out of range", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_marathon_options(
+    State(s): State<Arc<Counters>>,
+    body: Result<Json<MarathonOptionsBody>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    marathon_body(
+        s.set_marathon_options(MarathonOptions {
+            sub_minutes: b.sub_minutes,
+            bits_minutes: b.bits_minutes,
+            max_hours: b.max_hours,
+        })
+        .await,
+    )
+}
+
+/// Pauses or resumes by hand; a stream starting never resumes it.
+#[utoipa::path(
+    post,
+    path = "/api/admin/counters/marathon/pause",
+    tag = "admin",
+    request_body = MarathonPause,
+    responses(
+        (status = 200, body = MarathonPayload),
+        (status = 400, description = "`counter.invalid`", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn pause_marathon(
+    State(s): State<Arc<Counters>>,
+    body: Result<Json<MarathonPause>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    marathon_body(s.pause_marathon(b.paused).await)
+}
+
+/// Adds or takes minutes by hand.
+#[utoipa::path(
+    post,
+    path = "/api/admin/counters/marathon/add",
+    tag = "admin",
+    request_body = MarathonAdd,
+    responses(
+        (status = 200, body = MarathonPayload),
+        (status = 400, description = "`counter.invalid`: 0 or beyond ±1440", body = ErrorBody),
+        (status = 500, description = "`counter.storage_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn add_to_marathon(
+    State(s): State<Arc<Counters>>,
+    body: Result<Json<MarathonAdd>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "counter.invalid");
+    };
+    marathon_body(s.add_to_marathon(b.minutes).await)
+}
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        get_marathon,
+        set_marathon_options,
+        pause_marathon,
+        add_to_marathon,
         list_viewer_counters,
         create_viewer_counter,
         rename_viewer_counter,
@@ -648,7 +848,7 @@ pub(crate) async fn add_for_viewer(
         add_to_counter,
         reset_counter
     ),
-    components(schemas(CounterValuesEvent))
+    components(schemas(CounterValuesEvent, MarathonEvent))
 )]
 struct CounterApi;
 
