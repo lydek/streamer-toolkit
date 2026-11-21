@@ -23,7 +23,13 @@
 
     <section class="stack" aria-labelledby="media-heading">
       <h2 id="media-heading">{{ t('screenTools.media.heading') }}</h2>
-      <MediaLibrary @error="report" @imported="(n) => toast.add(successToast(t('screenTools.media.imported', { n })))" />
+      <MediaRules :media="media" @error="report" />
+      <h3>{{ t('screenTools.media.library') }}</h3>
+      <MediaLibrary
+        @error="report"
+        @loaded="(items) => (media = items)"
+        @imported="(n) => toast.add(successToast(t('screenTools.media.imported', { n })))"
+      />
     </section>
   </FullPage>
 </template>
@@ -31,20 +37,22 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
-import { computed } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
-import { ApiError } from './api'
+import { ApiError, type Schemas } from './api'
 import AppearanceSettings from './AppearanceSettings.vue'
 import BreakCardSettings from './BreakCardSettings.vue'
 import FullPage from './FullPage.vue'
 import MediaLibrary from './MediaLibrary.vue'
+import MediaRules from './MediaRules.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import WarningSettings from './WarningSettings.vue'
 
 const { t } = useI18n()
 const toast = useToast()
 const live = useLiveEvents()
+const media = shallowRef<Schemas['MediaItem'][]>([])
 const status = computed(() => {
   const card = live.value.breakCard
   if (!card) return undefined

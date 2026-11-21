@@ -8,13 +8,16 @@ use chrono::{DateTime, Utc};
 use crate::domain::{
     BreakCard, BreakSettings, Countdown,
     appearance::Appearance,
-    media::MediaEntry,
+    media::{MediaEntry, MediaRule},
     warnings::{Conditions, WarningSettings, Warnings},
 };
 
 mod media;
+mod playback;
 
 pub use media::MediaError;
+use playback::Playback;
+pub use playback::{MediaShow, PlaybackDeps, PublishMedia, RecentMedia};
 
 #[derive(Debug, thiserror::Error)]
 #[error("overlays.storage_failed: {0}")]
@@ -69,7 +72,19 @@ pub trait OverlayRepository: Send + Sync + 'static {
         &self,
         entry: &MediaEntry,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    /// The entry and the rules that show it.
     fn delete_media(&self, id: &str) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+
+    fn media_rules(&self) -> impl Future<Output = Result<Vec<MediaRule>, RepositoryError>> + Send;
+    fn save_media_rule(
+        &self,
+        rule: &MediaRule,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    /// `false` when the reward has no rule.
+    fn delete_media_rule(
+        &self,
+        reward_id: &str,
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
 }
 
 /// Announces the card after every change and once at start.
@@ -84,6 +99,7 @@ pub struct Publishers {
     pub(crate) break_card: PublishBreak,
     pub(crate) warnings: PublishWarnings,
     pub(crate) appearance: PublishAppearance,
+    pub(crate) media: PublishMedia,
 }
 
 #[derive(Default)]
@@ -100,19 +116,28 @@ pub struct OverlayService<R> {
     publish: PublishBreak,
     publish_warnings: PublishWarnings,
     publish_appearance: PublishAppearance,
+    publish_media: PublishMedia,
+    playback: Playback,
     /// One change at a time: each reads, changes and saves a single row.
     lock: tokio::sync::Mutex<()>,
     warnings: Mutex<WarningState>,
 }
 
 impl<R: OverlayRepository> OverlayService<R> {
-    pub(crate) fn new(repo: R, media_dir: PathBuf, publishers: Publishers) -> Self {
+    pub(crate) fn new(
+        repo: R,
+        media_dir: PathBuf,
+        publishers: Publishers,
+        deps: PlaybackDeps,
+    ) -> Self {
         Self {
             repo,
             media_dir,
             publish: publishers.break_card,
             publish_warnings: publishers.warnings,
             publish_appearance: publishers.appearance,
+            publish_media: publishers.media,
+            playback: Playback::new(deps),
             lock: tokio::sync::Mutex::new(()),
             warnings: Mutex::default(),
         }
@@ -129,7 +154,7 @@ impl<R: OverlayRepository> OverlayService<R> {
         let settings = self.repo.warning_settings().await?.unwrap_or_default();
         self.apply_warning_settings(settings, Utc::now());
         (self.publish_appearance)(self.appearance().await?);
-        Ok(())
+        self.reload_library().await
     }
 
     pub async fn appearance(&self) -> Result<Appearance, RepositoryError> {

@@ -1,13 +1,21 @@
 <template>
   <!-- The template is mounted here; alerts are rendered by template.ts as plain text. -->
   <div ref="host"></div>
+  <!-- A reward's video or GIF (screen tools), paced by the presentation queue like the alerts. -->
+  <div v-if="media" class="media" :class="`at-${media.position}`" data-media>
+    <img v-if="media.format === 'gif'" :src="media.url" alt="" />
+    <video v-else :src="media.url" autoplay playsinline :volume="media.volume / 100" :muted="media.volume === 0"></video>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { followAppearance } from '../appearance'
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
 import { type Incoming, stopsStage } from '../chat/chat'
 import type { AlertPayload } from './alerts'
+import type { components } from '../../api/schema'
+
+type MediaPlay = components['schemas']['MediaPlayPayload']
 import chimeUrl from './chime.wav'
 import { stylesheetsLoaded } from '../chat/template'
 import { playSound, stopSounds } from '../sound'
@@ -34,6 +42,8 @@ let generation = 0
 let loads = 0
 let lastSeq = 0
 let hide: ReturnType<typeof setTimeout> | undefined
+const media = shallowRef<MediaPlay>()
+let hideMedia: ReturnType<typeof setTimeout> | undefined
 /** The alert on screen, kept across a template change. */
 let current: { p: AlertPayload; until: number } | undefined
 let ws: WebSocket | undefined
@@ -109,11 +119,23 @@ function receive(msg: Incoming) {
     template?.stage.replaceChildren()
     current = undefined
     stopSounds()
+    clearTimeout(hideMedia)
+    media.value = undefined
   } else if (msg.type === 'alert' && (preview || msg.seq > lastSeq)) {
     // The admin window posts a preview's sample and live alerts in order, without a fitting `seq`.
     lastSeq = Math.max(lastSeq, msg.seq)
     void play(msg.payload)
+  } else if (msg.type === 'screen.media' && !preview && msg.seq > lastSeq) {
+    lastSeq = msg.seq
+    showMedia(msg.payload)
   }
+}
+
+/** Shows a reward's video or GIF for its time; the Host paces them, so a new one only replaces a stale one. */
+function showMedia(p: MediaPlay) {
+  clearTimeout(hideMedia)
+  media.value = p
+  hideMedia = setTimeout(() => (media.value = undefined), p.durationMs)
 }
 
 function connect() {
@@ -138,7 +160,59 @@ onBeforeUnmount(() => {
   stopped = true
   clearTimeout(retry)
   clearTimeout(hide)
+  clearTimeout(hideMedia)
   ws?.close()
   window.removeEventListener('message', onPreviewMessage)
 })
 </script>
+
+<style scoped>
+.media {
+  position: fixed;
+  display: grid;
+  place-items: center;
+}
+
+.media img,
+.media video {
+  max-width: 40vw;
+  max-height: 40vh;
+}
+
+.at-top_left {
+  top: 2vh;
+  left: 2vw;
+}
+
+.at-top_right {
+  top: 2vh;
+  right: 2vw;
+}
+
+.at-bottom_left {
+  bottom: 2vh;
+  left: 2vw;
+}
+
+.at-bottom_right {
+  right: 2vw;
+  bottom: 2vh;
+}
+
+.at-center {
+  inset: 0;
+}
+
+.at-full {
+  inset: 0;
+}
+
+.at-full img,
+.at-full video {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+}
+</style>

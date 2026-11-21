@@ -16,6 +16,7 @@ use axum::{
 };
 use checkin::{CheckedInEntry, CheckinService};
 use chrono::{DateTime, SecondsFormat, Utc};
+use overlays::application::RecentMedia;
 use serde::{Deserialize, Serialize};
 use sound::SoundService;
 use sqlx::SqlitePool;
@@ -41,6 +42,7 @@ pub(crate) struct FeedState {
     pub(crate) alerts: Arc<AlertsService>,
     pub(crate) sounds: Arc<SoundService>,
     pub(crate) checkin: Arc<CheckinService>,
+    pub(crate) screen_tools: Arc<overlays::Overlays>,
 }
 
 pub(crate) fn routes(state: FeedState) -> Router {
@@ -69,6 +71,15 @@ pub(crate) enum Triggered {
     Alert,
     Sound,
     Card,
+    Media,
+}
+
+/// Why its module turned it down, when the Host knows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FeedReason {
+    /// Its media file is gone from the media folder.
+    FileMissing,
 }
 
 /// What became of what it set off.
@@ -106,7 +117,13 @@ pub(crate) struct FeedResult {
     /// The reward sound's name (raw text), for a sound.
     #[schema(required)]
     pub(crate) sound: Option<String>,
+    /// The media item's title (raw text), for a video or GIF.
+    #[schema(required)]
+    pub(crate) media: Option<String>,
     pub(crate) outcome: FeedOutcome,
+    /// Why it was declined, when the Host knows; `null` otherwise.
+    #[schema(required)]
+    pub(crate) reason: Option<FeedReason>,
 }
 
 /// One item. `viewer` is raw viewer text: render it as text.
@@ -172,6 +189,7 @@ async fn read(s: &FeedState) -> Result<Vec<FeedItem>, sqlx::Error> {
                 .collect(),
             sounds: s.sounds.recent(),
             cards: s.checkin.recent(),
+            media: s.screen_tools.media_recent(),
         },
     ))
 }
@@ -195,6 +213,8 @@ pub(crate) struct Remembered {
     pub(crate) alerts: Vec<RememberedAlert>,
     pub(crate) sounds: Vec<RecentItem>,
     pub(crate) cards: Vec<RecentItem>,
+    /// Reward videos and GIFs.
+    pub(crate) media: Vec<RecentMedia>,
 }
 
 fn parse(at: &str) -> Option<DateTime<Utc>> {
@@ -243,6 +263,11 @@ pub(crate) fn compose(
             .collect()
     };
     let (sounds, cards) = (by_key(&remembered.sounds), by_key(&remembered.cards));
+    let media: HashMap<String, &RecentMedia> = remembered
+        .media
+        .iter()
+        .filter_map(|m| m.item.key.clone().map(|k| (k, m)))
+        .collect();
     let mut items: Vec<(DateTime<Utc>, FeedItem)> = Vec::new();
     let mut push = |at: &str, item: FeedItem| {
         if let Some(t) = parse(at).filter(|t| *t >= from) {
@@ -270,6 +295,8 @@ pub(crate) fn compose(
                 result: alert_outcomes.get(e.alert_id.as_str()).map(|o| FeedResult {
                     triggered: Triggered::Alert,
                     sound: None,
+                    media: None,
+                    reason: None,
                     outcome: (*o).into(),
                 }),
                 simulated: false,
@@ -285,14 +312,31 @@ pub(crate) fn compose(
                 event: FeedEvent::Redemption {
                     reward: r.reward_title.clone(),
                 },
-                result: sounds.get(&r.twitch_redemption_id).map(|s| FeedResult {
-                    triggered: Triggered::Sound,
-                    sound: match &s.subject {
-                        Subject::Sound { sound, .. } => Some(sound.clone()),
-                        _ => None,
-                    },
-                    outcome: s.outcome.into(),
-                }),
+                result: sounds
+                    .get(&r.twitch_redemption_id)
+                    .map(|s| FeedResult {
+                        triggered: Triggered::Sound,
+                        sound: match &s.subject {
+                            Subject::Sound { sound, .. } => Some(sound.clone()),
+                            _ => None,
+                        },
+                        outcome: s.outcome.into(),
+                        media: None,
+                        reason: None,
+                    })
+                    // A reward with a sound shows that; one with only a video or GIF shows that.
+                    .or_else(|| {
+                        media.get(&r.twitch_redemption_id).map(|m| FeedResult {
+                            triggered: Triggered::Media,
+                            sound: None,
+                            media: match &m.item.subject {
+                                Subject::Media { media, .. } => Some(media.clone()),
+                                _ => None,
+                            },
+                            outcome: m.item.outcome.into(),
+                            reason: m.file_missing.then_some(FeedReason::FileMissing),
+                        })
+                    }),
                 simulated: false,
             },
         );
@@ -309,6 +353,8 @@ pub(crate) fn compose(
                 result: cards.get(&c.record_id).map(|card| FeedResult {
                     triggered: Triggered::Card,
                     sound: None,
+                    media: None,
+                    reason: None,
                     outcome: card.outcome.into(),
                 }),
                 simulated: false,
@@ -334,6 +380,8 @@ pub(crate) fn compose(
                 result: Some(FeedResult {
                     triggered: Triggered::Alert,
                     sound: None,
+                    media: None,
+                    reason: None,
                     outcome: r.outcome.into(),
                 }),
                 simulated: true,
@@ -359,6 +407,8 @@ pub(crate) fn compose(
                 result: Some(FeedResult {
                     triggered: Triggered::Card,
                     sound: None,
+                    media: None,
+                    reason: None,
                     outcome: r.outcome.into(),
                 }),
                 simulated: true,

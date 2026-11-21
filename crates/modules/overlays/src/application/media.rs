@@ -78,6 +78,7 @@ impl<R: OverlayRepository> OverlayService<R> {
             let _ = fs::remove_file(&path);
             return Err(e.into());
         }
+        self.reload_library().await?;
         Ok(entry)
     }
 
@@ -100,10 +101,12 @@ impl<R: OverlayRepository> OverlayService<R> {
         entry.title = title;
         entry.duration_ms = duration_ms.or(entry.duration_ms);
         self.repo.update_media(&entry).await?;
+        self.reload_library().await?;
         Ok(entry)
     }
 
-    /// Removes the entry, then its file; a file that cannot be removed is left behind, never the entry.
+    /// Removes the entry and the rules that show it, then its file; a file that cannot be removed is left behind,
+    /// never the entry.
     pub async fn delete_media(&self, id: &str) -> Result<(), MediaError> {
         let entry = self
             .repo
@@ -111,6 +114,7 @@ impl<R: OverlayRepository> OverlayService<R> {
             .await?
             .ok_or(MediaError::NotFound)?;
         self.repo.delete_media(id).await?;
+        self.reload_library().await?;
         if let Err(e) = fs::remove_file(self.media_dir.join(entry.file_name()))
             && e.kind() != io::ErrorKind::NotFound
         {

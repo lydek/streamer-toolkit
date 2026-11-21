@@ -30,7 +30,17 @@ async fn restart(pool: SqlitePool) -> Rig {
 
 async fn restart_in(pool: SqlitePool, dir: std::path::PathBuf) -> Rig {
     let bus = Arc::new(EventBus::default());
-    let service = start(pool.clone(), bus.clone(), &dir);
+    let presenter = Presenter::start(Duration::from_millis(10), |_| true);
+    let service = start(
+        pool.clone(),
+        bus.clone(),
+        Deps {
+            data_dir: dir.clone(),
+            presenter,
+            modules: Arc::new(Modules::load(dir.clone())),
+            master_volume: Box::new(|| 50),
+        },
+    );
     // Let it announce the stored card.
     tokio::time::sleep(Duration::from_millis(50)).await;
     Rig {
@@ -477,4 +487,169 @@ async fn a_media_file_gone_from_the_folder_is_marked_missing() {
     let (_, list) = send(&again.app, "GET", MEDIA_URL, None).await;
     assert_eq!(list[0]["id"], gif["id"]);
     assert_eq!(list[0]["missing"], true);
+}
+
+fn redemption(
+    id: &str,
+    reward_id: &str,
+    change: toolkit_core::events::RedemptionChange,
+) -> toolkit_core::events::ChannelPointsRedemption {
+    toolkit_core::events::ChannelPointsRedemption {
+        id: id.into(),
+        change,
+        user_id: "u1".into(),
+        user_login: "orange".into(),
+        user_name: "橘子".into(),
+        reward_id: reward_id.into(),
+        reward_title: "貓咪".into(),
+        reward_cost: 100,
+        user_input: String::new(),
+        status: toolkit_core::events::RedemptionStatus::Unfulfilled,
+        redeemed_at: "2026-11-22T12:00:00Z".into(),
+    }
+}
+
+/// Every `screen.media` event published so far, as (source, payload).
+fn media_events(events: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<(String, Value)> {
+    let mut out = Vec::new();
+    while let Ok(text) = events.try_recv() {
+        let v: Value = serde_json::from_str(&text).unwrap();
+        if v["type"] == "screen.media" {
+            out.push((
+                v["source"].as_str().unwrap().to_owned(),
+                v["payload"].clone(),
+            ));
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn a_redemption_queues_its_reward_media_once_and_a_test_records_nothing() {
+    use toolkit_core::events::RedemptionChange::{Added, Updated};
+    let r = rig().await;
+    let (_, gif) = upload(&r.app, "cat.gif", GIF).await;
+    let id = gif["id"].as_str().unwrap().to_owned();
+    send(
+        &r.app,
+        "PUT",
+        &format!("{MEDIA_URL}/{id}"),
+        Some(json!({"title": "貓咪", "duration_ms": 20})),
+    )
+    .await;
+    let rule = json!({"media_id": id, "position": "bottom_right", "volume": null});
+    let (status, body) = send(
+        &r.app,
+        "PUT",
+        "/api/admin/screen-tools/media-rules/rw1",
+        Some(rule),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["position"], "bottom_right");
+    let (_, rules) = send(&r.app, "GET", "/api/admin/screen-tools/media-rules", None).await;
+    assert_eq!(rules[0]["reward_id"], "rw1");
+
+    let (_, mut events) = r.bus.subscribe();
+    r.service
+        .receive_redemption(&redemption("x1", "rw1", Added));
+    r.service
+        .receive_redemption(&redemption("x1", "rw1", Updated));
+    r.service
+        .receive_redemption(&redemption("x2", "other", Added));
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let shown = media_events(&mut events);
+    assert_eq!(shown.len(), 1, "one redemption, one show");
+    assert_eq!(shown[0].0, "twitch");
+    assert_eq!(
+        shown[0].1,
+        json!({"url": format!("/media/{id}"), "format": "gif", "position": "bottom_right", "volume": 50, "durationMs": 20})
+    );
+    let recent = r.service.media_recent();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0].item.key.as_deref(), Some("x1"));
+    assert_eq!(
+        recent[0].item.outcome,
+        Some(toolkit_core::presentation::Outcome::Played)
+    );
+
+    let (status, _) = send(
+        &r.app,
+        "POST",
+        "/api/admin/screen-tools/media-rules/rw1/test",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let shown = media_events(&mut events);
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].0, "simulation");
+    assert_eq!(r.service.media_recent().len(), 1, "a test is not recorded");
+    let (status, body) = send(
+        &r.app,
+        "POST",
+        "/api/admin/screen-tools/media-rules/none/test",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "media.not_found");
+}
+
+#[tokio::test]
+async fn a_missing_file_is_declined_at_once_and_says_why() {
+    use toolkit_core::{events::RedemptionChange::Added, presentation::Outcome};
+    let r = rig().await;
+    let (_, gif) = upload(&r.app, "cat.gif", GIF).await;
+    let id = gif["id"].as_str().unwrap().to_owned();
+    let rule = json!({"media_id": id, "position": "full", "volume": 80});
+    send(
+        &r.app,
+        "PUT",
+        "/api/admin/screen-tools/media-rules/rw1",
+        Some(rule),
+    )
+    .await;
+    std::fs::remove_file(r.dir.join("media").join(format!("{id}.gif"))).unwrap();
+
+    let (_, mut events) = r.bus.subscribe();
+    r.service
+        .receive_redemption(&redemption("x1", "rw1", Added));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(media_events(&mut events).is_empty());
+    let recent = r.service.media_recent();
+    assert_eq!(recent[0].item.outcome, Some(Outcome::Declined));
+    assert!(recent[0].file_missing);
+
+    // Deleting the item takes its rules with it.
+    send(&r.app, "DELETE", &format!("{MEDIA_URL}/{id}"), None).await;
+    let (_, rules) = send(&r.app, "GET", "/api/admin/screen-tools/media-rules", None).await;
+    assert_eq!(rules, json!([]));
+    let (status, _) = send(
+        &r.app,
+        "DELETE",
+        "/api/admin/screen-tools/media-rules/rw1",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn the_media_event_type_matches_what_the_bus_sends() {
+    let r = rig().await;
+    let (_, gif) = upload(&r.app, "cat.gif", GIF).await;
+    let rule = json!({"media_id": gif["id"], "position": "center", "volume": 30});
+    send(
+        &r.app,
+        "PUT",
+        "/api/admin/screen-tools/media-rules/rw1",
+        Some(rule),
+    )
+    .await;
+    let (_, mut events) = r.bus.subscribe();
+    r.service.test_media("rw1").unwrap();
+    let wire: Value = serde_json::from_str(&events.try_recv().unwrap()).unwrap();
+    let typed: MediaPlayEvent = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(serde_json::to_value(typed).unwrap(), wire);
 }

@@ -25,17 +25,20 @@ describe('feed', () => {
 
   it('says what it set off and what became of it, or nothing when unknown', () => {
     expect(feedResult(item({}))).toBe('')
-    expect(feedResult(item({ result: { triggered: 'sound', sound: 'Bell', outcome: 'sound_missing' } }))).toBe(
+    expect(feedResult(item({ result: { triggered: 'sound', sound: 'Bell', media: null, outcome: 'sound_missing', reason: null } }))).toBe(
       '音效「Bell」：已播，但音效檔案不見了',
     )
-    expect(feedResult(item({ result: { triggered: 'card', sound: null, outcome: 'off_air' } }))).toBe(
+    expect(feedResult(item({ result: { triggered: 'card', sound: null, media: null, outcome: 'off_air', reason: null } }))).toBe(
       '集點卡：Overlay 沒開，沒有播',
     )
     for (const outcome of ['queued', 'played', 'declined', 'skipped', 'cleared', 'stopped'] as const) {
-      expect(feedResult(item({ result: { triggered: 'alert', sound: null, outcome } }))).toBe(
+      expect(feedResult(item({ result: { triggered: 'alert', sound: null, media: null, outcome, reason: null } }))).toBe(
         `特效：${t(`feed.outcome.${outcome}`)}`,
       )
     }
+    expect(
+      feedResult(item({ result: { triggered: 'media', sound: null, media: '貓咪', outcome: 'declined', reason: 'file_missing' } })),
+    ).toBe('影片或 GIF「貓咪」：被模組拒絕（檔案不見了）')
   })
 
   it('counts and shows the latest on the tile, and knows which messages change it', () => {

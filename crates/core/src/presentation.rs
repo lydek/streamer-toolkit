@@ -1,4 +1,4 @@
-//! One queue for what the overlays present (alerts, stamp cards, reward sounds): items play one at a time, in the
+//! One queue for what the overlays present (alerts, stamp cards, reward sounds and videos): items play one at a time, in the
 //! order they came, with no size limit, so nothing overlaps and nothing is dropped. Modules still decide what to
 //! show; the queue only paces it. The broadcaster can skip the item playing, clear what waits, or stop everything
 //! at once.
@@ -45,6 +45,8 @@ pub enum Subject {
     },
     /// A reward sound and the viewer who redeemed it.
     Sound { sound: String, viewer: String },
+    /// A reward's video or GIF and the viewer who redeemed it.
+    Media { media: String, viewer: String },
 }
 
 /// Something the Host itself can see went wrong with an item (overlays do not report back).

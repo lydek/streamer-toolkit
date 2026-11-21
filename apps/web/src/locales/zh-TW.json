@@ -418,7 +418,8 @@
     "item": {
       "alert": "特效：{viewer} {action}",
       "card": "打卡卡片：{viewer} {stamps}/{slots}",
-      "sound": "音效：{sound}（{viewer}兌換）"
+      "sound": "音效：{sound}（{viewer}兌換）",
+      "media": "影片：{media}（{viewer}兌換）"
     },
     "action": {
       "follow": "追隨了",
@@ -814,7 +815,12 @@
     "triggered": {
       "alert": "特效",
       "sound": "音效「{sound}」",
-      "card": "集點卡"
+      "card": "集點卡",
+      "media": "影片或 GIF「{media}」"
+    },
+    "because": "{outcome}（{reason}）",
+    "reason": {
+      "file_missing": "檔案不見了"
     },
     "outcome": {
       "queued": "排隊中",
@@ -930,7 +936,29 @@
       "confirmDelete": "確定刪除",
       "cancel": "取消",
       "imported": "已匯入 {n} 個檔案。",
-      "importFailed": "{file}：{reason}"
+      "importFailed": "{file}：{reason}",
+      "library": "影片與 GIF"
+    },
+    "rules": {
+      "reward": "獎勵",
+      "media": "播放",
+      "position": "位置",
+      "volume": "音量",
+      "none": "不播",
+      "noRewards": "還沒有可以兌換的頻道點數獎勵（需要登入 Twitch）。",
+      "mediaFor": "「{reward}」播放的檔案",
+      "positionFor": "「{reward}」的位置",
+      "volumeFor": "「{reward}」的音量",
+      "followMaster": "跟著音效總音量",
+      "test": "試播",
+      "positions": {
+        "top_left": "左上",
+        "top_right": "右上",
+        "bottom_left": "左下",
+        "bottom_right": "右下",
+        "center": "置中",
+        "full": "全畫面"
+      }
     }
   },
   "music": {

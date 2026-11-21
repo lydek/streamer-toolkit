@@ -3622,6 +3622,170 @@
         }
       }
     },
+    "/api/admin/screen-tools/media-rules": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "What each reward shows.",
+        "operationId": "list_rules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MediaRuleBody"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/media-rules/{reward_id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sets what a reward shows.",
+        "operationId": "set_rule",
+        "parameters": [
+          {
+            "name": "reward_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaRuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaRuleBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`media.invalid`: a volume above 100",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`media.not_found`: no such media item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_rule",
+        "parameters": [
+          {
+            "name": "reward_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`media.not_found`: the reward has no rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`media.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/screen-tools/media-rules/{reward_id}/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "試播: shows the reward's media on the alerts overlay at once, as `source=simulation`; nothing is recorded.",
+        "operationId": "test_rule",
+        "parameters": [
+          {
+            "name": "reward_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`media.not_found`: no rule, its item is gone, or a video's length is not read yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/screen-tools/media/{id}": {
       "put": {
         "tags": [
@@ -7170,16 +7334,43 @@
           "stopped"
         ]
       },
+      "FeedReason": {
+        "type": "string",
+        "description": "Why its module turned it down, when the Host knows.",
+        "enum": [
+          "file_missing"
+        ]
+      },
       "FeedResult": {
         "type": "object",
         "required": [
           "triggered",
           "sound",
-          "outcome"
+          "media",
+          "outcome",
+          "reason"
         ],
         "properties": {
+          "media": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The media item's title (raw text), for a video or GIF."
+          },
           "outcome": {
             "$ref": "#/components/schemas/FeedOutcome"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedReason",
+                "description": "Why it was declined, when the Host knows; `null` otherwise."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sound": {
             "type": [
@@ -7661,6 +7852,152 @@
           "url": {
             "type": "string",
             "description": "`/media/{id}`, readable without a token."
+          }
+        }
+      },
+      "MediaPlayEvent": {
+        "type": "object",
+        "description": "A `screen.media` event exactly as `/ws/overlay` sends it when its turn on the presentation queue comes, or at\nonce for 試播 (`source=simulation`).",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MediaPlayPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MediaPlayType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "MediaPlayPayload": {
+        "type": "object",
+        "description": "The `payload` of a `screen.media` event: the alerts overlay shows `url` at `position` for `durationMs`, a video\nat `volume`. Not kept in snapshots, so a reload never shows it again.",
+        "required": [
+          "url",
+          "format",
+          "position",
+          "volume",
+          "durationMs"
+        ],
+        "properties": {
+          "durationMs": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "format": {
+            "type": "string",
+            "description": "`gif`, `webm` or `mp4`."
+          },
+          "position": {
+            "$ref": "#/components/schemas/MediaPosition"
+          },
+          "url": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Percent.",
+            "minimum": 0
+          }
+        }
+      },
+      "MediaPlayType": {
+        "type": "string",
+        "enum": [
+          "screen.media"
+        ]
+      },
+      "MediaPosition": {
+        "type": "string",
+        "description": "Where the alerts overlay shows a media item.",
+        "enum": [
+          "top_left",
+          "top_right",
+          "bottom_left",
+          "bottom_right",
+          "center",
+          "full"
+        ]
+      },
+      "MediaRuleBody": {
+        "type": "object",
+        "description": "What a channel points reward shows when redeemed.",
+        "required": [
+          "reward_id",
+          "media_id",
+          "position"
+        ],
+        "properties": {
+          "media_id": {
+            "type": "string",
+            "description": "A media library item."
+          },
+          "position": {
+            "$ref": "#/components/schemas/MediaPosition"
+          },
+          "reward_id": {
+            "type": "string"
+          },
+          "volume": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "0–100 %; `null` follows the sound master volume.",
+            "minimum": 0
+          }
+        }
+      },
+      "MediaRuleInput": {
+        "type": "object",
+        "required": [
+          "media_id",
+          "position"
+        ],
+        "properties": {
+          "media_id": {
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/MediaPosition"
+          },
+          "volume": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "0–100 %; `null` follows the sound master volume.",
+            "minimum": 0
           }
         }
       },
@@ -9878,6 +10215,29 @@
                 "type": "string"
               }
             }
+          },
+          {
+            "type": "object",
+            "description": "A reward's video or GIF and the viewer who redeemed it.",
+            "required": [
+              "media",
+              "viewer",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "media"
+                ]
+              },
+              "media": {
+                "type": "string"
+              },
+              "viewer": {
+                "type": "string"
+              }
+            }
           }
         ],
         "description": "What an item is, as the queue area names it; names are raw text."
@@ -10120,7 +10480,8 @@
         "enum": [
           "alert",
           "sound",
-          "card"
+          "card",
+          "media"
         ]
       },
       "TwitchBadgePayload": {
