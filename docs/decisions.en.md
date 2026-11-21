@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 020e1253f4594ba527cf1a30a39b46f4d85b2def65939f04de114526c25c887d -->
+<!-- source: docs/decisions.md source-sha256: 28f608fb15ca82fa78b649e6c1fb0bde94132d9063b2a75332ca55a6faa6ed68 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -136,4 +136,4 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | 2026-11-17 | New-version notice built in slice 7: the Host checks GitHub's `releases/latest` through the existing HTTPS client; dev builds do not check | A dev build's version says nothing about releases, and the download page command is granted only to the release build's admin window |
 | 2026-11-18 | The admin UI layout changed to a sticky top bar + group tabs across the top (at most two levels); home stays feature tiles + drawer | With more features, users can no longer find features through home tiles alone; tabs put every page one click away, and the sticky top bar keeps the connection status in view |
 | 2026-11-18 | Dropped the MVP; the target is now the prototype's full feature set, built in phases; issue labels go by phase; Twitch scopes are requested the first time a feature is turned on | The MVP feature set differed too much from the prototype design to be worth releasing on its own; requesting every scope at once makes people who use only a few features grant scopes they never need |
-| 2026-11-21 | The admin UI follows the prototype: full-width pages (up to 120rem), the docked chat panel open by default, tiles with a big value, home in one grid edited in place, and the stage card and queue as blocks in that grid | The prototype's layout is the target; the narrow column left wide windows mostly empty, and the chat is open almost all the time while streaming |
+| 2026-11-21 | The admin UI follows the prototype: full-width pages (up to 120rem), the docked chat panel open by default, tiles with a big value, home in one grid edited in place, the stage card and queue as blocks in that grid, and small tiles that open in place | The prototype's layout is the target; the narrow column left wide windows mostly empty, and the chat is open almost all the time while streaming |

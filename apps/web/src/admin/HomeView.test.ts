@@ -73,11 +73,36 @@ describe('HomeView stage blocks', () => {
     const headings = [...document.querySelectorAll('#tiles h2')].map((h) => h.textContent)
     // No stream yet: 開播前.
     expect(headings).toContain('開播前檢查')
-    expect(headings).toContain('呈現佇列')
+    // The queue starts as a small tile that opens in place.
+    expect(document.querySelector('[data-expand="queue"]')?.getAttribute('aria-expanded')).toBe('false')
     expect(headings).not.toContain('本場直播')
     expect(headings).not.toContain('本場摘要')
     expect(headings).not.toContain('待處理')
     expect(document.querySelector('#tiles li.size-w [aria-labelledby="checklist-heading"]')).not.toBeNull()
+  })
+})
+
+describe('HomeView blocks that open in place', () => {
+  it('opens a small tile into its block and back, with focus kept on the same place, and saves nothing', async () => {
+    await home()
+    const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="queue"]')!
+    toggle().click()
+    await flushPromises()
+    expect(document.getElementById('block-queue')?.closest('li')?.classList).toContain('size-m')
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(document.activeElement).toBe(toggle())
+    toggle().click()
+    await flushPromises()
+    expect(document.getElementById('block-queue')).toBeNull()
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(toggle())
+
+    document.querySelector<HTMLButtonElement>('#tiles [data-expand="feed"]')!.click()
+    await flushPromises()
+    expect(document.getElementById('block-feed')?.closest('li')?.classList).toContain('size-l')
+    // The feed loads with the live messages, which this test does not send.
+    expect(document.getElementById('block-feed')?.textContent).toContain('載入中')
+    expect(put).not.toHaveBeenCalled()
   })
 })
 
@@ -103,7 +128,8 @@ describe('HomeView skip link', () => {
   it('focuses the first tile', async () => {
     await home()
     skip().click()
-    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
+    // The queue's small tile comes first in the default order.
+    expect(document.activeElement).toBe(document.querySelector('[data-expand="queue"]'))
   })
 
   it('focuses "Arrange tiles" on an emptied home', async () => {
@@ -147,7 +173,8 @@ describe('HomeView update notice', () => {
     dismiss.click()
     await flushPromises()
     expect(document.querySelector('.update')).toBeNull()
-    expect(document.activeElement).toBe(document.querySelector('[data-drawer-tile="chat"]'))
+    // The queue's small tile comes first in the default order.
+    expect(document.activeElement).toBe(document.querySelector('[data-expand="queue"]'))
   })
 })
 

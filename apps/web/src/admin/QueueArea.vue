@@ -5,6 +5,7 @@
       <h2 id="queue-heading">{{ t('queue.title') }}</h2>
       <span class="summary">{{ summary }}</span>
       <Button :label="t('queue.clear')" text size="small" :disabled="busy" @click="clear" />
+      <slot name="actions" />
     </div>
     <ol v-if="items.length" class="queue-list">
       <li v-for="(item, i) in items" :key="i" :class="{ playing: item.playing }">
@@ -26,7 +27,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { errorToast, successToast } from './home'
-import { waitMs } from './queue'
+import { subjectText, waitMs } from './queue'
 
 const props = defineProps<{ status?: Schemas['QueueStatus'] }>()
 const { t } = useI18n()
@@ -43,20 +44,6 @@ const items = computed(() => [
   ...(props.status?.waiting ?? []).map((w) => ({ subject: w.subject, problem: null, onAir: w.onAir, playing: false })),
 ])
 
-/** 特效：阿凱 訂閱了, 打卡卡片：小魚 7/10, 音效：喝水（橘子兌換）; names are raw text, escaped by the template. */
-function subjectText(s: Schemas['Subject']): string {
-  switch (s.kind) {
-    case 'alert':
-      return t('queue.item.alert', {
-        viewer: s.viewer || t('queue.anonymous'),
-        action: t(`queue.action.${s.alert}`),
-      })
-    case 'card':
-      return t('queue.item.card', { viewer: s.viewer, stamps: s.stamps, slots: s.slots })
-    case 'sound':
-      return t('queue.item.sound', { sound: s.sound, viewer: s.viewer })
-  }
-}
 
 async function skip() {
   busy.value = true

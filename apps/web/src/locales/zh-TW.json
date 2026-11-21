@@ -450,6 +450,9 @@
     "connections": "連線與 OBS 來源",
     "chatEmpty": "還沒有訊息",
     "latest": "最新：{text}",
+    "collapse": "收合",
+    "statsLine": "{redemptions} 兌換 · {subs} 訂閱",
+    "queueIdle": "沒有正在播的",
     "blocks": {
       "pending": "待處理",
       "checklist": "開播前檢查",
@@ -462,7 +465,8 @@
       "checkin": "人今天打卡",
       "sound": "個音效",
       "feed": "件",
-      "redemption": "筆最近兌換"
+      "redemption": "筆最近兌換",
+      "queue": "個排隊中"
     },
     "status": {
       "connected": "已連線",

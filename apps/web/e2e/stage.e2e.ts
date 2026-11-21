@@ -72,6 +72,12 @@ const pressed = (page: Page, name: string) => stage(page).getByRole('button', { 
 test("while live it shows how long, the peak and this stream's numbers", async ({ page }) => {
   await open(page, { state: 'live', startedAt: '2026-11-18T11:58:00.000Z', viewers: 50 }, summary(null))
   await expect(pressed(page, zh.stage.live)).toHaveAttribute('aria-pressed', 'true')
+  // 本場直播 starts as a small tile with the time; it opens in place into the numbers.
+  const toggle = page.locator('#tiles [data-expand="stats"]')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(toggle).toBeFocused()
   await expect(stage(page).getByText(/^\d+:\d\d:\d\d · 最高 58 位觀眾$/)).toBeVisible()
   await expect(stage(page).getByText('1,200')).toBeVisible()
   await expect(stage(page).getByText(zh.stage.stats.redemptions)).toBeVisible()

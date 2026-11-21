@@ -27,7 +27,10 @@
     <p v-if="copyNotice" :role="copyNotice.error ? 'alert' : 'status'">{{ copyNotice.text }}</p>
   </section>
   <section v-else class="stage" aria-labelledby="session-heading">
-    <h2 id="session-heading">{{ t(shown === 'live' ? 'home.blocks.stats' : 'home.blocks.summary') }}</h2>
+    <div class="head">
+      <h2 id="session-heading">{{ t(shown === 'live' ? 'home.blocks.stats' : 'home.blocks.summary') }}</h2>
+      <slot name="actions" />
+    </div>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="notLive" class="muted">{{ t('stage.notLive') }}</p>
     <p v-else-if="!session" class="muted">{{ shown === 'live' ? t('stage.waiting') : t('stage.noStream') }}</p>

@@ -1,5 +1,5 @@
 <template>
-  <button type="button" class="tile" :aria-expanded="expanded" :aria-controls="drawerId(id)" :data-drawer-tile="id">
+  <button type="button" class="tile" :aria-expanded="expanded" :aria-controls="controls ?? drawerId(id)" :data-drawer-tile="controls ? undefined : id">
     <TileFace :name="name" :icon="icon" :tint="tint" :line="shown" />
     <template v-if="attention || shown.state === 'failed'">
       <span class="dot" aria-hidden="true"></span>
@@ -22,6 +22,8 @@ const props = defineProps<{
   line: Line
   attention?: boolean
   expanded: boolean
+  /** The element it opens when not a drawer (a home block); such a tile is no drawer tile for focus. */
+  controls?: string
 }>()
 const { t } = useI18n()
 

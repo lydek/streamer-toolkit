@@ -26,6 +26,8 @@ async function openWithQueue(page: Page, queue: unknown) {
     ),
   )
   await page.goto('/admin/')
+  // The queue starts as a small tile on home; it opens in place into its block.
+  await page.locator('#tiles [data-expand="queue"]').click()
   return calls
 }
 
