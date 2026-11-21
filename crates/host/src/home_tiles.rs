@@ -18,6 +18,10 @@ const MAX_TILES: usize = 50;
 const MAX_ID_LEN: usize = 32;
 /// The tiles of the old 「直播中」 group, which home showed before the others while it grouped its tiles.
 const OLD_LIVE_GROUP: [&str; 3] = ["chat", "alerts", "feed"];
+/// The stage blocks that joined the grid in version 2, in their default order; before, they always showed above it.
+const STAGE_BLOCKS: [&str; 5] = ["pending", "checklist", "stats", "summary", "queue"];
+/// The home `home_tiles` is saved for now (`Settings::home_tiles_version`).
+const VERSION: u8 = 2;
 
 pub(crate) fn routes(data_dir: PathBuf) -> Router {
     Router::new()
@@ -34,15 +38,17 @@ pub(crate) fn routes(data_dir: PathBuf) -> Router {
 )]
 pub(crate) async fn home_tiles(State(data_dir): State<PathBuf>) -> Json<Option<Vec<String>>> {
     let saved = settings::load(&data_dir);
-    if saved.home_tiles.is_none() || saved.home_tiles_flat {
+    if saved.home_tiles.is_none() || saved.home_tiles_version >= VERSION {
         return Json(saved.home_tiles);
     }
-    // A list from the grouped home: saved in the order it was shown, once. If saving fails, the next read tries again.
-    let mut shown = saved.home_tiles.map(as_shown);
+    // A list saved for an older home: brought up to date and saved, once. If saving fails, the next read tries again.
+    let from = saved.home_tiles_version;
+    let mut shown = saved.home_tiles.map(|ids| upgraded(ids, from));
     if let Ok(now) = settings::update(&data_dir, |s| {
-        if !s.home_tiles_flat {
-            s.home_tiles = s.home_tiles.take().map(as_shown);
-            s.home_tiles_flat = true;
+        if s.home_tiles_version < VERSION {
+            let from = s.home_tiles_version;
+            s.home_tiles = s.home_tiles.take().map(|ids| upgraded(ids, from));
+            s.home_tiles_version = VERSION;
         }
     }) {
         shown = now.home_tiles;
@@ -50,12 +56,30 @@ pub(crate) async fn home_tiles(State(data_dir): State<PathBuf>) -> Json<Option<V
     Json(shown)
 }
 
-/// The old grouped order: the 「直播中」 tiles first, each group keeping its saved order.
-fn as_shown(ids: Vec<String>) -> Vec<String> {
-    let (live, rest): (Vec<_>, Vec<_>) = ids
-        .into_iter()
-        .partition(|id| OLD_LIVE_GROUP.contains(&id.as_str()));
-    live.into_iter().chain(rest).collect()
+/// `ids` as the current home shows what the home of version `from` showed.
+fn upgraded(ids: Vec<String>, from: u8) -> Vec<String> {
+    let mut ids = ids;
+    if from < 1 {
+        // The grouped order: the 「直播中」 tiles first, each group keeping its saved order.
+        let (live, rest): (Vec<_>, Vec<_>) = ids
+            .into_iter()
+            .partition(|id| OLD_LIVE_GROUP.contains(&id.as_str()));
+        ids = live.into_iter().chain(rest).collect();
+    }
+    if from < 2 {
+        // The stage blocks always showed above the tiles, so they come first, even on an emptied home.
+        let mut first: Vec<String> = STAGE_BLOCKS
+            .iter()
+            .filter(|b| !ids.iter().any(|id| id == *b))
+            .map(|b| (*b).to_owned())
+            .collect();
+        first.append(&mut ids);
+        ids = first;
+        // Still a list `PUT` accepts, so what is read can be saved back: the last IDs give way to the blocks (with
+        // only 14 tiles today, those are IDs the admin UI does not know and skips anyway).
+        ids.truncate(MAX_TILES);
+    }
+    ids
 }
 
 /// Saves the tile order: up to 50 IDs of 1-32 characters `[a-z0-9-]`; duplicates keep their first position.
@@ -86,7 +110,7 @@ pub(crate) async fn set_home_tiles(
     };
     if settings::update(&data_dir, |s| {
         // Defaults (`None`) have no order to mark, so restoring them still writes nothing.
-        s.home_tiles_flat = tiles.is_some();
+        s.home_tiles_version = if tiles.is_some() { VERSION } else { 0 };
         s.home_tiles = tiles;
     })
     .is_err()

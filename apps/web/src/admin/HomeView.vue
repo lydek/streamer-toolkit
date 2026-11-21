@@ -24,18 +24,16 @@
       <p v-if="templateError" role="alert">{{ errorMessage(templateError) }}</p>
       <UpdateNotice @dismissed="keepFocus(firstTile)" />
 
-      <!-- Later slices add pending items; the list shows only when it has some. -->
-      <section v-if="pending.length" aria-labelledby="pending-heading">
-        <h2 id="pending-heading">{{ t('home.pending') }}</h2>
-        <ul class="plain">
-          <li v-for="p in pending" :key="p.id">
-            <Button :label="p.text" text @click="toggle(p.panel, $event.currentTarget)" />
-          </li>
-        </ul>
-      </section>
-
-      <StageCard v-if="!arranging" :live="live" :modules="modules" />
-      <QueueArea v-if="!arranging" :status="live.queue" />
+      <div v-if="!arranging" class="stage-switch">
+        <h2 id="stage-heading" class="sr-only">{{ t('stage.title') }}</h2>
+        <SelectButton
+          v-model="shownStage"
+          :options="STAGES"
+          :option-label="(s: Stage) => t(`stage.${s}`)"
+          :allow-empty="false"
+          aria-labelledby="stage-heading"
+        />
+      </div>
 
       <section id="tiles" ref="tilesEl" tabindex="-1" :aria-label="t('home.tiles')">
         <p v-if="!modules">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
@@ -51,9 +49,22 @@
           <p>{{ t('home.empty') }}</p>
           <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="enterArrange" />
         </div>
-        <ul v-else class="plain grid">
-          <li v-for="tile in tiles" :key="tile.id">
+        <ul v-else class="plain tiles">
+          <li v-for="tile in tiles" :key="tile.id" :class="tile.size && `size-${tile.size}`">
+            <!-- Later slices add pending items; the block shows only when it has some. -->
+            <section v-if="tile.id === 'pending'" class="block" aria-labelledby="pending-heading">
+              <h2 id="pending-heading">{{ t('home.blocks.pending') }}</h2>
+              <ul class="plain">
+                <li v-for="p in pending" :key="p.id">
+                  <Button :label="p.text" text @click="toggle(p.panel, $event.currentTarget)" />
+                </li>
+              </ul>
+            </section>
+            <StageCard v-else-if="tile.id === 'checklist'" part="checklist" :stage="stage" />
+            <StageCard v-else-if="tile.id === 'stats' || tile.id === 'summary'" part="session" :stage="stage" />
+            <QueueArea v-else-if="tile.id === 'queue'" :status="live.queue" />
             <HomeTile
+              v-else
               :id="tile.id"
               :name="moduleName(tile.id)"
               :icon="tile.icon"
@@ -283,6 +294,7 @@ import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import QueueArea from './QueueArea.vue'
 import StageCard from './StageCard.vue'
+import { STAGES, useStage } from './stage'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
@@ -301,6 +313,7 @@ import {
   obsLight,
   successToast,
   homeTiles,
+  type Stage,
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
@@ -425,11 +438,23 @@ const broadcasterId = computed(() =>
 )
 const obs = computed(() => obsLight(live.value))
 const dock = useDock()
-// The docked chat panel already shows the chat, so its tile steps aside while the panel is beside the page.
+const stage = useStage({ live: () => live.value, modules: () => modules.value })
+const shownStage = stage.shown
+// Until each stage has its own home, a stage block shows only in its stage, and 待處理 only with items.
+const hiddenNow = computed(() => {
+  const hidden = new Set<string>()
+  if (shownStage.value !== 'before') hidden.add('checklist')
+  if (shownStage.value !== 'live') hidden.add('stats')
+  if (shownStage.value !== 'after') hidden.add('summary')
+  if (!pending.value.length) hidden.add('pending')
+  // The docked chat panel already shows the chat.
+  if (dock.docked) hidden.add('chat')
+  return hidden
+})
 const tiles = computed(() =>
   homeTiles(
     modules.value ?? [],
-    arrangedTiles(savedTiles.value).filter((t) => !(dock.docked && t.id === 'chat')),
+    arrangedTiles(savedTiles.value).filter((t) => !hiddenNow.value.has(t.id)),
   ),
 )
 const soonTiles = SOON_PAGES.filter((p) => p.soon!.tile)
@@ -437,7 +462,14 @@ const pending = computed<{ id: string; text: string; panel: string }[]>(() => []
 
 const lines = computed<Record<string, Line>>(() => {
   const { status, lastChat, lastAlert } = live.value
+  // The stage blocks show their content on home itself; in edit mode they show only their name.
+  const block: Line = { state: 'ready', text: '' }
   return {
+    pending: block,
+    checklist: block,
+    stats: block,
+    summary: block,
+    queue: block,
     chat:
       status === 'open'
         ? { state: 'ready', text: lastChat ? `${lastChat.payload.userName}：${lastChat.payload.text}` : t('home.chatEmpty') }
@@ -513,7 +545,8 @@ function recentLine(r: typeof recent.value): Line {
   }
 }
 
-const moduleName = (id: string) => (te(`modules.names.${id}`) ? t(`modules.names.${id}`) : id)
+const moduleName = (id: string) =>
+  te(`modules.names.${id}`) ? t(`modules.names.${id}`) : te(`home.blocks.${id}`) ? t(`home.blocks.${id}`) : id
 
 async function refreshOverview() {
   try {
@@ -734,6 +767,50 @@ onBeforeUnmount(() => {
   /* 12.5rem = 200px at the default font size. */
   grid-template-columns: repeat(auto-fill, minmax(min(12.5rem, 100%), 1fr));
   gap: 0.75rem;
+}
+
+/* The prototype's 12-column home: a tile takes 3 columns, `size-m` 4, `size-w` the whole row. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.tiles > li {
+  grid-column: span 3;
+  min-width: 0;
+}
+
+.tiles > li.size-m {
+  grid-column: span 4;
+}
+
+.tiles > li.size-w {
+  grid-column: 1 / -1;
+}
+
+@container view (max-width: 60rem) {
+  .tiles > li {
+    grid-column: span 6;
+  }
+
+  .tiles > li.size-m {
+    grid-column: 1 / -1;
+  }
+}
+
+/* QueueArea's root takes this page's scoped styles, so the queue block gets the same card. */
+.block,
+.tiles .queue {
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.block h2 {
+  margin: 0;
 }
 
 @container view (max-width: 36rem) {

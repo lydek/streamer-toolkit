@@ -2,15 +2,27 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 import { i18n } from '../i18n'
 import { client } from './api'
+import type { LiveState } from './home'
 import StageCard from './StageCard.vue'
+import { useStage } from './stage'
 import { testRouter } from './testRouter'
 
 const { exportRecord } = vi.hoisted(() => ({ exportRecord: vi.fn() }))
 vi.mock('./streamRecord', () => ({ exportRecord }))
 
 const t = i18n.global.t
+
+// Home shares one stage between its blocks; this stands in for it with both blocks.
+const Blocks = defineComponent({
+  props: { live: { type: Object, required: true }, modules: { type: Array, default: undefined } },
+  setup(props) {
+    const stage = useStage({ live: () => props.live as LiveState, modules: () => props.modules as never })
+    return () => h('div', [h(StageCard, { part: 'checklist', stage }), h(StageCard, { part: 'session', stage })])
+  },
+})
 const summary = (endedAt: string | null) => ({
   startedAt: '2026-11-21T10:00:00.000Z',
   endedAt,
@@ -36,7 +48,7 @@ async function card(endedAt: string | null) {
     lastSeq: 1,
     stream: endedAt ? { state: 'offline' as const, startedAt: null, viewers: null } : { state: 'live' as const, startedAt: '2026-11-21T10:00:00.000Z', viewers: 42 },
   }
-  const wrapper = mount(StageCard, { props: { live }, global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+  const wrapper = mount(Blocks, { props: { live }, global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
@@ -80,15 +92,17 @@ describe('StageCard checks', () => {
       })) as never)
     const writeText = vi.fn(() => Promise.resolve())
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    const wrapper = mount(StageCard, {
+    const wrapper = mount(Blocks, {
       props: { live: { status: 'open', lastSeq: 1 }, modules: [{ id: 'chat', enabled: true, closed: false }] },
       global: { plugins: [testRouter(), i18n, PrimeVue] },
       attachTo: document.body,
     })
     await flushPromises()
     const row = wrapper.findAll('.checks li').find((li) => li.text().includes(t('stage.checks.overlay.chat.bad')))!
-    // Twitch and OBS still lead to where they are fixed.
+    // Twitch and OBS still lead to where they are fixed; they are problems, a missing overlay only a warning.
     expect(wrapper.findAll('.checks a').length).toBe(3)
+    expect(row.classes()).toContain('warn')
+    expect(wrapper.findAll('.checks li.bad').length).toBe(3)
     await row.get('button').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith(`${location.origin}/overlay/chat/`)

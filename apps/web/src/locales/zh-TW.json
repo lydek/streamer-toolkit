@@ -442,7 +442,6 @@
   "home": {
     "skip": "跳到功能磚",
     "tiles": "功能磚",
-    "pending": "待處理",
     "soon": "即將推出",
     "attention": "需要注意",
     "loadFailed": "載入失敗",
@@ -451,6 +450,13 @@
     "connections": "連線與 OBS 來源",
     "chatEmpty": "還沒有訊息",
     "latest": "最新：{text}",
+    "blocks": {
+      "pending": "待處理",
+      "checklist": "開播前檢查",
+      "stats": "本場直播",
+      "summary": "本場摘要",
+      "queue": "呈現佇列"
+    },
     "sceneCount": "{n} 個場景",
     "units": {
       "checkin": "人今天打卡",

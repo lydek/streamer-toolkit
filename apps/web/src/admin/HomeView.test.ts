@@ -67,6 +67,20 @@ describe('HomeView chat tile', () => {
   })
 })
 
+describe('HomeView stage blocks', () => {
+  it('sit in the tile grid, each only in its stage, and 待處理 only with items', async () => {
+    await home()
+    const headings = [...document.querySelectorAll('#tiles h2')].map((h) => h.textContent)
+    // No stream yet: 開播前.
+    expect(headings).toContain('開播前檢查')
+    expect(headings).toContain('呈現佇列')
+    expect(headings).not.toContain('本場直播')
+    expect(headings).not.toContain('本場摘要')
+    expect(headings).not.toContain('待處理')
+    expect(document.querySelector('#tiles li.size-w [aria-labelledby="checklist-heading"]')).not.toBeNull()
+  })
+})
+
 describe('HomeView tiles', () => {
   it('show a big count with its unit and the latest on the line', async () => {
     vi.mocked(client.GET).mockImplementation(((path: string) =>
@@ -196,7 +210,7 @@ describe('HomeView arrange mode', () => {
     await flushPromises()
     // The tiles other than chat stay in the order, hidden while their modules are off.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
-      body: ['alerts', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
+      body: ['pending', 'checklist', 'stats', 'summary', 'queue', 'alerts', 'feed', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()
