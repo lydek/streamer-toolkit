@@ -7,6 +7,7 @@ use tower::ServiceExt;
 struct Rig {
     pool: SqlitePool,
     bus: Arc<EventBus>,
+    service: Arc<Overlays>,
     app: Router,
 }
 
@@ -23,7 +24,8 @@ async fn restart(pool: SqlitePool) -> Rig {
     Rig {
         pool,
         bus,
-        app: routes(service),
+        app: routes(service.clone()),
+        service,
     }
 }
 
@@ -164,5 +166,120 @@ fn the_event_type_matches_what_the_bus_sends() {
     });
     let wire = snapshot_break(&bus);
     let typed: BreakEvent = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(serde_json::to_value(typed).unwrap(), wire);
+}
+
+/// The latest `screen.warnings` payload in a new snapshot.
+fn snapshot_warnings(bus: &EventBus) -> Value {
+    let (snapshot, _) = bus.subscribe();
+    let v: Value = serde_json::from_str(&snapshot).unwrap();
+    v["payload"]["screen.warnings"][0]["payload"].clone()
+}
+
+fn seen(chat: bool, twitch: bool, mic: Option<bool>) -> crate::Conditions {
+    crate::Conditions {
+        chat_overlay_open: chat,
+        twitch_connected: twitch,
+        inputs: Some(
+            mic.map(|muted| toolkit_core::streaming::Input {
+                name: "Mic".into(),
+                muted,
+            })
+            .into_iter()
+            .collect(),
+        ),
+    }
+}
+
+const WARNINGS_URL: &str = "/api/admin/screen-tools/warnings";
+
+#[tokio::test]
+async fn warnings_show_and_clear_with_what_the_host_sees() {
+    let r = rig().await;
+    let w = snapshot_warnings(&r.bus);
+    assert_eq!(w["chatOverlay"], true);
+    assert_eq!(w["twitch"], false);
+    assert_eq!(w["micSeconds"], 30);
+    assert_eq!(w["micInput"], Value::Null);
+
+    r.service.see(seen(false, false, Some(true)), Utc::now());
+    let w = snapshot_warnings(&r.bus);
+    assert_eq!(w["chatOverlayDown"], true);
+    assert_eq!(w["twitchDown"], true);
+    assert_eq!(
+        w["micMutedSince"],
+        Value::Null,
+        "no input picked: not checked"
+    );
+
+    let settings = json!({"chat_overlay": true, "twitch": true, "mic": true, "mic_seconds": 10, "mic_input": "Mic"});
+    let (status, w) = send(&r.app, "PUT", WARNINGS_URL, Some(settings)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(w["micInput"], "Mic");
+    assert!(
+        w["micMutedSince"].is_string(),
+        "the muted mic starts its wait"
+    );
+    assert_eq!(snapshot_warnings(&r.bus)["micSeconds"], 10);
+
+    r.service.see(seen(true, true, Some(false)), Utc::now());
+    let w = snapshot_warnings(&r.bus);
+    assert_eq!(w["chatOverlayDown"], false);
+    assert_eq!(w["twitchDown"], false);
+    assert_eq!(w["micMutedSince"], Value::Null);
+
+    r.service.see(seen(true, true, None), Utc::now());
+    assert_eq!(snapshot_warnings(&r.bus)["micMissing"], true);
+    let (_, w) = send(&r.app, "GET", WARNINGS_URL, None).await;
+    assert_eq!(w["micMissing"], true);
+
+    let bad = json!({"chat_overlay": true, "twitch": true, "mic": true, "mic_seconds": 0, "mic_input": null});
+    let (status, body) = send(&r.app, "PUT", WARNINGS_URL, Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "overlays.invalid");
+}
+
+#[tokio::test]
+async fn warning_settings_survive_a_restart_and_unchanged_sights_announce_nothing() {
+    let r = rig().await;
+    let settings = json!({"chat_overlay": false, "twitch": true, "mic": false, "mic_seconds": 45, "mic_input": "Mic"});
+    send(&r.app, "PUT", WARNINGS_URL, Some(settings)).await;
+    let again = restart(r.pool.clone()).await;
+    let w = snapshot_warnings(&again.bus);
+    assert_eq!(w["chatOverlay"], false);
+    assert_eq!(w["micSeconds"], 45);
+    assert_eq!(w["micInput"], "Mic");
+
+    let (_, mut events) = again.bus.subscribe();
+    again.service.see(seen(true, true, Some(false)), Utc::now());
+    assert!(events.try_recv().is_ok());
+    again.service.see(seen(true, true, Some(false)), Utc::now());
+    assert!(
+        events.try_recv().is_err(),
+        "the same sight again is not announced"
+    );
+}
+
+#[test]
+fn the_warnings_event_type_matches_what_the_bus_sends() {
+    let bus = EventBus::default();
+    bus.retain(warnings::WARNINGS, 1);
+    let w = crate::domain::warnings::Warnings {
+        mic_muted_since: Some(Utc::now()),
+        ..Default::default()
+    };
+    bus.publish(Event {
+        id: "w".into(),
+        event_type: warnings::WARNINGS,
+        version: warnings::WARNINGS_VERSION,
+        occurred_at: "2026-11-22T12:00:00.000Z".into(),
+        source: Source::System,
+        payload: serde_json::to_value(warnings::WarningsPayload::new(&Default::default(), &w))
+            .unwrap(),
+    });
+    let (snapshot, _) = bus.subscribe();
+    let v: Value = serde_json::from_str(&snapshot).unwrap();
+    let wire = v["payload"]["screen.warnings"][0].clone();
+    let typed: WarningsEvent = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(typed).unwrap(), wire);
 }

@@ -24,6 +24,7 @@ export type Incoming =
   | components['schemas']['CounterValuesEvent']
   | components['schemas']['MarathonEvent']
   | components['schemas']['BreakEvent']
+  | components['schemas']['WarningsEvent']
   | components['schemas']['CounterTestEvent']
   | components['schemas']['MarathonTestEvent']
   | components['schemas']['BgmTestEvent']

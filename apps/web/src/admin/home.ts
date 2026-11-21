@@ -139,6 +139,8 @@ export interface LiveState {
   marathon?: Schemas['MarathonEvent']
   /** The break card. */
   breakCard?: Schemas['BreakPayload']
+  /** The on-stream warnings' settings and state. */
+  warnings?: Schemas['WarningsPayload']
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -157,6 +159,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       counters: msg.payload['counter.values'].at(-1)?.payload.counters,
       marathon: msg.payload['counter.marathon'].at(-1),
       breakCard: msg.payload['screen.break'].at(-1)?.payload,
+      warnings: msg.payload['screen.warnings'].at(-1)?.payload,
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -171,6 +174,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'counter.values') next.counters = msg.payload.counters
   if (msg.type === 'counter.marathon') next.marathon = msg
   if (msg.type === 'screen.break') next.breakCard = msg.payload
+  if (msg.type === 'screen.warnings') next.warnings = msg.payload
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'chat.removed' && next.lastChat && removes(msg.payload, next.lastChat)) next.lastChat = undefined
   if (msg.type === 'alert') next.lastAlert = msg

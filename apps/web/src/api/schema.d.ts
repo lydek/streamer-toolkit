@@ -1100,6 +1100,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/screen-tools/warnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The warnings now (also kept current by `screen.warnings`). */
+        get: operations["get_warnings"];
+        put: operations["set_warnings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/alert": {
         parameters: {
             query?: never;
@@ -2576,6 +2593,7 @@ export interface components {
             marathon: number;
             other: number;
             sound: number;
+            warnings: number;
         };
         OverlayTest: {
             overlay: components["schemas"]["TestOverlay"];
@@ -2989,6 +3007,8 @@ export interface components {
             "presentation.queue": components["schemas"]["PresentationQueueEvent"][];
             /** @description At most one: the break card. */
             "screen.break": components["schemas"]["BreakEvent"][];
+            /** @description At most one: the on-stream warnings. */
+            "screen.warnings": components["schemas"]["WarningsEvent"][];
             /** @description At most one: the latest live state. */
             "stream.status": components["schemas"]["StreamStatusEvent"][];
         };
@@ -3362,6 +3382,56 @@ export interface components {
             stage: components["schemas"]["Stage"];
             subject: components["schemas"]["Subject"];
         };
+        WarningSettingsBody: {
+            chat_overlay: boolean;
+            mic: boolean;
+            /** @description An OBS audio input name; `null` or blank: the mic is not checked. */
+            mic_input?: string | null;
+            /**
+             * Format: int32
+             * @description 1–3600.
+             */
+            mic_seconds: number;
+            twitch: boolean;
+        };
+        /**
+         * @description A `screen.warnings` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps
+         *     only the latest one.
+         */
+        WarningsEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["WarningsPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["WarningsType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description Which warnings are on and what was last seen. The overlay shows a warning that is on and down; the mic one only
+         *     once `micMutedSince` is `micSeconds` old.
+         */
+        WarningsPayload: {
+            chatOverlay: boolean;
+            /** @description No chat overlay is open in OBS. */
+            chatOverlayDown: boolean;
+            mic: boolean;
+            /** @description The OBS audio input watched; `null`: the mic is not checked. */
+            micInput?: string | null;
+            /** @description The watched input is no longer in OBS: pick another. */
+            micMissing: boolean;
+            /** @description UTC, RFC 3339: since when the watched input has been muted. */
+            micMutedSince?: string | null;
+            /** Format: int32 */
+            micSeconds: number;
+            twitch: boolean;
+            /** @description The Twitch event connection is down. */
+            twitchDown: boolean;
+        };
+        /** @enum {string} */
+        WarningsType: "screen.warnings";
     };
     responses: never;
     parameters: never;
@@ -6192,6 +6262,66 @@ export interface operations {
                 };
             };
             /** @description `overlays.invalid`: neither or both given, or out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_warnings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarningsPayload"];
+                };
+            };
+        };
+    };
+    set_warnings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarningSettingsBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarningsPayload"];
+                };
+            };
+            /** @description `overlays.invalid`: out of range */
             400: {
                 headers: {
                     [name: string]: unknown;

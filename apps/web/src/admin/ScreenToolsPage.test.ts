@@ -22,7 +22,18 @@ const card: Schemas['BreakPayload'] = {
   minutes: 10,
   untilTime: '20:00',
 }
-const snapshot = (payload: Schemas['BreakPayload']) => ({
+const warnings: Schemas['WarningsPayload'] = {
+  chatOverlay: true,
+  twitch: false,
+  mic: true,
+  micSeconds: 30,
+  micInput: 'Mic',
+  chatOverlayDown: false,
+  twitchDown: false,
+  micMutedSince: null,
+  micMissing: false,
+}
+const snapshot = (payload: Schemas['BreakPayload'], w = warnings) => ({
   type: 'snapshot',
   version: 1,
   seq: 1,
@@ -37,6 +48,7 @@ const snapshot = (payload: Schemas['BreakPayload']) => ({
     'counter.values': [],
     'counter.marathon': [],
     'screen.break': [{ id: 'b', type: 'screen.break', version: 1, seq: 1, occurredAt: '', source: 'system', payload }],
+    'screen.warnings': [{ id: 'w', type: 'screen.warnings', version: 1, seq: 1, occurredAt: '', source: 'system', payload: w }],
     'chat.text_size': [],
   },
 })
@@ -65,9 +77,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function page(payload = card) {
+async function page(payload = card, w = warnings) {
   const wrapper = mount(ScreenToolsPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
-  socket.onmessage!({ data: JSON.stringify(snapshot(payload)) })
+  socket.onmessage!({ data: JSON.stringify(snapshot(payload, w)) })
   await flushPromises()
   return wrapper
 }
@@ -103,4 +115,17 @@ it('counts to the next time of day in the until mode, and hides a shown card', a
   await wrapper.findAll('button').find((b) => b.text() === '隱藏')!.trigger('click')
   await flushPromises()
   expect(post).toHaveBeenCalledWith('/api/admin/screen-tools/break/hide')
+})
+
+it('saves a warning switch with the other warning settings, and asks for a new mic once it is gone', async () => {
+  const wrapper = await page()
+  expect(wrapper.text()).not.toContain('請重新選擇麥克風')
+  await wrapper.get('input[aria-labelledby="warn-twitch"]').trigger('change')
+  await flushPromises()
+  expect(put).toHaveBeenCalledWith('/api/admin/screen-tools/warnings', {
+    body: { chat_overlay: true, twitch: true, mic: true, mic_seconds: 30, mic_input: 'Mic' },
+  })
+
+  const gone = await page(card, { ...warnings, micMissing: true })
+  expect(gone.text()).toContain('OBS 裡已經沒有「Mic」，請重新選擇麥克風。')
 })

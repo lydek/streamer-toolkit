@@ -2,6 +2,8 @@
 
 use chrono::{DateTime, Duration, Utc};
 
+pub mod warnings;
+
 /// The longest text on the card.
 pub(crate) const TEXT_MAX: usize = 100;
 /// The longest countdown: a day.

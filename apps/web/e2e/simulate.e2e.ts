@@ -12,7 +12,7 @@ test('each row sends its test event, a feature turned off cannot, and Esc return
     sent.push({ path: new URL(r.request().url()).pathname, body: r.request().postDataJSON() })
     return r.fulfill({ status: 204 })
   })
-  await page.route('**/api/admin/overlays', (r) => r.fulfill({ json: { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, other: 0 } }))
+  await page.route('**/api/admin/overlays', (r) => r.fulfill({ json: { chat: 1, alerts: 0, checkin: 1, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, other: 0 } }))
   await page.route('**/api/admin/sounds', (r) =>
     r.fulfill({ json: { sounds: [{ id: 's1', label: '叮咚' }, { id: 's2', label: '鈴聲' }], slots: {}, volume: 100 } }),
   )

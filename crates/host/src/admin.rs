@@ -138,6 +138,11 @@ impl AdminState {
         state
     }
 
+    /// Whether the Twitch event connection is up right now.
+    pub(crate) fn eventsub_up(&self) -> bool {
+        self.eventsub_connected.lock().unwrap().1
+    }
+
     /// Connects chat (and its check-in and counter commands), alerts, redemptions (and their reward sounds) and the stream's
     /// start and end for `auth`, and checks once a minute whether the stream is live (both wait until signed in);
     /// stops the tasks of the previous auth.
