@@ -393,6 +393,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/counters/marathon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sub marathon timer now (also kept current by `counter.marathon`). */
+        get: operations["get_marathon"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/marathon/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds or takes minutes by hand. */
+        post: operations["add_to_marathon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/marathon/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_marathon_options"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/counters/marathon/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pauses or resumes by hand; a stream starting never resumes it. */
+        post: operations["pause_marathon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/counters/viewers": {
         parameters: {
             query?: never;
@@ -1989,6 +2056,70 @@ export interface components {
         };
         /** @enum {string} */
         ManualCheckInResult: "checked_in" | "already_checked_in";
+        MarathonAdd: {
+            /**
+             * Format: int64
+             * @description -1440 to 1440, not 0; the remaining time stays between 0 and the cap.
+             */
+            minutes: number;
+        };
+        /**
+         * @description A `counter.marathon` event exactly as `/ws/overlay` sends it after any change and at each live status; the
+         *     snapshot keeps only the latest one.
+         */
+        MarathonEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["MarathonPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["MarathonType"];
+            /** Format: int32 */
+            version: number;
+        };
+        MarathonOptionsBody: {
+            /**
+             * Format: int32
+             * @description Minutes added per 100 bits (in proportion), 0–1440.
+             */
+            bits_minutes: number;
+            /**
+             * Format: int32
+             * @description The remaining time never goes above this many hours, 1–168.
+             */
+            max_hours: number;
+            /**
+             * Format: int32
+             * @description Minutes added per sub, resub or gifted sub, 0–1440.
+             */
+            sub_minutes: number;
+        };
+        MarathonPause: {
+            paused: boolean;
+        };
+        /**
+         * @description The sub marathon timer. The remaining time is as of the event's `occurredAt` and goes on counting down from
+         *     there only while `running`.
+         */
+        MarathonPayload: {
+            /** Format: int32 */
+            bitsMinutes: number;
+            /** @description The toolkit has seen the stream live. */
+            live: boolean;
+            /** Format: int32 */
+            maxHours: number;
+            /** @description Paused by hand; a stream starting does not resume it. */
+            paused: boolean;
+            /** Format: int64 */
+            remainingMs: number;
+            /** @description Counting down: live, not paused and time left. */
+            running: boolean;
+            /** Format: int32 */
+            subMinutes: number;
+        };
+        /** @enum {string} */
+        MarathonType: "counter.marathon";
         ModuleBody: {
             /**
              * @description With `enabled: false`: skip the module's outbox events instead of keeping them for later ("close"; the
@@ -2088,6 +2219,7 @@ export interface components {
             chat: number;
             checkin: number;
             counter: number;
+            marathon: number;
             other: number;
             sound: number;
         };
@@ -2445,6 +2577,8 @@ export interface components {
             "chat.message": components["schemas"]["ChatMessageEvent"][];
             /** @description The latest removals, oldest first: what was taken down before this snapshot. */
             "chat.removed": components["schemas"]["ChatRemovedEvent"][];
+            /** @description At most one: the latest sub marathon timer. */
+            "counter.marathon": components["schemas"]["MarathonEvent"][];
             /** @description At most one: every counter's latest value. */
             "counter.values": components["schemas"]["CounterValuesEvent"][];
             /** @description At most one: the latest streaming-software state. */
@@ -3688,6 +3822,157 @@ export interface operations {
                 };
             };
             /** @description `counter.storage_failed` or `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_marathon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarathonPayload"];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_to_marathon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarathonAdd"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarathonPayload"];
+                };
+            };
+            /** @description `counter.invalid`: 0 or beyond ±1440 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_marathon_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarathonOptionsBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarathonPayload"];
+                };
+            };
+            /** @description `counter.invalid`: out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    pause_marathon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarathonPause"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarathonPayload"];
+                };
+            };
+            /** @description `counter.invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `counter.storage_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

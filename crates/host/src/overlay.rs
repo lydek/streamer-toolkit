@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -36,6 +36,7 @@ pub(crate) enum OverlayKind {
     Sound,
     Bgm,
     Counter,
+    Marathon,
 }
 
 impl OverlayKind {
@@ -48,6 +49,7 @@ impl OverlayKind {
             "sound" => Some(Self::Sound),
             "bgm" => Some(Self::Bgm),
             "counter" => Some(Self::Counter),
+            "marathon" => Some(Self::Marathon),
             _ => None,
         }
     }
@@ -71,6 +73,7 @@ pub(crate) struct OverlayConnections {
     sound: AtomicUsize,
     bgm: AtomicUsize,
     counter: AtomicUsize,
+    marathon: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -85,6 +88,7 @@ impl Default for OverlayConnections {
             sound: AtomicUsize::default(),
             bgm: AtomicUsize::default(),
             counter: AtomicUsize::default(),
+            marathon: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -100,6 +104,7 @@ impl OverlayConnections {
             Some(OverlayKind::Sound) => &self.sound,
             Some(OverlayKind::Bgm) => &self.bgm,
             Some(OverlayKind::Counter) => &self.counter,
+            Some(OverlayKind::Marathon) => &self.marathon,
             None => &self.other,
         }
     }
@@ -134,6 +139,7 @@ impl OverlayConnections {
             sound: load(&self.sound),
             bgm: load(&self.bgm),
             counter: load(&self.counter),
+            marathon: load(&self.marathon),
             other: load(&self.other),
         }
     }
@@ -185,6 +191,7 @@ pub(crate) struct OverlayCounts {
     sound: usize,
     bgm: usize,
     counter: usize,
+    marathon: usize,
     other: usize,
 }
 
@@ -275,6 +282,9 @@ struct SnapshotPayload {
     /// At most one: every counter's latest value.
     #[serde(rename = "counter.values")]
     counter_values: Vec<counter::CounterValuesEvent>,
+    /// At most one: the latest sub marathon timer.
+    #[serde(rename = "counter.marathon")]
+    counter_marathon: Vec<counter::MarathonEvent>,
 }
 
 #[cfg(test)]
@@ -300,6 +310,7 @@ mod tests {
                 sound: 1,
                 bgm: 1,
                 counter: 0,
+                marathon: 0,
                 other: 2
             }
         );
@@ -319,6 +330,7 @@ mod tests {
                 sound: 0,
                 bgm: 0,
                 counter: 0,
+                marathon: 0,
                 other: 0
             }
         );
@@ -359,6 +371,18 @@ mod tests {
         bus.retain("stream.status", 1);
         bus.retain("bgm.player", 1);
         bus.retain("counter.values", 1);
+        bus.retain("counter.marathon", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "m".into(),
+            event_type: "counter.marathon",
+            version: 1,
+            occurred_at: "2026-11-21T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({
+                "remainingMs": 3_600_000, "running": true, "paused": false, "live": true,
+                "subMinutes": 5, "bitsMinutes": 2, "maxHours": 24
+            }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "c".into(),
             event_type: "counter.values",
@@ -455,6 +479,9 @@ mod tests {
         let counters = &wire["payload"]["counter.values"][0];
         assert_required("CounterValuesEvent", counters);
         assert_required("CounterValue", &counters["payload"]["counters"][0]);
+        let marathon = &wire["payload"]["counter.marathon"][0];
+        assert_required("MarathonEvent", marathon);
+        assert_required("MarathonPayload", &marathon["payload"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

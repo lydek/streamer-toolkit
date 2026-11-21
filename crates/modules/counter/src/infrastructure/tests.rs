@@ -565,3 +565,205 @@ async fn per_viewer_counts_rank_the_top_three_and_survive_a_restart() {
     // The first rig shares the data folder; only the restarted one cleans it up.
     std::mem::forget(r);
 }
+
+fn alert(id: &str, kind: toolkit_core::events::AlertKind) -> toolkit_core::events::Alert {
+    toolkit_core::events::Alert {
+        id: id.into(),
+        user_id: Some("1".into()),
+        user_login: Some("fish".into()),
+        user_name: Some("小魚".into()),
+        kind,
+        occurred_at: "2026-11-21T10:00:00Z".into(),
+    }
+}
+
+async fn marathon(r: &Rig) -> Value {
+    call(&r.app, "GET", "/api/admin/counters/marathon", None)
+        .await
+        .1
+}
+
+#[tokio::test]
+async fn subs_gifts_and_bits_add_marathon_time_once_each_and_simulations_never() {
+    use toolkit_core::events::AlertKind;
+    let r = rig("marathon").await;
+    let options = |sub: u32, bits: u32, hours: u32| json!({ "sub_minutes": sub, "bits_minutes": bits, "max_hours": hours });
+    for bad in [options(5, 2, 0), options(5, 2, 169), options(1441, 2, 2)] {
+        assert_eq!(
+            call(
+                &r.app,
+                "PUT",
+                "/api/admin/counters/marathon/options",
+                Some(bad)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let (status, body) = call(
+        &r.app,
+        "PUT",
+        "/api/admin/counters/marathon/options",
+        Some(options(5, 2, 2)),
+    )
+    .await;
+    assert_eq!(
+        (status, body["remainingMs"].clone(), body["running"].clone()),
+        (StatusCode::OK, json!(0), json!(false))
+    );
+
+    let minute = 60_000;
+    for a in [
+        alert(
+            "a1",
+            AlertKind::Subscribe {
+                tier: 1,
+                gifted: false,
+            },
+        ),
+        alert(
+            "a2",
+            AlertKind::Resubscribe {
+                tier: 1,
+                months: 3,
+                message: String::new(),
+            },
+        ),
+        alert("a3", AlertKind::Gift { tier: 1, count: 3 }),
+        // Twitch's own subscribe for each gifted sub: already counted by the gift.
+        alert(
+            "a4",
+            AlertKind::Subscribe {
+                tier: 1,
+                gifted: true,
+            },
+        ),
+        alert(
+            "a5",
+            AlertKind::Cheer {
+                bits: 150,
+                message: String::new(),
+            },
+        ),
+        alert("a6", AlertKind::Follow),
+    ] {
+        r.service.receive_alert(&a, Source::Twitch);
+    }
+    // Redelivered, and simulated: nothing.
+    r.service.receive_alert(
+        &alert(
+            "a1",
+            AlertKind::Subscribe {
+                tier: 1,
+                gifted: false,
+            },
+        ),
+        Source::Twitch,
+    );
+    r.service.receive_alert(
+        &alert("s1", AlertKind::Gift { tier: 1, count: 50 }),
+        Source::Simulation,
+    );
+    settle().await;
+    assert_eq!(marathon(&r).await["remainingMs"], (5 + 5 + 15 + 3) * minute);
+
+    // The cap, then by hand.
+    r.service.receive_alert(
+        &alert(
+            "a7",
+            AlertKind::Gift {
+                tier: 1,
+                count: 100,
+            },
+        ),
+        Source::Twitch,
+    );
+    settle().await;
+    assert_eq!(marathon(&r).await["remainingMs"], 120 * minute);
+    for bad in [0, 1441, -1441] {
+        let (status, _) = call(
+            &r.app,
+            "POST",
+            "/api/admin/counters/marathon/add",
+            Some(json!({ "minutes": bad })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let (_, body) = call(
+        &r.app,
+        "POST",
+        "/api/admin/counters/marathon/add",
+        Some(json!({ "minutes": -30 })),
+    )
+    .await;
+    assert_eq!(body["remainingMs"], 90 * minute);
+
+    let snapshot: Value = serde_json::from_str(&r.bus.subscribe().0).unwrap();
+    let event = &snapshot["payload"]["counter.marathon"][0];
+    let typed: MarathonEvent = serde_json::from_value(event.clone()).unwrap();
+    assert_eq!(
+        &serde_json::to_value(typed).unwrap(),
+        event,
+        "matches its documented type"
+    );
+    assert_eq!(event["payload"]["remainingMs"], 90 * minute);
+}
+
+#[tokio::test]
+async fn the_marathon_is_kept_across_a_restart_and_a_manual_pause_survives_a_stream_start() {
+    let r = rig("marathon-restart").await;
+    call(
+        &r.app,
+        "POST",
+        "/api/admin/counters/marathon/add",
+        Some(json!({ "minutes": 60 })),
+    )
+    .await;
+    let (_, body) = call(
+        &r.app,
+        "POST",
+        "/api/admin/counters/marathon/pause",
+        Some(json!({ "paused": true })),
+    )
+    .await;
+    assert_eq!(body["paused"], true);
+
+    let (dir, pool, session) = (r.dir.clone(), r.pool.clone(), r.session.clone());
+    let restarted = restart(dir, pool, session).await;
+    let started_at = chrono::Utc::now() - chrono::TimeDelta::minutes(30);
+    restarted
+        .service
+        .stream_status(crate::application::StreamState::Live { started_at })
+        .await;
+    let m = marathon(&restarted).await;
+    assert_eq!(
+        (m["paused"].clone(), m["live"].clone(), m["running"].clone()),
+        (json!(true), json!(true), json!(false))
+    );
+    assert_eq!(
+        m["remainingMs"],
+        60 * 60_000,
+        "paused: nothing counted, even from the stream's start"
+    );
+
+    // Resumed while live: it counts from now.
+    call(
+        &restarted.app,
+        "POST",
+        "/api/admin/counters/marathon/pause",
+        Some(json!({ "paused": false })),
+    )
+    .await;
+    let m = marathon(&restarted).await;
+    assert_eq!(m["running"], true);
+    assert!(m["remainingMs"].as_i64().unwrap() > 59 * 60_000);
+    restarted
+        .service
+        .stream_status(crate::application::StreamState::Offline)
+        .await;
+    assert_eq!(marathon(&restarted).await["running"], false);
+    // The first rig shares the data folder; only the restarted one cleans it up.
+    std::mem::forget(r);
+}

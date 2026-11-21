@@ -4,7 +4,10 @@ use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{CounterRepository, RepositoryError},
-    domain::{Counter, ViewerCount, ViewerCounter},
+    domain::{
+        Counter, ViewerCount, ViewerCounter,
+        marathon::{Marathon, MarathonOptions},
+    },
 };
 
 /// The most viewers a search returns.
@@ -31,6 +34,9 @@ struct Row {
     per_stream: bool,
     reset_session: Option<String>,
 }
+
+/// remaining_ms, anchor_at, paused, session, sub_minutes, bits_minutes, max_hours.
+type MarathonRow = (i64, String, bool, Option<String>, i64, i64, i64);
 
 fn storage(e: sqlx::Error) -> RepositoryError {
     RepositoryError(e.to_string())
@@ -253,6 +259,55 @@ impl CounterRepository for SqliteCounters {
             .await
             .map_err(storage)?;
         Ok(!found.is_empty())
+    }
+
+    async fn load_marathon(&self) -> Result<Option<Marathon>, RepositoryError> {
+        let row: Option<MarathonRow> = sqlx::query_as(
+            "SELECT remaining_ms, anchor_at, paused, session, sub_minutes, bits_minutes, max_hours \
+             FROM counter_marathon WHERE id = 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        let Some((remaining_ms, anchor, paused, session, sub, bits, hours)) = row else {
+            return Ok(None);
+        };
+        let number = |n: i64| u32::try_from(n).map_err(|e| RepositoryError(e.to_string()));
+        Ok(Some(Marathon {
+            remaining_ms,
+            anchor: chrono::DateTime::parse_from_rfc3339(&anchor)
+                .map_err(|e| RepositoryError(e.to_string()))?
+                .to_utc(),
+            paused,
+            session,
+            options: MarathonOptions {
+                sub_minutes: number(sub)?,
+                bits_minutes: number(bits)?,
+                max_hours: number(hours)?,
+            },
+        }))
+    }
+
+    async fn save_marathon(&self, m: &Marathon) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO counter_marathon \
+             (id, remaining_ms, anchor_at, paused, session, sub_minutes, bits_minutes, max_hours) \
+             VALUES (1, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT (id) DO UPDATE SET remaining_ms = excluded.remaining_ms, anchor_at = excluded.anchor_at, \
+             paused = excluded.paused, session = excluded.session, sub_minutes = excluded.sub_minutes, \
+             bits_minutes = excluded.bits_minutes, max_hours = excluded.max_hours",
+        )
+        .bind(m.remaining_ms)
+        .bind(m.anchor.to_rfc3339_opts(chrono::SecondsFormat::Micros, true))
+        .bind(m.paused)
+        .bind(&m.session)
+        .bind(m.options.sub_minutes)
+        .bind(m.options.bits_minutes)
+        .bind(m.options.max_hours)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
     }
 }
 

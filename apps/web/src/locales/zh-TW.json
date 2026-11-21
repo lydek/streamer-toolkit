@@ -778,6 +778,20 @@
     "deleteNote": "這個計數和它的聊天指令都會移除。",
     "deleted": "已刪除「{name}」。",
     "loadFailed": "無法載入計數器。",
+    "marathon": {
+      "heading": "訂閱馬拉松計時器",
+      "subMinutes": "每個訂閱加幾分鐘",
+      "bitsMinutes": "每 100 小奇點加幾分鐘",
+      "maxHours": "最長幾小時",
+      "pause": "暫停",
+      "resume": "繼續",
+      "addMinutes": "手動加時（分鐘）",
+      "add": "加時",
+      "running": "倒數中",
+      "paused": "已暫停",
+      "waiting": "等開播才倒數",
+      "done": "時間到了"
+    },
     "viewers": {
       "heading": "每位觀眾各自的計數",
       "add": "新增每人計數",

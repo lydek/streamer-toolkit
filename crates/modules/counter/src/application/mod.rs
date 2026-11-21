@@ -2,19 +2,28 @@
 //! announced with all values.
 
 use std::{
+    collections::VecDeque,
     future::Future,
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
+
+use chrono::{DateTime, Utc};
 
 use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
-    events::{ChatMessage, Source},
+    events::{Alert, ChatMessage, Source},
     modules::{self, Modules},
 };
 use uuid::Uuid;
 
-use crate::domain::{self, Counter, ViewerCount, ViewerCounter};
+use crate::domain::{
+    self, Counter, ViewerCount, ViewerCounter,
+    marathon::{Clock, Marathon, MarathonOptions},
+};
+
+/// Alert IDs remembered so a redelivered alert adds no time twice.
+const SEEN_ALERTS: usize = 500;
 
 #[derive(Debug, thiserror::Error)]
 #[error("counter.storage_failed: {0}")]
@@ -106,7 +115,37 @@ pub trait CounterRepository: Send + Sync + 'static {
         &self,
         twitch_user_id: &str,
     ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
+
+    /// The sub marathon timer as last saved; `None` before it was ever saved.
+    fn load_marathon(
+        &self,
+    ) -> impl Future<Output = Result<Option<Marathon>, RepositoryError>> + Send;
+    fn save_marathon(
+        &self,
+        marathon: &Marathon,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
+
+/// The sub marathon timer as the overlay and the admin UI show it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarathonStatus {
+    /// Its remaining time is as of its anchor, which is the time of this status.
+    pub marathon: Marathon,
+    /// Counting down now: live, not paused and time left.
+    pub running: bool,
+    /// The toolkit has seen the stream live.
+    pub live: bool,
+}
+
+/// A stream status, for the per-stream reset and the marathon clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamState {
+    Live { started_at: DateTime<Utc> },
+    Offline,
+}
+
+/// Announces the marathon timer after every change.
+pub type AnnounceMarathon = Box<dyn Fn(&MarathonStatus) + Send + Sync>;
 
 /// A per-viewer counter with its total and its top three.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,8 +177,12 @@ pub struct CounterService<R> {
     modules: Arc<Modules>,
     current_session: CurrentSession,
     announce: Announce,
+    announce_marathon: AnnounceMarathon,
     /// The counters' IDs, so chat never waits on the database to find a command.
     ids: RwLock<Vec<String>>,
+    /// Loaded on first use; one change at a time, each saved before the next.
+    clock: tokio::sync::Mutex<Option<Clock>>,
+    seen_alerts: Mutex<VecDeque<String>>,
 }
 
 impl<R: CounterRepository> CounterService<R> {
@@ -150,6 +193,7 @@ impl<R: CounterRepository> CounterService<R> {
         modules: Arc<Modules>,
         current_session: CurrentSession,
         announce: Announce,
+        announce_marathon: AnnounceMarathon,
     ) -> Arc<Self> {
         let service = Arc::new(Self {
             repo,
@@ -157,7 +201,10 @@ impl<R: CounterRepository> CounterService<R> {
             modules,
             current_session,
             announce,
+            announce_marathon,
             ids: RwLock::new(Vec::new()),
+            clock: tokio::sync::Mutex::new(None),
+            seen_alerts: Mutex::new(VecDeque::new()),
         });
         let loading = service.clone();
         tokio::spawn(async move {
@@ -169,6 +216,9 @@ impl<R: CounterRepository> CounterService<R> {
                 Err(e) => {
                     tracing::error!(code = "counter.storage_failed", error = %e.0, "counters not loaded")
                 }
+            }
+            if let Err(e) = loading.marathon().await {
+                tracing::error!(code = "counter.storage_failed", error = %e.0, "marathon timer not loaded");
             }
         });
         service
@@ -418,6 +468,126 @@ impl<R: CounterRepository> CounterService<R> {
                 .map_or(0, |c| c.value);
         }
         Ok(found)
+    }
+
+    /// Applies `change` to the marathon clock (loaded first if need be), saves it and announces it. Nothing is kept
+    /// in memory when saving fails.
+    async fn change_marathon(
+        &self,
+        change: impl FnOnce(&mut Clock, DateTime<Utc>),
+    ) -> Result<MarathonStatus, RepositoryError> {
+        let mut guard = self.clock.lock().await;
+        let mut clock = match guard.take() {
+            Some(clock) => clock,
+            None => Clock::new(
+                self.repo
+                    .load_marathon()
+                    .await?
+                    .unwrap_or_else(|| Marathon::new(Utc::now())),
+            ),
+        };
+        let before = clock.clone();
+        change(&mut clock, Utc::now());
+        if let Err(e) = self.repo.save_marathon(&clock.marathon).await {
+            *guard = Some(before);
+            return Err(e);
+        }
+        let status = MarathonStatus {
+            marathon: clock.marathon.clone(),
+            running: clock.running(),
+            live: clock.seen == domain::marathon::Seen::Live,
+        };
+        *guard = Some(clock);
+        (self.announce_marathon)(&status);
+        Ok(status)
+    }
+
+    /// The marathon timer now.
+    pub async fn marathon(&self) -> Result<MarathonStatus, RepositoryError> {
+        self.change_marathon(|clock, now| clock.settle(now)).await
+    }
+
+    pub async fn set_marathon_options(
+        &self,
+        options: MarathonOptions,
+    ) -> Result<MarathonStatus, CounterError> {
+        if !options.valid() {
+            return Err(CounterError::Invalid);
+        }
+        Ok(self
+            .change_marathon(|clock, now| {
+                clock.settle(now);
+                clock.marathon.set_options(options);
+            })
+            .await?)
+    }
+
+    /// Pauses or resumes by hand; a stream starting never resumes it.
+    pub async fn pause_marathon(&self, paused: bool) -> Result<MarathonStatus, CounterError> {
+        Ok(self
+            .change_marathon(|clock, now| clock.pause(paused, now))
+            .await?)
+    }
+
+    /// Adds (or takes) minutes by hand: -1440 to 1440, not 0.
+    pub async fn add_to_marathon(&self, minutes: i64) -> Result<MarathonStatus, CounterError> {
+        let max = i64::from(domain::marathon::MINUTES_MAX);
+        if minutes == 0 || !(-max..=max).contains(&minutes) {
+            return Err(CounterError::Invalid);
+        }
+        Ok(self
+            .change_marathon(|clock, now| clock.add(minutes * 60_000, now))
+            .await?)
+    }
+
+    /// Subs, resubs, gifts and bits add marathon time. Simulated alerts never do, nor a redelivered one; while the
+    /// module is disabled they are dropped like other in-memory events.
+    pub fn receive_alert(self: &Arc<Self>, alert: &Alert, source: Source) {
+        if source == Source::Simulation || !self.modules.is_enabled(modules::COUNTER) {
+            return;
+        }
+        {
+            let mut seen = self.seen_alerts.lock().unwrap();
+            if seen.contains(&alert.id) {
+                return;
+            }
+            if seen.len() == SEEN_ALERTS {
+                seen.pop_front();
+            }
+            seen.push_back(alert.id.clone());
+        }
+        let (service, kind) = (self.clone(), alert.kind.clone());
+        tokio::spawn(async move {
+            let added = service
+                .change_marathon(|clock, now| {
+                    let ms = clock.marathon.for_alert(&kind);
+                    if ms > 0 {
+                        clock.add(ms, now);
+                    }
+                })
+                .await;
+            if let Err(e) = added {
+                tracing::error!(code = "counter.storage_failed", error = %e.0, "marathon time not added");
+            }
+        });
+    }
+
+    /// A stream status: the per-stream reset when live, and the marathon clock either way.
+    pub async fn stream_status(&self, state: StreamState) {
+        let changed = match state {
+            StreamState::Live { started_at } => {
+                self.stream_live().await;
+                let Some(session) = (self.current_session)().await else {
+                    return;
+                };
+                self.change_marathon(|clock, now| clock.live(&session, started_at, now))
+                    .await
+            }
+            StreamState::Offline => self.change_marathon(|clock, now| clock.offline(now)).await,
+        };
+        if let Err(e) = changed {
+            tracing::error!(code = "counter.storage_failed", error = %e.0, "marathon clock not saved");
+        }
     }
 
     /// The broadcaster is live: per-stream counters not yet reset for this stream's session go back to 0, once

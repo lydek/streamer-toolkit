@@ -53,6 +53,7 @@ async function open(
           'stream.status': [event(1, stream)],
           'bgm.player': [],
           'counter.values': [],
+          'counter.marathon': [],
         },
       }),
     )
