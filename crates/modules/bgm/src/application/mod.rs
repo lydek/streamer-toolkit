@@ -11,6 +11,8 @@ use uuid::Uuid;
 
 use crate::domain::{self, Format};
 
+pub mod player;
+
 #[derive(Debug, thiserror::Error)]
 pub enum BgmError {
     #[error("music.unsupported_type")]
@@ -21,6 +23,12 @@ pub enum BgmError {
     NotFound,
     #[error("music.invalid")]
     Invalid,
+    /// No playlist chosen, or none of its tracks can play (missing files, lengths not measured yet).
+    #[error("music.nothing_to_play")]
+    NothingToPlay,
+    /// The background music feature is turned off.
+    #[error("music.off")]
+    Off,
     #[error("music.save_failed")]
     SaveFailed(#[from] io::Error),
 }
@@ -32,6 +40,10 @@ pub struct BgmService {
 impl BgmService {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
+    }
+
+    pub(crate) fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     fn folder(&self) -> PathBuf {

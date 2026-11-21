@@ -462,6 +462,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/music/player": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plays, pauses, skips, stops or seeks; the result arrives as a `bgm.player` event. */
+        post: operations["control_player"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/music/player/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the music volume and whether playlists play shuffled. */
+        put: operations["set_player_options"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/music/playlists": {
         parameters: {
             query?: never;
@@ -809,6 +843,23 @@ export interface paths {
         get?: never;
         /** Chooses what a slot plays. */
         put: operations["set_slot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sounds/volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the master volume that reward, alert and check-in sounds play at, on top of each sound's own. */
+        put: operations["set_volume"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1172,6 +1223,8 @@ export interface components {
         AlertSound: {
             /** @enum {string} */
             kind: "built_in";
+            /** Format: int32 */
+            volume: number;
         } | {
             /** @enum {string} */
             kind: "silent";
@@ -1221,6 +1274,40 @@ export interface components {
             /** @description On Twitch's image CDN only. */
             url: string;
         };
+        /** @description A `bgm.player` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
+        BgmPlayerEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["BgmPlayerPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["BgmPlayerType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description The `payload` of a `bgm.player` event. The track is at `positionMs` at the event's `occurredAt`, and goes on
+         *     from there only while `state` is `playing` and `onAir` is true.
+         */
+        BgmPlayerPayload: {
+            /** @description A music overlay is open in OBS; without one nothing plays and the position stands still. */
+            onAir: boolean;
+            /** @description The playlist chosen last; kept after a stop. */
+            playlist: string | null;
+            /** Format: int64 */
+            positionMs: number;
+            shuffle: boolean;
+            state: components["schemas"]["PlayStateName"];
+            track: components["schemas"]["PlayerTrack"] | null;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
+        /** @enum {string} */
+        BgmPlayerType: "bgm.player";
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
          * @enum {string}
@@ -1741,6 +1828,7 @@ export interface components {
         /** @description Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included. */
         OverlayCounts: {
             alerts: number;
+            bgm: number;
             chat: number;
             checkin: number;
             other: number;
@@ -1771,6 +1859,49 @@ export interface components {
             url: string;
             /** Format: int32 */
             volume: number;
+        };
+        /** @enum {string} */
+        PlayStateName: "stopped" | "playing" | "paused";
+        /** @description What to do with the player. */
+        PlayerControl: {
+            /** @enum {string} */
+            action: "play";
+            playlist?: string | null;
+        } | {
+            /** @enum {string} */
+            action: "pause";
+        } | {
+            /** @enum {string} */
+            action: "next";
+        } | {
+            /** @enum {string} */
+            action: "previous";
+        } | {
+            /** @enum {string} */
+            action: "stop";
+        } | {
+            /** @enum {string} */
+            action: "seek";
+            /** Format: int64 */
+            position_ms: number;
+        };
+        PlayerOptions: {
+            /** @description Random order instead of the playlist's own. */
+            shuffle: boolean;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
+        /** @description The track playing. `title` is broadcaster text: render it as text. */
+        PlayerTrack: {
+            /** Format: int32 */
+            durationMs: number;
+            id: string;
+            title: string;
+            /** @description Its file: `/music/{id}`. */
+            url: string;
         };
         Playing: {
             problem: components["schemas"]["Problem"] | null;
@@ -2030,6 +2161,8 @@ export interface components {
             version: number;
         };
         SnapshotPayload: {
+            /** @description At most one: the latest background music player status. */
+            "bgm.player": components["schemas"]["BgmPlayerEvent"][];
             "chat.message": components["schemas"]["ChatMessageEvent"][];
             /** @description The latest removals, oldest first: what was taken down before this snapshot. */
             "chat.removed": components["schemas"]["ChatRemovedEvent"][];
@@ -2077,6 +2210,11 @@ export interface components {
                 [key: string]: string;
             };
             sounds: components["schemas"]["Sound"][];
+            /**
+             * Format: int32
+             * @description Master volume, 0–100 (%), applied on top of each sound's own.
+             */
+            volume: number;
         };
         /**
          * @description A `sound.play` event exactly as `/ws/overlay` sends it: a reward sound for `/overlay/sound/`, which plays them
@@ -2098,6 +2236,13 @@ export interface components {
         SoundUpdate: {
             /** @description 1–100 characters after trimming. */
             label: string;
+            /**
+             * Format: int32
+             * @description 0–100 (%).
+             */
+            volume: number;
+        };
+        SoundVolume: {
             /**
              * Format: int32
              * @description 0–100 (%).
@@ -3385,6 +3530,93 @@ export interface operations {
             };
         };
     };
+    control_player: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerControl"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.invalid`: no playlist chosen yet */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.not_found`: no such playlist */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.nothing_to_play`: none of its tracks can play (files gone, lengths not measured); `music.off`: the feature is turned off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_player_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerOptions"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `music.invalid`: a volume over 100 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `music.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     create_playlist: {
         parameters: {
             query?: never;
@@ -4296,6 +4528,45 @@ export interface operations {
             };
             /** @description `sound.not_found`: no such sound */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `sound.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_volume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoundVolume"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `sound.invalid`: not between 0 and 100 */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -82,7 +82,7 @@ export interface Check {
   fix: string
 }
 
-type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound'
+type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm'
 
 /** Each overlay kind, the module that needs it in OBS, and the page with its OBS address. */
 const OVERLAYS: { kind: OverlayKind; module: string; page: string }[] = [
@@ -90,6 +90,7 @@ const OVERLAYS: { kind: OverlayKind; module: string; page: string }[] = [
   { kind: 'alerts', module: 'alerts', page: '/alerts' },
   { kind: 'checkin', module: 'checkin', page: '/checkin' },
   { kind: 'sound', module: 'sound', page: '/sounds' },
+  { kind: 'bgm', module: 'bgm', page: '/music' },
 ]
 
 /**
@@ -125,6 +126,8 @@ export interface LiveState {
   queue?: Schemas['QueueStatus']
   /** Whether the broadcaster is live on Twitch, since when and for how many viewers. */
   stream?: Schemas['StreamStatusPayload']
+  /** The background music player, with the time its position was taken. */
+  bgm?: Schemas['BgmPlayerEvent']
   lastChat?: Schemas['ChatMessageEvent']
   /** Since this connection opened: alerts are not in snapshots. */
   lastAlert?: Schemas['AlertEvent']
@@ -139,6 +142,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
       obsState: msg.payload['obs.state'].at(-1)?.payload,
       queue: msg.payload['presentation.queue'].at(-1)?.payload,
       stream: msg.payload['stream.status'].at(-1)?.payload,
+      bgm: msg.payload['bgm.player'].at(-1),
       lastChat: msg.payload['chat.message'].at(-1),
     }
   }
@@ -149,6 +153,7 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
   if (msg.type === 'obs.state') next.obsState = msg.payload
   if (msg.type === 'presentation.queue') next.queue = msg.payload
   if (msg.type === 'stream.status') next.stream = msg.payload
+  if (msg.type === 'bgm.player') next.bgm = msg
   if (msg.type === 'chat.message') next.lastChat = msg
   if (msg.type === 'chat.removed' && next.lastChat && removes(msg.payload, next.lastChat)) next.lastChat = undefined
   if (msg.type === 'alert') next.lastAlert = msg
@@ -222,6 +227,7 @@ export const TILES: Tile[] = [
   { id: 'checkin', group: 'features', icon: 'pi pi-check-square' },
   { id: 'sound', group: 'features', icon: 'pi pi-volume-up' },
   { id: 'scene', group: 'features', icon: 'pi pi-images' },
+  { id: 'bgm', group: 'features', icon: 'pi pi-headphones' },
 ]
 
 /** Non-empty groups in display order. */

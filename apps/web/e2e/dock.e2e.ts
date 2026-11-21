@@ -28,7 +28,7 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
         type: 'snapshot',
         version: 1,
         seq: 2,
-        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone'), chat(2, 'Kai', '@me can you sing')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [] },
       }),
     ),
   )
@@ -125,7 +125,7 @@ test('events lists every alert that arrived, even one no OBS overlay plays', asy
     seq: 2,
     occurredAt: '2026-11-19T10:00:00.000Z',
     source: 'twitch',
-    payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
+    payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in', volume: 100 } },
   }
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
     ws.send(
@@ -133,7 +133,7 @@ test('events lists every alert that arrived, even one no OBS overlay plays', asy
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [] },
       }),
     )
     ws.send(JSON.stringify(received))
@@ -164,7 +164,7 @@ test('chat from before a restart shows first, and a message a moderator deletes 
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+        payload: { 'chat.message': [chat(1, 'Fish', 'hello everyone')], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [] },
       }),
     )
   })
@@ -207,7 +207,7 @@ test('badge images, shared chat with 只看本頻道, and display settings that 
         type: 'snapshot',
         version: 1,
         seq: 2,
-        payload: { 'chat.message': [mod, shared], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] },
+        payload: { 'chat.message': [mod, shared], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [] },
       }),
     ),
   )

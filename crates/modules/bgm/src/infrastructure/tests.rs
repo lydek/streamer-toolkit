@@ -2,6 +2,7 @@ use super::*;
 use axum::http::Request;
 use serde_json::{Value, json};
 use std::path::PathBuf;
+use toolkit_core::modules::Modules;
 use tower::ServiceExt;
 
 const WAV: &[u8] = b"RIFF\x24\0\0\0WAVEfmt \x10\0\0\0";
@@ -15,8 +16,21 @@ fn data_dir(name: &str) -> PathBuf {
 }
 
 fn app(dir: &std::path::Path) -> Router {
+    app_on(dir, Arc::new(EventBus::default()))
+}
+
+/// The routes with a player that publishes on `bus` and has no overlay open.
+fn app_on(dir: &std::path::Path, bus: Arc<EventBus>) -> Router {
     let service = Arc::new(BgmService::new(dir.to_path_buf()));
-    routes(service.clone()).merge(file_routes(service))
+    let modules = Arc::new(Modules::load(dir.to_path_buf()));
+    let player = start(
+        service.clone(),
+        modules,
+        bus,
+        || false,
+        watch::channel(()).1,
+    );
+    routes(service.clone(), player).merge(file_routes(service))
 }
 
 async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Response) {
@@ -298,6 +312,179 @@ async fn tracks_go_into_playlists_and_leave_them_when_deleted() {
             .await
             .0,
         StatusCode::NOT_FOUND
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn music_files_answer_byte_ranges() {
+    let dir = data_dir("range");
+    let app = app(&dir);
+    let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let ranged = |range: &str| {
+        Request::get(format!("/music/{id}"))
+            .header(header::RANGE, range)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let size = WAV.len();
+    for (range, from, to) in [
+        ("bytes=4-7", 4, 8),
+        ("bytes=8-", 8, size),
+        ("bytes=-4", size - 4, size),
+        ("bytes=0-9999", 0, size),
+    ] {
+        let (status, res) = send(&app, ranged(range)).await;
+        assert_eq!(status, StatusCode::PARTIAL_CONTENT, "{range}");
+        let h = res.headers();
+        assert_eq!(
+            h[header::CONTENT_RANGE],
+            format!("bytes {from}-{}/{size}", to - 1).as_str(),
+            "{range}"
+        );
+        assert_eq!(h[header::CONTENT_TYPE], "audio/wav");
+        assert_eq!(h[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], &WAV[from..to], "{range}");
+    }
+    for range in ["bytes=99-", "bytes=5-2", "items=0-1", "bytes=x-1"] {
+        let (status, res) = send(&app, ranged(range)).await;
+        assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE, "{range}");
+        assert_eq!(
+            res.headers()[header::CONTENT_RANGE],
+            format!("bytes */{size}").as_str()
+        );
+    }
+    let (status, res) = send(&app, get(&format!("/music/{id}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(res.headers()[header::ACCEPT_RANGES], "bytes");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn the_player_is_controlled_over_the_api_and_reports_on_the_bus() {
+    let dir = data_dir("player");
+    let bus = Arc::new(EventBus::default());
+    let app = app_on(&dir, bus.clone());
+    let player = |body: Value| with_json("POST", "/api/admin/music/player", body);
+    let (snapshot, mut events) = bus.subscribe();
+    let snapshot: Value = serde_json::from_str(&snapshot).unwrap();
+    let first = &snapshot["payload"]["bgm.player"][0];
+    assert_eq!(
+        first["payload"]["state"], "stopped",
+        "kept for the snapshot"
+    );
+    assert_eq!(first["payload"]["volume"], 50);
+
+    assert_eq!(
+        send(&app, player(json!({"action": "play"}))).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(&app, player(json!({"action": "dance"}))).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let id = json(send(&app, upload("a.wav", WAV)).await.1).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let playlist = json(
+        send(
+            &app,
+            with_json(
+                "POST",
+                "/api/admin/music/playlists",
+                json!({"name": "Chat"}),
+            ),
+        )
+        .await
+        .1,
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(
+        &app,
+        with_json(
+            "PUT",
+            &format!("/api/admin/music/{id}/playlists"),
+            json!({"playlists": [playlist]}),
+        ),
+    )
+    .await;
+    // Not measured yet: nothing can play.
+    let (status, res) = send(
+        &app,
+        player(json!({"action": "play", "playlist": playlist})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(res).await["code"], "music.nothing_to_play");
+    send(
+        &app,
+        with_json(
+            "PUT",
+            &format!("/api/admin/music/{id}/duration"),
+            json!({"duration_ms": 60_000}),
+        ),
+    )
+    .await;
+    let (status, res) = send(&app, player(json!({"action": "play", "playlist": "nope"}))).await;
+    assert_eq!(
+        (status, json(res).await["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("music.not_found"))
+    );
+    assert_eq!(
+        send(
+            &app,
+            player(json!({"action": "play", "playlist": playlist}))
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let options = |body: Value| with_json("PUT", "/api/admin/music/player/options", body);
+    assert_eq!(
+        send(&app, options(json!({"volume": 101, "shuffle": false})))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(&app, options(json!({"volume": 30, "shuffle": true})))
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+
+    let mut last = Value::Null;
+    while let Ok(text) = events.try_recv() {
+        let event: Value = serde_json::from_str(&text).unwrap();
+        if event["type"] == "bgm.player" {
+            // Every event matches its documented type.
+            let typed: BgmPlayerEvent = serde_json::from_value(event.clone()).unwrap();
+            assert_eq!(serde_json::to_value(typed).unwrap(), event);
+            last = event;
+        }
+    }
+    let p = &last["payload"];
+    assert_eq!(p["state"], "playing");
+    assert_eq!(p["playlist"], playlist.as_str());
+    assert_eq!(p["track"]["url"], format!("/music/{id}").as_str());
+    assert_eq!(p["track"]["durationMs"], 60_000);
+    assert_eq!(
+        (p["onAir"].clone(), p["positionMs"].clone()),
+        (json!(false), json!(0))
+    );
+    assert_eq!(
+        (p["volume"].clone(), p["shuffle"].clone()),
+        (json!(30), json!(true))
     );
     let _ = std::fs::remove_dir_all(dir);
 }

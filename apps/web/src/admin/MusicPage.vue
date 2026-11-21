@@ -1,5 +1,11 @@
 <template>
   <FullPage :title="t('modules.names.bgm')">
+    <section class="stack" aria-labelledby="music-player">
+      <h2 id="music-player">{{ t('music.player.heading') }}</h2>
+      <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="copy" @click="copyObsUrl" />
+      <MusicPlayer :event="live.bgm" :playlists="library?.playlists ?? []" @error="report" />
+    </section>
+
     <section class="stack" aria-labelledby="music-library">
       <h2 id="music-library">{{ t('music.library') }}</h2>
       <label for="music-file">{{ t('music.file') }}</label>
@@ -64,8 +70,9 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
-import { errorToast, successToast } from './home'
+import { errorToast, successToast, useLiveEvents } from './home'
 import { importMusic, measureUnmeasured } from './music'
+import MusicPlayer from './MusicPlayer.vue'
 import MusicRow from './MusicRow.vue'
 import { keepFocus } from './page'
 import PlaylistRow from './PlaylistRow.vue'
@@ -79,6 +86,8 @@ const importErrors = ref<string[]>([])
 const busy = ref(false)
 const newName = ref('')
 const creating = ref(false)
+
+const live = useLiveEvents()
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 const report = (e: unknown) => toast.add(errorToast(message(e)))
@@ -145,10 +154,24 @@ async function playlistDeleted(p: Schemas['MusicPlaylist']) {
   await keepFocus(() => document.getElementById('new-playlist') ?? undefined)
 }
 
+async function copyObsUrl() {
+  try {
+    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
+    await navigator.clipboard.writeText(`${location.origin}/overlay/bgm/`)
+    toast.add(successToast(t('chat.copied')))
+  } catch {
+    report(t('chat.copyFailed'))
+  }
+}
+
 void refresh()
 </script>
 
 <style scoped>
+.copy {
+  align-self: flex-start;
+}
+
 .rows,
 .errors {
   list-style: none;

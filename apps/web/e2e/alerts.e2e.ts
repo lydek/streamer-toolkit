@@ -282,7 +282,7 @@ test('最近事件 says what became of each alert and 重播 queues it again', a
     userLogin: userName.toLowerCase(),
     userName,
     durationMs: 6000,
-    sound: { kind: 'built_in' },
+    sound: { kind: 'built_in', volume: 100 },
     ...extra,
   })
   const replays: string[] = []

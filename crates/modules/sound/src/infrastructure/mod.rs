@@ -87,6 +87,14 @@ pub struct SoundLibrary {
     /// Chosen slots: `alert.<kind>`, `checkin`, `checkin.full` or `reward.<Twitch reward ID>` → a sound's ID or
     /// `silent`. A slot left out plays its default: the built-in sound for alerts, nothing otherwise.
     pub slots: BTreeMap<String, String>,
+    /// Master volume, 0–100 (%), applied on top of each sound's own.
+    pub volume: u8,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SoundVolume {
+    /// 0–100 (%).
+    pub volume: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -111,7 +119,7 @@ impl PlaySound {
                 url: format!("/sounds/{id}"),
                 volume,
             }),
-            Cue::BuiltIn | Cue::Silent => None,
+            Cue::BuiltIn { .. } | Cue::Silent => None,
         }
     }
 }
@@ -174,15 +182,21 @@ fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AlertSound {
-    BuiltIn,
+    /// `volume`: 0–100, the master volume.
+    BuiltIn {
+        volume: u8,
+    },
     Silent,
-    File { url: String, volume: u8 },
+    File {
+        url: String,
+        volume: u8,
+    },
 }
 
 impl From<Cue> for AlertSound {
     fn from(cue: Cue) -> Self {
         match cue {
-            Cue::BuiltIn => Self::BuiltIn,
+            Cue::BuiltIn { volume } => Self::BuiltIn { volume },
             Cue::Silent => Self::Silent,
             Cue::File { id, volume } => Self::File {
                 url: format!("/sounds/{id}"),
@@ -227,6 +241,7 @@ pub fn routes(service: Arc<SoundService>) -> Router {
             put(update_sound).delete(delete_sound),
         )
         .route("/api/admin/sounds/slots/{slot}", put(set_slot))
+        .route("/api/admin/sounds/volume", put(set_volume))
         .route("/api/admin/sounds/{id}/play", post(play_sound))
         .route("/api/admin/sounds/{id}/duration", put(set_duration))
         .with_state(service)
@@ -250,6 +265,7 @@ pub(crate) async fn list_sounds(State(s): State<Arc<SoundService>>) -> Json<Soun
     Json(SoundLibrary {
         sounds: s.list().into_iter().map(|e| sound(e, &slots)).collect(),
         slots,
+        volume: s.volume(),
     })
 }
 
@@ -393,6 +409,31 @@ pub(crate) async fn set_duration(
     }
 }
 
+/// Sets the master volume that reward, alert and check-in sounds play at, on top of each sound's own.
+#[utoipa::path(
+    put,
+    path = "/api/admin/sounds/volume",
+    tag = "admin",
+    request_body = SoundVolume,
+    responses(
+        (status = 204),
+        (status = 400, description = "`sound.invalid`: not between 0 and 100", body = ErrorBody),
+        (status = 500, description = "`sound.save_failed`", body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_volume(
+    State(s): State<Arc<SoundService>>,
+    body: Result<Json<SoundVolume>, JsonRejection>,
+) -> Response {
+    let Ok(Json(b)) = body else {
+        return error(StatusCode::BAD_REQUEST, "sound.invalid");
+    };
+    match s.set_volume(b.volume) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => sound_error(e),
+    }
+}
+
 /// Deletes a sound and its file.
 #[utoipa::path(
     delete,
@@ -446,7 +487,8 @@ async fn sound_file(State(s): State<Arc<SoundService>>, Path(id): Path<String>) 
         delete_sound,
         set_slot,
         play_sound,
-        set_duration
+        set_duration,
+        set_volume
     ),
     components(schemas(SoundPlayEvent))
 )]

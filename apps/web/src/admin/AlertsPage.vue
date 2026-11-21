@@ -26,7 +26,7 @@ const { t } = useI18n()
 
 /** A sample resub with a message, which a preview plays over and over; live alerts take its place. */
 const start = (): Incoming[] => [
-  { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [] } },
+  { type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [] } },
   {
     id: 'sample',
     type: 'alert',
@@ -43,7 +43,7 @@ const start = (): Incoming[] => [
       months: 12,
       message: t('alerts.sample'),
       durationMs: 4000,
-      sound: { kind: 'built_in' },
+      sound: { kind: 'built_in', volume: 100 },
     },
   },
 ]

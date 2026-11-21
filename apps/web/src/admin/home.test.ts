@@ -50,7 +50,7 @@ const snapshot = (seq: number, payload: Partial<Schemas['SnapshotPayload']> = {}
   type: 'snapshot',
   version: 1,
   seq,
-  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], ...payload },
+  payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], ...payload },
 })
 
 afterEach(() => {
@@ -194,7 +194,7 @@ describe('applyLive', () => {
       seq,
       occurredAt: '',
       source: 'simulation',
-      payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in' } },
+      payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in', volume: 100 } },
     })
     let s = applyLive(start, snapshot(1, {}))
     s = applyLive(s, alert(2))
@@ -396,8 +396,9 @@ describe('pre-stream checks', () => {
     { id: 'alerts', enabled: true, closed: false },
     { id: 'checkin', enabled: false, closed: false },
     { id: 'redemption', enabled: true, closed: false },
+    { id: 'bgm', enabled: true, closed: false },
   ]
-  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, other: 1 }
+  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 1, other: 1 }
 
   it('lists Twitch, EventSub, OBS and the overlay of each enabled feature, with where to fix them', () => {
     expect(preStreamChecks(signedIn(true), live('connected'), modules, overlays)).toEqual([
@@ -406,6 +407,7 @@ describe('pre-stream checks', () => {
       { id: 'obs', ok: true, fix: '/settings/connections#obs' },
       { id: 'overlay.chat', ok: true, fix: '/chat' },
       { id: 'overlay.alerts', ok: false, fix: '/alerts' },
+      { id: 'overlay.bgm', ok: true, fix: '/music' },
     ])
   })
 

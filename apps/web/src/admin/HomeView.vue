@@ -216,8 +216,18 @@
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
       <template #now>
-        <SceneList v-if="obsReady(live.obsState)" :state="live.obsState" @error="sceneFailed" />
+        <SceneList v-if="obsReady(live.obsState)" :state="live.obsState" @error="drawerFailed" />
         <p v-else>{{ t('scene.notConnected') }}</p>
+      </template>
+    </AppDrawer>
+
+    <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
+      <template #actions>
+        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
+        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
+      </template>
+      <template #now>
+        <MusicPlayer :event="live.bgm" :playlists="playlists" @error="drawerFailed" />
       </template>
     </AppDrawer>
   </div>
@@ -257,6 +267,8 @@ import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
+import MusicPlayer from './MusicPlayer.vue'
+import { playerLine } from './music'
 import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
 import TwitchSignIn from './TwitchSignIn.vue'
 import UpdateNotice from './UpdateNotice.vue'
@@ -332,6 +344,16 @@ async function loadSounds() {
   }
 }
 watch(drawer.current, (id) => id === 'sound' && void loadSounds())
+// The playlists for the music drawer; reloaded when it opens.
+const playlists = shallowRef<Schemas['MusicPlaylist'][]>([])
+async function loadPlaylists() {
+  try {
+    playlists.value = (await api(client.GET('/api/admin/music'))).playlists
+  } catch (e) {
+    drawerFailed(e)
+  }
+}
+watch(drawer.current, (id) => id === 'bgm' && void loadPlaylists())
 const live = useLiveEvents(2000, (msg) => {
   chatLog.value = applyChat(chatLog.value, msg)
   if (changesRecords(msg)) void loadRecent()
@@ -373,9 +395,10 @@ const lines = computed<Record<string, Line>>(() => {
       status === 'open'
         ? { state: 'ready', text: live.value.obsState?.scene ?? t('scene.notConnected') }
         : { state: status },
+    bgm: status !== 'open' ? { state: status } : live.value.bgm ? { state: 'ready', text: playerLine(live.value.bgm.payload) } : { state: 'loading' },
   }
 })
-const sceneFailed = (e: unknown) =>
+const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
 
@@ -453,7 +476,7 @@ const simulateAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound') {
+async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm') {
   notice.value = undefined
   try {
     // The admin window loads the Host URL, so its origin is what OBS needs.

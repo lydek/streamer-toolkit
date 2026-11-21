@@ -24,14 +24,38 @@ const ALERT_KINDS: [&str; 6] = [
 /// What a slot plays.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cue {
-    /// The overlay's own built-in sound.
-    BuiltIn,
+    /// The overlay's own built-in sound at a volume (0–100).
+    BuiltIn {
+        volume: u8,
+    },
     Silent,
     /// A library sound at its volume (0–100).
     File {
         id: String,
         volume: u8,
     },
+}
+
+/// A volume (0–100) with the master volume (0–100) applied on top.
+pub(crate) fn scaled(volume: u8, master: u8) -> u8 {
+    (u16::from(volume.min(100)) * u16::from(master.min(100)) / 100) as u8
+}
+
+impl Cue {
+    /// This cue with the master volume (0–100) applied on top of its own.
+    pub(crate) fn at(self, master: u8) -> Self {
+        let scale = |volume| scaled(volume, master);
+        match self {
+            Self::BuiltIn { volume } => Self::BuiltIn {
+                volume: scale(volume),
+            },
+            Self::Silent => Self::Silent,
+            Self::File { id, volume } => Self::File {
+                id,
+                volume: scale(volume),
+            },
+        }
+    }
 }
 
 /// Whether `slot` names a place a sound can be chosen for: `alert.<kind>`, `checkin`, `checkin.full` or
@@ -53,7 +77,7 @@ pub(crate) fn valid_slot(slot: &str) -> bool {
 /// What a slot plays with nothing chosen: alerts keep their built-in sound, everything else is silent.
 pub(crate) fn default_cue(slot: &str) -> Cue {
     match slot.starts_with("alert.") {
-        true => Cue::BuiltIn,
+        true => Cue::BuiltIn { volume: 100 },
         false => Cue::Silent,
     }
 }
@@ -88,7 +112,7 @@ mod tests {
         ] {
             assert!(!valid_slot(slot), "{slot}");
         }
-        assert_eq!(default_cue("alert.cheer"), Cue::BuiltIn);
+        assert_eq!(default_cue("alert.cheer"), Cue::BuiltIn { volume: 100 });
         assert_eq!(default_cue("checkin.full"), Cue::Silent);
         assert_eq!(default_cue("reward.r1"), Cue::Silent);
     }
@@ -97,5 +121,22 @@ mod tests {
     fn volume_is_a_percentage() {
         assert!(valid_volume(0) && valid_volume(100));
         assert!(!valid_volume(101));
+    }
+
+    #[test]
+    fn the_master_volume_scales_every_cue() {
+        let file = |volume| Cue::File {
+            id: "a".into(),
+            volume,
+        };
+        assert_eq!(file(80).at(50), file(40));
+        assert_eq!(file(80).at(100), file(80));
+        assert_eq!(
+            Cue::BuiltIn { volume: 100 }.at(0),
+            Cue::BuiltIn { volume: 0 }
+        );
+        assert_eq!(Cue::Silent.at(50), Cue::Silent);
+        // An edited settings file cannot push past 100%.
+        assert_eq!(file(200).at(200), file(100));
     }
 }

@@ -1269,6 +1269,100 @@
         }
       }
     },
+    "/api/admin/music/player": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Plays, pauses, skips, stops or seeks; the result arrives as a `bgm.player` event.",
+        "operationId": "control_player",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerControl"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`music.invalid`: no playlist chosen yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`music.not_found`: no such playlist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`music.nothing_to_play`: none of its tracks can play (files gone, lengths not measured); `music.off`: the feature is turned off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/music/player/options": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sets the music volume and whether playlists play shuffled.",
+        "operationId": "set_player_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerOptions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`music.invalid`: a volume over 100",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`music.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/music/playlists": {
       "post": {
         "tags": [
@@ -2400,6 +2494,48 @@
         }
       }
     },
+    "/api/admin/sounds/volume": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sets the master volume that reward, alert and check-in sounds play at, on top of each sound's own.",
+        "operationId": "set_volume",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoundVolume"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`sound.invalid`: not between 0 and 100",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`sound.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds/{id}": {
       "put": {
         "tags": [
@@ -3363,7 +3499,9 @@
         "oneOf": [
           {
             "type": "object",
+            "description": "`volume`: 0–100, the master volume.",
             "required": [
+              "volume",
               "kind"
             ],
             "properties": {
@@ -3372,6 +3510,11 @@
                 "enum": [
                   "built_in"
                 ]
+              },
+              "volume": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
               }
             }
           },
@@ -3549,6 +3692,106 @@
             "description": "On Twitch's image CDN only."
           }
         }
+      },
+      "BgmPlayerEvent": {
+        "type": "object",
+        "description": "A `bgm.player` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BgmPlayerPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/BgmPlayerType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "BgmPlayerPayload": {
+        "type": "object",
+        "description": "The `payload` of a `bgm.player` event. The track is at `positionMs` at the event's `occurredAt`, and goes on\nfrom there only while `state` is `playing` and `onAir` is true.",
+        "required": [
+          "state",
+          "playlist",
+          "track",
+          "positionMs",
+          "onAir",
+          "shuffle",
+          "volume"
+        ],
+        "properties": {
+          "onAir": {
+            "type": "boolean",
+            "description": "A music overlay is open in OBS; without one nothing plays and the position stands still."
+          },
+          "playlist": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The playlist chosen last; kept after a stop."
+          },
+          "positionMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "shuffle": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PlayStateName"
+          },
+          "track": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PlayerTrack",
+                "description": "`null` while stopped."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "BgmPlayerType": {
+        "type": "string",
+        "enum": [
+          "bgm.player"
+        ]
       },
       "ChatBadgeName": {
         "type": "string",
@@ -5039,10 +5282,15 @@
           "alerts",
           "checkin",
           "sound",
+          "bgm",
           "other"
         ],
         "properties": {
           "alerts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bgm": {
             "type": "integer",
             "minimum": 0
           },
@@ -5127,6 +5375,164 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "PlayStateName": {
+        "type": "string",
+        "enum": [
+          "stopped",
+          "playing",
+          "paused"
+        ]
+      },
+      "PlayerControl": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Starts `playlist` (or the last chosen one) from its start, or resumes it when it is paused.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "play"
+                ]
+              },
+              "playlist": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "pause"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "next"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Within the first 3 seconds the track before; later the same track from its start.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "previous"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "stop"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Moves within the track playing; past its end, the next one starts.",
+            "required": [
+              "position_ms",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "seek"
+                ]
+              },
+              "position_ms": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "What to do with the player."
+      },
+      "PlayerOptions": {
+        "type": "object",
+        "required": [
+          "volume",
+          "shuffle"
+        ],
+        "properties": {
+          "shuffle": {
+            "type": "boolean",
+            "description": "Random order instead of the playlist's own."
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "PlayerTrack": {
+        "type": "object",
+        "description": "The track playing. `title` is broadcaster text: render it as text.",
+        "required": [
+          "id",
+          "title",
+          "url",
+          "durationMs"
+        ],
+        "properties": {
+          "durationMs": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Its file: `/music/{id}`."
           }
         }
       },
@@ -5858,9 +6264,17 @@
           "obs.status",
           "obs.state",
           "presentation.queue",
-          "stream.status"
+          "stream.status",
+          "bgm.player"
         ],
         "properties": {
+          "bgm.player": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BgmPlayerEvent"
+            },
+            "description": "At most one: the latest background music player status."
+          },
           "chat.message": {
             "type": "array",
             "items": {
@@ -5969,7 +6383,8 @@
         "type": "object",
         "required": [
           "sounds",
-          "slots"
+          "slots",
+          "volume"
         ],
         "properties": {
           "slots": {
@@ -5987,6 +6402,12 @@
             "items": {
               "$ref": "#/components/schemas/Sound"
             }
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Master volume, 0–100 (%), applied on top of each sound's own.",
+            "minimum": 0
           }
         }
       },
@@ -6047,6 +6468,20 @@
             "type": "string",
             "description": "1–100 characters after trimming."
           },
+          "volume": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100 (%).",
+            "minimum": 0
+          }
+        }
+      },
+      "SoundVolume": {
+        "type": "object",
+        "required": [
+          "volume"
+        ],
+        "properties": {
           "volume": {
             "type": "integer",
             "format": "int32",

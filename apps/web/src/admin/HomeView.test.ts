@@ -164,9 +164,9 @@ describe('HomeView arrange mode', () => {
     await flushPromises()
     document.querySelector<HTMLButtonElement>('[data-tile="chat"] [data-action="remove"]')!.click()
     await flushPromises()
-    // The alerts, redemption, check-in, sound and scene tiles stay in the order, hidden while their modules are off.
+    // The alerts, redemption, check-in, sound, scene and music tiles stay in the order, hidden while their modules are off.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
-      body: ['alerts', 'redemption', 'checkin', 'sound', 'scene'],
+      body: ['alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()

@@ -71,7 +71,7 @@ async function play(p: AlertPayload) {
   show(p, p.durationMs)
   if (preview) return
   const { sound } = p
-  if (sound.kind === 'built_in') playSound(chimeUrl, 100)
+  if (sound.kind === 'built_in') playSound(chimeUrl, sound.volume)
   else if (sound.kind === 'file') playSound(sound.url, sound.volume)
 }
 

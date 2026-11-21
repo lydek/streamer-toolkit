@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -34,6 +34,7 @@ pub(crate) enum OverlayKind {
     Alerts,
     Checkin,
     Sound,
+    Bgm,
 }
 
 impl OverlayKind {
@@ -44,6 +45,7 @@ impl OverlayKind {
             "alerts" => Some(Self::Alerts),
             "checkin" => Some(Self::Checkin),
             "sound" => Some(Self::Sound),
+            "bgm" => Some(Self::Bgm),
             _ => None,
         }
     }
@@ -65,6 +67,7 @@ pub(crate) struct OverlayConnections {
     alerts: AtomicUsize,
     checkin: AtomicUsize,
     sound: AtomicUsize,
+    bgm: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -77,6 +80,7 @@ impl Default for OverlayConnections {
             alerts: AtomicUsize::default(),
             checkin: AtomicUsize::default(),
             sound: AtomicUsize::default(),
+            bgm: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -90,11 +94,13 @@ impl OverlayConnections {
             Some(OverlayKind::Alerts) => &self.alerts,
             Some(OverlayKind::Checkin) => &self.checkin,
             Some(OverlayKind::Sound) => &self.sound,
+            Some(OverlayKind::Bgm) => &self.bgm,
             None => &self.other,
         }
     }
 
-    /// How many sockets of `kind` are open; the presentation queue skips an overlay with none.
+    /// How many sockets of `kind` are open; the presentation queue skips an overlay with none, and the music clock
+    /// stands still without one.
     pub(crate) fn count(&self, kind: OverlayKind) -> usize {
         self.counter(Some(kind)).load(Ordering::Relaxed)
     }
@@ -121,6 +127,7 @@ impl OverlayConnections {
             alerts: load(&self.alerts),
             checkin: load(&self.checkin),
             sound: load(&self.sound),
+            bgm: load(&self.bgm),
             other: load(&self.other),
         }
     }
@@ -170,6 +177,7 @@ pub(crate) struct OverlayCounts {
     alerts: usize,
     checkin: usize,
     sound: usize,
+    bgm: usize,
     other: usize,
 }
 
@@ -254,6 +262,9 @@ struct SnapshotPayload {
     /// At most one: the latest live state.
     #[serde(rename = "stream.status")]
     stream_status: Vec<stream::StreamStatusEvent>,
+    /// At most one: the latest background music player status.
+    #[serde(rename = "bgm.player")]
+    bgm_player: Vec<bgm::BgmPlayerEvent>,
 }
 
 #[cfg(test)]
@@ -266,6 +277,7 @@ mod tests {
         let chat = connections.open(OverlayKind::parse(Some("chat")));
         let chat2 = connections.open(OverlayKind::parse(Some("chat")));
         let sound = connections.open(OverlayKind::parse(Some("sound")));
+        let bgm = connections.open(OverlayKind::parse(Some("bgm")));
         // Old pages and the admin window send no kind; a kind this Host does not know counts the same.
         let old = connections.open(OverlayKind::parse(None));
         let unknown = connections.open(OverlayKind::parse(Some("clips")));
@@ -276,12 +288,16 @@ mod tests {
                 alerts: 0,
                 checkin: 0,
                 sound: 1,
+                bgm: 1,
                 other: 2
             }
         );
-        drop((chat, sound, old, unknown));
+        drop((chat, sound, bgm, old, unknown));
         let counts = connections.counts();
-        assert_eq!((counts.chat, counts.sound, counts.other), (1, 0, 0));
+        assert_eq!(
+            (counts.chat, counts.sound, counts.bgm, counts.other),
+            (1, 0, 0, 0)
+        );
         drop(chat2);
         assert_eq!(
             connections.counts(),
@@ -290,6 +306,7 @@ mod tests {
                 alerts: 0,
                 checkin: 0,
                 sound: 0,
+                bgm: 0,
                 other: 0
             }
         );
@@ -328,6 +345,18 @@ mod tests {
         crate::obs::retain(&bus);
         crate::obs::publish(&bus, integrations::obs::ObsStatus::CONNECTING);
         bus.retain("stream.status", 1);
+        bus.retain("bgm.player", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "b".into(),
+            event_type: "bgm.player",
+            version: 1,
+            occurred_at: "2026-11-21T10:00:00.000Z".into(),
+            source: Source::System,
+            payload: serde_json::json!({
+                "state": "playing", "playlist": "p", "positionMs": 1200, "onAir": true, "shuffle": false,
+                "volume": 50, "track": {"id": "t", "title": "Lo-fi", "url": "/music/t", "durationMs": 180000}
+            }),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "s".into(),
             event_type: "stream.status",
@@ -398,6 +427,10 @@ mod tests {
         let obs = &wire["payload"]["obs.status"][0];
         assert_required("ObsStatusEvent", obs);
         assert_required("ObsStatusPayload", &obs["payload"]);
+        let music = &wire["payload"]["bgm.player"][0];
+        assert_required("BgmPlayerEvent", music);
+        assert_required("BgmPlayerPayload", &music["payload"]);
+        assert_required("PlayerTrack", &music["payload"]["track"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 
