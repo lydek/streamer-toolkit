@@ -1,4 +1,5 @@
 import { computed, shallowRef } from 'vue'
+import { routeToOutput } from './outputDevice'
 
 /** The one sound or track being previewed in the admin window; starting another stops it. */
 const current = shallowRef<{ url: string; audio: HTMLAudioElement }>()
@@ -22,5 +23,8 @@ export function togglePreview(url: string, volume = 100) {
   const done = () => stopPreview(url)
   audio.onended = audio.onerror = done
   current.value = { url, audio }
-  audio.play()?.catch(done)
+  // On the chosen output device; stopped meanwhile, it never starts.
+  void routeToOutput(audio).then(() => {
+    if (current.value?.audio === audio) audio.play()?.catch(done)
+  })
 }

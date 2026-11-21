@@ -897,6 +897,12 @@
       "deleteNote": "這個計數和每位觀眾的數字都會移除。"
     }
   },
+  "outputDevice": {
+    "heading": "音訊",
+    "label": "試聽用的輸出裝置",
+    "default": "系統預設",
+    "names": "顯示裝置名稱（會詢問一次麥克風權限）"
+  },
   "performance": {
     "heading": "效能",
     "warning": "最近 60 秒掉幀 {n}%，超過 5%。",

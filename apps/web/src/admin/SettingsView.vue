@@ -42,6 +42,8 @@
               {{ t('settings.textSizePreview') }}
             </p>
           </div>
+          <h3>{{ t('outputDevice.heading') }}</h3>
+          <OutputDevicePicker />
         </section>
 
         <section v-show="section === 'connections'" aria-labelledby="twitch">
@@ -149,6 +151,7 @@ import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import BackupRestore from './BackupRestore.vue'
+import OutputDevicePicker from './OutputDevicePicker.vue'
 import TroubleshootPanel from './TroubleshootPanel.vue'
 import RecordRetention from './RecordRetention.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
