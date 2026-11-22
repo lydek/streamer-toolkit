@@ -411,7 +411,6 @@
     "checks": {
       "ready": "{ok} / {all} 好了",
       "fix": "修正",
-      "copied": "已複製。在 OBS 新增「瀏覽器」來源，貼上這個網址。",
       "twitch": { "ok": "Twitch 已登入", "bad": "Twitch 還沒登入" },
       "eventsub": { "ok": "EventSub 已連線", "bad": "EventSub 還沒連上，收不到聊天、特效與兌換" },
       "obs": { "ok": "OBS 已連線", "bad": "OBS 還沒連上" },
@@ -1296,6 +1295,14 @@
     "explain": "Host 無法使用目前的連接埠。請輸入新的連接埠，OBS 裡的網址也要一起更新。",
     "label": "連接埠",
     "retry": "儲存並重試"
+  },
+  "obsStatus": {
+    "in": "在 OBS：{n} 個場景，{live}",
+    "withLive": "含直播中",
+    "withoutLive": "不含直播中",
+    "duplicate": "OBS 裡有 {n} 個",
+    "missing": "還沒加入 OBS",
+    "offline": "OBS 沒連上"
   },
   "obsSources": {
     "scene": "場景",

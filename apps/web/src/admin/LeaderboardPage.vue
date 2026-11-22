@@ -22,6 +22,7 @@
         />
       </div>
       <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copy" />
+      <ObsStatusLink :overlay="`/overlay/leaderboard/?board=${kind}&period=${period}`" />
     </div>
     <p v-if="period === 'all'" class="note">{{ t(kind === 'checkins' ? 'leaderboard.allCheckins' : 'leaderboard.allKept') }}</p>
 
@@ -46,6 +47,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
+import ObsStatusLink from './ObsStatusLink.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 
 type Period = Schemas['Period']

@@ -89,17 +89,6 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
     ]
   })
 
-  const copyNotice = ref<{ text: string; error: boolean }>()
-  async function copyOverlayUrl(kind: string) {
-    try {
-      // The admin window loads the Host URL, so its origin is what OBS needs.
-      // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-      await navigator.clipboard.writeText(`${location.origin}/overlay/${kind}/`)
-      copyNotice.value = { text: t('stage.checks.copied'), error: false }
-    } catch {
-      copyNotice.value = { text: t('chat.copyFailed'), error: true }
-    }
-  }
 
   const exporting = ref(false)
   const exportNotice = ref<{ text: string; error: boolean }>()
@@ -118,7 +107,7 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
   // 直播中 picked while Twitch says the stream is not live.
   const notLive = computed(() => shown.value === 'live' && source.live().stream?.state !== 'live')
 
-  return { shown, failed, notLive, checks, copyNotice, copyOverlayUrl, session, when, line, stats, exporting, exportNotice, exportIt }
+  return { shown, failed, notLive, checks, session, when, line, stats, exporting, exportNotice, exportIt }
 }
 
 export type StageState = ReturnType<typeof useStage>

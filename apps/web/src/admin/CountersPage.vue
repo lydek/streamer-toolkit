@@ -2,12 +2,12 @@
   <FullPage :title="t('modules.names.counter')" tile="counter">
     <section class="stack" aria-labelledby="marathon-heading">
       <h2 id="marathon-heading">{{ t('counter.marathon.heading') }}</h2>
-      <MarathonTimer :event="live.marathon" @copy="copyObsUrl('marathon')" @error="report" />
+      <MarathonTimer :event="live.marathon" @error="report" />
     </section>
 
     <section class="stack" aria-labelledby="counters-heading">
       <h2 id="counters-heading">{{ t('counter.heading') }}</h2>
-      <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="copy" @click="copyObsUrl('counter')" />
+      <ObsStatusLink overlay="/overlay/counter/" class="copy" />
       <form class="create" @submit.prevent="create">
         <div class="field">
           <label for="new-counter-name">{{ t('counter.name') }}</label>
@@ -75,6 +75,7 @@ import { stepCounter, resetCounter } from './counters'
 import CounterRow from './CounterRow.vue'
 import FullPage from './FullPage.vue'
 import MarathonTimer from './MarathonTimer.vue'
+import ObsStatusLink from './ObsStatusLink.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import { keepFocus } from './page'
 import ViewerCounterRow from './ViewerCounterRow.vue'
@@ -159,15 +160,6 @@ async function deleted(c: Schemas['CounterBody']) {
   await keepFocus(() => document.getElementById('new-counter-name') ?? undefined)
 }
 
-async function copyObsUrl(overlay: 'counter' | 'marathon') {
-  try {
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)
-    toast.add(successToast(t('chat.copied')))
-  } catch {
-    report(t('chat.copyFailed'))
-  }
-}
 
 void load()
 void loadViewerCounters()

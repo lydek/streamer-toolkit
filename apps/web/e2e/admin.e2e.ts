@@ -41,7 +41,8 @@ for (const width of [1280, 800]) {
     await page.keyboard.press('Enter')
     await expect(page.getByRole('button', { name: zh.drawer.close })).toBeFocused()
     await page.keyboard.press('Tab')
-    await expect(page.getByRole('button', { name: zh.chat.copyObsUrl })).toBeFocused()
+    // The chat overlay's place in OBS, linking to the OBS sources page.
+    await expect(page.locator('a[href="/admin/obs-sources"]')).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(page.getByLabel(zh.simulate.userName)).toBeFocused()
     await page.keyboard.press('Tab')

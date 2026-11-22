@@ -3,7 +3,7 @@
     <section class="stack" aria-labelledby="break-heading">
       <div class="sec-head">
         <h2 id="break-heading">{{ t('screenTools.break.heading') }}</h2>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('break')" />
+        <ObsStatusLink overlay="/overlay/break/" />
       </div>
       <BreakCardSettings :card="live.breakCard" @error="report" />
     </section>
@@ -11,7 +11,7 @@
     <section class="stack" aria-labelledby="warnings-heading">
       <div class="sec-head">
         <h2 id="warnings-heading">{{ t('screenTools.warnings.heading') }}</h2>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('warnings')" />
+        <ObsStatusLink overlay="/overlay/warnings/" />
       </div>
       <WarningSettings :warnings="live.warnings" :inputs="live.obsState?.inputs ?? []" />
     </section>
@@ -35,7 +35,6 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { computed, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -48,6 +47,7 @@ import MediaLibrary from './MediaLibrary.vue'
 import MediaRules from './MediaRules.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import WarningSettings from './WarningSettings.vue'
+import ObsStatusLink from './ObsStatusLink.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -62,15 +62,6 @@ const status = computed(() => {
 const report = (e: unknown) =>
   toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)))
 
-async function copyObsUrl(overlay: 'break' | 'warnings') {
-  try {
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)
-    toast.add(successToast(t('chat.copied')))
-  } catch {
-    report(t('chat.copyFailed'))
-  }
-}
 </script>
 
 <style scoped>

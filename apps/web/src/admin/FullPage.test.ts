@@ -25,17 +25,15 @@ afterEach(() => {
 })
 
 describe('FullPage header', () => {
-  it('shows the tile icon, the status and copies the overlay URL', async () => {
-    const writeText = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+  it('shows the tile icon, the status and where the overlay is in OBS, linking to the OBS sources page', async () => {
     const wrapper = page({ tile: 'bgm', status: '播放中：Lo-fi', overlay: 'bgm' })
+    await flushPromises()
     expect(wrapper.get('.badge').classes()).toContain('tint-yellow')
     expect(wrapper.get('.status').text()).toBe('播放中：Lo-fi')
-    const copy = wrapper.findAll('button').find((b) => b.text() === '複製 OBS 網址')!
-    await copy.trigger('click')
-    await flushPromises()
-    expect(writeText).toHaveBeenCalledWith(`${location.origin}/overlay/bgm/`)
-    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success' }))
+    // No Host answers here, so OBS counts as not connected.
+    const link = wrapper.get('.page-end a')
+    expect(link.attributes('href')).toBe('/obs-sources')
+    expect(link.text()).toBe('OBS 沒連上')
   })
 
   it('shows neither a status nor a copy button on a page without them', () => {
