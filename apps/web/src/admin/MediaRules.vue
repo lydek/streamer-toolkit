@@ -62,7 +62,7 @@
             </span>
           </td>
           <td class="end">
-            <Button :label="t('screenTools.rules.test')" text :disabled="!ruleOf(r.id)" @click="test(r.id)" />
+            <Button :label="t('screenTools.rules.test')" icon="pi pi-play" text :disabled="!ruleOf(r.id)" @click="test(r.id)" />
           </td>
         </tr>
       </tbody>
@@ -183,18 +183,6 @@ watch(
 </script>
 
 <style scoped>
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table th,
-.table td {
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
 .volume {
   display: inline-flex;
   flex-wrap: wrap;

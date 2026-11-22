@@ -179,7 +179,7 @@ async function hide() {
   align-items: start;
 }
 
-@media (width < 48rem) {
+@container view (max-width: 48rem) {
   .split {
     grid-template-columns: minmax(0, 1fr);
   }

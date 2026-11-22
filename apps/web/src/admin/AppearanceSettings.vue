@@ -85,4 +85,9 @@ const size = useDrawerSetting(savedSize, (v) => save({ textSize: v }), queue)
   align-items: flex-start;
   gap: 0.25rem;
 }
+
+/* Room for "200%", not the input's default 20 characters that would widen a narrow page. */
+.field :deep(.p-inputnumber-input) {
+  width: 6rem;
+}
 </style>

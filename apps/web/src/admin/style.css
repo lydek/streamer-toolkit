@@ -45,6 +45,75 @@ main :is(form, p) {
   }
 }
 
+/* A segmented choice that does not fit wraps whole options; an option wider than the row breaks only at a space,
+   never between the characters of a word. */
+.p-selectbutton {
+  flex-wrap: wrap;
+}
+
+.p-selectbutton .p-togglebutton {
+  word-break: keep-all;
+}
+
+/* The admin tables (class "table"). */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table :is(th, td) {
+  padding: 0.5rem;
+  text-align: start;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+/* A narrow page: each table row is two lines (its first cell, then the rest) and the column names go. */
+@container view (max-width: 45rem) {
+  .table,
+  .table tbody {
+    display: block;
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--p-content-border-color);
+  }
+
+  .table tbody tr > :first-child {
+    flex-basis: 100%;
+  }
+
+  .table tbody :is(th, td) {
+    padding: 0;
+    border: 0;
+  }
+}
+
+/* Narrower still: buttons in a table row keep only their icon (the label stays for screen readers). */
+@container view (max-width: 28rem) {
+  .table td .p-button:has(.p-button-icon) .p-button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 form,
 .stack {
   display: flex;

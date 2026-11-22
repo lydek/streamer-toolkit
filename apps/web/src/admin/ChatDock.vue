@@ -1,12 +1,12 @@
 <template>
-  <!-- The docked chat panel: beside the pages on wide windows (resizable, saved), a slide-in panel below 900px. -->
+  <!-- The docked chat panel: beside the pages on wide windows (resizable, saved), a slide-in panel below 1000px. -->
   <aside
     v-if="shown"
     id="chat-dock"
     ref="panel"
     class="dock"
     :class="{ sheet: !wide }"
-    :style="wide ? { width: `${dock.width}px` } : undefined"
+    :style="wide ? { width: `${shownPx}px` } : undefined"
     :aria-label="t('dock.title')"
     tabindex="-1"
   >
@@ -17,7 +17,7 @@
       aria-orientation="vertical"
       tabindex="0"
       :aria-label="t('dock.resize')"
-      :aria-valuenow="dock.width"
+      :aria-valuenow="shownPx"
       :aria-valuemin="DOCK_MIN"
       :aria-valuemax="DOCK_MAX"
       @pointerdown="startResize"
@@ -79,7 +79,7 @@ import { alertTitle } from '../overlay/alerts/alerts'
 import { ApiError } from './api'
 import ChatNow from './ChatNow.vue'
 import { pause, resume, useChatHistory } from './chatLog'
-import { DOCK_MAX, DOCK_MIN, clampWidth, saveDock, useDock } from './dock'
+import { DOCK_MAX, DOCK_MIN, DOCK_WIDE_QUERY, clampWidth, saveDock, shownWidth, useDock } from './dock'
 import { useModules } from './features'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
 
@@ -91,8 +91,12 @@ const toast = useToast()
 const dock = useDock()
 const { hidden } = useModules()
 
-const wideQuery = window.matchMedia('(min-width: 900px)')
+const wideQuery = window.matchMedia(DOCK_WIDE_QUERY)
 const wide = ref(wideQuery.matches)
+// A smaller window shows the panel narrower; the saved width stays for when it is wide again.
+const viewport = ref(window.innerWidth)
+const onResize = () => (viewport.value = window.innerWidth)
+const shownPx = computed(() => shownWidth(dock.width, viewport.value))
 const onWide = () => {
   wide.value = wideQuery.matches
   dock.sheet = false
@@ -162,7 +166,7 @@ function resizeByKey(e: KeyboardEvent) {
   const delta = { ArrowLeft: step, ArrowRight: -step }[e.key]
   if (!delta) return
   e.preventDefault()
-  dock.width = clampWidth(dock.width + delta)
+  dock.width = clampWidth(shownPx.value + delta)
   void save()
 }
 
@@ -178,10 +182,12 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   wideQuery.addEventListener('change', onWide)
+  window.addEventListener('resize', onResize)
   document.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => {
   wideQuery.removeEventListener('change', onWide)
+  window.removeEventListener('resize', onResize)
   document.removeEventListener('keydown', onKeydown)
 })
 </script>

@@ -1,4 +1,4 @@
-// The docked chat panel: docked and saved on wide windows, a slide-in panel below 900px (API and `/ws/overlay` mocked).
+// The docked chat panel: docked and saved on wide windows, a slide-in panel below 1000px (API and `/ws/overlay` mocked).
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, scrollsSideways, zh } from './fixtures'
 
@@ -109,7 +109,7 @@ test('"mentions me" follows signing in to another account without a reload', asy
   await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)
 })
 
-test('below 900px it slides in from the chat button, takes focus, and Esc closes it without saving', async ({ page }) => {
+test('below 1000px it slides in from the chat button, takes focus, and Esc closes it without saving', async ({ page }) => {
   await page.setViewportSize({ width: 820, height: 1000 })
   const puts = await open(page, { open: true, width: 340 })
   await expect(panel(page)).toHaveCount(0)

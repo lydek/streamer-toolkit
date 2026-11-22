@@ -381,6 +381,10 @@ onBeforeUnmount(() => {
   margin-top: 1rem;
 }
 
+.settings-body {
+  container: panel / inline-size;
+}
+
 .settings-menu {
   position: sticky;
   top: calc(var(--appbar-h, 0px) + 1rem);

@@ -34,3 +34,13 @@ describe('useDock', () => {
     expect(dock.width).toBe(300)
   })
 })
+
+describe('shownWidth', () => {
+  it('shows the saved width while the pages keep 720px, else narrows it, never below the minimum', async () => {
+    const { shownWidth } = await import('./dock')
+    expect(shownWidth(560, 1700)).toBe(560)
+    expect(shownWidth(560, 1100)).toBe(380)
+    expect(shownWidth(560, 900)).toBe(280)
+    expect(shownWidth(300, 1100)).toBe(300)
+  })
+})

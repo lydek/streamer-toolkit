@@ -5,6 +5,12 @@ import { api, client } from './api'
 export const DOCK_MIN = 280
 export const DOCK_MAX = 560
 export const DOCK_DEFAULT = 340
+/** The pages beside the docked panel keep at least this width; narrower windows get the slide-in panel. */
+export const PAGE_MIN = 720
+export const DOCK_WIDE_QUERY = `(min-width: ${DOCK_MIN + PAGE_MIN}px)`
+
+/** The width the docked panel is shown at: the saved one, narrowed so the pages keep `PAGE_MIN`. */
+export const shownWidth = (saved: number, viewport: number) => Math.min(saved, Math.max(DOCK_MIN, viewport - PAGE_MIN))
 
 /**
  * The docked chat panel, shared by the app bar's chat button and the panel. `open` and `width` are the docked

@@ -14,7 +14,7 @@
       <section v-if="current" class="stack" aria-labelledby="scene-items">
         <h2 id="scene-items">{{ t('scene.items', { scene: current.name }) }}</h2>
         <p v-if="!current.items.length">{{ t('scene.noItems') }}</p>
-        <table v-else>
+        <table v-else class="table">
           <caption>{{ t('scene.order') }}</caption>
           <thead>
             <tr>
@@ -98,9 +98,7 @@ async function change(item: SceneItem, what: { enabled?: boolean; locked?: boole
 </script>
 
 <style scoped>
-table {
-  border-collapse: collapse;
-  width: 100%;
+.table {
   max-width: 40rem;
 }
 
@@ -108,13 +106,6 @@ caption {
   text-align: start;
   color: var(--p-text-muted-color);
   padding-bottom: 0.25rem;
-}
-
-th,
-td {
-  text-align: start;
-  padding: 0.375rem 0.5rem;
-  border-bottom: 1px solid var(--p-content-border-color);
 }
 
 tbody th {

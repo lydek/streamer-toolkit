@@ -186,4 +186,12 @@ async function add() {
   flex-direction: row;
   align-items: center;
 }
+
+/* A narrow page: the label above its field. */
+@container view (max-width: 36rem) {
+  .add {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 </style>
