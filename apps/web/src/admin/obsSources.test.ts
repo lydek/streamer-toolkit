@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { obsPresence, overlayRows } from './obsSources'
+import { describe, expect, it, vi } from 'vitest'
+import { client } from './api'
+import { obsPresence, obsProblems, overlayRows, useObsSources } from './obsSources'
 
 const source = (name: string, overlay: string, scenes: string[]) => ({ name, overlay, scenes })
 
@@ -59,5 +60,51 @@ describe('obsPresence', () => {
     const lb = data([source('A', '/overlay/leaderboard/?board=bits&period=stream', ['Game'])])
     expect(obsPresence('/overlay/leaderboard/?board=bits&period=stream', lb).kind).toBe('in')
     expect(obsPresence('/overlay/leaderboard/?board=chat&period=stream', lb).kind).toBe('missing')
+  })
+})
+
+describe('obsProblems', () => {
+  const t = (key: string, values?: Record<string, unknown>) => `${key} ${JSON.stringify(values ?? {})}`
+  const data = (sources: ReturnType<typeof source>[]) => ({ connected: true, local: true, live_scene: 'Talk', scenes: ['Game', 'Talk'], sources })
+  const rule = (scenes: string[], enabled = true) => ({
+    id: 'r', name: 'Talk music', autoplay: true, enabled, playlist: 'p', scenes, shuffle: false, stop_on_leave: false, volume: 100,
+  })
+
+  it('lists an overlay with two sources, and background music missing from a live scene with a playlist', () => {
+    const problems = obsProblems(
+      data([source('A', '/overlay/checkin/', []), source('B', '/overlay/checkin/', []), source('M', '/overlay/bgm/', ['Game'])]),
+      [rule(['talk'])],
+      new Set(),
+      t,
+    )
+    expect(problems.map((p) => [p.id, p.to])).toEqual([
+      ['duplicate:checkin', '/obs-sources'],
+      ['bgm:scene', '/obs-sources'],
+    ])
+  })
+
+  it('has nothing once the causes are gone, or while OBS is offline', () => {
+    const fixed = data([source('A', '/overlay/checkin/', []), source('M', '/overlay/bgm/', ['Talk'])])
+    expect(obsProblems(fixed, [rule(['Talk'])], new Set(), t)).toEqual([])
+    expect(obsProblems(data([]), [rule(['Talk'], false)], new Set(), t)).toEqual([])
+    expect(obsProblems(data([]), [rule(['Talk'])], new Set(['bgm']), t)).toEqual([])
+    expect(obsProblems(undefined, [rule(['Talk'])], new Set(), t)).toEqual([])
+  })
+})
+
+describe('useObsSources', () => {
+  it('reads once more after a read asked for right now while another was under way', async () => {
+    const answers: ((v: unknown) => void)[] = []
+    const get = vi.spyOn(client, 'GET').mockImplementation((() => new Promise((resolve) => answers.push(resolve))) as never)
+    const shared = useObsSources(true)
+    useObsSources(true)
+    expect(get).toHaveBeenCalledTimes(1)
+    const answer = (scenes: string[]) =>
+      answers.at(-1)!({ data: { connected: true, local: true, live_scene: null, scenes, sources: [] }, response: new Response(null, { status: 200 }) })
+    answer(['Old'])
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    answer(['Old', 'New'])
+    await vi.waitFor(() => expect(shared.value?.scenes).toEqual(['Old', 'New']))
+    get.mockRestore()
   })
 })

@@ -53,12 +53,12 @@
         </div>
         <ul v-else class="plain tiles">
           <li v-for="tile in tiles" :key="tile.id" :class="sizeOf(tile) && `size-${sizeOf(tile)}`">
-            <!-- Later slices add pending items; the block shows only when it has some. -->
+            <!-- Things to fix, each linking to the page that fixes it; the block shows only when it has some. -->
             <section v-if="tile.id === 'pending'" class="block" aria-labelledby="pending-heading">
               <h2 id="pending-heading">{{ t('home.blocks.pending') }}</h2>
               <ul class="plain">
                 <li v-for="p in pending" :key="p.id">
-                  <Button :label="p.text" text @click="toggle(p.panel, $event.currentTarget)" />
+                  <RouterLink :to="p.to">{{ p.text }}</RouterLink>
                 </li>
               </ul>
             </section>
@@ -390,6 +390,7 @@ import {
 } from './home'
 import HomeTile from './HomeTile.vue'
 import ObsStatusLink from './ObsStatusLink.vue'
+import { obsProblems, useObsSources } from './obsSources'
 import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
@@ -547,7 +548,28 @@ const tiles = computed(() =>
     ),
   ),
 )
-const pending = computed<{ id: string; text: string; panel: string }[]>(() => [])
+// OBS problems: read again whenever OBS's scenes or items change, so a fixed one goes away.
+const obsSources = useObsSources()
+watch(
+  () => live.value.obsState,
+  () => void useObsSources(true),
+)
+const sceneRules = shallowRef<Schemas['SceneRuleBody'][]>([])
+// The modules are loaded before home opens, so this reads right away too; only the latest read's answer shows.
+let rulesRead = 0
+watch(
+  () => modules.value?.some((m) => m.id === 'bgm' && m.enabled),
+  async (bgm) => {
+    const mine = ++rulesRead
+    const rules = bgm ? await api(client.GET('/api/admin/music')).then((m) => m.scene_rules, () => []) : []
+    if (mine === rulesRead) sceneRules.value = rules
+  },
+  { immediate: true },
+)
+const pending = computed(() => {
+  const off = new Set((modules.value ?? []).filter((m) => !m.enabled).map((m) => m.id))
+  return obsProblems(obsSources.value, sceneRules.value, off, t)
+})
 
 const lines = computed<Record<string, Line>>(() => {
   const { status, lastChat, lastAlert } = live.value
