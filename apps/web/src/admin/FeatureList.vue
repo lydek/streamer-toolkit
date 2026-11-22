@@ -90,7 +90,7 @@ const openPage = (f: Feature) => {
   const shown = f.pages.filter((p) => !hidden.value.has(p))
   return shown.find((p) => !SOON.has(p)) ?? shown[0] ?? f.pages[0]
 }
-const switchable = FEATURES.filter((f) => !f.fixed)
+const switchable = FEATURES.filter((f) => !f.fixed && !f.openWith)
 // Always-on home is not counted: only features that can be switched.
 const count = (fs: Feature[]) => {
   const s = fs.filter((f) => !f.fixed)
@@ -101,7 +101,7 @@ const shownGroups = computed(() => {
   const q = query.value.trim().toLowerCase()
   const matches = (f: Feature) => !q || `${name(f)} ${t(`features.${f.id}.desc`)}`.toLowerCase().includes(q)
   return GROUPS.map((g) => {
-    const all = FEATURES.filter((f) => f.group === g.id)
+    const all = FEATURES.filter((f) => f.group === g.id && !f.openWith)
     const shown = all.filter(matches)
     // A feature sits under the category of its first page; a group without categories lists its features as one.
     const category = (f: Feature) => g.categories?.find((c) => c.pages.some((p) => p.path === f.pages[0]))

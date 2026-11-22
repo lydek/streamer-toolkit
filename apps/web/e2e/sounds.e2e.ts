@@ -286,7 +286,8 @@ test('channel point rewards each choose a sound and test it in OBS', async ({ pa
     played.push(new URL(r.request().url()).pathname)
     return r.fulfill({ status: 204 })
   })
-  await page.goto('/admin/sounds')
+  // What a reward plays is set on 兌換時播放.
+  await page.goto('/admin/reward-playback')
   const reward = page.getByRole('combobox', { name: HTML })
   await expect(reward).toHaveText(zh.sound.silent)
   await expect(page.getByRole('combobox', { name: 'gone' })).toHaveText('Ding')

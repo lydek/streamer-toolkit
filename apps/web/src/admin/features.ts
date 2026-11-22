@@ -25,6 +25,9 @@ export interface Feature {
   affects?: string[]
   /** Its rules page, linked from its row in settings. */
   rules?: string
+  /** Pages that work with other features' modules (兌換時播放: sounds and media): open while any of them is on, and no
+   * switch or row of their own in settings. */
+  openWith?: string[]
 }
 
 export const FEATURES: Feature[] = [
@@ -40,6 +43,7 @@ export const FEATURES: Feature[] = [
   { id: 'polls', group: 'interact', icon: 'pi pi-chart-bar', pages: ['/polls'], scopes: ['channel:manage:polls', 'channel:manage:predictions'] },
   { id: 'checkin', group: 'interact', icon: 'pi pi-check-square', pages: ['/checkin', '/card-style', '/checkin-rules'], module: 'checkin', rules: '/checkin-rules' },
   { id: 'rewards', group: 'interact', icon: 'pi pi-star', pages: ['/rewards'], scopes: ['channel:manage:redemptions'], affects: ['songs'] },
+  { id: 'rewardPlayback', group: 'interact', icon: 'pi pi-play', pages: ['/reward-playback'], openWith: ['sound', 'media'] },
   { id: 'redemption', group: 'interact', icon: 'pi pi-gift', pages: ['/redemptions'], module: 'redemption' },
   { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters'], module: 'counter' },
   { id: 'marathon', group: 'interact', icon: 'pi pi-stopwatch', pages: ['/marathon'], module: 'marathon' },
@@ -84,12 +88,14 @@ export function turnOffPlan(f: Feature, on: (f: Feature) => boolean, all = FEATU
 }
 
 /**
- * Pages of built features whose module is listed as disabled: the tabs and sub-tabs hide them. A module not
- * listed (not loaded yet, or the load failed) hides nothing.
+ * Pages of built features whose module is listed as disabled, and of a page set that works with others' modules
+ * (`openWith`) once all of them are: the tabs and sub-tabs hide them. A module not listed (not loaded yet, or the
+ * load failed) hides nothing.
  */
 export function hiddenPages(modules: Schemas['ModuleState'][], all = FEATURES): Set<string> {
   const off = new Set(modules.filter((m) => !m.enabled).map((m) => m.id))
-  return new Set(all.filter((f) => f.module && off.has(f.module)).flatMap((f) => f.pages))
+  const closed = (f: Feature) => (f.module ? off.has(f.module) : !!f.openWith?.every((m) => off.has(m)))
+  return new Set(all.filter(closed).flatMap((f) => f.pages))
 }
 
 // The module states shared by the app bar and settings; settings hands over each list it loads.

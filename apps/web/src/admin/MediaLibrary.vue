@@ -22,6 +22,7 @@
             {{ item.title }}
             <span class="muted">{{ item.format.toUpperCase() }}</span>
             <span v-if="item.missing" class="muted">{{ t('screenTools.media.missing') }}</span>
+            <span v-if="usedBy?.get(item.id)?.length" class="muted">{{ t('screenTools.media.usedBy', { rewards: usedBy.get(item.id)!.join('、') }) }}</span>
           </td>
           <td>
             <span v-if="item.format === 'gif'" class="seconds">
@@ -67,6 +68,8 @@ import { ApiError, type Schemas, api, client } from './api'
 import { MEDIA_ACCEPT, importMedia, measureUnmeasured, saveMedia } from './media'
 import { formatLength } from './music'
 
+/** `usedBy`: the rewards each file is used by, by item ID. */
+defineProps<{ usedBy?: Map<string, string[]> }>()
 const emit = defineEmits<{ error: [unknown]; imported: [number]; loaded: [Schemas['MediaItem'][]] }>()
 const { t } = useI18n()
 const input = ref<HTMLInputElement>()

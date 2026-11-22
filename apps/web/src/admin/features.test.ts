@@ -70,3 +70,13 @@ describe('hiddenPages', () => {
     expect(hiddenPages([]).size).toBe(0)
   })
 })
+
+describe('hiddenPages', () => {
+  it('keeps 兌換時播放 while sounds or media are on, and hides it once both are off', () => {
+    const states = (off: string[]) => ['sound', 'media'].map((id) => ({ id, enabled: !off.includes(id), closed: false }))
+    expect(hiddenPages(states(['sound'])).has('/reward-playback')).toBe(false)
+    expect(hiddenPages(states(['media'])).has('/reward-playback')).toBe(false)
+    expect(hiddenPages(states(['sound', 'media'])).has('/reward-playback')).toBe(true)
+    expect(hiddenPages(states(['sound'])).has('/sounds')).toBe(true)
+  })
+})

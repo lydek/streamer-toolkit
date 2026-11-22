@@ -27,18 +27,6 @@
       />
     </ul>
 
-    <section class="stack" aria-labelledby="reward-sounds">
-      <h2 id="reward-sounds">{{ t('sound.rewards') }}</h2>
-      <p v-if="rewardError">{{ rewardError }}</p>
-      <SoundSlots
-        v-if="library && rewardSlots.length"
-        :key="`${version}:${rewardSlots.map((r) => r.slot)}`"
-        :slots="rewardSlots"
-        playable
-        @played="toast.add(successToast(t('sound.playedInObs')))"
-        @error="report"
-      />
-    </section>
   </FullPage>
 </template>
 
@@ -53,7 +41,6 @@ import { errorToast, successToast } from './home'
 import { keepFocus } from './page'
 import { importSound, measureUnmeasured, slotLabel } from './sounds'
 import SoundRow from './SoundRow.vue'
-import SoundSlots from './SoundSlots.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -62,26 +49,15 @@ const library = shallowRef<Schemas['SoundLibrary']>()
 const failed = ref('')
 const importError = ref('')
 const busy = ref(false)
-// Bumped on every load, so the reward choices list the current sounds.
-const version = ref(0)
 const rewards = ref<Schemas['Reward'][]>([])
-const rewardError = ref('')
+// Reward titles for each sound's "used by"; what a reward plays is set on 兌換時播放.
 const rewardTitles = computed(() => new Map(rewards.value.map((r) => [r.id, r.title])))
-// The channel's rewards, plus rewards with a sound that Twitch no longer lists (shown by ID).
-const rewardSlots = computed(() => {
-  const ids = [
-    ...rewards.value.map((r) => r.id),
-    ...Object.keys(library.value?.slots ?? {}).flatMap((s) => (s.startsWith('reward.') ? [s.slice(7)] : [])),
-  ]
-  return [...new Set(ids)].map((id) => ({ slot: `reward.${id}`, label: rewardTitles.value.get(id) ?? id }))
-})
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 
 async function load() {
   try {
     library.value = await api(client.GET('/api/admin/sounds'))
-    version.value++
     failed.value = ''
   } catch (e) {
     failed.value = e instanceof ApiError ? errorMessage(e.code) : t('sound.loadFailed')
@@ -117,11 +93,8 @@ async function deleted(s: Schemas['Sound']) {
 const report = (e: unknown) => toast.add(errorToast(message(e)))
 
 async function loadRewards() {
-  try {
-    rewards.value = await api(client.GET('/api/admin/checkin/rewards'))
-  } catch (e) {
-    rewardError.value = message(e)
-  }
+  // Without the list, a reward shows by its ID.
+  rewards.value = await api(client.GET('/api/admin/checkin/rewards')).catch(() => [])
 }
 
 void load()
