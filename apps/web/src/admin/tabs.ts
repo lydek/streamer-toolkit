@@ -1,7 +1,8 @@
 /*
- * The app bar's group tabs (docs/decisions.md 管理 UI 版面): top-level groups, each with one or more pages. A group
- * with several pages shows them as a second row of sub-tabs; never more than two levels. Settings is not a tab
- * (it sits behind the gear button), and neither is any route not listed here.
+ * The app bar's group tabs (docs/decisions.md 管理 UI 版面), three levels: groups in the bar; a group's categories in
+ * the second row (a group without categories lists its pages there instead); a category's pages as a row under the
+ * page title, shown only when it has more than one. Settings is not a tab (it sits behind the gear button), and
+ * neither is any route not listed here.
  *
  * Every screen of the design is listed (docs/scope.md 階段 0); a page marked `soon` is not built yet and shows the
  * coming-soon page (`pages.<id>` holds its name and one-line description). `tile` marks the page a coming-soon
@@ -14,18 +15,35 @@ export interface TabPage {
   label: string
   /** Not built yet: the route shows the coming-soon page. */
   soon?: { id: string; icon: string; tile?: boolean }
+  /** i18n key of a shorter name in the page row, where the full name would repeat the category's. */
+  tabLabel?: string
+}
+
+export interface TabCategory {
+  /** `nav.categories.<id>` holds its name. */
+  id: string
+  pages: TabPage[]
 }
 
 export interface TabGroup {
   id: string
   icon: string
+  /** Every page of the group in order (its categories' pages, when it has categories). */
   pages: TabPage[]
+  /** The second row; absent: the second row lists the pages. */
+  categories?: TabCategory[]
 }
 
 const soon = (path: string, id: string, icon: string, tile = false): TabPage => ({
   path,
   label: `pages.${id}.name`,
   soon: { id, icon, tile },
+})
+const grouped = (id: string, icon: string, categories: TabCategory[]): TabGroup => ({
+  id,
+  icon,
+  categories,
+  pages: categories.flatMap((c) => c.pages),
 })
 
 export const GROUPS: TabGroup[] = [
@@ -47,57 +65,74 @@ export const GROUPS: TabGroup[] = [
       soon('/singing-booth', 'singingBooth', 'pi pi-headphones', true),
     ],
   },
-  {
-    id: 'chat',
-    icon: 'pi pi-comments',
-    pages: [
-      { path: '/chat-log', label: 'pages.chatLog.name' },
-      soon('/chat-filter', 'chatFilter', 'pi pi-filter', true),
-      { path: '/chat', label: 'pages.chatTemplates.name' },
-      soon('/chat-window', 'chatWindow', 'pi pi-window-maximize'),
-      soon('/commands', 'commands', 'pi pi-reply', true),
-      soon('/timers', 'timers', 'pi pi-clock'),
-      soon('/greetings', 'greetings', 'pi pi-heart'),
-    ],
-  },
-  {
-    id: 'interact',
-    icon: 'pi pi-bolt',
-    pages: [
-      { path: '/alerts', label: 'modules.names.alerts' },
-      soon('/polls', 'polls', 'pi pi-chart-bar', true),
-      { path: '/checkin', label: 'modules.names.checkin' },
-      { path: '/card-style', label: 'pages.cardStyle.name' },
-      soon('/rewards', 'rewards', 'pi pi-star', true),
-      { path: '/redemptions', label: 'modules.names.redemption' },
-      { path: '/counters', label: 'modules.names.counter' },
-    ],
-  },
-  {
-    id: 'media',
-    icon: 'pi pi-images',
-    pages: [
-      { path: '/scenes', label: 'modules.names.scene' },
-      { path: '/music', label: 'modules.names.bgm' },
-      { path: '/sounds', label: 'modules.names.sound' },
-      soon('/tts', 'tts', 'pi pi-comment', true),
-      { path: '/screen-tools', label: 'modules.names.screen-tools' },
-      soon('/avatar', 'avatar', 'pi pi-face-smile', true),
-      soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
-      { path: '/image-sizes', label: 'pages.imageSizes.name' },
-    ],
-  },
-  {
-    id: 'viewers',
-    icon: 'pi pi-users',
-    pages: [
-      soon('/viewers', 'viewers', 'pi pi-users', true),
-      soon('/roles', 'roles', 'pi pi-tags'),
-      { path: '/leaderboard', label: 'pages.leaderboard.name' },
-      soon('/credits', 'credits', 'pi pi-list', true),
-      soon('/raids', 'raids', 'pi pi-send', true),
-    ],
-  },
+  grouped('chat', 'pi pi-comments', [
+    {
+      id: 'chatroom',
+      pages: [
+        { path: '/chat-log', label: 'pages.chatLog.name' },
+        { path: '/chat', label: 'pages.chatTemplates.name' },
+        soon('/chat-window', 'chatWindow', 'pi pi-window-maximize'),
+        soon('/chat-filter', 'chatFilter', 'pi pi-filter', true),
+      ],
+    },
+    {
+      id: 'bot',
+      pages: [
+        soon('/commands', 'commands', 'pi pi-reply', true),
+        soon('/timers', 'timers', 'pi pi-clock'),
+        soon('/greetings', 'greetings', 'pi pi-heart'),
+      ],
+    },
+  ]),
+  grouped('interact', 'pi pi-bolt', [
+    { id: 'alerts', pages: [{ path: '/alerts', label: 'modules.names.alerts' }] },
+    {
+      id: 'checkin',
+      pages: [
+        { path: '/checkin', label: 'modules.names.checkin', tabLabel: 'nav.pageTabs.checkin' },
+        { path: '/card-style', label: 'pages.cardStyle.name' },
+      ],
+    },
+    {
+      id: 'points',
+      pages: [
+        { ...soon('/rewards', 'rewards', 'pi pi-star', true), tabLabel: 'nav.pageTabs.rewards' },
+        { path: '/redemptions', label: 'modules.names.redemption' },
+      ],
+    },
+    { id: 'counters', pages: [{ path: '/counters', label: 'modules.names.counter' }] },
+    { id: 'polls', pages: [soon('/polls', 'polls', 'pi pi-chart-bar', true)] },
+  ]),
+  grouped('media', 'pi pi-images', [
+    {
+      id: 'obs',
+      pages: [
+        { path: '/scenes', label: 'modules.names.scene' },
+        soon('/modes', 'modes', 'pi pi-sliders-h'),
+        soon('/obs-sources', 'obsSources', 'pi pi-clone'),
+      ],
+    },
+    { id: 'music', pages: [{ path: '/music', label: 'modules.names.bgm' }] },
+    { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound' }] },
+    { id: 'widgets', pages: [{ path: '/screen-tools', label: 'modules.names.screen-tools' }] },
+    { id: 'pictures', pages: [{ path: '/image-sizes', label: 'pages.imageSizes.name' }] },
+    { id: 'avatar', pages: [soon('/avatar', 'avatar', 'pi pi-face-smile', true)] },
+  ]),
+  grouped('viewers', 'pi pi-users', [
+    {
+      id: 'viewers',
+      pages: [soon('/viewers', 'viewers', 'pi pi-users', true), soon('/roles', 'roles', 'pi pi-tags')],
+    },
+    { id: 'leaderboard', pages: [{ path: '/leaderboard', label: 'pages.leaderboard.name' }] },
+    {
+      id: 'raids',
+      pages: [
+        soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
+        soon('/raids', 'raids', 'pi pi-send', true),
+        soon('/credits', 'credits', 'pi pi-list', true),
+      ],
+    },
+  ]),
 ]
 
 /** Every page not built yet: grey in the tabs, its URL leads home, and `tile` ones are grey home tiles. */
@@ -106,6 +141,20 @@ export const SOON_PAGES = GROUPS.flatMap((g) => g.pages).filter((p) => p.soon)
 /** The group a route path belongs to, or undefined (settings, not found). */
 export function groupOf(path: string): TabGroup | undefined {
   return GROUPS.find((g) => g.pages.some((p) => p.path === path))
+}
+
+/** The category a route path belongs to, or undefined (a group without categories, settings, not found). */
+export function categoryOf(path: string): TabCategory | undefined {
+  return groupOf(path)?.categories?.find((c) => c.pages.some((p) => p.path === path))
+}
+
+/**
+ * Where a category goes: the page last seen in it while that page can open, else its first built page that is not
+ * turned off; undefined when it has none (the category is grey).
+ */
+export function categoryTarget(c: TabCategory, hidden: Set<string> = new Set(), last?: string): string | undefined {
+  const open = c.pages.filter((p) => !p.soon && !hidden.has(p.path))
+  return open.find((p) => p.path === last)?.path ?? open[0]?.path
 }
 
 /** A group can be opened while it has a page that is built and not turned off; otherwise its tab is grey. */

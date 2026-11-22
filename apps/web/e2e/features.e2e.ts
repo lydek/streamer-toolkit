@@ -32,18 +32,18 @@ test('turning a built feature off hides its tabs, also after a reload, and on br
   await expect(sw(page, 'sound')).not.toBeChecked()
   await tabs(page).getByRole('link', { name: zh.nav.groups.media }).click()
   await expect(page).toHaveURL(/\/admin\/scenes$/)
-  await expect(subTab(page, zh.modules.names.sound)).toHaveCount(0)
+  await expect(subTab(page, zh.nav.categories.sound)).toHaveCount(0)
 
   await page.reload()
   await tabs(page).getByRole('link', { name: zh.nav.groups.media }).click()
-  await expect(subTab(page, zh.pages.scenes.name)).toBeVisible()
-  await expect(subTab(page, zh.modules.names.sound)).toHaveCount(0)
+  await expect(subTab(page, zh.nav.categories.obs)).toBeVisible()
+  await expect(subTab(page, zh.nav.categories.sound)).toHaveCount(0)
 
   await page.goto('/admin/settings/features')
   await sw(page, 'sound').click()
   await expect(sw(page, 'sound')).toBeChecked()
   await tabs(page).getByRole('link', { name: zh.nav.groups.media }).click()
-  await expect(subTab(page, zh.modules.names.sound)).toBeVisible()
+  await expect(subTab(page, zh.nav.categories.sound)).toBeVisible()
 })
 
 test("a feature's page link opens its first built page", async ({ page }) => {

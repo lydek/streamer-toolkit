@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 54fbd492729c8ef51cd522bd741459fa64ee2d43f04d1e2793106a5217f56585 -->
+<!-- source: docs/scope.md source-sha256: 8e3f7ecaa0ba7dbffbae8fa4c5ceda02c227ecf0506dc85b929a7335521e578e -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -42,7 +42,7 @@ Each phase depends only on earlier phases; the order within a phase follows stre
 | 5 | Shoutouts and videos, credits, raids |
 | 6 | Modes |
 | 7 | Advanced viewer features, personal badges, chat moderation, chat filtering |
-| 8 | Avatars (VTuber Plus, VSeeFace), live captions, text-to-speech |
+| 8 | Avatars (VTuber Plus, VSeeFace), live captions |
 | 9 | Hotkeys, always-on-top chat window, profiles, bot account, themes and languages |
 
 **Other ideas:** go to the backlog; not scheduled, no specs.

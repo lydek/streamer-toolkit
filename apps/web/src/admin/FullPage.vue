@@ -11,6 +11,15 @@
         <Button v-if="overlay" :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl(overlay)" />
       </div>
     </header>
+    <!-- Third level: the other pages of this page's category, when it has more than one. -->
+    <nav v-if="pageTabs.length > 1" class="page-tabs" :aria-label="t(`nav.categories.${category!.id}`)">
+      <template v-for="p in pageTabs" :key="p.path">
+        <span v-if="p.soon" class="off" aria-disabled="true" :title="t('home.unbuilt')">
+          {{ t(p.tabLabel ?? p.label) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+        </span>
+        <RouterLink v-else :to="p.path">{{ t(p.tabLabel ?? p.label) }}</RouterLink>
+      </template>
+    </nav>
     <!-- Sticky, so a failed setting further down the page still shows its error. -->
     <p v-if="error" role="alert" class="page-error">{{ error }}</p>
     <slot />
@@ -24,8 +33,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useDrawer } from './drawer'
+import { useModules } from './features'
 import { TILES, errorToast, successToast } from './home'
 import { goHome } from './page'
+import { categoryOf } from './tabs'
 
 const props = defineProps<{
   title: string
@@ -46,6 +57,9 @@ const root = ref<HTMLElement>()
 // Only a page with an overlay copies; the others need no toast service.
 const toast = props.overlay ? useToast() : undefined
 const look = computed(() => TILES.find((tile) => tile.id === props.tile))
+const { hidden } = useModules()
+const category = computed(() => categoryOf(route.path))
+const pageTabs = computed(() => category.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
 
 async function copyObsUrl(overlay: string) {
   try {
@@ -75,6 +89,41 @@ onMounted(() => {
 
 .page-header h1 {
   margin: 0;
+}
+
+.page-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--p-surface-800);
+  scrollbar-width: none;
+}
+
+.page-tabs a,
+.page-tabs .off {
+  flex: none;
+  margin-bottom: -1px;
+  padding: 0.5rem 0.875rem;
+  border-bottom: 2px solid transparent;
+  color: var(--p-text-muted-color);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.page-tabs a:hover {
+  color: var(--p-text-color);
+}
+
+.page-tabs a[aria-current='page'] {
+  border-bottom-color: var(--p-primary-color);
+  color: var(--p-primary-color);
+}
+
+/* Not built yet: grey and inert (same contrast note as the app bar). */
+.page-tabs .off {
+  color: var(--p-surface-500);
+  cursor: not-allowed;
 }
 
 .badge {
