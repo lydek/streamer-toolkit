@@ -3890,6 +3890,55 @@
         }
       }
     },
+    "/api/admin/obs/preview": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts a scene in the preview while studio mode is on; `obs.state`'s `preview` shows it.",
+        "operationId": "set_preview_scene",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/scene": {
       "put": {
         "tags": [
@@ -4059,6 +4108,95 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/obs/studio": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Turns OBS's studio mode on or off; `obs.state` follows once OBS has done it, also when it is changed in OBS.",
+        "operationId": "set_studio",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/obs/transition": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts the preview on air (studio mode), with the transition given or the one in use.",
+        "operationId": "transition_now",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
           "404": {
             "content": {
               "application/json": {
@@ -12365,7 +12503,9 @@
           "scenes",
           "inputs",
           "streaming",
-          "recording"
+          "recording",
+          "preview",
+          "transition"
         ],
         "properties": {
           "inputs": {
@@ -12373,6 +12513,13 @@
             "items": {
               "$ref": "#/components/schemas/Input"
             }
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The scene in the preview while studio mode is on; `null` otherwise."
           },
           "recording": {
             "type": "boolean"
@@ -12392,6 +12539,35 @@
             "description": "In the program's own order."
           },
           "streaming": {
+            "type": "boolean"
+          },
+          "studioMode": {
+            "type": "boolean",
+            "description": "Whether the program's studio mode is on: picking a scene puts it in the preview, and a transition puts the\npreview on air."
+          },
+          "transition": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The transition in use."
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The transitions to pick from, in the program's order."
+          }
+        }
+      },
+      "StudioBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
             "type": "boolean"
           }
         }
@@ -12732,6 +12908,18 @@
           "title": {
             "type": "string",
             "description": "1–100 characters after trimming."
+          }
+        }
+      },
+      "TransitionBody": {
+        "type": "object",
+        "properties": {
+          "transition": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of `obs.state`'s `transitions`; absent keeps the one in use."
           }
         }
       },

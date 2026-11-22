@@ -16,6 +16,21 @@ pub struct StreamingState {
     pub inputs: Vec<Input>,
     pub streaming: bool,
     pub recording: bool,
+    /// Whether the program's studio mode is on: picking a scene puts it in the preview, and a transition puts the
+    /// preview on air.
+    #[serde(default)]
+    pub studio_mode: bool,
+    /// The scene in the preview while studio mode is on; `null` otherwise.
+    #[serde(default)]
+    #[schema(required)]
+    pub preview: Option<String>,
+    /// The transitions to pick from, in the program's order.
+    #[serde(default)]
+    pub transitions: Vec<String>,
+    /// The transition in use.
+    #[serde(default)]
+    #[schema(required)]
+    pub transition: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -175,6 +190,18 @@ pub trait StreamingSoftware: Send + Sync {
         scene: &str,
         item: i64,
         placement: Placement,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Turns studio mode on or off.
+    fn set_studio_mode(
+        &self,
+        enabled: bool,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Puts `scene` in the preview (studio mode).
+    fn set_preview(&self, scene: &str) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Puts the preview on air with `transition`, or the one in use when `None` (studio mode).
+    fn transition(
+        &self,
+        transition: Option<&str>,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Removes item `item` from `scene`; the source stays in the program's other scenes.
     fn remove_item(

@@ -16,6 +16,20 @@ export function switchScene(scene: string) {
   return api(client.PUT('/api/admin/obs/scene', { body: { scene } }))
 }
 
+/** Studio mode: puts `scene` in the preview. */
+export function previewScene(scene: string) {
+  return api(client.PUT('/api/admin/obs/preview', { body: { scene } }))
+}
+
+export function setStudioMode(enabled: boolean) {
+  return api(client.PUT('/api/admin/obs/studio', { body: { enabled } }))
+}
+
+/** Studio mode: puts the preview on air with `transition` (or the one in use). */
+export function transitionNow(transition?: string) {
+  return api(client.POST('/api/admin/obs/transition', { body: { transition } }))
+}
+
 /** `position`: the item's new place, counted front to back as the scene lists its items (0 is the front). */
 export function updateItem(
   scene: string,

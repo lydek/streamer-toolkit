@@ -85,6 +85,23 @@ afterEach(() => {
 })
 
 describe('ScenesPage', () => {
+  it('in studio mode puts a picked scene in the preview, and transitions with the transition picked', async () => {
+    const post = vi.fn(ok)
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const wrapper = await page()
+    snapshot({ ...connected(), studioMode: true, preview: 'Opening', transitions: ['Cut', 'Fade'], transition: 'Fade' })
+    await flushPromises()
+    expect(wrapper.text()).toContain(t('scene.studioNote'))
+    const buttons = wrapper.findAll('ul button')
+    expect(buttons.map((b) => b.attributes('aria-pressed'))).toEqual(['true', 'false'])
+    await buttons[1].trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/preview', { body: { scene: 'Game' } })
+    await wrapper.findAll('button').find((b) => b.text() === t('scene.transition'))!.trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/obs/transition', { body: { transition: 'Fade' } })
+  })
+
   it('shows and changes where an item sits, and says when it is off the canvas', async () => {
     vi.spyOn(client, 'GET').mockImplementation((() =>
       Promise.resolve({

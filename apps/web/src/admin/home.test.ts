@@ -131,7 +131,7 @@ describe('applyLive', () => {
   })
 
   it('takes the OBS scenes and outputs from the snapshot, then from newer events', () => {
-    const state = (streaming: boolean): Schemas['StreamingState'] => ({ scene: 'Live', scenes: [], inputs: [], streaming, recording: false })
+    const state = (streaming: boolean): Schemas['StreamingState'] => ({ scene: 'Live', scenes: [], inputs: [], streaming, recording: false, preview: null, transition: null })
     const stateEvent = (seq: number, streaming: boolean): Schemas['ObsStateEvent'] => ({
       id: `s${seq}`,
       type: 'obs.state',

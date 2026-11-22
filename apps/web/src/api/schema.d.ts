@@ -1243,6 +1243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Puts a scene in the preview while studio mode is on; `obs.state`'s `preview` shows it. */
+        put: operations["set_preview_scene"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/scene": {
         parameters: {
             query?: never;
@@ -1280,6 +1297,40 @@ export interface paths {
          *     sources are never touched; the sources stay in the other scenes.
          */
         delete: operations["remove_overlay"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/obs/studio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Turns OBS's studio mode on or off; `obs.state` follows once OBS has done it, also when it is changed in OBS. */
+        put: operations["set_studio"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/obs/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Puts the preview on air (studio mode), with the transition given or the one in use. */
+        post: operations["transition_now"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4226,12 +4277,26 @@ export interface components {
         /** @description What the streaming software shows right now; [`StreamingState::default`] while it is not connected. */
         StreamingState: {
             inputs: components["schemas"]["Input"][];
+            /** @description The scene in the preview while studio mode is on; `null` otherwise. */
+            preview: string | null;
             recording: boolean;
             /** @description The scene on air; `null` while not connected (unknown). */
             scene: string | null;
             /** @description In the program's own order. */
             scenes: components["schemas"]["Scene"][];
             streaming: boolean;
+            /**
+             * @description Whether the program's studio mode is on: picking a scene puts it in the preview, and a transition puts the
+             *     preview on air.
+             */
+            studioMode?: boolean;
+            /** @description The transition in use. */
+            transition: string | null;
+            /** @description The transitions to pick from, in the program's order. */
+            transitions?: string[];
+        };
+        StudioBody: {
+            enabled: boolean;
         };
         /** @description What an item is, as the queue area names it; names are raw text. */
         Subject: {
@@ -4345,6 +4410,10 @@ export interface components {
         TrackUpdate: {
             /** @description 1–100 characters after trimming. */
             title: string;
+        };
+        TransitionBody: {
+            /** @description One of `obs.state`'s `transitions`; absent keeps the one in use. */
+            transition?: string | null;
         };
         /**
          * @description What it set off.
@@ -7701,6 +7770,51 @@ export interface operations {
             };
         };
     };
+    set_preview_scene: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     switch_scene: {
         parameters: {
             query?: never;
@@ -7852,6 +7966,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_studio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    transition_now: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: {
                 headers: {

@@ -8,6 +8,32 @@
     <template v-else>
       <section class="stack" aria-labelledby="scene-list">
         <h2 id="scene-list">{{ t('scene.scenes') }}</h2>
+        <div class="studio">
+          <span class="switch">
+            <ToggleSwitch
+              input-id="studio-mode"
+              :model-value="state.studioMode"
+              :disabled="studioBusy"
+              @update:model-value="(v: boolean) => studio(() => setStudioMode(v))"
+            />
+            <label for="studio-mode">{{ t('scene.studio') }}</label>
+          </span>
+          <template v-if="state.studioMode">
+            <Select
+              v-model="transition"
+              :options="state.transitions ?? []"
+              :aria-label="t('scene.transitionKind')"
+              :disabled="studioBusy"
+            />
+            <Button
+              :label="t('scene.transition')"
+              icon="pi pi-step-forward"
+              :disabled="studioBusy || !state.preview"
+              @click="studio(() => transitionNow(transition ?? undefined))"
+            />
+          </template>
+        </div>
+        <p v-if="state.studioMode" class="muted">{{ t('scene.studioNote') }}</p>
         <SceneList :state="state" @error="report" />
       </section>
 
@@ -140,7 +166,7 @@ import FullPage from './FullPage.vue'
 import { errorToast, useLiveEvents } from './home'
 import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSources'
 import SceneList from './SceneList.vue'
-import { type SceneItem, kindKey, obsReady, updateItem } from './scenes'
+import { type SceneItem, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -169,6 +195,25 @@ const duplicates = computed(
         .flatMap((r) => r.sources.map((s) => s.name)),
     ),
 )
+
+// Studio mode: the transition picked here, starting from the one in use in OBS.
+const transition = ref<string | null>(null)
+watch(
+  () => state.value?.transition,
+  (now) => (transition.value = now ?? null),
+  { immediate: true },
+)
+const studioBusy = ref(false)
+async function studio(command: () => Promise<unknown>) {
+  studioBusy.value = true
+  try {
+    await command()
+  } catch (e) {
+    report(e)
+  } finally {
+    studioBusy.value = false
+  }
+}
 
 // 加入 Overlay: the built-in overlays not in this scene yet, with their suggested size.
 const addMenu = ref<InstanceType<typeof Menu>>()
@@ -300,5 +345,18 @@ tbody th {
 
 .muted {
   color: var(--p-text-muted-color);
+}
+
+.studio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.switch {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 </style>
