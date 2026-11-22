@@ -17,6 +17,9 @@
                 ? t('troubleshoot.failed')
                 : t('troubleshoot.latency', { ms: conn.twitch_latency_ms })
           }}
+          <RouterLink v-if="!conn.twitch_signed_in || conn.twitch_latency_ms == null" to="/settings/connections#twitch" class="fix">
+            {{ t('troubleshoot.fix') }}
+          </RouterLink>
         </dd>
         <dt>EventSub</dt>
         <dd>
@@ -24,9 +27,13 @@
           <template v-if="conn.eventsub_subscriptions != null">
             · {{ t('troubleshoot.subscriptions', { n: conn.eventsub_subscriptions }) }}
           </template>
+          <RouterLink v-if="!conn.eventsub_connected" to="/settings/connections#twitch" class="fix">{{ t('troubleshoot.fix') }}</RouterLink>
         </dd>
         <dt>OBS</dt>
-        <dd>{{ t(conn.obs_connected ? 'troubleshoot.connected' : 'troubleshoot.disconnected') }}</dd>
+        <dd>
+          {{ t(conn.obs_connected ? 'troubleshoot.connected' : 'troubleshoot.disconnected') }}
+          <RouterLink v-if="!conn.obs_connected" to="/settings/connections#obs" class="fix">{{ t('troubleshoot.fix') }}</RouterLink>
+        </dd>
       </dl>
     </section>
 
@@ -192,5 +199,9 @@ void loadLog()
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.fix {
+  margin-inline-start: 0.5rem;
 }
 </style>

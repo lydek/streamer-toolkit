@@ -784,6 +784,11 @@
     }
   },
   "settings": {
+    "streamingSoftware": "直播軟體",
+    "twitch": {
+      "scopes": "權限",
+      "bot": "機器人帳號"
+    },
     "title": "設定",
     "textSize": "文字大小",
     "textSizePreview": "預覽：今天唱什麼？放開後套用到整個視窗。",
@@ -837,7 +842,8 @@
   },
   "backup": {
     "export": "匯出備份",
-    "exported": "已匯出備份。",
+    "exported": "已匯出備份：{file}",
+    "choiceSize": "{choice} {size}",
     "restoreFile": "從備份檔還原",
     "createdAt": "備份時間：",
     "appVersion": "程式版本：{version}",
@@ -846,9 +852,8 @@
     "restoreNote": "目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
     "restoreOnly": {
       "data": "只會取代資料（設定與紀錄），媒體不動。目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
-      "media": "只會取代媒體，設定與紀錄不動。目前的媒體會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。"
+      "media": "只會取代媒體，設定與紀錄不動；播放清單與獎勵的連結不會回來。目前的媒體會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。"
     },
-    "sizes": "目前資料 {data}、媒體 {media}",
     "choice": "匯出內容",
     "choices": {
       "all": "全部",
@@ -1052,11 +1057,13 @@
     "app": "本工具",
     "mb": "{n} MB",
     "obsCpu": "OBS CPU",
-    "dropped": "OBS 掉幀（最近 60 秒）",
+    "dropped": "OBS 掉幀",
+    "droppedWindow": "最近 60 秒",
     "bitrate": "OBS 串流位元率",
     "kbps": "{n} kbps"
   },
   "troubleshoot": {
+    "fix": "去設定",
     "connections": "連線檢查",
     "check": "重新檢查",
     "twitchApi": "Twitch API",

@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
+import { testRouter } from './testRouter'
 import TroubleshootPanel from './TroubleshootPanel.vue'
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn(async () => {}) }))
@@ -29,11 +30,15 @@ afterEach(() => {
 })
 
 it('shows the connection checks and the log, and opens only the logs folder', async () => {
-  const wrapper = mount(TroubleshootPanel, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
+  const wrapper = mount(TroubleshootPanel, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   expect(wrapper.text()).toContain('87 毫秒')
   expect(wrapper.text()).toContain('9 個訂閱')
   expect(wrapper.text()).toContain('obs.unreachable')
+  // Only the failing row points to its settings.
+  const fixes = wrapper.findAll('a.fix')
+  expect(fixes.map((a) => a.attributes('href'))).toEqual(['/settings/connections#obs'])
+  expect(fixes[0].text()).toBe('去設定')
   expect(client.GET).toHaveBeenCalledWith('/api/admin/diagnostics/logs', { params: { query: { level: 'warn' } } })
   await wrapper.findAll('button').find((b) => b.text() === '開啟記錄檔資料夾')!.trigger('click')
   expect(invoke).toHaveBeenCalledWith('open_logs_folder')

@@ -6,9 +6,13 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import BackupRestore from './BackupRestore.vue'
 
-const { previewRestore, saveBackup } = vi.hoisted(() => ({ previewRestore: vi.fn(), saveBackup: vi.fn(async () => true) }))
+const { previewRestore, saveBackup, toastAdd } = vi.hoisted(() => ({
+  previewRestore: vi.fn(),
+  saveBackup: vi.fn(async (): Promise<string | false> => 'mine.stbackup'),
+  toastAdd: vi.fn(),
+}))
 vi.mock('./backup', async (original) => ({ ...(await original<typeof import('./backup')>()), previewRestore, saveBackup }))
-vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
+vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: toastAdd }) }))
 
 beforeEach(() => {
   vi.spyOn(client, 'GET').mockResolvedValue({
@@ -19,14 +23,16 @@ beforeEach(() => {
 enableAutoUnmount(afterEach)
 afterEach(() => vi.restoreAllMocks())
 
-it('shows how large the data and the media are and exports the chosen kind', async () => {
+it('shows each choice with its size, exports the chosen kind and names the saved file', async () => {
   const wrapper = mount(BackupRestore, { global: { plugins: [i18n, PrimeVue] } })
   await flushPromises()
-  expect(wrapper.text()).toContain('目前資料 3.0 MB、媒體 2.0 GB')
-  await wrapper.findAll('[aria-labelledby="backup-choice"] button').find((b) => b.text() === '媒體')!.trigger('click')
+  const choices = wrapper.findAll('[aria-labelledby="backup-choice"] button')
+  expect(choices.map((b) => b.text())).toEqual(['全部 2.0 GB', '資料 3.0 MB', '媒體 2.0 GB'])
+  await choices.find((b) => b.text().startsWith('媒體'))!.trigger('click')
   await wrapper.findAll('button').find((b) => b.text() === '匯出備份')!.trigger('click')
   await flushPromises()
   expect(saveBackup).toHaveBeenCalledWith('media')
+  expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: '已匯出備份：mine.stbackup' }))
 })
 
 it('says which kinds a backup holds and that only those are replaced', async () => {
@@ -50,4 +56,5 @@ it('says which kinds a backup holds and that only those are replaced', async () 
   expect(wrapper.text()).toContain('音效 2 個')
   expect(wrapper.text()).not.toContain('兌換紀錄')
   expect(wrapper.text()).toContain('設定與紀錄不動')
+  expect(wrapper.text()).toContain('播放清單與獎勵的連結不會回來')
 })

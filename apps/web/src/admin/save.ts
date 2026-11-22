@@ -15,13 +15,14 @@ export interface FileType {
 
 /**
  * Asks where to save first (the save dialog needs the click's user activation), then writes what `content` gives
- * there. Resolves `false` when the dialog is cancelled. Without the save dialog API the browser downloads the file.
+ * there. Resolves the saved file's name (the one picked in the dialog), or `false` when the dialog is cancelled.
+ * Without the save dialog API the browser downloads the file under `name`.
  */
 export async function saveFile(
   name: string,
   type: FileType,
   content: () => Promise<Blob | ReadableStream<Uint8Array>>,
-): Promise<boolean> {
+): Promise<string | false> {
   const picker = (globalThis as SavePicker).showSaveFilePicker
   let file: FileSystemFileHandle | undefined
   if (picker) {
@@ -39,10 +40,10 @@ export async function saveFile(
   if (file) {
     const stream = data instanceof Blob ? data.stream() : data
     await stream.pipeTo(await file.createWritable())
-    return true
+    return file.name
   }
   const url = URL.createObjectURL(data instanceof Blob ? data : await new Response(data).blob())
   Object.assign(document.createElement('a'), { href: url, download: name }).click()
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  return true
+  return name
 }

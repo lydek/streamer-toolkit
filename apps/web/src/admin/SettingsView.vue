@@ -46,13 +46,18 @@
           <OutputDevicePicker />
         </section>
 
-        <section v-show="section === 'connections'" aria-labelledby="twitch">
+        <section v-show="section === 'connections'" class="card" aria-labelledby="twitch">
           <h2 id="twitch" tabindex="-1">Twitch</h2>
           <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
+          <!-- Not built yet: grey. -->
+          <p v-for="s in ['scopes', 'bot']" :key="s" class="off">
+            {{ t(`settings.twitch.${s}`) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+          </p>
         </section>
 
-        <section v-show="section === 'connections'" aria-labelledby="obs">
-          <h2 id="obs" tabindex="-1">OBS</h2>
+        <section v-show="section === 'connections'" class="card" aria-labelledby="streaming-software">
+          <h2 id="streaming-software">{{ t('settings.streamingSoftware') }}</h2>
+          <h3 id="obs" tabindex="-1">OBS Studio</h3>
           <p v-if="obsHost.value.value === undefined">{{ loadText }}</p>
           <div v-else class="stack">
             <label for="obs-host">{{ t('settings.obs.host') }}</label>
@@ -468,5 +473,23 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.card {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 6px;
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.off {
+  color: var(--p-text-muted-color);
 }
 </style>
