@@ -55,6 +55,52 @@ export interface OverlayRow {
 
 const pathOf = (overlay: string) => overlay.split('?')[0]
 
+type T = (key: string, values?: Record<string, unknown>) => string
+
+/** A row's name: the overlay's, or 「排行榜：小奇點・本場」 for one board and period. */
+export function overlayName(r: OverlayRow, t: T): string {
+  if (r.board) {
+    const board = t(`overlay.leaderboard.${r.board.board}`)
+    return t('obsSources.leaderboardRow', { board, period: t(`leaderboard.periods.${r.board.period}`) })
+  }
+  return t(r.key === 'leaderboard-other' ? 'obsSources.names.leaderboardOther' : `obsSources.names.${r.entry.id}`)
+}
+
+export interface ObsProblem {
+  id: string
+  text: string
+  /** The page that fixes it. */
+  to: string
+}
+
+/**
+ * OBS problems for home's to-do list: an overlay with two or more sources, and background music missing from the
+ * scene on air while a playlist rule names that scene. Each goes away once its cause does.
+ */
+export function obsProblems(
+  data: Schemas['ObsSources'] | undefined,
+  rules: Schemas['SceneRuleBody'][],
+  off: Set<string>,
+  t: T,
+): ObsProblem[] {
+  if (!data?.connected) return []
+  const rows = overlayRows(data.sources, off)
+  const problems: ObsProblem[] = rows
+    .filter((r) => r.sources.length > 1)
+    .map((r) => ({
+      id: `duplicate:${r.key}`,
+      text: t('obsSources.problems.duplicate', { name: overlayName(r, t), n: r.sources.length }),
+      to: '/obs-sources',
+    }))
+  const live = data.live_scene?.toLowerCase()
+  const bgm = rows.find((r) => r.key === 'bgm')
+  const ruled = rules.some((r) => r.enabled && r.playlist && r.scenes.some((s) => s.toLowerCase() === live))
+  if (live && bgm && ruled && !bgm.scenes.some((s) => s.toLowerCase() === live)) {
+    problems.push({ id: 'bgm:scene', text: t('obsSources.problems.bgmNotInScene', { scene: data.live_scene }), to: '/obs-sources' })
+  }
+  return problems
+}
+
 function row(key: string, entry: OverlayEntry, sources: Schemas['OverlaySource'][], url?: string): OverlayRow {
   return { key, entry, url, sources, scenes: [...new Set(sources.flatMap((s) => s.scenes))] }
 }
@@ -101,17 +147,26 @@ export function obsPresence(overlay: string, data: Schemas['ObsSources'] | undef
 const shared = shallowRef<Schemas['ObsSources']>()
 let readAt = 0
 let reading: Promise<void> | undefined
+// Asked to read right now while a read was under way: that read may have started before the change, so one more.
+let again = false
 
-/** The overlays' places in OBS, read again when a page that shows them opens. */
-export function useObsSources() {
-  if (!reading && Date.now() - readAt > 2000) {
+/** The overlays' places in OBS, read again when a page that shows them opens (`force`: right now). */
+export function useObsSources(force = false) {
+  if (reading) again ||= force
+  else if (force || Date.now() - readAt > 2000) {
     reading = api(client.GET('/api/admin/obs/sources'))
       .then((data) => {
         shared.value = data
         readAt = Date.now()
       })
       .catch(() => {})
-      .finally(() => (reading = undefined))
+      .finally(() => {
+        reading = undefined
+        if (again) {
+          again = false
+          useObsSources(true)
+        }
+      })
   }
   return shared
 }

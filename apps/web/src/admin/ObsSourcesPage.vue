@@ -82,7 +82,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import { useModules } from './features'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
-import { type OverlayRow, overlayRows } from './obsSources'
+import { type OverlayRow, overlayName, overlayRows } from './obsSources'
 import { GROUPS } from './tabs'
 
 const { t } = useI18n()
@@ -112,13 +112,7 @@ const groups = computed(() =>
 const duplicates = computed(() => rows.value.filter((r) => r.sources.length > 1))
 const others = (r: OverlayRow) => r.scenes.filter((s) => s !== scene.value)
 
-function rowName(r: OverlayRow) {
-  if (r.board) {
-    const board = t(`overlay.leaderboard.${r.board.board}`)
-    return t('obsSources.leaderboardRow', { board, period: t(`leaderboard.periods.${r.board.period}`) })
-  }
-  return t(r.key === 'leaderboard-other' ? 'obsSources.names.leaderboardOther' : `obsSources.names.${r.entry.id}`)
-}
+const rowName = (r: OverlayRow) => overlayName(r, t)
 
 // The row whose switch is saving; the others wait so two changes never cross.
 const busy = ref('')

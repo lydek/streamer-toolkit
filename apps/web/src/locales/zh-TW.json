@@ -1321,6 +1321,10 @@
     "sources": "{n} 個來源",
     "duplicate": "「{name}」在 OBS 有 {n} 個來源，{effect}。同一個來源放在多個場景不算。",
     "leaderboardRow": "排行榜：{board}・{period}",
+    "problems": {
+      "duplicate": "「{name}」在 OBS 有 {n} 個來源",
+      "bgmNotInScene": "「{scene}」有歌單，但背景音樂不在這個場景"
+    },
     "sourceName": "{name}（{app}）",
     "notLocal": "OBS 在另一台電腦：這裡只能看，不能把 Overlay 加進場景，因為本工具的網址在那台電腦打不開。",
     "inSceneFor": "「{name}」放在「{scene}」",
