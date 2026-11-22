@@ -11,8 +11,9 @@ use sqlx::SqlitePool;
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
-    modules::Modules,
-    outbox::Outbox,
+    modules::{self, Modules},
+    outbox::{Handled, Outbox, OutboxEvent, Subscriber, Subscription},
+    presentation::{REDEMPTION_PLAYED, RedemptionPlayed},
 };
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
@@ -69,9 +70,11 @@ pub struct RedemptionChangedPayload {
 }
 
 fn publish_changed(bus: &EventBus, r: &Redemption) {
-    let payload = RedemptionChangedPayload {
-        id: r.id.0.to_string(),
-    };
+    publish_changed_id(bus, r.id.0.to_string());
+}
+
+fn publish_changed_id(bus: &EventBus, id: String) {
+    let payload = RedemptionChangedPayload { id };
     bus.publish(Event {
         id: Uuid::now_v7().to_string(),
         event_type: CHANGED,
@@ -96,6 +99,43 @@ pub fn start(
         modules,
         move |r| publish_changed(&bus, r),
     )
+}
+
+/// What this module takes from the outbox: what each redemption played, kept with its record and announced on
+/// `bus` so the redemption list shows it.
+pub fn subscriptions(pool: SqlitePool, bus: Arc<EventBus>) -> Vec<Subscription> {
+    vec![Subscription {
+        module: modules::REDEMPTION,
+        event_type: REDEMPTION_PLAYED,
+        handler: Arc::new(PlaybackRecords { pool, bus }),
+    }]
+}
+
+struct PlaybackRecords {
+    pool: SqlitePool,
+    bus: Arc<EventBus>,
+}
+
+impl Subscriber for PlaybackRecords {
+    /// The event ID keeps a redelivered event from being kept twice.
+    fn handle<'a>(&'a self, event: &'a OutboxEvent) -> Handled<'a> {
+        Box::pin(async move {
+            let played: RedemptionPlayed =
+                serde_json::from_value(event.payload.clone()).map_err(|e| e.to_string())?;
+            let kept = db::record_played(&self.pool, &event.id, &played)
+                .await
+                .map_err(|e| e.to_string())?;
+            // Announced once, when first kept; a redelivered event changes nothing.
+            if kept
+                && let Some(id) = db::record_id(&self.pool, &played.redemption_id)
+                    .await
+                    .map_err(|e| e.to_string())?
+            {
+                publish_changed_id(&self.bus, id);
+            }
+            Ok(())
+        })
+    }
 }
 
 #[derive(OpenApi)]
@@ -158,6 +198,61 @@ mod tests {
         }
         assert!(changed["seq"].as_u64() > created["seq"].as_u64());
         assert!(rx.try_recv().is_err(), "nothing else was announced");
+        drop(service);
+    }
+
+    #[tokio::test]
+    async fn playback_kept_is_announced_once_for_its_record() {
+        use toolkit_core::presentation::{PlayResult, PlayedKind};
+        let pool = pool().await;
+        let bus = Arc::new(EventBus::default());
+        let (_, mut rx) = bus.subscribe();
+        let service = start(
+            pool.clone(),
+            bus.clone(),
+            modules("played"),
+            Outbox::new(pool.clone(), modules("outbox-p"), Vec::new()),
+        );
+        service.receive(
+            event(
+                "r-1",
+                RedemptionChange::Added,
+                RedemptionStatus::Unfulfilled,
+            ),
+            Source::Twitch,
+        );
+        wire(&mut rx).await;
+        let handler = subscriptions(pool.clone(), bus).remove(0).handler;
+        let played = |redemption: &str| OutboxEvent {
+            id: format!("e-{redemption}"),
+            event_type: REDEMPTION_PLAYED.into(),
+            payload: serde_json::to_value(RedemptionPlayed {
+                redemption_id: redemption.into(),
+                what: PlayedKind::Sound,
+                result: PlayResult::Played,
+            })
+            .unwrap(),
+            occurred_at: Utc::now(),
+        };
+        let twitch_id: String =
+            sqlx::query_scalar("SELECT twitch_redemption_id FROM redemption_records")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        handler.handle(&played(&twitch_id)).await.unwrap();
+        let id: String = sqlx::query_scalar("SELECT id FROM redemption_records")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            wire(&mut rx).await["payload"],
+            serde_json::json!({ "id": id })
+        );
+        // A redelivery, and a redemption that was never recorded, announce nothing.
+        handler.handle(&played(&twitch_id)).await.unwrap();
+        handler.handle(&played("t-unknown")).await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(rx.try_recv().is_err());
         drop(service);
     }
 

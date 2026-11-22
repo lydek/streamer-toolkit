@@ -14,7 +14,10 @@ use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
     events::{ChatMessage, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Recent, RecentItem, Shown, Stage, Subject},
+    presentation::{
+        Item, PlayResult, PlayedKind, PlayedReporter, Presenter, Recent, RecentItem, Shown, Stage,
+        Subject, reporting,
+    },
     settings::{self, CheckinSettings},
 };
 
@@ -294,6 +297,8 @@ pub(crate) struct CheckedIn {
     pub(crate) total: u64,
     pub(crate) stamps: u32,
     pub(crate) slots: u32,
+    /// The Twitch redemption that checked the viewer in, if one did.
+    pub(crate) redemption: Option<String>,
 }
 
 /// Called after every recorded check-in, whatever triggered it.
@@ -404,6 +409,7 @@ pub(crate) fn checked_in(viewer: &Viewer, outcome: &Outcome, rules: &Rules) -> O
             total: *total,
             stamps: rules.slots.stamps(*total),
             slots: rules.slots.get(),
+            redemption: None,
         }),
         Outcome::Repeat | Outcome::Redelivered => None,
     }
@@ -454,6 +460,8 @@ pub struct CheckinService {
     config: Arc<Config>,
     on_checked_in: OnCheckedIn,
     queue_card: QueueCard,
+    /// Tells the redemption module what each redemption's card did.
+    played: PlayedReporter,
 }
 
 impl CheckinService {
@@ -476,11 +484,13 @@ impl CheckinService {
             presenter,
         } = screen;
         let recent = Recent::default();
-        let (card_repo, card_presenter, card_show, card_recent) = (
+        let played = PlayedReporter::default();
+        let (card_repo, card_presenter, card_show, card_recent, card_played) = (
             repo.clone(),
             presenter.clone(),
             show_card.clone(),
             recent.clone(),
+            played.clone(),
         );
         let queue_card: QueueCard = Arc::new(move |c, record| {
             // The card is built (avatar looked up) while it waits its turn; it shows only once built.
@@ -495,7 +505,18 @@ impl CheckinService {
             };
             // A pushed card is no check-in: the event feed never lists it.
             let done = record.then(|| {
-                card_recent.record(Some(c.record_id.clone()), subject.clone(), Source::Twitch)
+                let done =
+                    card_recent.record(Some(c.record_id.clone()), subject.clone(), Source::Twitch);
+                match c.redemption.clone() {
+                    Some(id) => reporting(
+                        done,
+                        card_played.clone(),
+                        id,
+                        PlayedKind::Card,
+                        PlayResult::from,
+                    ),
+                    None => done,
+                }
             });
             card_presenter.push(Item {
                 stage: Stage::Checkin,
@@ -591,7 +612,13 @@ impl CheckinService {
             config,
             on_checked_in,
             queue_card: kept,
+            played,
         }
+    }
+
+    /// Where it reports what each redemption's card did; the host connects it to the outbox.
+    pub fn played(&self) -> &PlayedReporter {
+        &self.played
     }
 
     /// Shows a repeat check-in's card when the style asks for it; nothing is recorded.
@@ -767,6 +794,7 @@ async fn pushed<R: CheckinRepository>(
         total,
         stamps: rules.slots.stamps(total),
         slots: rules.slots.get(),
+        redemption: None,
     }))
 }
 

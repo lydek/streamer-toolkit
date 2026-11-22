@@ -3638,6 +3638,11 @@ export interface components {
             /** Format: float */
             y: number;
         };
+        /**
+         * @description How it ended: an [`Outcome`], or `file_missing` for media whose file was gone.
+         * @enum {string}
+         */
+        PlayResult: "played" | "sound_missing" | "file_missing" | "off_air" | "declined" | "skipped" | "cleared" | "stopped";
         /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */
         PlaySound: {
             url: string;
@@ -3646,6 +3651,15 @@ export interface components {
         };
         /** @enum {string} */
         PlayStateName: "stopped" | "playing" | "paused";
+        PlayedEntry: {
+            result: components["schemas"]["PlayResult"];
+            what: components["schemas"]["PlayedKind"];
+        };
+        /**
+         * @description What a redemption showed.
+         * @enum {string}
+         */
+        PlayedKind: "card" | "sound" | "media";
         /** @description What to do with the player. */
         PlayerControl: {
             /** @enum {string} */
@@ -3862,6 +3876,11 @@ export interface components {
          */
         RedemptionRecord: {
             id: string;
+            /**
+             * @description What the redemption played, in the order each ended: empty when it played nothing, `null` for a record
+             *     from before this was kept.
+             */
+            played: components["schemas"]["PlayedEntry"][] | null;
             /** @description RFC 3339, UTC. */
             redeemed_at: string;
             /** Format: int32 */

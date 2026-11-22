@@ -1009,3 +1009,137 @@ mod tests {
         assert_eq!(rest, [(5, Outcome::Stopped), (7, Outcome::Stopped)]);
     }
 }
+
+/// `presentation.redemption_played` in the outbox: what one Twitch redemption showed and how it ended. Sent by the
+/// module that showed it (check-in card, reward sound, reward media) once its item ends; simulated and test items
+/// never send it. The redemption module keeps it with the record.
+pub const REDEMPTION_PLAYED: &str = "presentation.redemption_played";
+
+/// What a redemption showed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayedKind {
+    Card,
+    Sound,
+    Media,
+}
+
+/// How it ended: an [`Outcome`], or `file_missing` for media whose file was gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayResult {
+    Played,
+    SoundMissing,
+    FileMissing,
+    OffAir,
+    Declined,
+    Skipped,
+    Cleared,
+    Stopped,
+}
+
+impl From<Outcome> for PlayResult {
+    fn from(o: Outcome) -> Self {
+        match o {
+            Outcome::Played => Self::Played,
+            Outcome::SoundMissing => Self::SoundMissing,
+            Outcome::OffAir => Self::OffAir,
+            Outcome::Declined => Self::Declined,
+            Outcome::Skipped => Self::Skipped,
+            Outcome::Cleared => Self::Cleared,
+            Outcome::Stopped => Self::Stopped,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RedemptionPlayed {
+    /// The Twitch redemption ID.
+    pub redemption_id: String,
+    pub what: PlayedKind,
+    pub result: PlayResult,
+}
+
+/// Sends a [`RedemptionPlayed`]; the host publishes it to the outbox.
+pub type ReportPlayed = Arc<dyn Fn(RedemptionPlayed) + Send + Sync>;
+
+/// Where a module sends [`RedemptionPlayed`]: nowhere until the host connects it, once the outbox exists (it is
+/// built after the modules, since it takes their subscriptions).
+#[derive(Clone, Default)]
+pub struct PlayedReporter(Arc<std::sync::OnceLock<ReportPlayed>>);
+
+impl PlayedReporter {
+    /// The first connection stays.
+    pub fn connect(&self, report: ReportPlayed) {
+        let _ = self.0.set(report);
+    }
+
+    pub fn send(&self, played: RedemptionPlayed) {
+        if let Some(report) = self.0.get() {
+            report(played);
+        }
+    }
+}
+
+/// `done` that also reports what Twitch redemption `redemption` showed, with the result `result` makes of its
+/// outcome.
+pub fn reporting(
+    done: Box<dyn FnOnce(Outcome) + Send>,
+    report: PlayedReporter,
+    redemption: String,
+    what: PlayedKind,
+    result: impl FnOnce(Outcome) -> PlayResult + Send + 'static,
+) -> Box<dyn FnOnce(Outcome) + Send> {
+    Box::new(move |outcome| {
+        done(outcome);
+        report.send(RedemptionPlayed {
+            redemption_id: redemption,
+            what,
+            result: result(outcome),
+        });
+    })
+}
+
+#[cfg(test)]
+mod played_tests {
+    use super::*;
+
+    #[test]
+    fn reporting_records_the_outcome_then_reports_what_played_once_connected() {
+        let reporter = PlayedReporter::default();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let outcomes = Arc::new(Mutex::new(Vec::new()));
+        let record = |outcomes: Arc<Mutex<Vec<Outcome>>>| -> Box<dyn FnOnce(Outcome) + Send> {
+            Box::new(move |o| outcomes.lock().unwrap().push(o))
+        };
+        // Not connected yet: nothing is sent, the outcome is still recorded.
+        reporting(
+            record(outcomes.clone()),
+            reporter.clone(),
+            "r0".into(),
+            PlayedKind::Sound,
+            PlayResult::from,
+        )(Outcome::Played);
+        let into = sent.clone();
+        reporter.connect(Arc::new(move |p| into.lock().unwrap().push(p)));
+        reporting(
+            record(outcomes.clone()),
+            reporter,
+            "r1".into(),
+            PlayedKind::Media,
+            |_| PlayResult::FileMissing,
+        )(Outcome::Declined);
+        assert_eq!(
+            *outcomes.lock().unwrap(),
+            vec![Outcome::Played, Outcome::Declined]
+        );
+        assert_eq!(
+            *sent.lock().unwrap(),
+            vec![RedemptionPlayed {
+                redemption_id: "r1".into(),
+                what: PlayedKind::Media,
+                result: PlayResult::FileMissing,
+            }]
+        );
+    }
+}

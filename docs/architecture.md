@@ -76,6 +76,7 @@ apps/
   - 訂閱者依事件的 `occurredAt` 判斷業務時間（例如打卡的營運日），不用處理時間，補送的事件才不會算到錯的日子。
   - 重試有上限（共 5 次，間隔 1、2、4、8 秒；重試期間擋住該訂閱者後面的事件）；超過就把事件移入 dead-letter，在 UI 顯示並提供「重試」或「略過」，避免單一事件永久卡住該訂閱者。
   - 所有訂閱者都投遞完成的事件每 10 分鐘清除（啟動時也清一次）；已移除模組的待投遞紀錄一併清除。
+- 播放結果（UI-C5）：Twitch 兌換觸發打卡卡片、兌換音效或影片與 GIF 時，負責的模組在那一項結束時用 `Outbox::publish_now` 發布 `RedemptionPlayed`（事件類型 `presentation.redemption_played`：Twitch 兌換 ID、`what` 是 `card`／`sound`／`media`、`result` 是佇列的結果，或影片檔案不見時為 `file_missing`）；模擬與試播不發布。寫入失敗時用同一個事件 ID 再試三次（隔 1、5、30 秒），仍失敗才只寫 log。outbox 要等各模組建好才能建立（它需要各模組的訂閱），所以模組先拿一個空的 `PlayedReporter`，Host 建好 outbox 後再接上。兌換紀錄訂閱這個事件，存進自己的 `redemption_playback`（以 outbox 事件 ID 為主鍵，重送不會重複），第一次存下時對那筆紀錄發 `redemption.changed`，兌換紀錄頁跟著更新；`redemption_records.playback_tracked` 在這個欄位加入後新增的紀錄為 1，舊紀錄為 0。`GET /api/admin/redemptions` 每筆帶 `played`：依結束順序列出播了什麼與結果，什麼都沒播是空陣列，舊紀錄是 `null`；兌換紀錄頁分別顯示成各項結果、「—」與「沒有紀錄」。
 - **停用模組**：
   - Skeleton 起就有啟用／停用開關；停用期間記憶體事件（聊天等）直接丟棄，不保留。
   - 有訂閱 outbox 的模組（目前只有打卡簽到）停用時由實況主選擇（設定存在 `settings.json` 的 `disabled_modules` 與 `closed_modules`）：
@@ -95,7 +96,7 @@ apps/
 
 ## 5. 對外通訊
 - 用戶端目前只有管理 UI（Tauri 視窗）與 OBS Overlay，一律走 HTTP＋WebSocket（例外：下方「Tauri IPC 權限」列出的 IPC 指令），只綁 `127.0.0.1`。OBS Dock 與手機瀏覽器控制之後再設計。
-- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增或狀態改變時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
+- HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增、狀態改變或存下播放結果時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
 - **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。

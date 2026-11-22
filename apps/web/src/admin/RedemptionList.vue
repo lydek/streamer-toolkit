@@ -13,6 +13,8 @@
         </span>
       </div>
       <p v-if="r.user_input" class="input">{{ r.user_input }}</p>
+      <!-- What it played: — for nothing, 沒有紀錄 for a record from before this was kept. -->
+      <p class="played">{{ t('redemption.played.label') }}{{ playedText(r) }}</p>
       <time :datetime="r.redeemed_at">{{ formatTime(r.redeemed_at) }}</time>
     </li>
   </ul>
@@ -30,6 +32,14 @@ const ICONS: Record<RedemptionStatus, string> = {
   fulfilled: 'pi pi-check',
   canceled: 'pi pi-replay',
   unknown: 'pi pi-question-circle',
+}
+
+function playedText(r: RedemptionRecord) {
+  if (!r.played) return t('redemption.played.untracked')
+  if (!r.played.length) return t('redemption.played.none')
+  return r.played
+    .map((p) => t('redemption.played.entry', { what: t(`redemption.played.what.${p.what}`), result: t(`redemption.played.result.${p.result}`) }))
+    .join('、')
 }
 
 const formatTime = (iso: string) =>
@@ -81,6 +91,12 @@ const formatTime = (iso: string) =>
 }
 
 time {
+  font-size: 0.875rem;
+}
+
+.played {
+  margin: 0.25rem 0 0;
+  color: var(--p-text-muted-color);
   font-size: 0.875rem;
 }
 </style>

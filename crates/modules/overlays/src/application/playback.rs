@@ -11,7 +11,10 @@ use std::{
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Recent, RecentItem, Shown, Stage, Subject},
+    presentation::{
+        Item, Outcome, PlayResult, PlayedKind, PlayedReporter, Presenter, Recent, RecentItem,
+        Shown, Stage, Subject, reporting,
+    },
 };
 
 use super::{OverlayRepository, OverlayService, RepositoryError, media::MediaError};
@@ -55,6 +58,8 @@ pub(crate) struct Playback {
     recent: Recent,
     /// Redemption IDs whose item was declined because its file is gone.
     missing: Arc<Mutex<VecDeque<String>>>,
+    /// Tells the redemption module what each redemption's media did.
+    pub(crate) played: PlayedReporter,
 }
 
 impl Playback {
@@ -64,6 +69,7 @@ impl Playback {
             library: Mutex::default(),
             recent: Recent::default(),
             missing: Arc::default(),
+            played: PlayedReporter::default(),
         }
     }
 }
@@ -146,10 +152,21 @@ impl<R: OverlayRepository> OverlayService<R> {
             media: title,
             viewer: r.user_name.clone(),
         };
-        let done = self
-            .playback
-            .recent
-            .record(Some(r.id.clone()), subject.clone(), Source::Twitch);
+        let gone = self.playback.missing.clone();
+        let id = r.id.clone();
+        let done = reporting(
+            self.playback
+                .recent
+                .record(Some(r.id.clone()), subject.clone(), Source::Twitch),
+            self.playback.played.clone(),
+            r.id.clone(),
+            PlayedKind::Media,
+            // Declined because the file was gone says so; any other declined item was turned down.
+            move |outcome| match outcome {
+                Outcome::Declined if gone.lock().unwrap().contains(&id) => PlayResult::FileMissing,
+                other => other.into(),
+            },
+        );
         let (publish, modules, missing, key) = (
             self.publish_media.clone(),
             deps.modules.clone(),

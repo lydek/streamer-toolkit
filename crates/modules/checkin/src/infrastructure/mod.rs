@@ -300,6 +300,7 @@ impl Subscriber for RedemptionCheckins {
         Box::pin(async move {
             let r: RedemptionRecorded =
                 serde_json::from_value(event.payload.clone()).map_err(|e| e.to_string())?;
+            let redemption = r.twitch_redemption_id.clone();
             let redeemed = Redeemed {
                 event_id: event.id.clone(),
                 viewer: Viewer {
@@ -320,9 +321,10 @@ impl Subscriber for RedemptionCheckins {
                 {
                     (self.repeat)(&c);
                 }
-            } else if let Some(c) =
+            } else if let Some(mut c) =
                 outcome.and_then(|o| application::checked_in(&redeemed.viewer, &o, &rules))
             {
+                c.redemption = Some(redemption);
                 (self.notify)(&c);
             }
             Ok(())
