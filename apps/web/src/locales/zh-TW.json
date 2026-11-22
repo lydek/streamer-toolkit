@@ -127,7 +127,7 @@
     "groupCount": "{on} / {all} 開啟",
     "empty": "找不到符合的功能。",
     "alwaysOn": "一定開著",
-    "settings": "設定",
+    "rules": "規則",
     "open": "頁面",
     "cancel": "取消",
     "needs": {
@@ -356,6 +356,10 @@
     "modes": {
       "name": "模式",
       "desc": "一鍵切換場景、音訊與要顯示的東西。"
+    },
+    "checkinRules": {
+      "name": "打卡規則",
+      "desc": "打卡指令、獎勵、格數、音效、時區與換日時間。"
     },
     "alertEvents": {
       "name": "每種事件",
@@ -815,6 +819,7 @@
       "file": "選擇 JSON 檔",
       "summary": "會新增 {added} 位、更新 {updated} 位，略過 {skipped} 筆。",
       "confirm": "確認匯入",
+      "close": "關閉",
       "done": "已匯入：新增 {added} 位、更新 {updated} 位。",
       "reasons": {
         "invalid_id": "不是數字的 Twitch user ID",

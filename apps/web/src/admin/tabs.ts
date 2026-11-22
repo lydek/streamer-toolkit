@@ -98,6 +98,7 @@ export const GROUPS: TabGroup[] = [
       pages: [
         { path: '/checkin', label: 'modules.names.checkin', tabLabel: 'nav.pageTabs.checkin' },
         { path: '/card-style', label: 'pages.cardStyle.name' },
+        { path: '/checkin-rules', label: 'pages.checkinRules.name' },
       ],
     },
     {

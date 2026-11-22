@@ -5,6 +5,7 @@ import AlertsPage from './AlertsPage.vue'
 import CardStylePage from './CardStylePage.vue'
 import ChatLogPage from './ChatLogPage.vue'
 import ChatPage from './ChatPage.vue'
+import CheckinRulesPage from './CheckinRulesPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
 import { modulesLoaded, useModules } from './features'
@@ -39,6 +40,7 @@ export const router = createRouter({
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
     { path: '/card-style', component: CardStylePage },
+    { path: '/checkin-rules', component: CheckinRulesPage },
     { path: '/sounds', component: SoundsPage },
     { path: '/scenes', component: ScenesPage },
     { path: '/obs-sources', component: ObsSourcesPage },

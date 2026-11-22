@@ -91,15 +91,8 @@
         <section v-show="section === 'features'" aria-labelledby="features">
           <h2 id="features" tabindex="-1">{{ t('settings.features') }}</h2>
           <FeatureList :modules="modules" :busy="busy" :load-text="loadText" :with-settings="['checkin']" @toggle="toggleModule">
-            <!-- Check-in's own settings, behind 「設定」 on its row. -->
+            <!-- Check-in's held redemptions belong to its switch; its rules have their own page (打卡規則). -->
             <template #settings>
-              <CheckinSettings @error="report" />
-              <SoundSlots
-                :slots="[
-                  { slot: 'checkin', label: t('sound.checkinNormal') },
-                  { slot: 'checkin.full', label: t('sound.checkinFull') },
-                ]"
-              />
               <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
             </template>
           </FeatureList>
@@ -156,8 +149,6 @@ import TroubleshootPanel from './TroubleshootPanel.vue'
 import RecordRetention from './RecordRetention.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
-import CheckinSettings from './CheckinSettings.vue'
-import SoundSlots from './SoundSlots.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
 import FeatureList from './FeatureList.vue'

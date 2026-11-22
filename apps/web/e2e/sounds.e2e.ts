@@ -197,9 +197,8 @@ test('alerts and check-ins each choose a sound, and deleting a used sound lists 
   await page.getByRole('option', { name: zh.sound.builtIn }).click()
   await expect.poll(() => 'alert.raid' in s.slots).toBe(false)
 
-  // Check-in's sounds are in its settings under settings › features.
-  await page.goto('/admin/settings/features')
-  await page.getByRole('button', { name: `${zh.features.settings}：${zh.features.checkin.name}` }).click()
+  // Check-in's sounds are on its rules page.
+  await page.goto('/admin/checkin-rules')
   await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toHaveText(zh.sound.silent)
   await page.getByRole('combobox', { name: zh.sound.checkinFull }).click()
   await page.getByRole('option', { name: 'Ding' }).click()

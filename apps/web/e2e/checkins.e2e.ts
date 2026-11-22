@@ -159,6 +159,9 @@ test('importing previews the file, says what is skipped and why, then imports th
   await page.goto('/admin/checkin')
   await expect(page.getByText(zh.checkin.page.empty)).toBeVisible()
 
+  // The import is a dialog, fresh each time it opens.
+  const opener = page.getByRole('button', { name: zh.checkin.import.heading })
+  await opener.click()
   const file = page.getByLabel(zh.checkin.import.file)
   await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{oops') })
   await expect(page.getByText(zh.errors.checkin.import_invalid)).toBeVisible()
@@ -177,6 +180,7 @@ test('importing previews the file, says what is skipped and why, then imports th
   expect(bodies.apply).toEqual([content])
   await expect.poll(() => listed).toBeGreaterThan(before)
   await expect(page.getByRole('button', { name: zh.checkin.import.confirm })).toHaveCount(0)
-  // The focused confirm button is gone: focus goes back to the file field.
-  await expect(file).toBeFocused()
+  // Done, the dialog closes and focus goes back to the button that opened it.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(opener).toBeFocused()
 })
