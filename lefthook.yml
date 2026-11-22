@@ -20,6 +20,7 @@ pre-commit:
 # CI always runs everything. Exclude lists name only what a job provably ignores, so any other file
 # (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
 # - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
+# - prototype/ is a static HTML mock-up that no check reads.
 # - Rust-only jobs ignore apps/web/, except cargo-test: the Host embeds dist/ and the overlay's
 #   built-in templates and tests them, so only admin UI and E2E changes skip it.
 # shortcut: lefthook drops paths that no longer exist from {push_files}, so a push that only deletes or renames files may skip
@@ -37,6 +38,7 @@ pre-push:
         - "docs/{architecture,dev,scope}.md"
         - "docs/**/*.en.md"
         - "docs/modules/**"
+        - "prototype/**"
     - name: frontend-licenses
       run: pnpm check:licenses
       exclude: *docs-but-decisions
@@ -45,6 +47,7 @@ pre-push:
       exclude: &docs
         - "*.md"
         - "docs/**"
+        - "prototype/**"
     - name: web-test
       run: pnpm web:test
       exclude: *docs
@@ -62,6 +65,7 @@ pre-push:
       exclude: &docs-and-web
         - "*.md"
         - "docs/**"
+        - "prototype/**"
         - "apps/web/**"
     - name: clippy
       run: cargo clippy --workspace --all-targets -- -D warnings
@@ -76,6 +80,7 @@ pre-push:
         - "docs/**"
         - "apps/web/src/admin/**"
         - "apps/web/e2e/**"
+        - "prototype/**"
     - name: cargo-deny
       run: cargo deny check
       exclude: *docs-and-web
