@@ -1233,6 +1233,7 @@
     "forward": "「{item}」往前",
     "backward": "「{item}」往後",
     "duplicate": "重複",
+    "addOverlay": "加入 Overlay",
     "align": "對齊",
     "alignOf": "「{item}」的對齊方式",
     "x": "「{item}」的 X",

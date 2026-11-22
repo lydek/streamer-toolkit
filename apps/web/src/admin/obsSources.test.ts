@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { client } from './api'
-import { obsPresence, obsProblems, overlayRows, useObsSources } from './obsSources'
+import { addOverlay, obsPresence, obsProblems, overlayRows, sourceSize, useObsSources } from './obsSources'
 
 const source = (name: string, overlay: string, scenes: string[]) => ({ name, overlay, scenes })
 
@@ -89,6 +89,20 @@ describe('obsProblems', () => {
     expect(obsProblems(data([]), [rule(['Talk'], false)], new Set(), t)).toEqual([])
     expect(obsProblems(data([]), [rule(['Talk'])], new Set(['bgm']), t)).toEqual([])
     expect(obsProblems(undefined, [rule(['Talk'])], new Set(), t)).toEqual([])
+  })
+})
+
+describe('addOverlay', () => {
+  it('creates the source at the suggested size, named after the overlay', async () => {
+    const post = vi.spyOn(client, 'POST').mockResolvedValue({ data: undefined, response: new Response(null, { status: 204 }) } as never)
+    const t = (key: string, values?: Record<string, unknown>) => (key === 'obsSources.sourceName' ? `${values!.name}（${values!.app}）` : key)
+    const chat = overlayRows([]).find((r) => r.key === 'chat')!
+    await addOverlay('Game', chat, t)
+    expect(post).toHaveBeenCalledWith('/api/admin/obs/sources', {
+      body: { scene: 'Game', overlay: '/overlay/chat/', name: 'obsSources.names.chat（app.name）', width: 400, height: 600 },
+    })
+    expect(sourceSize('audio')).toEqual([100, 100])
+    post.mockRestore()
   })
 })
 

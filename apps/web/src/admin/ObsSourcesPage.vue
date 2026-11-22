@@ -82,7 +82,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import { useModules } from './features'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
-import { type OverlayRow, overlayName, overlayRows } from './obsSources'
+import { type OverlayRow, addOverlay, overlayName, overlayRows } from './obsSources'
 import { GROUPS } from './tabs'
 
 const { t } = useI18n()
@@ -116,10 +116,6 @@ const rowName = (r: OverlayRow) => overlayName(r, t)
 
 // The row whose switch is saving; the others wait so two changes never cross.
 const busy = ref('')
-const sizeOf = (size: string): [number, number] => {
-  const [width, height] = size === 'audio' ? [100, 100] : size.split(' × ').map(Number)
-  return [width, height]
-}
 
 /** Puts the overlay in the picked scene or takes it out; a failure leaves the switch as OBS has it. */
 async function setInScene(r: OverlayRow, on: boolean) {
@@ -127,9 +123,7 @@ async function setInScene(r: OverlayRow, on: boolean) {
   busy.value = r.key
   try {
     if (on) {
-      const [width, height] = sizeOf(r.entry.size)
-      const name = t('obsSources.sourceName', { name: rowName(r), app: t('app.name') })
-      await api(client.POST('/api/admin/obs/sources', { body: { scene: scene.value, overlay: r.url, name, width, height } }))
+      await addOverlay(scene.value, r, t)
     } else {
       await api(client.DELETE('/api/admin/obs/sources', { params: { query: { scene: scene.value, overlay: r.url } } }))
     }
