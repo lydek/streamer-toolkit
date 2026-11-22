@@ -91,7 +91,9 @@ onMounted(() => {
   margin: 0;
 }
 
+/* Positioned, so the sr-only text of a grey tab scrolls with the row instead of widening the page. */
 .page-tabs {
+  position: relative;
   display: flex;
   gap: 0.25rem;
   margin-top: 0.75rem;

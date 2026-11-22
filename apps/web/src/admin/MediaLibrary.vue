@@ -39,8 +39,8 @@
           </td>
           <td class="end">
             <span v-if="confirming === item.id" role="group" :aria-label="t('screenTools.media.delete', { title: item.title })">
-              <Button :label="t('screenTools.media.cancel')" text @click="confirming = undefined" />
-              <Button :label="t('screenTools.media.confirmDelete')" severity="danger" @click="remove(item)" />
+              <Button :label="t('screenTools.media.cancel')" icon="pi pi-times" text @click="confirming = undefined" />
+              <Button :label="t('screenTools.media.confirmDelete')" icon="pi pi-trash" severity="danger" @click="remove(item)" />
             </span>
             <Button
               v-else
@@ -140,16 +140,7 @@ void refresh()
 
 <style scoped>
 .table {
-  width: 100%;
   max-width: 52rem;
-  border-collapse: collapse;
-}
-
-.table th,
-.table td {
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--p-content-border-color);
 }
 
 .muted {

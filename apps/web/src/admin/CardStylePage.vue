@@ -255,7 +255,7 @@ void load()
   align-items: start;
 }
 
-@media (width < 60rem) {
+@container view (max-width: 60rem) {
   .split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -269,8 +269,7 @@ void load()
 }
 
 .field :deep(.p-inputtext) {
-  min-width: 20rem;
-  max-width: 100%;
+  min-width: min(20rem, 100%);
 }
 
 .group {
@@ -285,6 +284,14 @@ void load()
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 0.75rem;
+}
+
+/* A narrow page: each label above its control. */
+@container view (max-width: 36rem) {
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .thumb {

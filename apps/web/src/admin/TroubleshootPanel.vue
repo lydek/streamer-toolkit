@@ -155,6 +155,17 @@ void loadLog()
   margin: 0;
 }
 
+/* A narrow settings column: each name above its value. */
+@container panel (max-width: 36rem) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .facts dd {
+    margin-bottom: 0.5rem;
+  }
+}
+
 .log {
   max-height: 20rem;
   overflow-y: auto;

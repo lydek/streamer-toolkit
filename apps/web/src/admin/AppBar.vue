@@ -163,7 +163,7 @@ import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
 import { clockText, errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
-import { saveDock, useDock } from './dock'
+import { DOCK_WIDE_QUERY, saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
@@ -252,9 +252,9 @@ async function stop() {
   }
 }
 
-// The chat button: docks or undocks the panel on wide windows (saved), slides it in below 900px.
+// The chat button: docks or undocks the panel on wide windows (saved), slides it in on narrower ones.
 const dock = useDock()
-const wideQuery = window.matchMedia('(min-width: 900px)')
+const wideQuery = window.matchMedia(DOCK_WIDE_QUERY)
 const wide = ref(wideQuery.matches)
 wideQuery.addEventListener('change', () => (wide.value = wideQuery.matches))
 const chatOpen = computed(() => (wide.value ? dock.open : dock.sheet))
@@ -606,7 +606,9 @@ onBeforeUnmount(() => {
   border-top-color: var(--p-primary-color);
 }
 
+/* Positioned, so the sr-only text of a grey tab scrolls with the row instead of widening the page. */
 .sub-tabs {
+  position: relative;
   display: flex;
   gap: 0.375rem;
   padding: 0.625rem 0;
