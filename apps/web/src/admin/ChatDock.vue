@@ -74,6 +74,7 @@ import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
 import { ApiError } from './api'
@@ -102,7 +103,12 @@ const onWide = () => {
   dock.sheet = false
 }
 // Turning the chat feature off in settings removes the panel too.
-const shown = computed(() => !hidden.value.has('/chat') && (wide.value ? dock.open : dock.sheet))
+// The chat log page shows the chat itself: the panel steps aside there and comes back after, with its saved
+// open state untouched.
+const route = useRoute()
+const shown = computed(
+  () => !hidden.value.has('/chat') && route.path !== '/chat-log' && (wide.value ? dock.open : dock.sheet),
+)
 watchEffect(() => (dock.docked = wide.value && shown.value))
 
 const filter = ref<(typeof FILTERS)[number]>('all')
