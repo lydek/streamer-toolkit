@@ -23,6 +23,9 @@
               <th scope="col">{{ t('scene.shown') }}</th>
               <th scope="col">{{ t('scene.locked') }}</th>
               <th scope="col">{{ t('scene.move') }}</th>
+              <th scope="col">X</th>
+              <th scope="col">Y</th>
+              <th scope="col">{{ t('scene.align') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -66,6 +69,40 @@
                   @click="change(item, { position: i + 1 })"
                 />
               </td>
+              <template v-if="placements.get(item.id)">
+                <td>
+                  <InputNumber
+                    :model-value="placements.get(item.id)!.x"
+                    :max-fraction-digits="1"
+                    :disabled="busy.has(item.id)"
+                    :aria-label="t('scene.x', { item: item.source })"
+                    class="coord"
+                    @update:model-value="(x: number | null) => x !== null && place(item, { x })"
+                  />
+                </td>
+                <td>
+                  <InputNumber
+                    :model-value="placements.get(item.id)!.y"
+                    :max-fraction-digits="1"
+                    :disabled="busy.has(item.id)"
+                    :aria-label="t('scene.y', { item: item.source })"
+                    class="coord"
+                    @update:model-value="(y: number | null) => y !== null && place(item, { y })"
+                  />
+                </td>
+                <td>
+                  <Select
+                    :model-value="placements.get(item.id)!.align"
+                    :options="ALIGNS"
+                    :option-label="(a: Align) => t(`scene.aligns.${a}`)"
+                    :disabled="busy.has(item.id)"
+                    :aria-label="t('scene.alignOf', { item: item.source })"
+                    @update:model-value="(align: Align) => place(item, { align })"
+                  />
+                  <span v-if="outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
+                </td>
+              </template>
+              <td v-else colspan="3"></td>
             </tr>
           </tbody>
         </table>
@@ -76,12 +113,14 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
-import { ApiError } from './api'
+import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, useLiveEvents } from './home'
 import { overlayRows, useObsSources } from './obsSources'
@@ -116,15 +155,54 @@ const duplicates = computed(
     ),
 )
 
-async function change(item: SceneItem, what: { enabled?: boolean; locked?: boolean; position?: number }) {
+type Align = Schemas['Align']
+const ALIGNS: Align[] = ['top_left', 'top', 'top_right', 'left', 'center', 'right', 'bottom_left', 'bottom', 'bottom_right']
+// The canvas and each item's position in the scene on air, read again as OBS's scenes and items change.
+const canvas = ref<Schemas['Canvas']>()
+const placements = ref(new Map<number, Schemas['Placement']>())
+// Each read's number; only the latest one's answer shows, so an older scene's never replaces the one on air.
+let placementRead = 0
+watch(
+  state,
+  async (s) => {
+    if (!s?.scene) return
+    const mine = ++placementRead
+    try {
+      const got = await api(client.GET('/api/admin/obs/placements', { params: { query: { scene: s.scene } } }))
+      if (mine !== placementRead) return
+      canvas.value = got.canvas
+      placements.value = new Map(got.items.map(({ item, ...p }) => [item, p]))
+    } catch {
+      if (mine === placementRead) placements.value = new Map()
+    }
+  },
+  { immediate: true },
+)
+const outside = (p: Schemas['Placement']) =>
+  !!canvas.value && (p.x < 0 || p.y < 0 || p.x > canvas.value.width || p.y > canvas.value.height)
+
+async function place(item: SceneItem, what: Partial<Schemas['Placement']>) {
+  const now = placements.value.get(item.id)
+  if (!now) return
+  const next = { ...now, ...what }
+  // OBS sends no event when an item moves, so the next change starts from this one, not the last read.
+  if (await change(item, { placement: next })) placements.value = new Map(placements.value).set(item.id, next)
+}
+
+async function change(
+  item: SceneItem,
+  what: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement'] },
+) {
   const scene = state.value?.scene
-  if (!scene) return
+  if (!scene) return false
   busy.value = new Set(busy.value).add(item.id)
   try {
     await updateItem(scene, item.id, what)
+    return true
   } catch (e) {
     resets.value++
     report(e)
+    return false
   } finally {
     const next = new Set(busy.value)
     next.delete(item.id)
@@ -161,5 +239,15 @@ tbody th {
 
 .move {
   white-space: nowrap;
+}
+
+.coord :deep(.p-inputnumber-input) {
+  width: 5.5rem;
+}
+
+.warn {
+  display: block;
+  color: var(--p-yellow-300);
+  font-size: 0.8125rem;
 }
 </style>

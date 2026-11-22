@@ -1233,6 +1233,22 @@
     "forward": "「{item}」往前",
     "backward": "「{item}」往後",
     "duplicate": "重複",
+    "align": "對齊",
+    "alignOf": "「{item}」的對齊方式",
+    "x": "「{item}」的 X",
+    "y": "「{item}」的 Y",
+    "outside": "超出畫布",
+    "aligns": {
+      "top_left": "左上",
+      "top": "上",
+      "top_right": "右上",
+      "left": "左",
+      "center": "中央",
+      "right": "右",
+      "bottom_left": "左下",
+      "bottom": "下",
+      "bottom_right": "右下"
+    },
     "kinds": {
       "scene": "場景",
       "group": "群組",

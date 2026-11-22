@@ -78,6 +78,7 @@ use crate::{
         obs::update_obs,
         obs::switch_scene,
         obs::update_item,
+        obs::scene_placements,
         obs::overlay_sources,
         obs::add_overlay,
         obs::remove_overlay,

@@ -3833,6 +3833,63 @@
         }
       }
     },
+    "/api/admin/obs/placements": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The canvas size and where each item of a scene sits (asked when the scene page shows the scene).",
+        "operationId": "scene_placements",
+        "parameters": [
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenePlacements"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/scene": {
       "put": {
         "tags": [
@@ -6632,6 +6689,21 @@
           "alert"
         ]
       },
+      "Align": {
+        "type": "string",
+        "description": "Which point of an item its position is: a corner, the middle of an edge, or the center.",
+        "enum": [
+          "top_left",
+          "top",
+          "top_right",
+          "left",
+          "center",
+          "right",
+          "bottom_left",
+          "bottom",
+          "bottom_right"
+        ]
+      },
       "Allowed": {
         "type": "string",
         "description": "Who may use a chat command. Each level also lets in the ones above it (subscriber, then VIP, then moderator),\nand the broadcaster may always use every command.",
@@ -7184,6 +7256,26 @@
         "enum": [
           "screen.break"
         ]
+      },
+      "Canvas": {
+        "type": "object",
+        "description": "The canvas size in pixels (OBS: the base resolution).",
+        "required": [
+          "width",
+          "height"
+        ],
+        "properties": {
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
       },
       "CardImage": {
         "type": "object",
@@ -9145,6 +9237,17 @@
             ],
             "description": "Locks or unlocks the item; absent leaves it."
           },
+          "placement": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Placement",
+                "description": "Puts the item at this canvas position and alignment; absent leaves it. Scale, rotation and crop stay."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "position": {
             "type": [
               "integer",
@@ -9158,6 +9261,26 @@
             "type": "string"
           }
         }
+      },
+      "ItemPlacement": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Placement"
+          },
+          {
+            "type": "object",
+            "required": [
+              "item"
+            ],
+            "properties": {
+              "item": {
+                "type": "integer",
+                "format": "int64",
+                "description": "The item's `id` in `obs.state`."
+              }
+            }
+          }
+        ]
       },
       "LeaderboardEvent": {
         "type": "object",
@@ -10375,6 +10498,28 @@
           "offline"
         ]
       },
+      "Placement": {
+        "type": "object",
+        "description": "Where an item sits on the canvas: the canvas pixel its `align` point is at.",
+        "required": [
+          "x",
+          "y",
+          "align"
+        ],
+        "properties": {
+          "align": {
+            "$ref": "#/components/schemas/Align"
+          },
+          "x": {
+            "type": "number",
+            "format": "float"
+          },
+          "y": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      },
       "PlaySound": {
         "type": "object",
         "description": "A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%).",
@@ -11276,6 +11421,24 @@
           "source": {
             "type": "string",
             "description": "The source the item shows."
+          }
+        }
+      },
+      "ScenePlacements": {
+        "type": "object",
+        "required": [
+          "canvas",
+          "items"
+        ],
+        "properties": {
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemPlacement"
+            }
           }
         }
       },
