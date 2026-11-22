@@ -7,6 +7,7 @@ import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import { counterTile } from './counters'
 import CountersPage from './CountersPage.vue'
+import MarathonPage from './MarathonPage.vue'
 import { testRouter } from './testRouter'
 
 const { toastAdd } = vi.hoisted(() => ({ toastAdd: vi.fn() }))
@@ -22,6 +23,12 @@ let get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, put: ReturnTy
 
 async function page() {
   const wrapper = mount(CountersPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+  await flushPromises()
+  return wrapper
+}
+
+async function marathonPage() {
+  const wrapper = mount(MarathonPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
@@ -206,7 +213,8 @@ describe('CountersPage per-viewer counts', () => {
   })
 })
 
-describe('CountersPage marathon timer', () => {
+// 訂閱馬拉松 has its own page.
+describe('MarathonPage', () => {
   const marathon = (p: Partial<Schemas['MarathonPayload']>) => ({
     id: 'm',
     type: 'counter.marathon',
@@ -244,7 +252,7 @@ describe('CountersPage marathon timer', () => {
   }
 
   it('shows the remaining time and state, pauses, resumes, adds time and saves the options', async () => {
-    const wrapper = await page()
+    const wrapper = await marathonPage()
     await receive(marathon({}))
     expect(wrapper.get('.remaining').text()).toContain('1:02:05')
     expect(wrapper.get('.remaining').text()).toContain(t('counter.marathon.paused'))

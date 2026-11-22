@@ -41,7 +41,7 @@ export const FEATURES: Feature[] = [
   { id: 'checkin', group: 'interact', icon: 'pi pi-check-square', pages: ['/checkin', '/card-style', '/checkin-rules'], module: 'checkin', rules: '/checkin-rules' },
   { id: 'rewards', group: 'interact', icon: 'pi pi-star', pages: ['/rewards'], scopes: ['channel:manage:redemptions'], affects: ['songs'] },
   { id: 'redemption', group: 'interact', icon: 'pi pi-gift', pages: ['/redemptions'], module: 'redemption' },
-  { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters'], module: 'counter' },
+  { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters', '/marathon'], module: 'counter' },
   { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes', '/modes'], module: 'scene', needs: 'obs', affects: ['music'] },
   { id: 'obsSources', group: 'media', icon: 'pi pi-clone', pages: ['/obs-sources'], needs: 'obs', fixed: true },
   { id: 'music', group: 'media', icon: 'pi pi-headphones', pages: ['/music'], module: 'bgm' },
