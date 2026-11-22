@@ -13,6 +13,7 @@ import HomeView from './HomeView.vue'
 import ImageSizesPage from './ImageSizesPage.vue'
 import LeaderboardPage from './LeaderboardPage.vue'
 import CountersPage from './CountersPage.vue'
+import MarathonPage from './MarathonPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
 import ObsSourcesPage from './ObsSourcesPage.vue'
@@ -46,6 +47,7 @@ export const router = createRouter({
     { path: '/obs-sources', component: ObsSourcesPage },
     { path: '/music', component: MusicPage },
     { path: '/counters', component: CountersPage },
+    { path: '/marathon', component: MarathonPage },
     { path: '/rehearsal', component: RehearsalPage },
     { path: '/leaderboard', component: LeaderboardPage },
     { path: '/image-sizes', component: ImageSizesPage },

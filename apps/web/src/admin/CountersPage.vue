@@ -1,13 +1,8 @@
 <template>
-  <FullPage :title="t('modules.names.counter')" tile="counter">
-    <section class="stack" aria-labelledby="marathon-heading">
-      <h2 id="marathon-heading">{{ t('counter.marathon.heading') }}</h2>
-      <MarathonTimer :event="live.marathon" @error="report" />
-    </section>
-
+  <!-- 計數器; 訂閱馬拉松 is its own page (MarathonPage.vue). -->
+  <FullPage :title="t('modules.names.counter')" tile="counter" overlay="counter">
     <section class="stack" aria-labelledby="counters-heading">
       <h2 id="counters-heading">{{ t('counter.heading') }}</h2>
-      <ObsStatusLink overlay="/overlay/counter/" class="copy" />
       <form class="create" @submit.prevent="create">
         <div class="field">
           <label for="new-counter-name">{{ t('counter.name') }}</label>
@@ -74,8 +69,6 @@ import { ApiError, type Schemas, api, client } from './api'
 import { stepCounter, resetCounter } from './counters'
 import CounterRow from './CounterRow.vue'
 import FullPage from './FullPage.vue'
-import MarathonTimer from './MarathonTimer.vue'
-import ObsStatusLink from './ObsStatusLink.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import { keepFocus } from './page'
 import ViewerCounterRow from './ViewerCounterRow.vue'

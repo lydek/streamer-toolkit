@@ -1,6 +1,5 @@
 <template>
   <div class="stack">
-    <ObsStatusLink overlay="/overlay/marathon/" class="copy" />
     <p class="remaining">
       <output>{{ status ? clockText(remaining) : t('app.loading') }}</output>
       <span v-if="status" class="state">{{ t(stateKey) }}</span>
@@ -81,7 +80,6 @@ import { remainingMs } from '../overlay/marathon/marathon'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
 import { clockText } from './home'
-import ObsStatusLink from './ObsStatusLink.vue'
 
 const props = defineProps<{
   /** The latest `counter.marathon` event; `undefined` until the live connection has it. */
