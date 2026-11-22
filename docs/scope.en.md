@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: 8e3f7ecaa0ba7dbffbae8fa4c5ceda02c227ecf0506dc85b929a7335521e578e -->
+<!-- source: docs/scope.md source-sha256: 63632095811c7e41e51ed340ec643534be529f06bed659fd09c2d94f8b4a4b6a -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -39,7 +39,7 @@ Each phase depends only on earlier phases; the order within a phase follows stre
 | 2 | Features that only need the shared foundations: scenes and background music, home statistics, the event feed, chat history and display, counters, screen tools, the card editor, rehearsal and more |
 | 3 | Requesting permissions per feature, and features that write to Twitch: chat bot, channel point reward management, stream info, polls and predictions and more |
 | 4 | Song requests (optionally linked to Leihu Singsing) |
-| 5 | Shoutouts and videos, credits, raids |
+| 5 | Shoutouts (SO), credits, raids |
 | 6 | Modes |
 | 7 | Advanced viewer features, personal badges, chat moderation, chat filtering |
 | 8 | Avatars (VTuber Plus, VSeeFace), live captions |
