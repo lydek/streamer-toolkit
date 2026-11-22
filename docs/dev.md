@@ -138,6 +138,7 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 - 功能範圍改了就改 `scope.md`；分層或模組規則改了就改 `architecture.md`；技術選型改了就在 `decisions.md` 的變更紀錄寫一行。
 - 待辦與想法開 GitHub Issue，不寫進文件。
 - 不寫 ADR、研究文件、品質清單。`docs/archive/` 是早期草稿，已列入 `.gitignore`，只存在本機，僅供參考，不是指令。
+- 介面的目標是可點的 prototype `prototype/ui-v2.html`：進 git，每個分支都是同一份，裡面只放假資料。畫面要改先改它，確認後才拆 issue，改動和其他檔案一樣走 commit 與 PR。檢視時在 repo 根目錄執行 `python -m http.server 5180 --bind 127.0.0.1`，再開 `http://localhost:5180/prototype/ui-v2.html`；直接開檔案讀不到 `localStorage`，畫面會停在舊版面。圖示讀 `apps/web/node_modules/primeicons`，要先裝好相依套件。
 
 ## 語言
 - `README.md` 與 `docs/`（含 `docs/modules/`）都雙語：繁體中文為唯一權威版本，英文版是同目錄的 `<name>.en.md`。`docs/archive/` 不翻譯。`AGENTS.md` 只有英文。

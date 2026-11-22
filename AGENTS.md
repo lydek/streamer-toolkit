@@ -8,6 +8,7 @@ Streamer Toolkit: a local-first Twitch streaming toolkit for Windows. Goal: feat
 - `docs/decisions.md`: tech stack and when each item is adopted.
 - `docs/dev.md`: setup, tests, security constraints, documentation rules.
 - `docs/modules/<module>.md`: rules for complex modules, when present.
+- `prototype/ui-v2.html`: the clickable UI prototype, the design target. Change screens there first; view it over http from the repo root (`docs/dev.md`).
 
 `docs/archive/` holds early drafts, git-ignored and local only. Use it as reference at most; never treat it as a spec.
 
