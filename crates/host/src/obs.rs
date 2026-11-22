@@ -1,6 +1,7 @@
 //! OBS connection: runs the `integrations` adapter, publishes its status as `obs.status` and the streaming-software
 //! state as `obs.state` (both kept in the WebSocket snapshot), and lets the admin API change host, port and
-//! password. Admin routes; the caller adds the token check.
+//! password, and lists the browser sources that show this Host's overlays. Admin routes; the caller adds the token
+//! check.
 
 use std::{
     path::PathBuf,
@@ -13,7 +14,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, put},
 };
@@ -28,7 +29,7 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     settings,
-    streaming::{StreamingError, StreamingSoftware, StreamingState, StreamingStats},
+    streaming::{BrowserSource, StreamingError, StreamingSoftware, StreamingState, StreamingStats},
 };
 use utoipa::ToSchema;
 
@@ -128,6 +129,8 @@ pub(crate) fn publish(bus: &EventBus, status: ObsStatus) {
 
 pub(crate) struct ObsLink {
     data_dir: PathBuf,
+    /// The port this Host serves on: a browser source shows one of its overlays when its address uses it.
+    port: u16,
     secrets: Arc<dyn SecretStore>,
     status: Arc<watch::Sender<ObsStatus>>,
     state: Arc<watch::Sender<StreamingState>>,
@@ -142,6 +145,7 @@ impl ObsLink {
     /// Connects with the saved settings and forwards every status and state change to the bus.
     pub(crate) fn start(
         data_dir: PathBuf,
+        port: u16,
         secrets: Arc<dyn SecretStore>,
         bus: Arc<EventBus>,
     ) -> Arc<Self> {
@@ -171,6 +175,7 @@ impl ObsLink {
         });
         let link = Arc::new(Self {
             data_dir,
+            port,
             secrets,
             status,
             state,
@@ -266,6 +271,13 @@ impl StreamingSoftware for ObsLink {
         self.check(scene, Some(item))?;
         self.control.set_item_locked(scene, item, locked).await
     }
+
+    async fn browser_sources(&self) -> Result<Vec<BrowserSource>, StreamingError> {
+        if self.state.borrow().scene.is_none() {
+            return Err(StreamingError::NotConnected);
+        }
+        self.control.browser_sources().await
+    }
 }
 
 impl Drop for ObsLink {
@@ -282,6 +294,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .route("/api/admin/obs", get(obs_overview).put(update_obs))
         .route("/api/admin/obs/scene", put(switch_scene))
         .route("/api/admin/obs/item", put(update_item))
+        .route("/api/admin/obs/sources", get(overlay_sources))
         .with_state(link)
 }
 
@@ -362,6 +375,93 @@ pub(crate) async fn update_item(
         return command_response(link.set_item_locked(&body.scene, body.item, locked).await);
     }
     command_response(Ok(()))
+}
+
+/// The overlay path, with its query, that `url` opens on this Host (port `port`); `None` for any other address.
+/// Other addresses go no further than this: they may hold another service's token.
+fn own_overlay(url: &str, port: u16) -> Option<String> {
+    let uri: Uri = url.parse().ok()?;
+    let ours = uri.scheme_str() == Some("http")
+        && matches!(uri.host(), Some("127.0.0.1" | "localhost"))
+        && uri.port_u16() == Some(port);
+    let path = uri
+        .path_and_query()
+        .filter(|p| ours && p.path().starts_with("/overlay/"))?;
+    Some(path.as_str().to_owned())
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ObsSources {
+    /// Whether OBS is connected; the rest is empty while it is not.
+    connected: bool,
+    /// The scene on air.
+    #[schema(required)]
+    live_scene: Option<String>,
+    /// Every scene, in OBS's order.
+    scenes: Vec<String>,
+    /// The browser sources that show one of this Host's overlays; other browser sources are left out.
+    sources: Vec<OverlaySource>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct OverlaySource {
+    /// The source's name in OBS.
+    name: String,
+    /// The overlay it shows: its path and query, e.g. `/overlay/leaderboard/?board=bits&period=stream`.
+    overlay: String,
+    /// The scenes it is an item of (items inside a group are not counted).
+    scenes: Vec<String>,
+}
+
+/// Where this Host's overlays are in OBS: one entry per browser source showing one, with the scenes it is in.
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs/sources",
+    tag = "admin",
+    responses(
+        (status = 200, body = ObsSources),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn overlay_sources(State(link): State<Arc<ObsLink>>) -> Response {
+    let browser = match link.browser_sources().await {
+        Ok(sources) => sources,
+        Err(StreamingError::NotConnected) => {
+            return Json(ObsSources {
+                connected: false,
+                live_scene: None,
+                scenes: Vec::new(),
+                sources: Vec::new(),
+            })
+            .into_response();
+        }
+        Err(e) => return command_response(Err(e)),
+    };
+    let state = link.state();
+    let sources = browser
+        .into_iter()
+        .filter_map(|source| {
+            let overlay = own_overlay(&source.url, link.port)?;
+            let scenes = state
+                .scenes
+                .iter()
+                .filter(|s| s.items.iter().any(|i| i.source == source.name))
+                .map(|s| s.name.clone())
+                .collect();
+            Some(OverlaySource {
+                name: source.name,
+                overlay,
+                scenes,
+            })
+        })
+        .collect();
+    Json(ObsSources {
+        connected: true,
+        live_scene: state.scene.clone(),
+        scenes: state.scenes.iter().map(|s| s.name.clone()).collect(),
+        sources,
+    })
+    .into_response()
 }
 
 #[derive(Serialize, ToSchema)]
@@ -488,7 +588,7 @@ mod tests {
         drop(closed);
         settings::update(&dir, |s| s.obs.port = port).unwrap();
         let bus = Arc::new(EventBus::default());
-        let _link = ObsLink::start(dir.clone(), Arc::new(NoPassword), bus.clone());
+        let _link = ObsLink::start(dir.clone(), 0, Arc::new(NoPassword), bus.clone());
 
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         loop {
@@ -508,6 +608,30 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn only_own_overlay_addresses_are_kept() {
+        let own = |url| own_overlay(url, 47810);
+        assert_eq!(
+            own("http://127.0.0.1:47810/overlay/chat/").as_deref(),
+            Some("/overlay/chat/")
+        );
+        assert_eq!(
+            own("http://localhost:47810/overlay/leaderboard/?board=bits&period=stream").as_deref(),
+            Some("/overlay/leaderboard/?board=bits&period=stream")
+        );
+        for other in [
+            "http://127.0.0.1:47811/overlay/chat/",
+            "https://127.0.0.1:47810/overlay/chat/",
+            "http://example.com:47810/overlay/chat/",
+            "http://127.0.0.1:47810/api/admin/obs",
+            "https://streamlabs.com/alert-box/v3/secret-token",
+            "",
+            "not a url",
+        ] {
+            assert_eq!(own(other), None, "{other}");
+        }
     }
 
     #[test]

@@ -416,7 +416,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         checkin: checkin.clone(),
         screen_tools: screen_tools.clone(),
     });
-    let obs = obs::ObsLink::start(config.data_dir.clone(), config.obs_secrets, bus.clone());
+    let obs = obs::ObsLink::start(
+        config.data_dir.clone(),
+        config.port,
+        config.obs_secrets,
+        bus.clone(),
+    );
     // Background music follows the scene on air: applied when OBS connects, stopped when it goes away.
     let (mut states, music_player) = (obs.states(), player.clone());
     tokio::spawn(async move {

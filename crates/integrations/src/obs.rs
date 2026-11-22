@@ -29,7 +29,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    Input, Scene, SceneItem, StreamingError, StreamingState, StreamingStats,
+    BrowserSource, Input, Scene, SceneItem, StreamingError, StreamingState, StreamingStats,
 };
 
 use crate::secrets::SecretStore;
@@ -157,7 +157,37 @@ impl ObsControl {
             .await
             .map_err(command_error)
     }
+
+    /// Every browser source (`GetInputList` by kind) and its `url` setting (`GetInputSettings`).
+    pub async fn browser_sources(&self) -> Result<Vec<BrowserSource>, StreamingError> {
+        let client = self.client()?;
+        let inputs = client
+            .inputs()
+            .list(Some(BROWSER_SOURCE))
+            .await
+            .map_err(command_error)?;
+        let mut sources = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            let settings = client
+                .inputs()
+                .settings::<serde_json::Value>(InputId::Name(&input.id.name))
+                .await
+                .map_err(command_error)?;
+            let url = settings.settings["url"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            sources.push(BrowserSource {
+                name: input.id.name,
+                url,
+            });
+        }
+        Ok(sources)
+    }
 }
+
+/// OBS's input kind for a browser source.
+const BROWSER_SOURCE: &str = "browser_source";
 
 fn command_error(error: ObwsError) -> StreamingError {
     match error {
@@ -512,6 +542,7 @@ mod tests {
     const MIC: &str = "00000000-0000-0000-0000-000000000002";
     /// An image: OBS answers its mute state with an error, as for every input without audio.
     const LOGO: &str = "00000000-0000-0000-0000-000000000003";
+    const CHAT: &str = "00000000-0000-0000-0000-000000000004";
 
     impl FakeObs {
         fn event(&self, kind: &'static str, data: Value) {
@@ -519,8 +550,13 @@ mod tests {
             self.push.notify_one();
         }
 
-        fn answer(&self, request_type: &str) -> Value {
+        fn answer(&self, request_type: &str, data: &Value) -> Value {
             match request_type {
+                "GetInputList" if data["inputKind"] == "browser_source" => json!({"inputs": [{
+                    "inputName": "Chat", "inputUuid": CHAT, "inputKind": "browser_source",
+                    "unversionedInputKind": "browser_source"}]}),
+                "GetInputSettings" => json!({"inputKind": "browser_source",
+                    "inputSettings": {"url": "http://127.0.0.1:47810/overlay/chat/", "width": 800}}),
                 "GetSceneList" => {
                     *self.scene_lists.lock().unwrap() += 1;
                     json!({"currentProgramSceneName": "Live", "currentProgramSceneUuid": LIVE,
@@ -615,7 +651,7 @@ mod tests {
                                 "requestType": request_type,
                                 "requestId": request["d"]["requestId"],
                                 "requestStatus": status,
-                                "responseData": fake.answer(request_type)}}))
+                                "responseData": fake.answer(request_type, data)}}))
                             .await;
                         }
                         Some(Ok(_)) => {}
@@ -821,6 +857,12 @@ mod tests {
         let (mut status, _, control) = run_with_state(start(fake.clone()).await, None);
         reaches(&mut status, ObsStatus::CONNECTED).await;
 
+        let sources = control.browser_sources().await.unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(
+            (sources[0].name.as_str(), sources[0].url.as_str()),
+            ("Chat", "http://127.0.0.1:47810/overlay/chat/")
+        );
         control.switch_scene("BRB").await.unwrap();
         control.set_item_enabled("Live", 1, false).await.unwrap();
         control.set_item_locked("Live", 2, true).await.unwrap();

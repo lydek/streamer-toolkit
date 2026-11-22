@@ -1243,6 +1243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where this Host's overlays are in OBS: one entry per browser source showing one, with the scenes it is in. */
+        get: operations["overlay_sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/overlays": {
         parameters: {
             query?: never;
@@ -3362,6 +3379,16 @@ export interface components {
              */
             port: number;
         };
+        ObsSources: {
+            /** @description Whether OBS is connected; the rest is empty while it is not. */
+            connected: boolean;
+            /** @description The scene on air. */
+            live_scene: string | null;
+            /** @description Every scene, in OBS's order. */
+            scenes: string[];
+            /** @description The browser sources that show one of this Host's overlays; other browser sources are left out. */
+            sources: components["schemas"]["OverlaySource"][];
+        };
         /** @enum {string} */
         ObsState: "connected" | "reconnecting" | "error";
         /** @description An `obs.state` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
@@ -3416,6 +3443,14 @@ export interface components {
             other: number;
             sound: number;
             warnings: number;
+        };
+        OverlaySource: {
+            /** @description The source's name in OBS. */
+            name: string;
+            /** @description The overlay it shows: its path and query, e.g. `/overlay/leaderboard/?board=bits&period=stream`. */
+            overlay: string;
+            /** @description The scenes it is an item of (items inside a group are not counted). */
+            scenes: string[];
         };
         OverlayTest: {
             overlay: components["schemas"]["TestOverlay"];
@@ -7569,6 +7604,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    overlay_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObsSources"];
                 };
             };
             502: {
