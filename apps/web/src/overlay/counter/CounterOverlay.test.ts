@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../../i18n'
 import CounterOverlay from './CounterOverlay.vue'
 
+const t = i18n.global.t
+
 let socket: { url: string; onmessage?: (e: { data: string }) => void }
 beforeEach(() => {
   vi.stubGlobal(
@@ -61,7 +63,7 @@ it('shows a test row for 3 s apart from the counters, restarting on another test
   await send({ type: 'snapshot', version: 1, seq: 1, payload: { 'counter.values': [values(1, [{ id: 'a', name: '死亡次數', value: 12 }])] } })
   await send(test(2))
   const row = () => wrapper.find('[data-counter-test]')
-  expect([row().get('.name').text(), row().get('.value').text()]).toEqual(['測試', '99'])
+  expect([row().get('.name').text(), row().get('.value').text()]).toEqual([t('overlay.counter.test'), '99'])
   expect(wrapper.findAll('[data-counter]')).toHaveLength(1)
 
   await vi.advanceTimersByTimeAsync(2000)

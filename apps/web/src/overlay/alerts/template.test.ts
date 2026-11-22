@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { i18n } from '../../i18n'
 import type { AlertPayload } from './alerts'
 import { fillAlert, loadAlertTemplate, parseAlertTemplate } from './template'
 import defaultHtml from './templates/default/template.html?raw'
+
+const t = i18n.global.t
 
 const BASE = 'http://127.0.0.1:47810/templates/alerts/'
 
@@ -27,18 +30,18 @@ describe('fillAlert', () => {
       ] as const
     ).map((p) => render({ ...p, userId: '7', userLogin: 'viewer', userName: name, durationMs: 6000, sound: { kind: 'built_in', volume: 100 } }).querySelector('.title')!.textContent)
     expect(titles).toEqual([
-      `${name} 追隨了！`,
-      `${name} 訂閱了！`,
-      `${name} 續訂了 12 個月！`,
-      `${name} 送了 20 份訂閱！`,
-      `${name} 送出 100 小奇點！`,
-      `${name} 帶著 42 人揪團來了！`,
+      t('alerts.text.follow', { name }),
+      t('alerts.text.subscribe', { name }),
+      t('alerts.text.resubscribe', { name, months: 12 }),
+      t('alerts.text.gift', { name, count: 20 }),
+      t('alerts.text.cheer', { name, bits: 100 }),
+      t('alerts.text.raid', { name, viewers: 42 }),
     ])
   })
 
   it('names an anonymous gift, keeps a message as text and drops an empty one', () => {
     const gift = render({ kind: 'gift', userId: null, userLogin: null, userName: null, tier: 1, count: 5, durationMs: 6000, sound: { kind: 'built_in', volume: 100 } })
-    expect(gift.querySelector('.title')!.textContent).toBe('匿名觀眾 送了 5 份訂閱！')
+    expect(gift.querySelector('.title')!.textContent).toBe(t('alerts.text.gift', { name: t('alerts.anonymous'), count: 5 }))
     expect(gift.querySelector('.message')).toBeNull()
 
     const cheer = render({ kind: 'cheer', userId: '7', userLogin: 'a', userName: 'A', bits: 1, message: '<b>hi</b>', durationMs: 9000, sound: { kind: 'built_in', volume: 100 } })
