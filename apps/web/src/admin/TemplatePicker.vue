@@ -137,7 +137,8 @@ onMounted(refresh)
 
 .options {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  /* Small previews, so the templates fit in one row. */
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
   gap: 1rem;
 }
 
