@@ -5,10 +5,20 @@
     <div class="head">
       <h2 :id="headingId">{{ t('home.blocks.checklist') }}</h2>
       <span class="ready">{{ t('stage.checks.ready', { ok: checks.filter((c) => c.ok).length, all: checks.length }) }}</span>
+      <!-- Folded, it lists only what is not ready; when everything is, only this row shows. -->
+      <Button
+        :label="t(openChecks ? 'stage.checks.fold' : 'stage.checks.unfold')"
+        :icon="openChecks ? 'pi pi-angle-up' : 'pi pi-angle-down'"
+        text
+        size="small"
+        :aria-expanded="openChecks"
+        :aria-controls="`${headingId}-list`"
+        @click="openChecks = !openChecks"
+      />
     </div>
-    <ul class="plain checks">
+    <ul :id="`${headingId}-list`" class="plain checks">
       <!-- An overlay not in OBS yet only warns: the stream works without it. -->
-      <li v-for="c in checks" :key="c.id" :class="c.ok ? 'ok' : c.id.startsWith('overlay.') ? 'warn' : 'bad'">
+      <li v-for="c in openChecks ? checks : checks.filter((c) => !c.ok)" :key="c.id" :class="c.ok ? 'ok' : c.id.startsWith('overlay.') ? 'warn' : 'bad'">
         <i :class="c.ok ? 'pi pi-check-circle' : c.id.startsWith('overlay.') ? 'pi pi-exclamation-circle' : 'pi pi-times-circle'" aria-hidden="true"></i>
         <span>{{ t(`stage.checks.${c.id}.${c.ok ? 'ok' : 'bad'}`) }}</span>
         <!-- An overlay is fixed on the OBS sources page, which adds it to a scene. -->
@@ -43,7 +53,7 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { useId } from 'vue'
+import { ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { StageState } from './stage'
 import ObsStatusLink from './ObsStatusLink.vue'
@@ -55,6 +65,8 @@ const headingId = useId()
 // The state object never changes for a block, so its refs are unpacked once for the template.
 const { shown, failed, notLive, checks, session, line, stats, exporting, exportNotice, exportIt } =
   props.stage
+// 開播前檢查 starts folded: only what is not ready.
+const openChecks = ref(false)
 </script>
 
 <style scoped>

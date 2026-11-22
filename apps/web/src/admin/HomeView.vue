@@ -16,6 +16,10 @@
             :allow-empty="false"
             aria-labelledby="stage-heading"
           />
+          <template v-if="stage.manual.value">
+            <span class="manual">{{ t('stage.manual') }}</span>
+            <Button :label="t('stage.backToAuto')" size="small" text @click="stage.backToAuto()" />
+          </template>
         </div>
         <div class="lights">
           <Button v-if="arranging" ref="doneButton" :label="t('arrange.done')" icon="pi pi-check" @click="leaveArrange" />
@@ -389,6 +393,7 @@ import {
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
+import { FEATURES } from './features'
 import ObsStatusLink from './ObsStatusLink.vue'
 import { obsProblems, useObsSources } from './obsSources'
 import { changesCheckins } from './checkins'
@@ -649,7 +654,7 @@ function bgmLine(p: Schemas['BgmPlayerPayload']): Line {
 
 /** The 畫面工具 tile: whether the break card is on screen. */
 function breakLine(card: Schemas['BreakPayload']): Line {
-  if (!card.shown) return { state: 'ready', text: t('screenTools.break.hidden') }
+  if (!card.shown) return { state: 'ready', num: t('screenTools.break.hiddenShort'), text: t('screenTools.break.hidden') }
   return { state: 'ready', num: t('screenTools.break.shownShort'), text: card.text || t('screenTools.break.heading') }
 }
 
@@ -687,6 +692,9 @@ function recentLine(r: typeof recent.value): Line {
 const moduleName = (id: string) => {
   const unbuilt = TILES.find((tile) => tile.id === id)?.unbuilt
   if (unbuilt) return t(unbuilt.label)
+  // A module's tile goes by its feature's name, as its page does (場景與模式, 休息卡片); the ID stays the module's.
+  const feature = FEATURES.find((f) => f.module === id)
+  if (feature) return t(`features.${feature.id}.name`)
   if (te(`modules.names.${id}`)) return t(`modules.names.${id}`)
   if (te(`home.blocks.${id}`)) return t(`home.blocks.${id}`)
   // A tile that is no module's (e.g. 演練) is named after its page.
@@ -1021,5 +1029,10 @@ onBeforeUnmount(() => {
 
 h4 {
   margin: 0;
+}
+
+.stage-switch .manual {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
 }
 </style>
