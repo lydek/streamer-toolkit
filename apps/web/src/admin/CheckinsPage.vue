@@ -39,28 +39,13 @@
         />
         <Button :label="t('checkin.push.show')" size="small" text @click="pushCard(v)" />
         <Button
-          v-if="deducting !== v.id"
           :label="t('checkin.deduct.open')"
           size="small"
           text
           :disabled="!v.available"
+          :aria-label="t('checkin.deduct.for', { name: v.user_name })"
           @click="openDeduct(v)"
         />
-        <form v-else class="deduct" :aria-label="t('checkin.deduct.for', { name: v.user_name })" @submit.prevent="deduct(v)">
-          <label :for="`deduct-amount-${v.id}`">{{ t('checkin.deduct.amount') }}</label>
-          <InputNumber
-            v-model="amount"
-            :input-id="`deduct-amount-${v.id}`"
-            :min="1"
-            :max="v.available"
-            :allow-empty="false"
-            :use-grouping="false"
-          />
-          <label :for="`deduct-reason-${v.id}`">{{ t('checkin.deduct.reason') }}</label>
-          <InputText :id="`deduct-reason-${v.id}`" v-model="reason" maxlength="100" autocomplete="off" />
-          <Button type="submit" :label="t('checkin.deduct.confirm')" size="small" :disabled="busy" />
-          <Button :label="t('checkin.deduct.cancel')" size="small" text @click="deducting = undefined" />
-        </form>
       </li>
     </ul>
 
@@ -78,6 +63,29 @@
     </nav>
 
     <CheckinDeductions ref="log" />
+    <!-- 扣印章: empty each time it opens; Esc or 取消 sends nothing. -->
+    <dialog ref="deductEl" class="sheet deduct" aria-labelledby="deduct-title" @close="deducting = undefined">
+      <form v-if="deducting" class="stack" @submit.prevent="deduct(deducting)">
+        <h2 id="deduct-title">{{ t('checkin.deduct.for', { name: deducting.user_name }) }}</h2>
+        <p>{{ t('checkin.deduct.available', { n: deducting.available }) }}</p>
+        <label for="deduct-amount">{{ t('checkin.deduct.amount') }}</label>
+        <InputNumber
+          v-model="amount"
+          input-id="deduct-amount"
+          :min="1"
+          :max="deducting.available"
+          :allow-empty="false"
+          :use-grouping="false"
+        />
+        <label for="deduct-reason">{{ t('checkin.deduct.reason') }}</label>
+        <InputText id="deduct-reason" v-model="reason" maxlength="100" autocomplete="off" />
+        <div class="buttons sheet-actions">
+          <Button type="submit" :label="t('checkin.deduct.confirm')" :disabled="busy" />
+          <Button :label="t('checkin.deduct.cancel')" text @click="deductEl?.close()" />
+        </div>
+      </form>
+    </dialog>
+
     <!-- A fresh import each time it opens; Esc or 關閉 cancels it. -->
     <dialog ref="importEl" class="sheet import" aria-labelledby="checkin-import" @close="importing = false">
       <CheckinImport v-if="importing" @imported="imported" />
@@ -130,7 +138,8 @@ const failed = ref('')
 const busy = ref(false)
 let request = 0
 // The viewer whose deduction form is open.
-const deducting = ref<string>()
+const deductEl = ref<HTMLDialogElement>()
+const deducting = ref<Schemas['CheckinViewer']>()
 const amount = ref(1)
 const reason = ref('')
 const log = ref<InstanceType<typeof CheckinDeductions>>()
@@ -215,9 +224,10 @@ async function hideCard() {
 }
 
 function openDeduct(v: Schemas['CheckinViewer']) {
-  deducting.value = v.id
+  deducting.value = v
   amount.value = 1
   reason.value = ''
+  deductEl.value?.showModal()
 }
 
 async function deduct(v: Schemas['CheckinViewer']) {
@@ -229,8 +239,8 @@ async function deduct(v: Schemas['CheckinViewer']) {
         body: { amount: amount.value, reason: reason.value },
       }),
     )
+    deductEl.value?.close()
     toast.add(successToast(t('checkin.deduct.done', { name: v.user_name, n: amount.value, left: available })))
-    deducting.value = undefined
     await Promise.all([load(), log.value?.load()])
   } catch (e) {
     toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
@@ -311,13 +321,6 @@ useLiveEvents(2000, (msg) => {
   margin-left: auto;
 }
 
-.deduct {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .deduct :deep(.p-inputnumber-input) {
   width: 5rem;
 }
@@ -333,5 +336,9 @@ useLiveEvents(2000, (msg) => {
 
 .import {
   max-width: 36rem;
+}
+
+.deduct {
+  max-width: 28rem;
 }
 </style>
