@@ -1,10 +1,13 @@
 //! SQLite repository for redemption records. Rows map to the domain here; nothing else sees them.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqlitePool, migrate::Migrator};
-use toolkit_core::outbox::{Outbox, OutboxEvent};
+use toolkit_core::{
+    outbox::{Outbox, OutboxEvent},
+    presentation::{PlayResult, PlayedKind, RedemptionPlayed},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -112,6 +115,93 @@ pub(crate) async fn list(
         .map(Redemption::try_from)
         .collect::<Result<_, _>>()?;
     Ok((items, u64::try_from(total).unwrap_or(0)))
+}
+
+/// What each of these Twitch redemptions played, by Twitch redemption ID: `None` for a record from before this was
+/// tracked, an empty list when nothing played.
+pub(crate) async fn played(
+    pool: &SqlitePool,
+    twitch_ids: &[String],
+) -> Result<HashMap<String, Option<Vec<(PlayedKind, PlayResult)>>>, RepositoryError> {
+    let mut out = HashMap::new();
+    if twitch_ids.is_empty() {
+        return Ok(out);
+    }
+    let mut tracked = QueryBuilder::<Sqlite>::new(
+        "SELECT twitch_redemption_id, playback_tracked FROM redemption_records WHERE twitch_redemption_id IN (",
+    );
+    let mut ids = tracked.separated(", ");
+    for id in twitch_ids {
+        ids.push_bind(id);
+    }
+    tracked.push(")");
+    let rows: Vec<(String, i64)> = tracked
+        .build_query_as()
+        .fetch_all(pool)
+        .await
+        .map_err(storage)?;
+    for (id, on) in rows {
+        out.insert(id, (on != 0).then(Vec::new));
+    }
+    let mut shown = QueryBuilder::<Sqlite>::new(
+        "SELECT twitch_redemption_id, what, result FROM redemption_playback WHERE twitch_redemption_id IN (",
+    );
+    let mut ids = shown.separated(", ");
+    for id in twitch_ids {
+        ids.push_bind(id);
+    }
+    shown.push(") ORDER BY recorded_at, event_id");
+    let rows: Vec<(String, String, String)> = shown
+        .build_query_as()
+        .fetch_all(pool)
+        .await
+        .map_err(storage)?;
+    for (id, what, result) in rows {
+        let parsed = (
+            serde_json::from_value(serde_json::Value::String(what)),
+            serde_json::from_value(serde_json::Value::String(result)),
+        );
+        if let (Ok(what), Ok(result)) = parsed
+            && let Some(Some(list)) = out.get_mut(&id)
+        {
+            list.push((what, result));
+        }
+    }
+    Ok(out)
+}
+
+/// Keeps what a redemption played; `false` when this outbox event was kept already.
+pub(crate) async fn record_played(
+    pool: &SqlitePool,
+    event_id: &str,
+    played: &RedemptionPlayed,
+) -> Result<bool, RepositoryError> {
+    let text = |v: serde_json::Value| v.as_str().unwrap_or_default().to_owned();
+    let result = sqlx::query(
+        "INSERT INTO redemption_playback (event_id, twitch_redemption_id, what, result, recorded_at) \
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT (event_id) DO NOTHING",
+    )
+    .bind(event_id)
+    .bind(&played.redemption_id)
+    .bind(text(serde_json::to_value(played.what).map_err(storage)?))
+    .bind(text(serde_json::to_value(played.result).map_err(storage)?))
+    .bind(time_text(Utc::now()))
+    .execute(pool)
+    .await
+    .map_err(storage)?;
+    Ok(result.rows_affected() == 1)
+}
+
+/// The record ID of the Twitch redemption `twitch_id`; `None` when it was not recorded.
+pub(crate) async fn record_id(
+    pool: &SqlitePool,
+    twitch_id: &str,
+) -> Result<Option<String>, RepositoryError> {
+    sqlx::query_scalar("SELECT id FROM redemption_records WHERE twitch_redemption_id = ?")
+        .bind(twitch_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(storage)
 }
 
 /// `WHERE` for [`ListFilter`]; every value is bound, none is spliced into the SQL.
@@ -248,8 +338,8 @@ impl RedemptionRepository for SqliteRedemptions {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let result = sqlx::query(
             "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id, \
-             reward_title, reward_cost, user_input, status, redeemed_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (twitch_redemption_id) DO NOTHING",
+             reward_title, reward_cost, user_input, status, redeemed_at, updated_at, playback_tracked) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT (twitch_redemption_id) DO NOTHING",
         )
         .bind(r.id.0.to_string())
         .bind(&r.twitch_id.0)
@@ -363,6 +453,51 @@ pub(crate) mod tests {
                 (serde_json::from_str(&payload).unwrap(), at)
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn what_a_redemption_played_is_kept_once_and_old_records_have_no_record() {
+        let pool = pool().await;
+        // "old" was stored before playback was tracked; "new" after.
+        for (id, tracked) in [("old", 0), ("new", 1), ("none", 1)] {
+            sqlx::query(
+                "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id,                  reward_title, reward_cost, user_input, status, redeemed_at, updated_at, playback_tracked)                  VALUES (?, ?, 'u', 'u', 'u', 'r', 'r', 1, '', 'unfulfilled', ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(format!("t-{id}"))
+            .bind("2026-11-22T10:00:00.000000Z")
+            .bind("2026-11-22T10:00:00.000000Z")
+            .bind(tracked)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let card = RedemptionPlayed {
+            redemption_id: "t-new".into(),
+            what: PlayedKind::Card,
+            result: PlayResult::Played,
+        };
+        let media = RedemptionPlayed {
+            redemption_id: "t-new".into(),
+            what: PlayedKind::Media,
+            result: PlayResult::FileMissing,
+        };
+        assert!(record_played(&pool, "e1", &card).await.unwrap());
+        // A redelivered event is kept once.
+        assert!(!record_played(&pool, "e1", &card).await.unwrap());
+        assert!(record_played(&pool, "e2", &media).await.unwrap());
+
+        let ids: Vec<String> = ["t-old", "t-new", "t-none"].map(String::from).into();
+        let played = played(&pool, &ids).await.unwrap();
+        assert_eq!(played["t-old"], None);
+        assert_eq!(
+            played["t-new"],
+            Some(vec![
+                (PlayedKind::Card, PlayResult::Played),
+                (PlayedKind::Media, PlayResult::FileMissing),
+            ])
+        );
+        assert_eq!(played["t-none"], Some(vec![]));
     }
 
     #[tokio::test]

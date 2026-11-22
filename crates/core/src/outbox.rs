@@ -145,6 +145,16 @@ impl Outbox {
         Ok(())
     }
 
+    /// Publishes `event` in a transaction of its own and wakes the dispatcher, for a publisher with no write of its
+    /// own to share it with.
+    pub async fn publish_now(&self, event: &OutboxEvent) -> sqlx::Result<()> {
+        let mut tx = self.pool.begin().await?;
+        self.publish(&mut tx, event).await?;
+        tx.commit().await?;
+        self.wake();
+        Ok(())
+    }
+
     /// Lets the dispatcher run now instead of at its next poll.
     pub fn wake(&self) {
         self.wake.notify_one();

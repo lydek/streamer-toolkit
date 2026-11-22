@@ -143,6 +143,11 @@ impl<R: OverlayRepository> OverlayService<R> {
         }
     }
 
+    /// Where it reports what each redemption's media did; the host connects it to the outbox.
+    pub fn played(&self) -> &toolkit_core::presentation::PlayedReporter {
+        &self.playback.played
+    }
+
     pub async fn break_card(&self) -> Result<BreakCard, RepositoryError> {
         Ok(self.repo.break_card().await?.unwrap_or_default())
     }

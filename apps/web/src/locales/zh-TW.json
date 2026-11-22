@@ -624,6 +624,23 @@
     }
   },
   "redemption": {
+    "played": {
+      "label": "播放：",
+      "none": "—",
+      "untracked": "沒有紀錄",
+      "entry": "{what}{result}",
+      "what": { "card": "集點卡", "sound": "音效", "media": "影片或 GIF" },
+      "result": {
+        "played": "已播",
+        "sound_missing": "已播，但音效檔案不見了",
+        "file_missing": "：檔案不見了",
+        "off_air": "：Overlay 沒開，沒有播",
+        "declined": "：沒有播",
+        "skipped": "：已跳過",
+        "cleared": "：清空排隊，沒有播",
+        "stopped": "：緊急停止"
+      }
+    },
     "empty": "還沒有兌換紀錄",
     "noMatch": "沒有符合條件的紀錄",
     "writeFailed": "有 {n} 筆兌換重試後仍無法寫入紀錄，不在清單裡。",

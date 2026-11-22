@@ -376,12 +376,39 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             master_volume: Box::new(move || master.volume()),
         },
     );
-    let outbox = toolkit_core::outbox::Outbox::new(
-        config.db.clone(),
-        modules.clone(),
-        checkin::subscriptions(config.db.clone(), &checkin),
-    );
+    let mut subscriptions = checkin::subscriptions(config.db.clone(), &checkin);
+    subscriptions.extend(redemption::subscriptions(config.db.clone(), bus.clone()));
+    let outbox =
+        toolkit_core::outbox::Outbox::new(config.db.clone(), modules.clone(), subscriptions);
     outbox.start();
+    // What each Twitch redemption played, from the modules that showed it, goes to the redemption module.
+    let report_played: toolkit_core::presentation::ReportPlayed = {
+        let outbox = outbox.clone();
+        Arc::new(move |played| {
+            let outbox = outbox.clone();
+            tokio::spawn(async move {
+                let event = toolkit_core::outbox::OutboxEvent {
+                    id: uuid::Uuid::now_v7().to_string(),
+                    event_type: toolkit_core::presentation::REDEMPTION_PLAYED.into(),
+                    payload: serde_json::to_value(&played).expect("serializable"),
+                    occurred_at: chrono::Utc::now(),
+                };
+                // A failed write (a busy or full disk) is tried again with the same event ID, so it is kept once.
+                let mut waits = [1, 5, 30].into_iter();
+                while let Err(e) = outbox.publish_now(&event).await {
+                    let Some(wait) = waits.next() else {
+                        tracing::warn!(code = "redemption.storage_failed", error = %e, "what a redemption played not kept");
+                        return;
+                    };
+                    tracing::warn!(code = "redemption.storage_failed", error = %e, "what a redemption played not kept yet");
+                    tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                }
+            });
+        })
+    };
+    sounds.played().connect(report_played.clone());
+    checkin.played().connect(report_played.clone());
+    screen_tools.played().connect(report_played);
     let redemption = Arc::new(redemption::start(
         config.db.clone(),
         bus.clone(),

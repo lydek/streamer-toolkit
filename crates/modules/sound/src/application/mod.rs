@@ -12,7 +12,10 @@ use std::{
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, Source},
     modules::{self, Modules},
-    presentation::{Item, Presenter, Recent, RecentItem, Shown, Stage, Subject},
+    presentation::{
+        Item, PlayResult, PlayedKind, PlayedReporter, Presenter, Recent, RecentItem, Shown, Stage,
+        Subject, reporting,
+    },
     settings::{self, SoundEntry},
 };
 use uuid::Uuid;
@@ -55,6 +58,8 @@ pub struct SoundService {
     stop_tests: StopTests,
     /// What became of the latest reward sounds.
     recent: Recent,
+    /// Tells the redemption module what each redemption's sound did.
+    played: PlayedReporter,
 }
 
 impl SoundService {
@@ -72,7 +77,13 @@ impl SoundService {
             play: Arc::new(play),
             stop_tests: Arc::new(stop_tests),
             recent: Recent::default(),
+            played: PlayedReporter::default(),
         }
+    }
+
+    /// Where it reports what each redemption's sound did; the host connects it to the outbox.
+    pub fn played(&self) -> &PlayedReporter {
+        &self.played
     }
 
     /// Queues the sound chosen for a new redemption's reward on the presentation queue, for as long as it plays;
@@ -99,9 +110,14 @@ impl SoundService {
             sound: entry.map(|e| e.label).unwrap_or_default(),
             viewer: r.user_name.clone(),
         };
-        let done = self
-            .recent
-            .record(Some(r.id.clone()), subject.clone(), Source::Twitch);
+        let done = reporting(
+            self.recent
+                .record(Some(r.id.clone()), subject.clone(), Source::Twitch),
+            self.played.clone(),
+            r.id.clone(),
+            PlayedKind::Sound,
+            PlayResult::from,
+        );
         self.presenter.push(Item {
             stage: Stage::Sound,
             subject,

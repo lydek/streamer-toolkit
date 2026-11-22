@@ -14,6 +14,8 @@ use utoipa::{IntoParams, ToSchema};
 
 use std::sync::Arc;
 
+use toolkit_core::presentation::{PlayResult, PlayedKind};
+
 use crate::{
     application::{ListFilter, RedemptionService},
     domain::{Redemption, Status},
@@ -72,6 +74,16 @@ pub struct RedemptionRecord {
     pub redeemed_at: String,
     /// RFC 3339, UTC: when the record was created or last changed status.
     pub updated_at: String,
+    /// What the redemption played, in the order each ended: empty when it played nothing, `null` for a record
+    /// from before this was kept.
+    #[schema(required)]
+    pub played: Option<Vec<PlayedEntry>>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlayedEntry {
+    pub what: PlayedKind,
+    pub result: PlayResult,
 }
 
 impl From<Redemption> for RedemptionRecord {
@@ -87,6 +99,7 @@ impl From<Redemption> for RedemptionRecord {
             status: r.status.into(),
             redeemed_at: time(r.redeemed_at),
             updated_at: time(r.updated_at),
+            played: None,
         }
     }
 }
@@ -186,9 +199,31 @@ pub(crate) async fn list_redemptions(
     let Some(filter) = query.ok().and_then(|Query(q)| filter(q).ok()) else {
         return error(StatusCode::BAD_REQUEST, "redemption.invalid_filter");
     };
-    match db::list(&pool, &filter).await {
-        Ok((items, total)) => Json(RedemptionPage {
-            items: items.into_iter().map(RedemptionRecord::from).collect(),
+    let listed = match db::list(&pool, &filter).await {
+        Ok((items, total)) => {
+            let ids: Vec<String> = items.iter().map(|r| r.twitch_id.0.clone()).collect();
+            db::played(&pool, &ids)
+                .await
+                .map(|played| (items, total, played))
+        }
+        Err(e) => Err(e),
+    };
+    match listed {
+        Ok((items, total, mut played)) => Json(RedemptionPage {
+            items: items
+                .into_iter()
+                .map(|r| {
+                    let shown = played.remove(&r.twitch_id.0).flatten();
+                    RedemptionRecord {
+                        played: shown.map(|list| {
+                            list.into_iter()
+                                .map(|(what, result)| PlayedEntry { what, result })
+                                .collect()
+                        }),
+                        ..RedemptionRecord::from(r)
+                    }
+                })
+                .collect(),
             total,
             failed_writes: service.failed_writes(),
         })

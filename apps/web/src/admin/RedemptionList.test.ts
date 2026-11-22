@@ -15,6 +15,7 @@ const record = (over: Partial<RedemptionRecord> = {}): RedemptionRecord => ({
   status: 'unfulfilled',
   redeemed_at: '2026-11-16T10:00:00.000Z',
   updated_at: '2026-11-16T10:00:00.000Z',
+  played: [],
   ...over,
 })
 
@@ -41,4 +42,13 @@ it('names the status in words with its icon, and leaves out an empty input', () 
   expect(statuses[0].find('i').attributes('aria-hidden')).toBe('true')
   expect(wrapper.findAll('.input').map((p) => p.text())).toEqual(['hi'])
   expect(wrapper.find('time').attributes('datetime')).toBe('2026-11-16T10:00:00.000Z')
+})
+
+it('says what each redemption played: each item and its result, — for nothing, 沒有紀錄 before this was kept', () => {
+  const rows = list([
+    record({ id: 'a', played: [{ what: 'card', result: 'played' }, { what: 'media', result: 'file_missing' }] }),
+    record({ id: 'b', played: [] }),
+    record({ id: 'c', played: null }),
+  ]).findAll('.played')
+  expect(rows.map((r) => r.text())).toEqual(['播放：集點卡已播、影片或 GIF：檔案不見了', '播放：—', '播放：沒有紀錄'])
 })

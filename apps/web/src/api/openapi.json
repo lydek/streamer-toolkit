@@ -10658,6 +10658,20 @@
           }
         }
       },
+      "PlayResult": {
+        "type": "string",
+        "description": "How it ended: an [`Outcome`], or `file_missing` for media whose file was gone.",
+        "enum": [
+          "played",
+          "sound_missing",
+          "file_missing",
+          "off_air",
+          "declined",
+          "skipped",
+          "cleared",
+          "stopped"
+        ]
+      },
       "PlaySound": {
         "type": "object",
         "description": "A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%).",
@@ -10682,6 +10696,30 @@
           "stopped",
           "playing",
           "paused"
+        ]
+      },
+      "PlayedEntry": {
+        "type": "object",
+        "required": [
+          "what",
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/PlayResult"
+          },
+          "what": {
+            "$ref": "#/components/schemas/PlayedKind"
+          }
+        }
+      },
+      "PlayedKind": {
+        "type": "string",
+        "description": "What a redemption showed.",
+        "enum": [
+          "card",
+          "sound",
+          "media"
         ]
       },
       "PlayerControl": {
@@ -11342,11 +11380,22 @@
           "user_input",
           "status",
           "redeemed_at",
-          "updated_at"
+          "updated_at",
+          "played"
         ],
         "properties": {
           "id": {
             "type": "string"
+          },
+          "played": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayedEntry"
+            },
+            "description": "What the redemption played, in the order each ended: empty when it played nothing, `null` for a record\nfrom before this was kept."
           },
           "redeemed_at": {
             "type": "string",
