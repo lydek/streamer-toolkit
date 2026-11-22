@@ -475,6 +475,8 @@
     "withText": "{head}：{text}"
   },
   "stage": {
+    "manual": "手動選的",
+    "backToAuto": "改回自動",
     "title": "直播階段",
     "before": "開播前",
     "live": "直播中",
@@ -484,6 +486,8 @@
     "noStream": "還沒有直播紀錄。",
     "peak": "最高 {n} 位觀眾",
     "checks": {
+      "fold": "收起",
+      "unfold": "全部",
       "ready": "{ok} / {all} 好了",
       "fix": "修正",
       "twitch": { "ok": "Twitch 已登入", "bad": "Twitch 還沒登入" },
@@ -1189,6 +1193,7 @@
       "preview": "預覽",
       "shown": "休息卡片顯示中",
       "shownShort": "顯示中",
+      "hiddenShort": "收起",
       "hidden": "休息卡片沒有顯示",
       "forMinutes": "{n} 分鐘"
     },

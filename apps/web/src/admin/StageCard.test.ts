@@ -107,4 +107,28 @@ describe('StageCard checks', () => {
     expect(link.attributes('href')).toBe('/obs-sources')
     expect(link.text()).toBe(t('obsStatus.missing'))
   })
+
+  it('folds to the checks not ready, keeps the count of all, and unfolds to every check', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/overlays'
+            ? { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, other: 0 }
+            : null,
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = mount(Blocks, {
+      props: { live: { status: 'open', lastSeq: 1 }, modules: [{ id: 'chat', enabled: true, closed: false }] },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const rows = () => wrapper.findAll('.checks li')
+    expect(rows().some((li) => li.classes('ok'))).toBe(false)
+    const folded = rows().length
+    expect(wrapper.get('.ready').text()).toBe(t('stage.checks.ready', { ok: 1, all: folded + 1 }))
+    await wrapper.findAll('button').find((b) => b.attributes('aria-expanded') === 'false')!.trigger('click')
+    expect(rows()).toHaveLength(folded + 1)
+    expect(rows().filter((li) => li.classes('ok'))).toHaveLength(1)
+  })
 })

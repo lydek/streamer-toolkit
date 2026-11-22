@@ -32,6 +32,9 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
   const picked = ref<Stage>()
   const shown = computed({ get: () => picked.value ?? auto.value, set: (s: Stage) => (picked.value = s) })
   watch(auto, () => (picked.value = undefined))
+  /** Picked by hand, away from the one the stream status gives; until the next change of status. */
+  const manual = computed(() => picked.value !== undefined && picked.value !== auto.value)
+  const backToAuto = () => (picked.value = undefined)
 
   // A start, an end or a sign-in changes which session is the latest: read it again.
   watch([() => source.live().stream?.state, () => source.live().stream?.startedAt], () => void load(), { immediate: true })
@@ -107,7 +110,7 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
   // 直播中 picked while Twitch says the stream is not live.
   const notLive = computed(() => shown.value === 'live' && source.live().stream?.state !== 'live')
 
-  return { shown, failed, notLive, checks, session, when, line, stats, exporting, exportNotice, exportIt }
+  return { shown, manual, backToAuto, failed, notLive, checks, session, when, line, stats, exporting, exportNotice, exportIt }
 }
 
 export type StageState = ReturnType<typeof useStage>
