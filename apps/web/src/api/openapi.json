@@ -2897,6 +2897,37 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "crop_x",
+            "in": "query",
+            "description": "With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the\npicture.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "crop_y",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "crop_side",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
           }
         ],
         "requestBody": {
@@ -2922,7 +2953,7 @@
             }
           },
           "400": {
-            "description": "`image_sizes.unsupported`",
+            "description": "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture",
             "content": {
               "application/json": {
                 "schema": {
@@ -9212,7 +9243,8 @@
         "description": "How a picture that is not square becomes square.",
         "enum": [
           "pad",
-          "crop"
+          "crop",
+          "manual"
         ]
       },
       "GeneralSettings": {

@@ -3113,7 +3113,7 @@ export interface components {
          * @description How a picture that is not square becomes square.
          * @enum {string}
          */
-        Fit: "pad" | "crop";
+        Fit: "pad" | "crop" | "manual";
         /** @description Settings → General. The desktop app reads the same `settings.json` flag on every ✕ of the admin window. */
         GeneralSettings: {
             /** @description Show the close hint on ✕; the hint's "Don't show again" turns it off. */
@@ -6912,6 +6912,13 @@ export interface operations {
                 fit: components["schemas"]["Fit"];
                 /** @description `zip`: every size in one zip file; otherwise JSON with a preview of each. */
                 zip?: boolean;
+                /**
+                 * @description With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the
+                 *     picture.
+                 */
+                crop_x?: number;
+                crop_y?: number;
+                crop_side?: number;
             };
             header?: never;
             path?: never;
@@ -6933,7 +6940,7 @@ export interface operations {
                     "application/json": components["schemas"]["SizedImages"];
                 };
             };
-            /** @description `image_sizes.unsupported` */
+            /** @description `image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture */
             400: {
                 headers: {
                     [name: string]: unknown;

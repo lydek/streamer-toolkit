@@ -55,6 +55,16 @@ pub(crate) enum Fit {
     Pad,
     /// The middle.
     Crop,
+    /// The square the broadcaster picked (`crop_x`, `crop_y`, `crop_side`).
+    Manual,
+}
+
+/// A square of the picture, in its own pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Crop {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) side: u32,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -65,6 +75,11 @@ pub(crate) struct SizeQuery {
     /// `zip`: every size in one zip file; otherwise JSON with a preview of each.
     #[serde(default)]
     zip: bool,
+    /// With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the
+    /// picture.
+    crop_x: Option<u32>,
+    crop_y: Option<u32>,
+    crop_side: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
@@ -110,11 +125,11 @@ fn decode(bytes: &[u8]) -> Result<DynamicImage, &'static str> {
     })
 }
 
-/// Square, by transparent edges or by the middle.
-fn square(img: &DynamicImage, fit: Fit) -> RgbaImage {
+/// Square, by transparent edges, by the middle, or by the square picked (which must lie inside the picture).
+fn square(img: &DynamicImage, fit: Fit, crop: Option<Crop>) -> Result<RgbaImage, &'static str> {
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
-    match fit {
+    Ok(match fit {
         Fit::Pad => {
             let side = w.max(h);
             let mut canvas = RgbaImage::new(side, side);
@@ -130,7 +145,17 @@ fn square(img: &DynamicImage, fit: Fit) -> RgbaImage {
             let side = w.min(h);
             imageops::crop_imm(&rgba, (w - side) / 2, (h - side) / 2, side, side).to_image()
         }
-    }
+        Fit::Manual => {
+            let c = crop.ok_or("image_sizes.invalid_crop")?;
+            let inside = c.side > 0
+                && c.x.checked_add(c.side).is_some_and(|r| r <= w)
+                && c.y.checked_add(c.side).is_some_and(|b| b <= h);
+            if !inside {
+                return Err("image_sizes.invalid_crop");
+            }
+            imageops::crop_imm(&rgba, c.x, c.y, c.side, c.side).to_image()
+        }
+    })
 }
 
 fn png(img: &RgbaImage) -> Vec<u8> {
@@ -158,8 +183,13 @@ fn reduced(img: &RgbaImage) -> RgbaImage {
 type Sized = (u32, Vec<u8>, bool);
 
 /// Every size as PNG bytes, with whether a badge is still above its limit.
-pub(crate) fn sized(bytes: &[u8], kind: ImageKind, fit: Fit) -> Result<Vec<Sized>, &'static str> {
-    sized_within(bytes, kind, fit, BADGE_MAX_BYTES)
+pub(crate) fn sized(
+    bytes: &[u8],
+    kind: ImageKind,
+    fit: Fit,
+    crop: Option<Crop>,
+) -> Result<Vec<Sized>, &'static str> {
+    sized_within(bytes, kind, fit, crop, BADGE_MAX_BYTES)
 }
 
 /// [`sized`] with the badge limit given (a 72 px badge rarely reaches 25 KB, so tests use a smaller one).
@@ -167,9 +197,10 @@ fn sized_within(
     bytes: &[u8],
     kind: ImageKind,
     fit: Fit,
+    crop: Option<Crop>,
     limit: usize,
 ) -> Result<Vec<Sized>, &'static str> {
-    let source = square(&decode(bytes)?, fit);
+    let source = square(&decode(bytes)?, fit, crop)?;
     Ok(kind
         .sizes()
         .into_iter()
@@ -217,7 +248,7 @@ fn zip_of(kind: ImageKind, files: &[Sized]) -> Vec<u8> {
     request_body(content = String, content_type = "application/octet-stream", description = "The picture"),
     responses(
         (status = 200, body = SizedImages, description = "Or, with `zip=true`, an `application/zip` file"),
-        (status = 400, description = "`image_sizes.unsupported`", body = ErrorBody),
+        (status = 400, description = "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture", body = ErrorBody),
         (status = 413, description = "`image_sizes.too_large`: more than 10 MB or 4096 px a side", body = ErrorBody),
     )
 )]
@@ -232,7 +263,11 @@ pub(crate) async fn make_sizes(
         }
         Err(_) => return error(StatusCode::BAD_REQUEST, "image_sizes.unsupported"),
     };
-    let result = tokio::task::spawn_blocking(move || sized(&bytes, q.kind, q.fit)).await;
+    let crop = match (q.crop_x, q.crop_y, q.crop_side) {
+        (Some(x), Some(y), Some(side)) => Some(Crop { x, y, side }),
+        _ => None,
+    };
+    let result = tokio::task::spawn_blocking(move || sized(&bytes, q.kind, q.fit, crop)).await;
     let files = match result {
         Ok(Ok(files)) => files,
         Ok(Err(code @ "image_sizes.too_large")) => {
@@ -302,7 +337,7 @@ mod tests {
             (ImageKind::Points, [112, 56, 28]),
         ] {
             for fit in [Fit::Pad, Fit::Crop] {
-                let out = sized(&picture(300, 120, false), kind, fit).unwrap();
+                let out = sized(&picture(300, 120, false), kind, fit, None).unwrap();
                 assert_eq!(out.iter().map(|o| o.0).collect::<Vec<_>>(), sizes);
                 for (px, file, too_large) in out {
                     assert_eq!(side(&file), (px, px));
@@ -313,8 +348,28 @@ mod tests {
     }
 
     #[test]
+    fn a_picked_square_is_cut_out_and_must_lie_inside() {
+        let pic = picture(300, 120, false);
+        let crop = |x, y, side| Some(Crop { x, y, side });
+        let out = sized(&pic, ImageKind::Points, Fit::Manual, crop(10, 20, 100)).unwrap();
+        assert!(out.iter().all(|(px, file, _)| side(file) == (*px, *px)));
+        for bad in [
+            None,
+            crop(250, 0, 100),
+            crop(0, 30, 100),
+            crop(0, 0, 0),
+            crop(u32::MAX, 0, 2),
+        ] {
+            assert_eq!(
+                sized(&pic, ImageKind::Points, Fit::Manual, bad).err(),
+                Some("image_sizes.invalid_crop")
+            );
+        }
+    }
+
+    #[test]
     fn padding_keeps_the_edges_transparent() {
-        let out = sized(&picture(300, 100, false), ImageKind::Points, Fit::Pad).unwrap();
+        let out = sized(&picture(300, 100, false), ImageKind::Points, Fit::Pad, None).unwrap();
         let img = image::load_from_memory(&out[0].1).unwrap().to_rgba8();
         assert_eq!(img.get_pixel(56, 0)[3], 0, "the top edge is padding");
         assert_eq!(img.get_pixel(56, 56)[3], 255);
@@ -323,9 +378,9 @@ mod tests {
     #[test]
     fn a_heavy_badge_is_reduced_to_256_colors_and_flagged_only_when_still_over() {
         let noisy = picture(72, 72, true);
-        let plain = sized_within(&noisy, ImageKind::Badge, Fit::Crop, usize::MAX).unwrap();
+        let plain = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, usize::MAX).unwrap();
         let limit = plain[0].1.len() - 1;
-        let out = sized_within(&noisy, ImageKind::Badge, Fit::Crop, limit).unwrap();
+        let out = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, limit).unwrap();
         assert!(
             out[0].1.len() < plain[0].1.len(),
             "reducing the colors made it smaller"
@@ -338,23 +393,30 @@ mod tests {
             .collect();
         assert!(colors.len() <= 256);
         assert!(!out[0].2, "under the limit after reducing");
-        let still = sized_within(&noisy, ImageKind::Badge, Fit::Crop, 10).unwrap();
+        let still = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, 10).unwrap();
         assert!(still[0].2, "flagged when even that is too big");
-        let icon = sized_within(&noisy, ImageKind::Points, Fit::Crop, 10).unwrap();
+        let icon = sized_within(&noisy, ImageKind::Points, Fit::Crop, None, 10).unwrap();
         assert!(!icon[0].2, "only badges have the limit");
     }
 
     #[test]
     fn oversized_and_unknown_input_is_refused() {
         assert_eq!(
-            sized(&picture(MAX_SIDE + 1, 2, false), ImageKind::Badge, Fit::Pad).err(),
+            sized(
+                &picture(MAX_SIDE + 1, 2, false),
+                ImageKind::Badge,
+                Fit::Pad,
+                None
+            )
+            .err(),
             Some("image_sizes.too_large")
         );
         assert_eq!(
             sized(
                 b"<svg xmlns='http://www.w3.org/2000/svg'/>",
                 ImageKind::Badge,
-                Fit::Pad
+                Fit::Pad,
+                None
             )
             .err(),
             Some("image_sizes.unsupported")
@@ -363,7 +425,7 @@ mod tests {
 
     #[test]
     fn the_zip_holds_one_png_per_size() {
-        let files = sized(&picture(100, 100, false), ImageKind::Badge, Fit::Pad).unwrap();
+        let files = sized(&picture(100, 100, false), ImageKind::Badge, Fit::Pad, None).unwrap();
         let zip = zip_of(ImageKind::Badge, &files);
         let archive = zip::ZipArchive::new(Cursor::new(zip)).unwrap();
         let mut names: Vec<String> = archive

@@ -86,6 +86,22 @@ it('refuses a picture over 10 MB without sending it', async () => {
   expect(wrapper.find('[role="alert"]').text()).toContain('10 MB')
 })
 
+it("drops the last picture's sizes for a picked square until the new picture is read, and says when it is not", async () => {
+  const wrapper = await page()
+  await pick(wrapper, new File(['png'], 'logo.png', { type: 'image/png' }))
+  await wrapper.findAll('[aria-labelledby="is-fit"] button').find((b) => b.text() === '自己選範圍')!.trigger('click')
+  await flushPromises()
+  // The browser has not read the picture's size yet (jsdom never does): nothing to show or download.
+  expect(wrapper.findAll('.sheet')).toHaveLength(0)
+  const download = wrapper.findAll('button').find((b) => b.text() === '全部下載')!
+  expect(download.attributes('disabled')).toBeDefined()
+
+  const big = new File(['x'], 'big.png', { type: 'image/png' })
+  Object.defineProperty(big, 'size', { value: IMAGE_SIZES_MAX_BYTES + 1 })
+  await pick(wrapper, big)
+  expect(wrapper.find('[role="alert"]').text()).toContain('10 MB')
+})
+
 it('names the zip after the picture and the size', () => {
   expect(zipName('my.logo.png', 'badge')).toBe('my.logo-badge.zip')
   expect(zipName('.png', 'points')).toBe('image-points.zip')
