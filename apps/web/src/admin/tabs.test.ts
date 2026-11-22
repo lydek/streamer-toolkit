@@ -72,8 +72,9 @@ describe('what counts as built', () => {
     const soon = new Set(SOON_PAGES.map((p) => p.path))
     for (const f of FEATURES) {
       if (f.fixed) continue
-      // A feature without a module is not built: all its pages are grey. A built one has a page to open.
-      if (!f.module) expect(f.pages.every((p) => soon.has(p)), f.id).toBe(true)
+      // A feature without a module (or others' modules it works with) is not built: all its pages are grey. A built
+      // one has a page to open.
+      if (!f.module && !f.openWith) expect(f.pages.every((p) => soon.has(p)), f.id).toBe(true)
       else expect(f.pages.some((p) => !soon.has(p)), f.id).toBe(true)
     }
     const tilePages = SOON_PAGES.filter((p) => p.soon!.tile).map((p) => p.path.slice(1))

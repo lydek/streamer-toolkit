@@ -19,6 +19,7 @@ import NotFoundView from './NotFoundView.vue'
 import ObsSourcesPage from './ObsSourcesPage.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import RehearsalPage from './RehearsalPage.vue'
+import RewardPlaybackPage from './RewardPlaybackPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
@@ -41,6 +42,7 @@ export const router = createRouter({
     { path: '/alert-events', component: AlertEventsPage },
     { path: '/alert-log', component: AlertLogPage },
     { path: '/redemptions', component: RedemptionsPage },
+    { path: '/reward-playback', component: RewardPlaybackPage },
     { path: '/checkin', component: CheckinsPage },
     { path: '/card-style', component: CardStylePage },
     { path: '/checkin-rules', component: CheckinRulesPage },

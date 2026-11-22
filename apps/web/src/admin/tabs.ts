@@ -106,6 +106,7 @@ export const GROUPS: TabGroup[] = [
       pages: [
         { ...soon('/rewards', 'rewards', 'pi pi-star', true), tabLabel: 'nav.pageTabs.rewards' },
         { path: '/redemptions', label: 'modules.names.redemption' },
+        { path: '/reward-playback', label: 'pages.rewardPlayback.name' },
       ],
     },
     {

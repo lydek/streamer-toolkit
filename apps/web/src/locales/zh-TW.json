@@ -378,6 +378,10 @@
       "name": "模式",
       "desc": "一鍵切換場景、音訊與要顯示的東西。"
     },
+    "rewardPlayback": {
+      "name": "兌換時播放",
+      "desc": "每個獎勵兌換時播的音效、影片或 GIF。"
+    },
     "warnings": {
       "name": "警語",
       "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒。"
@@ -1198,6 +1202,7 @@
       "secondsUnit": "秒",
       "reading": "讀取長度中",
       "missing": "檔案不見了",
+      "usedBy": "用在：{rewards}",
       "delete": "刪除「{title}」",
       "confirmDelete": "確定刪除",
       "cancel": "取消",
@@ -1397,6 +1402,10 @@
     "explain": "Host 無法使用目前的連接埠。請輸入新的連接埠，OBS 裡的網址也要一起更新。",
     "label": "連接埠",
     "retry": "儲存並重試"
+  },
+  "rewardPlayback": {
+    "soundOverlay": "音效：",
+    "mediaOverlay": "影片與 GIF："
   },
   "obsStatus": {
     "in": "在 OBS：{n} 個場景，{live}",
