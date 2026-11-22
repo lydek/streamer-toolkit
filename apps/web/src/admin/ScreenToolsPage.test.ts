@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import ScreenToolsPage from './ScreenToolsPage.vue'
+import WarningsPage from './WarningsPage.vue'
 import { testRouter } from './testRouter'
 
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
@@ -79,8 +80,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function page(payload = card, w = warnings) {
-  const wrapper = mount(ScreenToolsPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+async function page(payload = card, w = warnings, component: typeof ScreenToolsPage | typeof WarningsPage = ScreenToolsPage) {
+  const wrapper = mount(component, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   socket.onmessage!({ data: JSON.stringify(snapshot(payload, w)) })
   await flushPromises()
   return wrapper
@@ -119,8 +120,9 @@ it('counts to the next time of day in the until mode, and hides a shown card', a
   expect(post).toHaveBeenCalledWith('/api/admin/screen-tools/break/hide')
 })
 
+// 警語 has its own page.
 it('saves a warning switch with the other warning settings, and asks for a new mic once it is gone', async () => {
-  const wrapper = await page()
+  const wrapper = await page(card, warnings, WarningsPage)
   expect(wrapper.text()).not.toContain('請重新選擇麥克風')
   await wrapper.get('input[aria-labelledby="warn-twitch"]').trigger('change')
   await flushPromises()
@@ -128,7 +130,7 @@ it('saves a warning switch with the other warning settings, and asks for a new m
     body: { chat_overlay: true, twitch: true, mic: true, mic_seconds: 30, mic_input: 'Mic' },
   })
 
-  const gone = await page(card, { ...warnings, micMissing: true })
+  const gone = await page(card, { ...warnings, micMissing: true }, WarningsPage)
   expect(gone.text()).toContain('OBS 裡已經沒有「Mic」，請重新選擇麥克風。')
 })
 
