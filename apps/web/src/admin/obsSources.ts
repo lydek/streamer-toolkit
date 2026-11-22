@@ -66,6 +66,19 @@ export function overlayName(r: OverlayRow, t: T): string {
   return t(r.key === 'leaderboard-other' ? 'obsSources.names.leaderboardOther' : `obsSources.names.${r.entry.id}`)
 }
 
+/** A browser source's width and height for an overlay's suggested size; a sound-only one gets a small box. */
+export function sourceSize(size: string): [number, number] {
+  const [width, height] = size === 'audio' ? [100, 100] : size.split(' × ').map(Number)
+  return [width, height]
+}
+
+/** Puts a row's overlay in `scene` (POST /api/admin/obs/sources), naming a new source after it. */
+export function addOverlay(scene: string, r: OverlayRow, t: T) {
+  const [width, height] = sourceSize(r.entry.size)
+  const name = t('obsSources.sourceName', { name: overlayName(r, t), app: t('app.name') })
+  return api(client.POST('/api/admin/obs/sources', { body: { scene, overlay: r.url!, name, width, height } }))
+}
+
 export interface ObsProblem {
   id: string
   text: string

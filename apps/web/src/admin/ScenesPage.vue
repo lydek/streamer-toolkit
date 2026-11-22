@@ -106,6 +106,19 @@
             </tr>
           </tbody>
         </table>
+        <div class="add">
+          <Button
+            :label="t('scene.addOverlay')"
+            icon="pi pi-plus"
+            outlined
+            :disabled="!obsSources?.local || !addable.length || adding"
+            aria-haspopup="true"
+            aria-controls="add-overlay"
+            @click="addMenu?.toggle($event)"
+          />
+          <Menu id="add-overlay" ref="addMenu" :model="addable" popup />
+          <span v-if="obsSources && !obsSources.local" class="muted">{{ t('obsSources.notLocal') }}</span>
+        </div>
       </section>
     </template>
   </FullPage>
@@ -114,6 +127,8 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
+import Menu from 'primevue/menu'
+import type { MenuItem } from 'primevue/menuitem'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
@@ -123,7 +138,7 @@ import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, useLiveEvents } from './home'
-import { overlayRows, useObsSources } from './obsSources'
+import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSources'
 import SceneList from './SceneList.vue'
 import { type SceneItem, kindKey, obsReady, updateItem } from './scenes'
 
@@ -154,6 +169,30 @@ const duplicates = computed(
         .flatMap((r) => r.sources.map((s) => s.name)),
     ),
 )
+
+// 加入 Overlay: the built-in overlays not in this scene yet, with their suggested size.
+const addMenu = ref<InstanceType<typeof Menu>>()
+const adding = ref(false)
+const addable = computed<MenuItem[]>(() => {
+  const scene = state.value?.scene
+  if (!scene) return []
+  return overlayRows(obsSources.value?.sources ?? [])
+    .filter((r) => r.url && !r.scenes.includes(scene))
+    .map((r) => ({
+      label: `${overlayName(r, t)}　${r.entry.size === 'audio' ? t('obsSources.audioOnly') : r.entry.size}`,
+      command: async () => {
+        adding.value = true
+        try {
+          await addOverlay(scene, r, t)
+        } catch (e) {
+          report(e)
+        } finally {
+          adding.value = false
+          void useObsSources(true)
+        }
+      },
+    }))
+})
 
 type Align = Schemas['Align']
 const ALIGNS: Align[] = ['top_left', 'top', 'top_right', 'left', 'center', 'right', 'bottom_left', 'bottom', 'bottom_right']
@@ -249,5 +288,17 @@ tbody th {
   display: block;
   color: var(--p-yellow-300);
   font-size: 0.8125rem;
+}
+
+.add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.muted {
+  color: var(--p-text-muted-color);
 }
 </style>
