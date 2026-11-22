@@ -67,6 +67,7 @@
       "raids": "揪團與 SO"
     },
     "pageTabs": {
+      "alertTemplates": "樣板",
       "checkin": "打卡名單",
       "rewards": "獎勵"
     }
@@ -356,6 +357,14 @@
       "name": "模式",
       "desc": "一鍵切換場景、音訊與要顯示的東西。"
     },
+    "alertEvents": {
+      "name": "每種事件",
+      "desc": "每種事件的音效與試播。"
+    },
+    "alertLog": {
+      "name": "最近事件",
+      "desc": "這次開啟後的特效與結果。"
+    },
     "obsSources": {
       "name": "OBS 來源",
       "desc": "所有內建 Overlay 在 OBS 的哪些場景，一頁看完。"
@@ -559,6 +568,9 @@
     "copyFailed": "無法複製到剪貼簿。"
   },
   "alerts": {
+    "test": "試播",
+    "testKind": "試播「{kind}」",
+    "tested": "已送出測試特效。",
     "empty": "還沒有特效",
     "recent": {
       "title": "最近事件",

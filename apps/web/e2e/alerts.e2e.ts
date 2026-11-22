@@ -299,7 +299,7 @@ test('最近事件 says what became of each alert and 重播 queues it again', a
     replays.push(new URL(r.request().url()).pathname)
     return r.fulfill({ status: 204 })
   })
-  await page.goto('/admin/alerts')
+  await page.goto('/admin/alert-log')
   const recent = page.getByRole('region', { name: zh.alerts.recent.title })
   const rows = recent.getByRole('listitem')
   await expect(rows).toHaveCount(3)

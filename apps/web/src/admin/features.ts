@@ -34,7 +34,7 @@ export const FEATURES: Feature[] = [
   { id: 'chat', group: 'chat', icon: 'pi pi-comments', pages: ['/chat-log', '/chat', '/chat-window'], module: 'chat' },
   { id: 'chatFilter', group: 'chat', icon: 'pi pi-filter', pages: ['/chat-filter'], scopes: ['moderator:manage:chat_messages'] },
   { id: 'bot', group: 'chat', icon: 'pi pi-reply', pages: ['/commands', '/timers', '/greetings'], scopes: ['user:write:chat'] },
-  { id: 'alerts', group: 'interact', icon: 'pi pi-bell', pages: ['/alerts'], module: 'alerts' },
+  { id: 'alerts', group: 'interact', icon: 'pi pi-bell', pages: ['/alerts', '/alert-events', '/alert-log'], module: 'alerts' },
   { id: 'polls', group: 'interact', icon: 'pi pi-chart-bar', pages: ['/polls'], scopes: ['channel:manage:polls', 'channel:manage:predictions'] },
   { id: 'checkin', group: 'interact', icon: 'pi pi-check-square', pages: ['/checkin', '/card-style'], module: 'checkin' },
   { id: 'rewards', group: 'interact', icon: 'pi pi-star', pages: ['/rewards'], scopes: ['channel:manage:redemptions'], affects: ['songs'] },

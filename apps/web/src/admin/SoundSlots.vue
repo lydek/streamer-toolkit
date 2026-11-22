@@ -22,6 +22,8 @@
           :disabled="testing !== s.slot && !isFile(fields[i].value.value)"
           @click="testing === s.slot ? stop() : play(s.slot, fields[i].value.value)"
         />
+        <!-- More controls for this slot, e.g. a test of what uses the sound. -->
+        <slot name="actions" :slot-id="s.slot" :label="s.label" />
       </div>
     </template>
   </div>

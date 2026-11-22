@@ -5,6 +5,9 @@ import { UNBUILT_TILES } from './home'
 import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, closedPageTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 import { router } from './router'
 
+// The alerts feature's pages: turning it off hides all of them.
+const ALERT_PAGES = FEATURES.find((f) => f.id === 'alerts')!.pages
+
 describe('groupOf', () => {
   it('finds the group of a page and of a sub-page', () => {
     expect(groupOf('/')?.id).toBe('home')
@@ -48,7 +51,7 @@ describe('firstPage', () => {
     expect(firstPage(media, new Set(['/scenes']))).toBe('/obs-sources')
     // Hidden alerts, then the coming-soon polls page, are skipped.
     const interact = GROUPS.find((g) => g.id === 'interact')!
-    expect(firstPage(interact, new Set(['/alerts']))).toBe('/checkin')
+    expect(firstPage(interact, new Set(ALERT_PAGES))).toBe('/checkin')
   })
 })
 
@@ -117,7 +120,7 @@ describe('closedPageTarget', () => {
 
   it("sends a turned-off page to its group's first open page, or home when the group has none", () => {
     expect(closedPageTarget('/card-style', new Set(['/checkin', '/card-style']))).toBe('/alerts')
-    expect(closedPageTarget('/alerts', new Set(['/alerts']))).toBe('/checkin')
+    expect(closedPageTarget('/alerts', new Set(ALERT_PAGES))).toBe('/checkin')
     const media = GROUPS.find((g) => g.id === 'media')!.pages.map((p) => p.path)
     expect(closedPageTarget('/sounds', new Set(media))).toBe('/')
   })

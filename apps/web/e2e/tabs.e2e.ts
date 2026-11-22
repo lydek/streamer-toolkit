@@ -26,12 +26,11 @@ test('every group, category and page is one click away, and the current one is m
   await expect(subTab(page, zh.nav.categories.chatroom)).toHaveAttribute('aria-current', 'true')
   await expect(pageTab(page, 'chatroom', zh.pages.chatLog.name)).toHaveAttribute('aria-current', 'page')
 
-  // A category with one page is the page itself, with no page tabs.
   await tab(page, 'interact').click()
   await expect(page).toHaveURL(/\/admin\/alerts$/)
   await expect(tab(page, 'interact')).toHaveAttribute('aria-current', 'true')
-  await expect(subTab(page, zh.nav.categories.alerts)).toHaveAttribute('aria-current', 'page')
-  await expect(pageTabs(page, 'alerts')).toHaveCount(0)
+  await expect(subTab(page, zh.nav.categories.alerts)).toHaveAttribute('aria-current', 'true')
+  await expect(pageTab(page, 'alerts', zh.nav.pageTabs.alertTemplates)).toHaveAttribute('aria-current', 'page')
 
   // A category goes back to the page last seen in it.
   await subTab(page, zh.nav.categories.checkin).click()

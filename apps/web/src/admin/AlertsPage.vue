@@ -1,22 +1,15 @@
 <template>
   <FullPage :title="t('modules.names.alerts')" tile="alerts" overlay="alerts">
+    <!-- 樣板: the first of the alerts pages (每種事件 and 最近事件 are their own pages). -->
     <TemplatePicker overlay="alerts" :ids="BUILT_IN" :label="(id) => t(`alerts.templates.${id}`)" :start="start" />
-    <section aria-labelledby="alert-sounds">
-      <h2 id="alert-sounds">{{ t('modules.names.sound') }}</h2>
-      <SoundSlots built-in :slots="ALERT_KINDS.map((k) => ({ slot: `alert.${k}`, label: t(`alerts.kinds.${k}`) }))" />
-    </section>
-    <RecentAlerts />
   </FullPage>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ALERT_KINDS } from '../overlay/alerts/alerts'
 import type { Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 import FullPage from './FullPage.vue'
-import RecentAlerts from './RecentAlerts.vue'
-import SoundSlots from './SoundSlots.vue'
 import TemplatePicker from './TemplatePicker.vue'
 
 // Keys of a full record, so a template added to the Host's list fails the typecheck until it is listed here.
