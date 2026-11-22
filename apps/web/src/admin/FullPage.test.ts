@@ -8,6 +8,8 @@ import FullPage from './FullPage.vue'
 import { navOpened } from './page'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 const toastAdd = vi.hoisted(() => vi.fn())
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: toastAdd }) }))
 const hiddenPages = vi.hoisted(() => ({ set: new Set<string>() }))
@@ -33,7 +35,7 @@ describe('FullPage header', () => {
     // No Host answers here, so OBS counts as not connected.
     const link = wrapper.get('.page-end a')
     expect(link.attributes('href')).toBe('/obs-sources')
-    expect(link.text()).toBe('OBS 沒連上')
+    expect(link.text()).toBe(t('obsStatus.offline'))
   })
 
   it('shows neither a status nor a copy button on a page without them', () => {
@@ -53,11 +55,11 @@ describe('FullPage page tabs', () => {
   it("lists the category's pages, marks the open one and names the row after the category", async () => {
     const wrapper = await at('/checkin')
     const nav = wrapper.get('nav.page-tabs')
-    expect(nav.attributes('aria-label')).toBe('打卡')
+    expect(nav.attributes('aria-label')).toBe(t('nav.categories.checkin'))
     expect(nav.findAll('a').map((a) => [a.text(), a.attributes('aria-current')])).toEqual([
-      ['打卡名單', 'page'],
-      ['卡片樣式', undefined],
-      ['打卡規則', undefined],
+      [t('nav.pageTabs.checkin'), 'page'],
+      [t('pages.cardStyle.name'), undefined],
+      [t('pages.checkinRules.name'), undefined],
     ])
   })
 
@@ -66,7 +68,7 @@ describe('FullPage page tabs', () => {
     expect(off.element.tagName).toBe('SPAN')
     expect(off.attributes('aria-disabled')).toBe('true')
     expect(off.attributes('tabindex')).toBeUndefined()
-    expect(off.text()).toContain('獎勵')
+    expect(off.text()).toContain(t('nav.pageTabs.rewards'))
   })
 
   it('has no row for a page without a category, or when only one page of the category is left', async () => {
@@ -81,10 +83,10 @@ describe('FullPage page tabs', () => {
     await router.push('/card-style')
     navOpened.path = '/card-style'
     const viaTab = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
-    expect(document.activeElement?.textContent).toBe('卡片樣式')
+    expect(document.activeElement?.textContent).toBe(t('pages.cardStyle.name'))
     viaTab.unmount()
     const direct = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
-    expect(document.activeElement?.textContent).toContain('回首頁')
+    expect(document.activeElement?.textContent).toContain(t('app.home'))
     direct.unmount()
     // A category link stays on the app bar, so it keeps focus.
     const category = document.body.appendChild(document.createElement('a'))

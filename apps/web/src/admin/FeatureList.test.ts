@@ -7,17 +7,22 @@ import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 const list = () =>
   mount(FeatureList, {
     props: { modules: [{ id: 'chat', enabled: true, closed: false }], busy: false, loadText: '' },
     global: { plugins: [testRouter(), i18n, PrimeVue] },
   })
 
+const name = (id: string) => t(`features.${id}.name`)
+const category = (id: string) => t(`nav.categories.${id}`)
+
 /** Each heading of a group's card with the feature names under it; '' for features with no heading. */
 function sections(group: string, wrapper = list()) {
   const card = wrapper
     .findAll('section')
-    .find((s) => s.get('h3').text().startsWith(group))!
+    .find((s) => s.get('h3').text().startsWith(t(`nav.groups.${group}`)))!
   return card.findAll('h4, li.feat').reduce<[string, string[]][]>((out, el) => {
     if (el.element.tagName === 'H4') out.push([el.text(), []])
     else (out.at(-1) ?? out[out.push(['', []]) - 1])[1].push(el.get('.name').text())
@@ -27,24 +32,25 @@ function sections(group: string, wrapper = list()) {
 
 describe('FeatureList', () => {
   it("lists a group's features under their categories, in the categories' order", () => {
-    expect(sections('聊天')).toEqual([
-      ['聊天室', ['聊天室', '聊天過濾']],
-      ['聊天機器人', ['聊天機器人']],
+    expect(sections('chat')).toEqual([
+      [category('chatroom'), [name('chat'), name('chatFilter')]],
+      [category('bot'), [name('bot')]],
     ])
-    expect(sections('觀眾')[2]).toEqual(['揪團與 SO', ['SO', '感謝名單', '揪團']])
+    expect(sections('viewers')[2]).toEqual([category('raids'), [name('shoutouts'), name('credits'), name('raids')]])
   })
 
   it('lists the features of a group without categories with no heading', () => {
-    expect(sections('首頁')).toEqual([['', ['首頁', '直播資訊', '演練']]])
+    expect(sections('home')).toEqual([['', [name('home'), name('streamInfo'), name('rehearsal')]]])
   })
 
   it('keeps only the matching features, under their categories, and drops groups left empty', async () => {
     const wrapper = list()
-    await wrapper.get('input[type="search"]').setValue('過濾')
+    // Part of the name, not all of it or its start: the search matches anywhere in it.
+    await wrapper.get('input[type="search"]').setValue(name('chatFilter').slice(1))
     expect(wrapper.findAll('section')).toHaveLength(1)
-    expect(sections('聊天', wrapper)).toEqual([['聊天室', ['聊天過濾']]])
+    expect(sections('chat', wrapper)).toEqual([[category('chatroom'), [name('chatFilter')]]])
     await wrapper.get('input[type="search"]').setValue('')
-    expect(sections('聊天', wrapper)).toHaveLength(2)
+    expect(sections('chat', wrapper)).toHaveLength(2)
   })
 
   it('gives the switch its focus back once the change it started has saved', async () => {

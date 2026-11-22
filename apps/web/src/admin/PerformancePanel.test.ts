@@ -5,6 +5,8 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import PerformancePanel from './PerformancePanel.vue'
 
+const t = i18n.global.t
+
 enableAutoUnmount(afterEach)
 afterEach(() => vi.restoreAllMocks())
 
@@ -25,8 +27,8 @@ it('shows — for OBS while it is not connected and the rest as usual', async ()
   const wrapper = mount(PerformancePanel, { global: { plugins: [i18n] } })
   await flushPromises()
   expect(wrapper.text()).toContain('12.5%')
-  expect(wrapper.text()).toContain('8000 / 16000 MB')
-  expect(wrapper.text()).toContain('OBS 掉幀最近 60 秒')
+  expect(wrapper.text()).toContain(t('performance.memoryOf', { used: 8000, total: 16000 }))
+  expect(wrapper.text()).toContain(t('performance.dropped') + t('performance.droppedWindow'))
   expect(wrapper.findAll('dd').slice(3).map((d) => d.text())).toEqual(['—', '—', '—'])
   expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 })
@@ -35,6 +37,6 @@ it('warns when more than 5 % of frames dropped in the last minute', async () => 
   answer(sample({ cpu_percent: 4, dropped_percent: 6.25, bitrate_kbps: 6000 }, true))
   const wrapper = mount(PerformancePanel, { global: { plugins: [i18n] } })
   await flushPromises()
-  expect(wrapper.get('[role="alert"]').text()).toBe('最近 60 秒掉幀 6.3%，超過 5%。')
-  expect(wrapper.text()).toContain('6000 kbps')
+  expect(wrapper.get('[role="alert"]').text()).toBe(t('performance.warning', { n: '6.3' }))
+  expect(wrapper.text()).toContain(t('performance.kbps', { n: 6000 }))
 })

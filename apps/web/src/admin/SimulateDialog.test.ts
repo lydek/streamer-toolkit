@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import SimulateDialog from './SimulateDialog.vue'
 
+const t = i18n.global.t
+
 const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), modules: { value: undefined as unknown } }))
 
 vi.mock('./api', async (original) => ({
@@ -77,39 +79,41 @@ const press = async (id: string, label: string) => {
 describe('SimulateDialog', () => {
   it('sends one test event per row through the shared routes and says so', async () => {
     const wrapper = await opened()
-    await press('chat', '送一則訊息')
-    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/chat', { body: { text: '這是一則測試訊息' } })
-    expect(wrapper.get('[role="status"]').text()).toBe('已送出測試：聊天室 · 送一則訊息')
-    await press('alerts', '送禮訂閱')
+    await press('chat', t('simulate.dialog.sendMessage'))
+    expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/chat', { body: { text: t('simulate.dialog.chatText') } })
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      t('simulate.dialog.sent', { row: t('simulate.dialog.rows.chat'), button: t('simulate.dialog.sendMessage') }),
+    )
+    await press('alerts', t('alerts.kinds.gift'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/alert', { body: { kind: 'gift', amount: 5 } })
-    await press('alerts', '追隨')
+    await press('alerts', t('alerts.kinds.follow'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/alert', { body: { kind: 'follow', amount: null } })
-    await press('sound', '播放')
+    await press('sound', t('simulate.dialog.play'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 's1' } } })
     // 集滿 uses the card's own slot count.
-    await press('checkin', '集滿')
+    await press('checkin', t('simulate.dialog.fullCard'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/checkin', { body: { stamps: 7 } })
     // The Host picks the test values; the dialog only names the overlay.
-    await press('counter', '顯示測試值')
+    await press('counter', t('simulate.dialog.showTest'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'counter' } })
-    await press('marathon', '顯示測試值')
+    await press('marathon', t('simulate.dialog.showTest'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/simulate/overlay-test', { body: { overlay: 'marathon' } })
-    await press('bgm', '播 5 秒')
+    await press('bgm', t('simulate.dialog.playTest'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/music/player/test')
     wrapper.unmount()
   })
 
   it('shows each overlay connection in words, and 無法確認 when it cannot be read', async () => {
     const wrapper = await opened()
-    expect(row('chat').textContent).toContain('OBS 已連上')
-    expect(row('alerts').textContent).toContain('還沒放進 OBS')
+    expect(row('chat').textContent).toContain(t('simulate.dialog.connected'))
+    expect(row('alerts').textContent).toContain(t('simulate.dialog.notInObs'))
     wrapper.unmount()
     answers['/api/admin/overlays'] = undefined
     calls.get.mockImplementation((path: string) =>
       path === '/api/admin/overlays' ? Promise.reject(new Error('offline')) : Promise.resolve(answers[path]),
     )
     const again = await opened()
-    expect(row('chat').textContent).toContain('無法確認')
+    expect(row('chat').textContent).toContain(t('simulate.dialog.unknown'))
     again.unmount()
   })
 
@@ -118,13 +122,13 @@ describe('SimulateDialog', () => {
     answers['/api/admin/sounds'] = { sounds: [], slots: {}, volume: 100 }
     calls.post.mockRejectedValue(new Error('boom'))
     const wrapper = await opened()
-    expect(row('sound').textContent).toContain('功能已關閉')
+    expect(row('sound').textContent).toContain(t('simulate.dialog.featureOff'))
     expect([...row('sound').querySelectorAll('button')].every((b) => b.disabled)).toBe(true)
     for (const id of ['counter', 'marathon']) {
-      expect(row(id).textContent).toContain('功能已關閉')
+      expect(row(id).textContent).toContain(t('simulate.dialog.featureOff'))
       expect(row(id).querySelector('button')!.disabled).toBe(true)
     }
-    await press('chat', '送一則訊息')
+    await press('chat', t('simulate.dialog.sendMessage'))
     expect(wrapper.get('[role="status"]').text()).toContain('boom')
     wrapper.unmount()
   })
@@ -134,14 +138,14 @@ describe('SimulateDialog', () => {
       calls.modules.value = on([onlyOn])
       const wrapper = await opened()
       expect(row(onlyOn).querySelector('button')!.disabled).toBe(false)
-      expect(row(off).textContent).toContain('功能已關閉')
+      expect(row(off).textContent).toContain(t('simulate.dialog.featureOff'))
       wrapper.unmount()
     }
   })
 
   it('puts focus on 關閉 when it opens and tells the bar when it closes', async () => {
     const wrapper = await opened()
-    expect(document.activeElement?.textContent?.trim()).toBe('關閉')
+    expect(document.activeElement?.textContent?.trim()).toBe(t('app.close'))
     ;(document.activeElement as HTMLButtonElement).click()
     expect(wrapper.emitted('closed')).toHaveLength(1)
     wrapper.unmount()
@@ -155,13 +159,13 @@ describe('SimulateDialog', () => {
       wrapper.unmount()
       return [text, disabled]
     }
-    expect(await reason(player('playing'))).toEqual(['背景音樂正在播', true])
-    expect(await reason(player('stopped', null))).toEqual(['還沒選過歌單', true])
-    expect(await reason(null)).toEqual(['無法確認', true])
+    expect(await reason(player('playing'))).toEqual([t('simulate.dialog.bgmPlaying'), true])
+    expect(await reason(player('stopped', null))).toEqual([t('simulate.dialog.noPlaylist'), true])
+    expect(await reason(null)).toEqual([t('simulate.dialog.unknown'), true])
     // Paused is fine: the test plays on its own and the player stays paused.
     expect((await reason(player('paused')))[1]).toBe(false)
     answers['/api/admin/music'] = { tracks: [], playlists: [{ id: 'p1', name: '聊天', tracks: [], used_by: [] }], scene_rules: [] }
-    expect(await reason(player('stopped'))).toEqual(['歌單裡沒有能播的歌', true])
+    expect(await reason(player('stopped'))).toEqual([t('simulate.dialog.nothingToPlay'), true])
   })
 
 
@@ -171,7 +175,7 @@ describe('SimulateDialog', () => {
       path === '/api/admin/checkin/settings' ? new Promise((r) => (slots = r)) : Promise.resolve(answers[path]),
     )
     const wrapper = await opened()
-    const full = () => [...row('checkin').querySelectorAll('button')].find((b) => b.textContent?.trim() === '集滿')!
+    const full = () => [...row('checkin').querySelectorAll('button')].find((b) => b.textContent?.trim() === t('simulate.dialog.fullCard'))!
     expect(full().disabled).toBe(true)
     slots({ card_slots: 7 })
     await flushPromises()
@@ -185,7 +189,7 @@ describe('SimulateDialog', () => {
     )
     await (wrapper.vm as unknown as { open: () => Promise<void> }).open()
     await flushPromises()
-    await press('sound', '播放')
+    await press('sound', t('simulate.dialog.play'))
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 's2' } } })
     expect(full().disabled).toBe(true)
     wrapper.unmount()
