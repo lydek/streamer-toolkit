@@ -7,6 +7,8 @@ import type { AlertEvent } from './alerts'
 import AlertsOverlay from './AlertsOverlay.vue'
 import chimeUrl from './chime.wav'
 
+const t = i18n.global.t
+
 const played = vi.hoisted(() => [] as [string, number][])
 vi.mock('../sound', () => ({ playSound: (url: string, volume: number) => played.push([url, volume]), stopSounds: () => {} }))
 
@@ -175,7 +177,7 @@ describe('AlertsOverlay', () => {
     expect(titles()).toEqual([])
     post(alert(3))
     await flushPromises()
-    expect(titles()).toEqual(['R3 帶著 3 人揪團來了！'])
+    expect(titles()).toEqual([t('alerts.text.raid', { name: 'R3', viewers: 3 })])
     wrapper.unmount()
   })
 
@@ -199,14 +201,14 @@ describe('AlertsOverlay', () => {
     loads[0].release('old')
     post(alert(1, 6000))
     await flushPromises()
-    expect(titles()).toEqual(['R1 帶著 1 人揪團來了！'])
+    expect(titles()).toEqual([t('alerts.text.raid', { name: 'R1', viewers: 1 })])
 
     vi.advanceTimersByTime(2000)
     post(changed)
     loads[1].release('new')
     await flushPromises()
     const shown = document.querySelector<HTMLElement>('.new [data-kind]')!
-    expect(shown.textContent).toBe('R1 帶著 1 人揪團來了！')
+    expect(shown.textContent).toBe(t('alerts.text.raid', { name: 'R1', viewers: 1 }))
     expect(shown.style.getPropertyValue('--duration')).toBe('4000ms')
     expect(document.querySelector('.old')).toBeNull()
 

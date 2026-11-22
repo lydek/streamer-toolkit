@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../../i18n'
 import LeaderboardOverlay from './LeaderboardOverlay.vue'
 
+const t = i18n.global.t
+
 let socket: { url: string; onmessage?: (e: { data: string }) => void }
 beforeEach(() => {
   vi.stubGlobal(
@@ -45,7 +47,7 @@ it('shows the board and period in its URL, as text, and follows updates', async 
   expect(socket.url).toContain('/ws/overlay?kind=leaderboard')
   socket.onmessage!({ data: JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'leaderboard.update': [update(1, '<b>小魚</b>')] } }) })
   await flushPromises()
-  expect(wrapper.get('.title').text()).toBe('小奇點')
+  expect(wrapper.get('.title').text()).toBe(t('overlay.leaderboard.bits'))
   expect(wrapper.get('.name').text()).toBe('<b>小魚</b>')
   expect(wrapper.find('.name b').exists()).toBe(false)
   socket.onmessage!({ data: JSON.stringify(update(2, '莓莓')) })

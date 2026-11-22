@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../../i18n'
 import WarningsOverlay from './WarningsOverlay.vue'
 
+const t = i18n.global.t
+
 let socket: { url: string; onmessage?: (e: { data: string }) => void }
 beforeEach(() => {
   vi.useFakeTimers()
@@ -57,7 +59,7 @@ it('shows each warning that is down, the mic once it has been muted long enough,
   expect(socket.url).toContain('/ws/overlay?kind=warnings')
   await send({ type: 'snapshot', version: 1, seq: 1, payload: { 'screen.warnings': [event(1, { chatOverlayDown: true })] } })
   expect(shown(wrapper)).toEqual(['chatOverlay'])
-  expect(wrapper.text()).toContain('聊天室沒有連上')
+  expect(wrapper.text()).toContain(t('overlay.warnings.chatOverlay'))
 
   await send(event(2, { twitchDown: true, micMutedSince: '2026-11-22T12:00:00.000Z' }))
   expect(shown(wrapper)).toEqual(['twitch'])
