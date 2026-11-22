@@ -30,10 +30,23 @@
       <input type="file" :accept="IMAGE_SIZES_ACCEPT" class="sr-only" @change="onPick" />
     </label>
 
+    <ImageCropper
+      v-if="fit === 'manual' && source"
+      v-model="crop"
+      :src="source.url"
+      :width="source.width"
+      :height="source.height"
+      @commit="run"
+    />
+
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="busy">{{ t('app.loading') }}</p>
     <div v-else-if="sized" class="results">
       <div v-for="bg in BACKGROUNDS" :key="bg" class="sheet" :class="bg">
+        <!-- A points icon as Twitch shows it under the chat: the icon, then the balance. -->
+        <p v-if="kind === 'points'" class="balance">
+          <img :src="sized.images[0].data_url" alt="" width="20" height="20" />∞
+        </p>
         <figure v-for="img in sized.images" :key="img.px">
           <img :src="img.data_url" :width="img.px" :height="img.px" :alt="t('imageSizes.alt', { px: img.px })" />
           <figcaption :class="{ over: img.too_large }">
@@ -54,11 +67,22 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
 import FullPage from './FullPage.vue'
-import { type Fit, IMAGE_SIZES_ACCEPT, type ImageKind, makeSizes, sizesZip, zipName } from './imageSizes'
+import ImageCropper from './ImageCropper.vue'
+import {
+  type Crop,
+  type Fit,
+  IMAGE_SIZES_ACCEPT,
+  IMAGE_SIZES_MAX_BYTES,
+  type ImageKind,
+  centeredCrop,
+  makeSizes,
+  sizesZip,
+  zipName,
+} from './imageSizes'
 import { saveFile } from './save'
 
 const KINDS: ImageKind[] = ['badge', 'points']
-const FITS: Fit[] = ['pad', 'crop']
+const FITS: Fit[] = ['pad', 'crop', 'manual']
 const BACKGROUNDS = ['dark', 'light']
 
 const { t } = useI18n()
@@ -69,6 +93,9 @@ const sized = shallowRef<Schemas['SizedImages']>()
 const busy = ref(false)
 const over = ref(false)
 const failed = ref('')
+// The picture as shown under the frame, with its own size; the frame starts centered and as large as it fits.
+const source = shallowRef<{ url: string; width: number; height: number }>()
+const crop = ref<Crop>({ x: 0, y: 0, side: 1 })
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 // Each request's number; only the latest one's answer (result, error, busy) shows.
@@ -78,10 +105,16 @@ async function run() {
   const picked = file.value
   if (!picked) return
   const mine = ++request
+  // A picked square needs the picture's size first (the frame starts from it); until then nothing shows.
+  if (fit.value === 'manual' && !source.value) {
+    sized.value = undefined
+    busy.value = false
+    return
+  }
   busy.value = true
   failed.value = ''
   try {
-    const result = await makeSizes(picked, kind.value, fit.value)
+    const result = await makeSizes(picked, kind.value, fit.value, crop.value)
     if (mine === request) sized.value = result
   } catch (e) {
     if (mine !== request) return
@@ -95,7 +128,36 @@ async function run() {
 function choose(f: File | undefined) {
   if (!f) return
   file.value = f
+  source.value = undefined
+  // The last picture's sizes go at once, and an answer still on its way for it is dropped.
+  sized.value = undefined
+  failed.value = ''
   void run()
+  // Too large: the Host would refuse it, so it is not read here either (run says why, except for a picked square).
+  if (f.size > IMAGE_SIZES_MAX_BYTES) {
+    if (fit.value === 'manual') failed.value = message(new ApiError('image_sizes.too_large'))
+    return
+  }
+  // The frame needs the picture's own size; a picked square waits for it. A data: URL, since the admin window's
+  // CSP allows no blob: images.
+  const unreadable = () => {
+    if (file.value === f && fit.value === 'manual') failed.value = message(new ApiError('image_sizes.failed'))
+  }
+  const reader = new FileReader()
+  reader.onerror = unreadable
+  reader.onload = () => {
+    const url = String(reader.result)
+    const img = new Image()
+    img.onerror = unreadable
+    img.onload = () => {
+      if (file.value !== f) return
+      source.value = { url, width: img.naturalWidth, height: img.naturalHeight }
+      crop.value = centeredCrop(img.naturalWidth, img.naturalHeight)
+      if (fit.value === 'manual') void run()
+    }
+    img.src = url
+  }
+  reader.readAsDataURL(f)
 }
 
 function onPick(e: Event) {
@@ -116,7 +178,7 @@ async function download() {
   if (!picked) return
   try {
     await saveFile(zipName(picked.name, kind.value), { description: 'ZIP', mime: 'application/zip', extension: '.zip' }, () =>
-      sizesZip(picked, kind.value, fit.value),
+      sizesZip(picked, kind.value, fit.value, crop.value),
     )
   } catch (e) {
     failed.value = message(e)
@@ -195,6 +257,14 @@ figcaption {
 
 .over {
   color: var(--p-red-500);
+  font-weight: 600;
+}
+
+.balance {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  margin: 0 0 0.75rem;
   font-weight: 600;
 }
 </style>
