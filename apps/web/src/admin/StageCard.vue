@@ -11,20 +11,11 @@
       <li v-for="c in checks" :key="c.id" :class="c.ok ? 'ok' : c.id.startsWith('overlay.') ? 'warn' : 'bad'">
         <i :class="c.ok ? 'pi pi-check-circle' : c.id.startsWith('overlay.') ? 'pi pi-exclamation-circle' : 'pi pi-times-circle'" aria-hidden="true"></i>
         <span>{{ t(`stage.checks.${c.id}.${c.ok ? 'ok' : 'bad'}`) }}</span>
-        <!-- An overlay is fixed by adding its URL to OBS as a browser source: copy it right here. -->
-        <Button
-          v-if="!c.ok && c.id.startsWith('overlay.')"
-          :label="t('chat.copyObsUrl')"
-          icon="pi pi-copy"
-          text
-          size="small"
-          class="fix"
-          @click="copyOverlayUrl(c.id.slice('overlay.'.length))"
-        />
+        <!-- An overlay is fixed on the OBS sources page, which adds it to a scene. -->
+        <ObsStatusLink v-if="!c.ok && c.id.startsWith('overlay.')" :overlay="`/overlay/${c.id.slice('overlay.'.length)}/`" class="fix" />
         <RouterLink v-else-if="!c.ok" :to="c.fix" class="fix">{{ t('stage.checks.fix') }}</RouterLink>
       </li>
     </ul>
-    <p v-if="copyNotice" :role="copyNotice.error ? 'alert' : 'status'">{{ copyNotice.text }}</p>
   </section>
   <section v-else class="stage" :aria-labelledby="headingId">
     <div class="head">
@@ -55,13 +46,14 @@ import Button from 'primevue/button'
 import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { StageState } from './stage'
+import ObsStatusLink from './ObsStatusLink.vue'
 
 const props = defineProps<{ part: 'checklist' | 'session'; stage: StageState }>()
 const { t } = useI18n()
 // A stage may hold both 本場直播 and 本場摘要 (both `session`), so each block names its own heading.
 const headingId = useId()
 // The state object never changes for a block, so its refs are unpacked once for the template.
-const { shown, failed, notLive, checks, copyNotice, copyOverlayUrl, session, line, stats, exporting, exportNotice, exportIt } =
+const { shown, failed, notLive, checks, session, line, stats, exporting, exportNotice, exportIt } =
   props.stage
 </script>
 

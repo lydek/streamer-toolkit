@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { overlayRows } from './obsSources'
+import { obsPresence, overlayRows } from './obsSources'
 
 const source = (name: string, overlay: string, scenes: string[]) => ({ name, overlay, scenes })
 
@@ -36,5 +36,28 @@ describe('overlayRows', () => {
     expect(ids).not.toContain('counter')
     expect(ids).not.toContain('marathon')
     expect(ids).toContain('chat')
+  })
+})
+
+describe('obsPresence', () => {
+  const data = (sources: ReturnType<typeof source>[]) => ({ connected: true, local: true, live_scene: 'Game', scenes: ['Game', 'Talk'], sources })
+
+  it('says whether OBS is offline, has the overlay nowhere, twice, or in how many scenes with the live one', () => {
+    expect(obsPresence('/overlay/chat/', undefined)).toEqual({ kind: 'offline' })
+    expect(obsPresence('/overlay/chat/', { ...data([]), connected: false })).toEqual({ kind: 'offline' })
+    expect(obsPresence('/overlay/chat/', data([]))).toEqual({ kind: 'missing' })
+    expect(obsPresence('/overlay/chat/', data([source('A', '/overlay/chat/', [])]))).toEqual({ kind: 'missing' })
+    expect(obsPresence('/overlay/chat/', data([source('A', '/overlay/chat/', ['Talk'])]))).toEqual({ kind: 'in', scenes: 1, live: false })
+    expect(obsPresence('/overlay/chat/', data([source('A', '/overlay/chat/?x', ['Game', 'Talk'])]))).toEqual({ kind: 'in', scenes: 2, live: true })
+    expect(obsPresence('/overlay/chat/', data([source('A', '/overlay/chat/', []), source('B', '/overlay/chat/', [])]))).toEqual({
+      kind: 'duplicate',
+      sources: 2,
+    })
+  })
+
+  it('matches a leaderboard by its board and period', () => {
+    const lb = data([source('A', '/overlay/leaderboard/?board=bits&period=stream', ['Game'])])
+    expect(obsPresence('/overlay/leaderboard/?board=bits&period=stream', lb).kind).toBe('in')
+    expect(obsPresence('/overlay/leaderboard/?board=chat&period=stream', lb).kind).toBe('missing')
   })
 })

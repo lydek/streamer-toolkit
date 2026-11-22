@@ -138,7 +138,7 @@
 
     <AppDrawer id="chat" :title="moduleName('chat')" full-page="/chat">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('chat')" />
+        <ObsStatusLink overlay="/overlay/chat/" />
         <form @submit.prevent="sendChat">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-user">{{ t('simulate.userName') }}</label>
@@ -156,7 +156,7 @@
 
     <AppDrawer id="alerts" :title="moduleName('alerts')" full-page="/alerts">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('alerts')" />
+        <ObsStatusLink overlay="/overlay/alerts/" />
         <form @submit.prevent="sendAlert">
           <p>{{ t('simulate.hint') }}</p>
           <span id="sim-kind">{{ t('simulate.kind') }}</span>
@@ -200,7 +200,7 @@
 
     <AppDrawer id="checkin" :title="moduleName('checkin')" full-page="/checkin">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('checkin')" />
+        <ObsStatusLink overlay="/overlay/checkin/" />
         <form @submit.prevent="sendCheckin">
           <p>{{ t('simulate.hint') }}</p>
           <label for="sim-checkin-user">{{ t('simulate.userName') }}</label>
@@ -234,7 +234,7 @@
 
     <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('sound')" />
+        <ObsStatusLink overlay="/overlay/sound/" />
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
       <template #now>
@@ -261,7 +261,7 @@
 
     <AppDrawer id="counter" :title="moduleName('counter')" full-page="/counters">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('counter')" />
+        <ObsStatusLink overlay="/overlay/counter/" />
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
       <template #now>
@@ -284,7 +284,7 @@
 
     <AppDrawer id="screen-tools" :title="moduleName('screen-tools')" full-page="/screen-tools">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('break')" />
+        <ObsStatusLink overlay="/overlay/break/" />
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
       <template #now>
@@ -341,7 +341,7 @@
 
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
-        <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl('bgm')" />
+        <ObsStatusLink overlay="/overlay/bgm/" />
         <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
       </template>
       <template #now>
@@ -389,6 +389,7 @@ import {
   useLiveEvents,
 } from './home'
 import HomeTile from './HomeTile.vue'
+import ObsStatusLink from './ObsStatusLink.vue'
 import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
@@ -742,17 +743,6 @@ const sendAlert = () =>
     notify(t('simulate.alertSent'), false)
   })
 
-async function copyObsUrl(overlay: 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm' | 'counter' | 'break') {
-  notice.value = undefined
-  try {
-    // The admin window loads the Host URL, so its origin is what OBS needs.
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)
-    notify(t('chat.copied'), false)
-  } catch {
-    notify(t('chat.copyFailed'), true)
-  }
-}
 
 // The section itself shows no focus ring, so it only takes focus while it has nothing focusable (loading, failed).
 const firstTile = () =>

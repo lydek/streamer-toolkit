@@ -1,4 +1,5 @@
-import type { Schemas } from './api'
+import { shallowRef } from 'vue'
+import { type Schemas, api, client } from './api'
 
 /*
  * The built-in overlays for the OBS sources page (docs/architecture.md OBS 連線): what each shows, its group (as the
@@ -76,4 +77,41 @@ export function overlayRows(sources: Schemas['OverlaySource'][], off: Set<string
     })
     return [...boards, row('leaderboard-other', o, [])]
   })
+}
+
+/** What OBS has of one overlay, for the status link on its pages. */
+export type ObsPresence =
+  | { kind: 'offline' }
+  | { kind: 'missing' }
+  | { kind: 'duplicate'; sources: number }
+  | { kind: 'in'; scenes: number; live: boolean }
+
+/** Where `overlay` (a path, with the query a leaderboard needs) is in OBS, from `GET /api/admin/obs/sources`. */
+export function obsPresence(overlay: string, data: Schemas['ObsSources'] | undefined): ObsPresence {
+  if (!data?.connected) return { kind: 'offline' }
+  const exact = overlay.includes('?')
+  const mine = data.sources.filter((s) => (exact ? s.overlay === overlay : pathOf(s.overlay) === overlay))
+  if (mine.length > 1) return { kind: 'duplicate', sources: mine.length }
+  const scenes = mine[0]?.scenes ?? []
+  if (!scenes.length) return { kind: 'missing' }
+  return { kind: 'in', scenes: scenes.length, live: !!data.live_scene && scenes.includes(data.live_scene) }
+}
+
+// One shared copy for every status link: read when a page with one opens, at most once per couple of seconds.
+const shared = shallowRef<Schemas['ObsSources']>()
+let readAt = 0
+let reading: Promise<void> | undefined
+
+/** The overlays' places in OBS, read again when a page that shows them opens. */
+export function useObsSources() {
+  if (!reading && Date.now() - readAt > 2000) {
+    reading = api(client.GET('/api/admin/obs/sources'))
+      .then((data) => {
+        shared.value = data
+        readAt = Date.now()
+      })
+      .catch(() => {})
+      .finally(() => (reading = undefined))
+  }
+  return shared
 }

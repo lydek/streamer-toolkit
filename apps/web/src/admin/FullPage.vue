@@ -5,10 +5,10 @@
       <Button :label="t('app.home')" icon="pi pi-arrow-left" text @click="goHome(router)" />
       <span v-if="look" class="badge" :class="`tint-${look.tint}`" aria-hidden="true"><i :class="look.icon"></i></span>
       <h1>{{ title }}</h1>
-      <!-- This page's state (e.g. the scene on air) and its overlay's URL, at the right end. -->
+      <!-- This page's state (e.g. the scene on air) and where its overlay is in OBS, at the right end. -->
       <div v-if="status || overlay" class="page-end">
         <span v-if="status" class="status">{{ status }}</span>
-        <Button v-if="overlay" :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined @click="copyObsUrl(overlay)" />
+        <ObsStatusLink v-if="overlay" :overlay="`/overlay/${overlay}/`" />
       </div>
     </header>
     <!-- Third level: the other pages of this page's category, when it has more than one. -->
@@ -28,13 +28,13 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { useToast } from 'primevue/usetoast'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useDrawer } from './drawer'
 import { useModules } from './features'
-import { TILES, errorToast, successToast } from './home'
+import { TILES } from './home'
+import ObsStatusLink from './ObsStatusLink.vue'
 import { goHome, navOpened } from './page'
 import { categoryOf } from './tabs'
 
@@ -44,8 +44,8 @@ const props = defineProps<{
   tile?: string
   /** What this page shows right now, e.g. 目前場景：聊天; nothing on pages without one. */
   status?: string
-  /** The page's one overlay (`/overlay/<overlay>/`), whose URL 「複製 OBS 網址」 copies; a page with several puts
-   * each button by its own overlay instead. */
+  /** The page's one overlay (`/overlay/<overlay>/`), whose place in OBS the header shows; a page with several
+   * puts each status by its own overlay instead. */
   overlay?: string
 }>()
 
@@ -54,23 +54,10 @@ const router = useRouter()
 const route = useRoute()
 const { error } = useDrawer()
 const root = ref<HTMLElement>()
-// Only a page with an overlay copies; the others need no toast service.
-const toast = props.overlay ? useToast() : undefined
 const look = computed(() => TILES.find((tile) => tile.id === props.tile))
 const { hidden } = useModules()
 const category = computed(() => categoryOf(route.path))
 const pageTabs = computed(() => category.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
-
-async function copyObsUrl(overlay: string) {
-  try {
-    // The admin window loads the Host URL, so its origin is what OBS needs.
-    // shortcut: under `tauri dev` this is the Vite URL, which works only while Vite runs.
-    await navigator.clipboard.writeText(`${location.origin}/overlay/${overlay}/`)
-    toast?.add(successToast(t('chat.copied')))
-  } catch {
-    toast?.add(errorToast(t('chat.copyFailed')))
-  }
-}
 
 // A hash names a section to land on (it needs tabindex="-1"); a page opened from a category or page tab keeps the
 // keyboard there (navOpened); otherwise "← Home" takes focus.

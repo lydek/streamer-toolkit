@@ -81,17 +81,17 @@ describe('StageCard export', () => {
 })
 
 describe('StageCard checks', () => {
-  it('copies the OBS URL of an overlay that is not in OBS yet', async () => {
+  it('links an overlay that is not in OBS yet to the OBS sources page, with its status', async () => {
     vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
       Promise.resolve({
         data:
           path === '/api/admin/overlays'
             ? { chat: 0, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, other: 0 }
-            : null,
+            : path === '/api/admin/obs/sources'
+              ? { connected: true, local: true, live_scene: 'Live', scenes: ['Live'], sources: [] }
+              : null,
         response: new Response(null, { status: 200 }),
       })) as never)
-    const writeText = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const wrapper = mount(Blocks, {
       props: { live: { status: 'open', lastSeq: 1 }, modules: [{ id: 'chat', enabled: true, closed: false }] },
       global: { plugins: [testRouter(), i18n, PrimeVue] },
@@ -100,12 +100,11 @@ describe('StageCard checks', () => {
     await flushPromises()
     const row = wrapper.findAll('.checks li').find((li) => li.text().includes(t('stage.checks.overlay.chat.bad')))!
     // Twitch and OBS still lead to where they are fixed; they are problems, a missing overlay only a warning.
-    expect(wrapper.findAll('.checks a').length).toBe(3)
+    expect(wrapper.findAll('.checks li.bad a').length).toBe(3)
     expect(row.classes()).toContain('warn')
     expect(wrapper.findAll('.checks li.bad').length).toBe(3)
-    await row.get('button').trigger('click')
-    await flushPromises()
-    expect(writeText).toHaveBeenCalledWith(`${location.origin}/overlay/chat/`)
-    expect(wrapper.get('[role="status"]').text()).toBe(t('stage.checks.copied'))
+    const link = row.get('a')
+    expect(link.attributes('href')).toBe('/obs-sources')
+    expect(link.text()).toBe(t('obsStatus.missing'))
   })
 })

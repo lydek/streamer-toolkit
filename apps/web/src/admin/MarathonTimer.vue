@@ -1,6 +1,6 @@
 <template>
   <div class="stack">
-    <Button :label="t('chat.copyObsUrl')" icon="pi pi-copy" outlined class="copy" @click="emit('copy')" />
+    <ObsStatusLink overlay="/overlay/marathon/" class="copy" />
     <p class="remaining">
       <output>{{ status ? clockText(remaining) : t('app.loading') }}</output>
       <span v-if="status" class="state">{{ t(stateKey) }}</span>
@@ -81,12 +81,13 @@ import { remainingMs } from '../overlay/marathon/marathon'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
 import { clockText } from './home'
+import ObsStatusLink from './ObsStatusLink.vue'
 
 const props = defineProps<{
   /** The latest `counter.marathon` event; `undefined` until the live connection has it. */
   event?: Schemas['MarathonEvent']
 }>()
-const emit = defineEmits<{ copy: []; error: [unknown] }>()
+const emit = defineEmits<{ error: [unknown] }>()
 const { t } = useI18n()
 
 const status = computed(() => props.event?.payload)
