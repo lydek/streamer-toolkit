@@ -67,6 +67,11 @@
         </tr>
       </tbody>
     </table>
+    <!-- The built-in overlays' look, chosen apart from the admin UI's; it covers the chat overlay's text size too. -->
+    <section class="stack appearance" aria-labelledby="appearance-heading">
+      <h2 id="appearance-heading">{{ t('screenTools.appearance.heading') }}</h2>
+      <AppearanceSettings :appearance="live.appearance" />
+    </section>
   </FullPage>
 </template>
 
@@ -79,6 +84,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import AppearanceSettings from './AppearanceSettings.vue'
 import { useModules } from './features'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
@@ -231,5 +237,9 @@ tbody th[scope='row'] {
 
 .end {
   text-align: end;
+}
+
+.appearance {
+  margin-top: 1.5rem;
 }
 </style>

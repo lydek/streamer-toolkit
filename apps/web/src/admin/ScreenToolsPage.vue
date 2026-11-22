@@ -3,10 +3,6 @@
   <FullPage :title="t('modules.names.screen-tools')" tile="screen-tools" overlay="break" :status="status">
     <BreakCardSettings :card="live.breakCard" @error="report" />
 
-    <section class="stack" aria-labelledby="appearance-heading">
-      <h2 id="appearance-heading">{{ t('screenTools.appearance.heading') }}</h2>
-      <AppearanceSettings :appearance="live.appearance" />
-    </section>
 
   </FullPage>
 </template>
@@ -17,7 +13,6 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError } from './api'
-import AppearanceSettings from './AppearanceSettings.vue'
 import BreakCardSettings from './BreakCardSettings.vue'
 import FullPage from './FullPage.vue'
 import { errorToast, useLiveEvents } from './home'

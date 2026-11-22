@@ -166,6 +166,21 @@ impl<R: OverlayRepository> OverlayService<R> {
         Ok(self.repo.appearance().await?.unwrap_or_default())
     }
 
+    /// Upgrading from the chat overlay's own text size: takes `percent` as the overlays' text size while that is
+    /// still the default 100%; `false` when the broadcaster's own size was kept.
+    pub async fn adopt_text_size(&self, percent: u16) -> Result<bool, OverlayError> {
+        let current = self.appearance().await?;
+        if current.text_size != Appearance::default().text_size {
+            return Ok(false);
+        }
+        self.set_appearance(Appearance {
+            text_size: percent,
+            ..current
+        })
+        .await
+        .map(|_| true)
+    }
+
     pub async fn set_appearance(&self, appearance: Appearance) -> Result<Appearance, OverlayError> {
         if !appearance.valid() {
             return Err(OverlayError::Invalid);

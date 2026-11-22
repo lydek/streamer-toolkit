@@ -87,7 +87,6 @@ use crate::{
         obs::remove_overlay,
         templates::chat_template,
         templates::select_chat_template,
-        templates::set_chat_text_size,
         templates::alert_template,
         templates::select_alert_template,
         update::update,

@@ -148,35 +148,32 @@ describe('ChatPreview', () => {
     wrapper.unmount()
   })
 
-  it('saves the overlay text size, shows the announced one and starts previews with it', async () => {
+  it('starts previews with the text size the Host announces', async () => {
     const wrapper = await setup()
-    const select = wrapper.getComponent(Select)
-    expect(select.props('modelValue')).toBeNull()
-    select.vm.$emit('update:modelValue', 32)
-    await flushPromises()
-    expect(calls.put).toHaveBeenCalledWith('/api/admin/templates/chat/text-size', { body: { text_size: 32 } })
-
     const size: Incoming = { type: 'chat.text_size', id: 's', version: 1, seq: 4, occurredAt: '', source: 'system', payload: { textSize: 32 } }
     const [frame] = frames(wrapper)
     const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {})
     calls.listener!(size)
     await flushPromises()
-    expect(select.props('modelValue')).toBe(32)
     expect(post).toHaveBeenLastCalledWith(size, '*')
     await wrapper.get('iframe').trigger('load')
     const reloaded = post.mock.calls.at(-1)![0] as Extract<Incoming, { type: 'snapshot' }>
     expect(reloaded.payload['chat.text_size']).toEqual([size])
+    // The template page only picks the template: the text size is the overlays' appearance now.
+    expect(wrapper.findComponent(Select).exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('reports a text size the Host refuses', async () => {
+  it("starts previews with the overlays' appearance, as the overlay in OBS has it", async () => {
     const wrapper = await setup()
-    calls.put.mockRejectedValueOnce(new ApiError('template.invalid_text_size'))
-    wrapper.getComponent(Select).vm.$emit('update:modelValue', 99)
+    const look: Incoming = { type: 'screen.appearance', id: 'a', version: 1, seq: 5, occurredAt: '', source: 'system', payload: { theme: 'contrast', textSize: 150 } }
+    const [frame] = frames(wrapper)
+    const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {})
+    calls.listener!(look)
     await flushPromises()
-    expect(calls.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ severity: 'error', summary: i18n.global.t('errors.template.invalid_text_size') }),
-    )
+    await wrapper.get('iframe').trigger('load')
+    const reloaded = post.mock.calls.at(-1)![0] as Extract<Incoming, { type: 'snapshot' }>
+    expect(reloaded.payload['screen.appearance']).toEqual([look])
     wrapper.unmount()
   })
 })

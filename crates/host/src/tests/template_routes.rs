@@ -112,7 +112,7 @@ async fn first_run_serves_the_built_in_default_with_overlay_headers() {
     );
     assert_eq!(
         template_status(&app).await,
-        serde_json::json!({ "selected": "default", "error": null, "text_size": null })
+        serde_json::json!({ "selected": "default", "error": null })
     );
     let (status, headers, body) = get_body(&app, "/templates/chat/template.html").await;
     assert_eq!(status, StatusCode::OK);
@@ -241,7 +241,7 @@ async fn custom_template_serves_assets_in_subfolders() {
     let (app, dir) = custom_template_app("assets");
     assert_eq!(
         template_status(&app).await,
-        serde_json::json!({ "selected": "custom", "error": null, "text_size": null })
+        serde_json::json!({ "selected": "custom", "error": null })
     );
     std::fs::create_dir_all(dir.join("templates/chat/img")).unwrap();
     std::fs::write(dir.join("templates/chat/img/logo.svg"), "<svg/>").unwrap();
@@ -348,42 +348,41 @@ async fn user_folder_changes_are_ignored_while_a_built_in_template_is_selected()
     let _ = std::fs::remove_dir_all(dir);
 }
 
-fn put_text_size(size: &str) -> Request {
-    get_req("/api/admin/templates/chat/text-size", "127.0.0.1:47810")
-        .method(Method::PUT)
-        .header(header::ORIGIN, "http://127.0.0.1:47810")
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(format!(r#"{{"text_size":{size}}}"#)))
-        .unwrap()
-}
-
 #[tokio::test]
-async fn the_chat_overlay_text_size_is_checked_saved_and_kept() {
-    let (app, dir) = template_app("text-size");
-    assert_eq!(
-        template_status(&app).await["text_size"],
-        serde_json::Value::Null,
-        "each template's own"
-    );
-    for bad in ["15", "49", "\"big\""] {
-        let res = app.clone().oneshot(put_text_size(bad)).await.unwrap();
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+async fn an_old_chat_text_size_carries_over_into_the_overlay_text_size_once() {
+    let dir = std::env::temp_dir().join(format!("st-tpl-carry-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    // 36px with the default template (24px) is 150%.
+    settings::update(&dir, |s| s.chat_text_size = Some(36)).unwrap();
+    let mut config = test_config();
+    config.data_dir = dir.clone();
+    config.db = db::memory_migrated().await;
+    let app = router(config).unwrap();
+    for _ in 0..200 {
+        if settings::load(&dir).chat_text_size.is_none() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    let res = app.clone().oneshot(put_text_size("32")).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
-    assert_eq!(template_status(&app).await["text_size"], 32);
-    assert_eq!(settings::load(&dir).chat_text_size, Some(32));
-
-    // A restart reads it again; null goes back to each template's own size.
-    let restarted = template_router(&dir);
-    assert_eq!(template_status(&restarted).await["text_size"], 32);
-    let res = restarted
+    assert_eq!(
+        settings::load(&dir).chat_text_size,
+        None,
+        "cleared, so it runs once"
+    );
+    let res = app
         .clone()
-        .oneshot(put_text_size("null"))
+        .oneshot(
+            get_req("/api/admin/screen-tools/appearance", "127.0.0.1:47810")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
-    assert_eq!(settings::load(&dir).chat_text_size, None);
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let appearance: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(appearance["textSize"], 150);
     let _ = std::fs::remove_dir_all(dir);
 }

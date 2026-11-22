@@ -14,7 +14,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::get,
 };
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
@@ -182,17 +182,6 @@ pub(crate) struct TemplateStatus {
     /// get the default template instead of the user's; otherwise `null`.
     #[schema(required)]
     error: Option<String>,
-    /// The overlay text size in px; `null` keeps each template's own size.
-    #[schema(required)]
-    text_size: Option<u16>,
-}
-
-/// `PUT /api/admin/templates/chat/text-size`.
-#[derive(Deserialize, ToSchema)]
-pub(crate) struct TextSizeChoice {
-    /// 16–48 px, or `null` for each template's own size.
-    #[schema(required)]
-    text_size: Option<u16>,
 }
 
 /// `PUT /api/admin/templates/chat`.
@@ -219,7 +208,32 @@ pub(crate) struct Templates {
     error: RwLock<Option<&'static str>>,
 }
 
+/// A built-in chat template's own text size in px; `None` for the user's template.
+fn own_text_size(template: ChatTemplate) -> Option<u16> {
+    match template {
+        ChatTemplate::Default | ChatTemplate::Bubble => Some(24),
+        ChatTemplate::Compact => Some(20),
+        ChatTemplate::Custom => None,
+    }
+}
+
+/// The overlays' text size (percent, in steps of 10 within 50-200) that the chat overlay's old size in px came to
+/// with `template`; `None` when there is nothing to carry over: no size, the template's own size, or the user's
+/// template, whose sizes are its own.
+pub(crate) fn carried_text_size(px: Option<u16>, template: &str) -> Option<u16> {
+    let own = own_text_size(ChatTemplate::from_id(template))?;
+    let px = px.filter(|&px| px != own)?;
+    let percent = (f64::from(px) * 100.0 / f64::from(own) / 10.0).round() as u16 * 10;
+    Some(percent.clamp(50, 200))
+}
+
 impl Templates {
+    /// The chat text size of settings.json is gone after the upgrade: overlays are told there is none.
+    pub(crate) fn forget_text_size(&self) {
+        *self.text_size.write().unwrap() = None;
+        publish_text_size(&self.bus, None);
+    }
+
     /// Reads the selection, checks the user template and starts watching it.
     pub(crate) fn start(data_dir: &Path, bus: Arc<EventBus>) -> Arc<Self> {
         let dir = data_dir.join("templates").join("chat");
@@ -297,10 +311,6 @@ pub(crate) fn admin_routes(t: Arc<Templates>) -> Router {
             get(chat_template).put(select_chat_template),
         )
         .route(
-            "/api/admin/templates/chat/text-size",
-            put(set_chat_text_size),
-        )
-        .route(
             "/api/admin/templates/alerts",
             get(alert_template).put(select_alert_template),
         )
@@ -362,45 +372,7 @@ pub(crate) async fn chat_template(State(t): State<Arc<Templates>>) -> Json<Templ
     Json(TemplateStatus {
         selected: t.selected(),
         error: t.error().map(Into::into),
-        text_size: *t.text_size.read().unwrap(),
     })
-}
-
-/// Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once
-/// (`chat.text_size`).
-#[utoipa::path(
-    put,
-    path = "/api/admin/templates/chat/text-size",
-    tag = "admin",
-    request_body = TextSizeChoice,
-    responses(
-        (status = 204),
-        (status = 400, description = "`template.invalid_text_size`: not between 16 and 48", body = ErrorBody),
-        (status = 500, description = "`settings.save_failed`", body = ErrorBody),
-    )
-)]
-pub(crate) async fn set_chat_text_size(
-    State(t): State<Arc<Templates>>,
-    body: Result<Json<TextSizeChoice>, JsonRejection>,
-) -> Response {
-    let Ok(Json(TextSizeChoice { text_size })) = body else {
-        return error(StatusCode::BAD_REQUEST, "template.invalid_text_size");
-    };
-    if text_size.is_some_and(|n| !TEXT_SIZES.contains(&n)) {
-        return error(StatusCode::BAD_REQUEST, "template.invalid_text_size");
-    }
-    let saved = tokio::task::spawn_blocking(move || {
-        let _turn = t.switching.lock().unwrap();
-        settings::update(&t.data_dir, |s| s.chat_text_size = text_size)?;
-        *t.text_size.write().unwrap() = text_size;
-        publish_text_size(&t.bus, text_size);
-        std::io::Result::Ok(())
-    })
-    .await;
-    match saved {
-        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
-        _ => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
-    }
 }
 
 /// Switches the chat overlay template and saves the choice; overlays reload it at once (`template.changed`).
@@ -657,6 +629,19 @@ fn publish_changed(bus: &EventBus, overlay: &str) {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    #[test]
+    fn an_old_chat_text_size_carries_over_as_the_nearest_ten_percent() {
+        assert_eq!(super::carried_text_size(Some(36), "default"), Some(150));
+        assert_eq!(super::carried_text_size(Some(26), "compact"), Some(130));
+        assert_eq!(super::carried_text_size(Some(29), "bubble"), Some(120));
+        assert_eq!(super::carried_text_size(Some(48), "compact"), Some(200));
+        assert_eq!(super::carried_text_size(Some(16), "bubble"), Some(70));
+        // Nothing to carry over: no size, the template's own size, or the user's template.
+        assert_eq!(super::carried_text_size(None, "default"), None);
+        assert_eq!(super::carried_text_size(Some(24), "default"), None);
+        assert_eq!(super::carried_text_size(Some(32), "custom"), None);
+    }
+
     use super::*;
 
     /// A user template folder holding a copy of the built-in default.
