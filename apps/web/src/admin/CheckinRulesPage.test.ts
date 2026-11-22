@@ -7,6 +7,8 @@ import { i18n } from '../i18n'
 import CheckinRulesPage from './CheckinRulesPage.vue'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const { client } = vi.hoisted(() => ({ client: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn() } }))
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), client }))
@@ -93,7 +95,7 @@ describe('CheckinRulesPage', () => {
     await wrapper.get('#checkin-command').setValue('deaths')
     await wrapper.get('#checkin-command').trigger('blur')
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain('已被計數器的「死亡次數」使用。'),
+      expect(wrapper.text()).toContain(t('errors.commands.taken', { feature: t('modules.names.counter'), label: '死亡次數' })),
     )
     expect(wrapper.get<HTMLInputElement>('#checkin-command').element.value).toBe('打卡')
     wrapper.unmount()

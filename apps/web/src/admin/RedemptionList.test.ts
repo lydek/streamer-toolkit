@@ -5,6 +5,8 @@ import { i18n } from '../i18n'
 import RedemptionList from './RedemptionList.vue'
 import type { RedemptionRecord } from './redemptions'
 
+const t = i18n.global.t
+
 const record = (over: Partial<RedemptionRecord> = {}): RedemptionRecord => ({
   id: 'r1',
   user_login: 'viewer',
@@ -38,7 +40,7 @@ it('shows viewer and Twitch text as text, never as markup', () => {
 it('names the status in words with its icon, and leaves out an empty input', () => {
   const wrapper = list([record({ status: 'canceled' }), record({ id: 'r2', status: 'unknown', user_input: 'hi' })])
   const statuses = wrapper.findAll('.status')
-  expect(statuses.map((s) => s.text())).toEqual(['已退還', '不明'])
+  expect(statuses.map((s) => s.text())).toEqual([t('redemption.status.canceled'), t('redemption.status.unknown')])
   expect(statuses[0].find('i').attributes('aria-hidden')).toBe('true')
   expect(wrapper.findAll('.input').map((p) => p.text())).toEqual(['hi'])
   expect(wrapper.find('time').attributes('datetime')).toBe('2026-11-16T10:00:00.000Z')
@@ -50,5 +52,12 @@ it('says what each redemption played: each item and its result, — for nothing,
     record({ id: 'b', played: [] }),
     record({ id: 'c', played: null }),
   ]).findAll('.played')
-  expect(rows.map((r) => r.text())).toEqual(['播放：集點卡已播、影片或 GIF：檔案不見了', '播放：—', '播放：沒有紀錄'])
+  const label = t('redemption.played.label')
+  const entry = (what: string, result: string) =>
+    t('redemption.played.entry', { what: t(`redemption.played.what.${what}`), result: t(`redemption.played.result.${result}`) })
+  expect(rows.map((r) => r.text())).toEqual([
+    `${label}${entry('card', 'played')}、${entry('media', 'file_missing')}`,
+    label + t('redemption.played.none'),
+    label + t('redemption.played.untracked'),
+  ])
 })

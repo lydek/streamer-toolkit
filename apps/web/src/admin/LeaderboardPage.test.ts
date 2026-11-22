@@ -7,6 +7,8 @@ import { client } from './api'
 import LeaderboardPage from './LeaderboardPage.vue'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
 
 beforeEach(() => {
@@ -38,7 +40,7 @@ it('takes the boards from a reconnect snapshot', async () => {
   )
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
-  await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === '全部')!.trigger('click')
+  await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === t('leaderboard.periods.all'))!.trigger('click')
   const boards = { boards: [{ board: 'checkins', period: 'all', entries: [{ name: '莓莓', value: 50 }] }] }
   const update = { id: 'u', type: 'leaderboard.update', version: 1, seq: 7, occurredAt: '', source: 'system', payload: boards }
   const kinds = ['chat.removed', 'chat.message', 'obs.status', 'obs.state', 'presentation.queue', 'stream.status', 'bgm.player']
@@ -54,10 +56,10 @@ it('shows every board side by side for the chosen period, and copies one with it
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   expect(wrapper.findAll('section.board')).toHaveLength(4)
-  await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === '全部')!.trigger('click')
+  await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === t('leaderboard.periods.all'))!.trigger('click')
   const checkins = wrapper.get('section[aria-labelledby="lb-checkins"]')
   expect(checkins.text()).toContain('小魚')
-  expect(checkins.text()).toContain('打卡頁的累計次數')
+  expect(checkins.text()).toContain(t('leaderboard.allCheckins'))
   await checkins.get('button').trigger('click')
   await flushPromises()
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${location.origin}/overlay/leaderboard/?board=checkins&period=all`)
@@ -74,6 +76,6 @@ it('says which periods of each board are in OBS', async () => {
     })) as never)
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
-  expect(wrapper.get('section[aria-labelledby="lb-bits"] .in-obs').text()).toBe('在 OBS：本場')
-  expect(wrapper.get('section[aria-labelledby="lb-chat"] .in-obs').text()).toBe('還沒加入 OBS')
+  expect(wrapper.get('section[aria-labelledby="lb-bits"] .in-obs').text()).toBe(t('leaderboard.inObs', { periods: t('leaderboard.periods.stream') }))
+  expect(wrapper.get('section[aria-labelledby="lb-chat"] .in-obs').text()).toBe(t('obsStatus.missing'))
 })

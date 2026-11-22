@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { i18n } from '../i18n'
 import { subjectText, waitMs } from './queue'
+
+const t = i18n.global.t
 
 const start = Date.parse('2026-11-19T10:00:00.000Z')
 
@@ -33,6 +36,6 @@ describe('waitMs', () => {
 
 describe('subjectText', () => {
   it('names a reward video with who redeemed it', () => {
-    expect(subjectText({ kind: 'media', media: '貓咪跳舞', viewer: '橘子' })).toBe('影片：貓咪跳舞（橘子兌換）')
+    expect(subjectText({ kind: 'media', media: '貓咪跳舞', viewer: '橘子' })).toBe(t('queue.item.media', { media: '貓咪跳舞', viewer: '橘子' }))
   })
 })
