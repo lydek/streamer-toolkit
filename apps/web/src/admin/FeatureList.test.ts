@@ -2,6 +2,7 @@
 import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
 import { testRouter } from './testRouter'
@@ -44,5 +45,21 @@ describe('FeatureList', () => {
     expect(sections('聊天', wrapper)).toEqual([['聊天室', ['聊天過濾']]])
     await wrapper.get('input[type="search"]').setValue('')
     expect(sections('聊天', wrapper)).toHaveLength(2)
+  })
+
+  it('gives the switch its focus back once the change it started has saved', async () => {
+    const wrapper = mount(FeatureList, {
+      props: { modules: [{ id: 'sound', enabled: true, closed: false }], busy: false, loadText: '' },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    await wrapper.get('#module-sound').trigger('change')
+    expect(wrapper.emitted('toggle')).toHaveLength(1)
+    await wrapper.setProps({ busy: true })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await wrapper.setProps({ busy: false })
+    await nextTick()
+    expect(document.activeElement?.id).toBe('module-sound')
+    wrapper.unmount()
   })
 })

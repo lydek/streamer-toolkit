@@ -17,7 +17,7 @@
         <span v-if="p.soon" class="off" aria-disabled="true" :title="t('home.unbuilt')">
           {{ t(p.tabLabel ?? p.label) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
         </span>
-        <RouterLink v-else :to="p.path">{{ t(p.tabLabel ?? p.label) }}</RouterLink>
+        <RouterLink v-else :to="p.path" @click="navOpened.path = p.path">{{ t(p.tabLabel ?? p.label) }}</RouterLink>
       </template>
     </nav>
     <!-- Sticky, so a failed setting further down the page still shows its error. -->
@@ -35,7 +35,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDrawer } from './drawer'
 import { useModules } from './features'
 import { TILES, errorToast, successToast } from './home'
-import { goHome } from './page'
+import { goHome, navOpened } from './page'
 import { categoryOf } from './tabs'
 
 const props = defineProps<{
@@ -72,10 +72,16 @@ async function copyObsUrl(overlay: string) {
   }
 }
 
-// A hash names a section to land on (it needs tabindex="-1"); otherwise "← Home" takes focus.
+// A hash names a section to land on (it needs tabindex="-1"); a page opened from a category or page tab keeps the
+// keyboard there (navOpened); otherwise "← Home" takes focus.
 onMounted(() => {
   const target = route.hash ? document.getElementById(decodeURIComponent(route.hash.slice(1))) : null
-  ;(target ?? root.value?.querySelector('button'))?.focus()
+  const fromNav = navOpened.path === route.path
+  navOpened.path = ''
+  const kept = fromNav && document.activeElement !== document.body && document.activeElement?.isConnected
+  if (kept && !target) return
+  const tab = fromNav ? root.value?.querySelector<HTMLElement>('.page-tabs [aria-current="page"]') : null
+  ;(target ?? tab ?? root.value?.querySelector('button'))?.focus()
 })
 </script>
 

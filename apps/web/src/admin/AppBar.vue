@@ -13,6 +13,8 @@
         <span v-else-if="live.stream?.state === 'offline'" class="live-pill offline">
           <span class="dot" aria-hidden="true"></span>{{ t('nav.offline') }}
         </span>
+        <!-- Screen readers hear going live or ending, never the ticking timer. -->
+        <span class="sr-only" aria-live="polite">{{ liveState }}</span>
         <span v-if="live.obsState?.streaming" class="on-air">{{ t('nav.streaming') }}</span>
         <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
@@ -124,7 +126,7 @@
       <button ref="editEl" :hidden="!measuring && needMore" type="button" class="more" @click="editor?.open()">
         <i class="pi pi-pencil" aria-hidden="true"></i>{{ t('nav.edit') }}
       </button>
-      <Menu id="tabs-more" ref="moreMenu" :model="moreItems" :pt="morePt" popup @show="moreOpen = true" @hide="moreOpen = false" />
+      <Menu id="tabs-more" ref="moreMenu" :model="moreItems" :pt="morePt" popup @show="moreOpen = true" @hide="onMoreHide" />
     </nav>
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
@@ -143,7 +145,7 @@
           {{ item.label }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
         </span>
         <RouterLink v-else v-slot="{ href, navigate }" :to="item.to" custom>
-          <a :href="href" :aria-current="item.current" @click="navigate">{{ item.label }}</a>
+          <a :href="href" :aria-current="item.current" @click="navOpened.path = item.to!; navigate($event)">{{ item.label }}</a>
         </RouterLink>
       </template>
     </nav>
@@ -168,6 +170,7 @@ import { useModules } from './features'
 import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
 import SimulateDialog from './SimulateDialog.vue'
+import { navOpened } from './page'
 import { GROUPS, type TabGroup, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 
 const { t } = useI18n()
@@ -185,6 +188,10 @@ const live = useLiveEvents()
 // How long the stream has run, ticking each second, and the viewers from the last minute's check.
 const now = ref(Date.now())
 const clock = window.setInterval(() => (now.value = Date.now()), 1000)
+const liveState = computed(() => {
+  const state = live.value.stream?.state
+  return state === 'live' ? t('nav.live') : state === 'offline' ? t('nav.offline') : ''
+})
 const liveMeta = computed(() => {
   const s = live.value.stream
   if (s?.state !== 'live' || !s.startedAt) return ''
@@ -310,6 +317,14 @@ const moreEl = ref<HTMLElement>()
 const editEl = ref<HTMLElement>()
 const moreMenu = ref<InstanceType<typeof Menu>>()
 const moreOpen = ref(false)
+// Picking an item removes the menu, which drops focus; it goes back to "More" unless the item moved it (the tab
+// editor dialog).
+function onMoreHide() {
+  moreOpen.value = false
+  void nextTick(() => {
+    if (!document.activeElement || document.activeElement === document.body) moreEl.value?.focus()
+  })
+}
 const shown = ref(GROUPS.length)
 const measuring = ref(false)
 const inMore = computed(() => [...pinned.value.slice(shown.value), ...unpinned.value])

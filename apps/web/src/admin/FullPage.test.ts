@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
 import { i18n } from '../i18n'
 import FullPage from './FullPage.vue'
+import { navOpened } from './page'
 import { testRouter } from './testRouter'
 
 const toastAdd = vi.hoisted(() => vi.fn())
@@ -74,5 +75,27 @@ describe('FullPage page tabs', () => {
     expect((await at('/songs')).find('nav.page-tabs').exists()).toBe(false)
     hiddenPages.set = new Set(['/card-style'])
     expect((await at('/checkin')).find('nav.page-tabs').exists()).toBe(false)
+  })
+
+  it('keeps the keyboard on the category or page tab that opened the page, else focuses "← Home"', async () => {
+    const router = testRouter()
+    await router.push('/card-style')
+    navOpened.path = '/card-style'
+    const viaTab = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
+    expect(document.activeElement?.textContent).toBe('卡片樣式')
+    viaTab.unmount()
+    const direct = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
+    expect(document.activeElement?.textContent).toContain('回首頁')
+    direct.unmount()
+    // A category link stays on the app bar, so it keeps focus.
+    const category = document.body.appendChild(document.createElement('a'))
+    category.href = '#'
+    await router.push('/card-style')
+    category.focus()
+    navOpened.path = '/card-style'
+    const viaCategory = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
+    expect(document.activeElement).toBe(category)
+    viaCategory.unmount()
+    category.remove()
   })
 })
