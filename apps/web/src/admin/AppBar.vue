@@ -666,6 +666,7 @@ onBeforeUnmount(() => {
   }
 
   .tabs > a,
+  .tabs > .off,
   .tabs > .more {
     flex: 1 1 0;
     min-width: 0;
@@ -677,6 +678,7 @@ onBeforeUnmount(() => {
   }
 
   .tabs > a i,
+  .tabs > .off i,
   .tabs > .more i {
     font-size: 1.125rem;
   }
@@ -684,6 +686,13 @@ onBeforeUnmount(() => {
   .tabs > a[aria-current],
   .tabs > .more.current {
     color: var(--p-primary-color);
+  }
+
+  /* The category row scrolls edge to edge; its first item lines up with the page. */
+  .sub-tabs {
+    margin: 0 -1rem;
+    padding-inline: 1rem;
+    scroll-padding-inline: 1rem;
   }
 }
 </style>

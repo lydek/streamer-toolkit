@@ -38,10 +38,17 @@ main :is(form, p) {
   max-width: 48rem;
 }
 
-/* Below 600px the group tabs are a fixed bottom bar (AppBar.vue); keep the page end clear of it. */
+/* Below 600px the group tabs are a fixed bottom bar (AppBar.vue); keep the page end clear of it, and show
+   notifications just above it. */
 @media (max-width: 599.98px) {
   body {
     padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+
+  /* !important: PrimeVue writes the toast's position as an inline style. */
+  .p-toast.p-toast-top-right {
+    top: auto !important;
+    bottom: calc(4.75rem + env(safe-area-inset-bottom)) !important;
   }
 }
 
@@ -112,6 +119,11 @@ main :is(form, p) {
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
+
+/* A text box keeps its default width only while it fits, so large text never widens a narrow page. */
+main :is(input, .p-inputtext, .p-inputnumber, .p-select) {
+  max-width: 100%;
 }
 
 form,
