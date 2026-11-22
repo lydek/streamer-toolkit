@@ -16,7 +16,12 @@ export function switchScene(scene: string) {
   return api(client.PUT('/api/admin/obs/scene', { body: { scene } }))
 }
 
-export function updateItem(scene: string, item: number, change: { enabled?: boolean; locked?: boolean }) {
+/** `position`: the item's new place, counted front to back as the scene lists its items (0 is the front). */
+export function updateItem(
+  scene: string,
+  item: number,
+  change: { enabled?: boolean; locked?: boolean; position?: number },
+) {
   return api(client.PUT('/api/admin/obs/item', { body: { scene, item, ...change } }))
 }
 

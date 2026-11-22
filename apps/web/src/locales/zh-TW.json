@@ -1229,6 +1229,10 @@
     "locked": "鎖定",
     "showItem": "顯示「{item}」",
     "lockItem": "鎖定「{item}」",
+    "move": "順序",
+    "forward": "「{item}」往前",
+    "backward": "「{item}」往後",
+    "duplicate": "重複",
     "kinds": {
       "scene": "場景",
       "group": "群組",

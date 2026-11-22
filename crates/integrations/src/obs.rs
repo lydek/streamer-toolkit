@@ -21,7 +21,7 @@ use obws::{
         EventSubscription,
         inputs::Create,
         inputs::InputId,
-        scene_items::{CreateSceneItem, SetEnabled, SetLocked},
+        scene_items::{CreateSceneItem, SetEnabled, SetIndex, SetLocked},
         scenes::SceneId,
         sources::SourceId,
     },
@@ -224,6 +224,36 @@ impl ObsControl {
             })
             .await
             .map(drop)
+            .map_err(command_error)
+    }
+
+    /// `SetSceneItemIndex`. OBS counts from the bottom item, so the front-to-back position is turned around
+    /// against the scene's item count.
+    pub async fn set_item_position(
+        &self,
+        scene: &str,
+        item: i64,
+        position: u32,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        let count = client
+            .scene_items()
+            .list(SceneId::Name(scene))
+            .await
+            .map_err(command_error)?
+            .len();
+        let index = u32::try_from(count)
+            .ok()
+            .and_then(|count| count.checked_sub(position + 1))
+            .ok_or(StreamingError::NotFound)?;
+        client
+            .scene_items()
+            .set_index(SetIndex {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                index,
+            })
+            .await
             .map_err(command_error)
     }
 
@@ -934,6 +964,8 @@ mod tests {
             .unwrap();
         control.add_source("BRB", "Chat").await.unwrap();
         control.remove_item("Live", 9).await.unwrap();
+        // Front to back, position 0 of the two items is OBS's index 1.
+        control.set_item_position("Live", 2, 0).await.unwrap();
         assert_eq!(
             *fake.commands.lock().unwrap(),
             vec![
@@ -962,6 +994,10 @@ mod tests {
                 (
                     "RemoveSceneItem".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 9})
+                ),
+                (
+                    "SetSceneItemIndex".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemIndex": 1})
                 ),
             ]
         );
