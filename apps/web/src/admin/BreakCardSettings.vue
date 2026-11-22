@@ -197,7 +197,10 @@ async function hide() {
   gap: 0.5rem;
 }
 
+/* The OBS canvas scaled to the frame: the overlay's sizes at 1920px wide, in container units (1px = 100cqw / 1920),
+   so the card keeps its proportions at any width and its text never wraps. */
 .preview {
+  container-type: inline-size;
   display: grid;
   place-items: center;
   aspect-ratio: 16 / 9;
@@ -208,15 +211,20 @@ async function hide() {
 .card {
   display: grid;
   justify-items: center;
-  gap: 0.25rem;
-  padding: 1rem 1.75rem;
-  border-radius: 0.75rem;
+  gap: calc(100cqw * 4 / 1920);
+  padding: calc(100cqw * 16 / 1920) calc(100cqw * 28 / 1920);
+  border-radius: calc(100cqw * 12 / 1920);
   background: rgb(0 0 0 / 70%);
   color: #fff;
+  white-space: nowrap;
+}
+
+.card b {
+  font-size: calc(100cqw * 24 / 1920);
 }
 
 .card output {
-  font-size: 2rem;
+  font-size: calc(100cqw * 32 / 1920);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

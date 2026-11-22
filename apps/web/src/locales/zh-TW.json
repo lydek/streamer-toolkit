@@ -67,6 +67,7 @@
       "raids": "揪團與 SO"
     },
     "pageTabs": {
+      "breakCard": "休息卡片",
       "alertTemplates": "樣板",
       "checkin": "打卡名單",
       "rewards": "獎勵"
@@ -214,6 +215,14 @@
       "name": "音效",
       "desc": "音效庫與各功能的音效"
     },
+    "goals": {
+      "name": "目標條",
+      "desc": "訂閱與小奇點目標"
+    },
+    "captions": {
+      "name": "即時字幕",
+      "desc": "把你說的話顯示在畫面上"
+    },
     "screenTools": {
       "name": "畫面工具",
       "desc": "休息卡片、目標條、跑馬燈"
@@ -356,6 +365,22 @@
     "modes": {
       "name": "模式",
       "desc": "一鍵切換場景、音訊與要顯示的東西。"
+    },
+    "warnings": {
+      "name": "警語",
+      "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒。"
+    },
+    "media": {
+      "name": "影片與 GIF",
+      "desc": "兌換時播放的影片與 GIF 檔案。"
+    },
+    "goals": {
+      "name": "目標條",
+      "desc": "訂閱與小奇點目標。"
+    },
+    "captions": {
+      "name": "即時字幕",
+      "desc": "把你說的話顯示在畫面上。"
     },
     "marathon": {
       "name": "訂閱馬拉松",

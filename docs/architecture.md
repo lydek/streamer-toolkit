@@ -198,13 +198,13 @@ apps/
   - 顯示時存下倒數結束的時間，重新啟動工具或重新載入 Overlay 都顯示同一個時間；每次變動與啟動時發布 `screen.break`（整張卡片），快照只保留最新一則。Overlay 自己往下算，到 0 換成結束文字，卡片留著直到手動隱藏；倒數結束不會自動切場景。
   - 警語（`/overlay/warnings/`，`?kind=warnings`）：出問題時在直播畫面上用小字提醒，觀眾也看得到。設定存在 `overlays_warnings`（一筆：三個開關、麥克風靜音幾秒才提醒、要看的 OBS 音訊輸入名稱）；預設開「聊天室 Overlay 沒連上」與「麥克風靜音超過 30 秒」，Twitch 中斷預設關。管理 API：`GET`／`PUT /api/admin/screen-tools/warnings`（秒數 1–3600）。
     - Host 每 0.5 秒把看到的狀態交給模組：有沒有開著的聊天室 Overlay（`?kind=chat` 的連線數）、Twitch EventSub 是否連上、OBS 的音訊輸入（OBS 沒連上時為未知）。模組只在狀態或設定改變時發布 `screen.warnings`（設定加上狀態），快照只保留最新一則。
-    - 麥克風：從 OBS 的輸入清單選（清單本來就只列有靜音狀態的輸入，也就是有音訊的輸入）；沒選就不檢查。模組記下第一次看到靜音的時間，Overlay 在滿設定的秒數後顯示，取消靜音就消失；換一個輸入重新計時。OBS 連著但清單裡沒有選的輸入時標記 `micMissing`，畫面工具頁提示重新選擇，此時不檢查靜音。
+    - 麥克風：從 OBS 的輸入清單選（清單本來就只列有靜音狀態的輸入，也就是有音訊的輸入）；沒選就不檢查。模組記下第一次看到靜音的時間，Overlay 在滿設定的秒數後顯示，取消靜音就消失；換一個輸入重新計時。OBS 連著但清單裡沒有選的輸入時標記 `micMissing`，警語頁（`/admin/warnings`）提示重新選擇，此時不檢查靜音。
   - 疊加層外觀：內建 Overlay 的主題（`dark` 深色、`cream` 奶油、`contrast` 高對比）與文字大小（50–200%，每 10%），和管理介面的主題分開。存在 `overlays_appearance`（一筆）；管理 API `GET`／`PUT /api/admin/screen-tools/appearance`；每次變動與啟動時發布 `screen.appearance`，快照只保留最新一則，已開的 Overlay 立刻換，不用重新整理。
     - 套用方式：Overlay 頁收到後在頁面根節點設 CSS 變數（`--ov-fg` 文字、`--ov-bg` 底色、`--ov-accent` 強調色、`--ov-shadow` 文字陰影、`--ov-scale` 文字倍率）；深色、100% 不設任何變數，就是內建 Overlay 原本的樣子。內建 Overlay（休息卡片、警語、計數器、馬拉松計時器、集點卡、排行榜）與聊天室、特效的內建樣板讀這些變數，原本的值當備援；使用者自訂樣板不讀，所以不受影響。Host 的測試檢查每個內建樣板的 CSS 都有讀主題與文字倍率。
     - 之後新增的內建 Overlay 也要呼叫 `apps/web/src/overlay/appearance.ts` 的 `followAppearance`，並讀同一組變數。
   - 媒體庫（兌換時播的影片與 GIF）：管理 API `GET`／`POST /api/admin/screen-tools/media`、`PUT`／`DELETE /api/admin/screen-tools/media/{id}`（`PUT` 改名稱與長度）。清單存在 `overlays_media`（UUID v7、名稱、格式、長度），檔案在資料夾的 `media/<id>.<格式>`，隨備份一起備份與還原。
     - 匯入：body 就是檔案本身，`?name=` 帶原檔名（只用來看副檔名與當作預設名稱，不當成路徑）；只收 GIF、WebM、MP4，上限 50 MB（超過回 413 `media.too_large`），副檔名與 magic bytes（GIF 的 `GIF87a`／`GIF89a`、WebM 的 EBML 開頭、MP4 的 `ftyp`）不一致回 400 `media.unsupported_type`。
-    - 長度：GIF 預設 5 秒，可以改（1 毫秒到 10 分鐘）；影片由管理視窗匯入後用 `<video>` 讀取再存起來，開啟畫面工具頁時也會補讀還沒有長度的影片。
+    - 長度：GIF 預設 5 秒，可以改（1 毫秒到 10 分鐘）；影片由管理視窗匯入後用 `<video>` 讀取再存起來，開啟「影片與 GIF」頁（`/admin/media`）時也會補讀還沒有長度的影片。
     - `GET /media/{id}` 與 `/music/{id}` 相同：唯讀、不需要 token、只提供媒體庫裡有的 ID、`Content-Type` 依格式固定、`nosniff`、`no-store`；目前不支援 byte range（短片從頭播放用不到）。
   - 兌換時播影片或 GIF：每個頻道點數獎勵（清單同打卡設定）最多對應一個媒體庫項目，存在 `overlays_media_rules`（獎勵 ID、項目、位置 `top_left`／`top_right`／`bottom_left`／`bottom_right`／`center`／`full`、音量；音量 `null` 表示跟著音效總音量）。管理 API：`GET /api/admin/screen-tools/media-rules`、`PUT`／`DELETE /api/admin/screen-tools/media-rules/{reward_id}`、`POST /api/admin/screen-tools/media-rules/{reward_id}/test`（試播）。刪除媒體項目時，用到它的對應一併刪除。
     - 播放：Host 在交給音效模組的同一處，也把兌換交給這個模組。新的兌換（狀態更新不算、模組停用時不算）依對應排進呈現佇列（`Stage::Alerts`，佇列項目 `media`），在特效 Overlay 播放，不用另外加來源；輪到時發布 `screen.media`（網址、格式、位置、音量、長度，不放進快照），特效 Overlay 依位置顯示 GIF 或影片，影片照播聲音；被跳過或緊急停止時立刻拿掉。影片還沒讀到長度時不排隊。

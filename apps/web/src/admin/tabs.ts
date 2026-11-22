@@ -128,8 +128,22 @@ export const GROUPS: TabGroup[] = [
     },
     { id: 'music', pages: [{ path: '/music', label: 'modules.names.bgm' }] },
     { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound' }] },
-    { id: 'widgets', pages: [{ path: '/screen-tools', label: 'modules.names.screen-tools' }] },
-    { id: 'pictures', pages: [{ path: '/image-sizes', label: 'pages.imageSizes.name' }] },
+    {
+      id: 'widgets',
+      pages: [
+        { path: '/screen-tools', label: 'modules.names.screen-tools', tabLabel: 'nav.pageTabs.breakCard' },
+        { path: '/warnings', label: 'pages.warnings.name' },
+        soon('/goals', 'goals', 'pi pi-flag'),
+        soon('/captions', 'captions', 'pi pi-align-left'),
+      ],
+    },
+    {
+      id: 'pictures',
+      pages: [
+        { path: '/media', label: 'pages.media.name' },
+        { path: '/image-sizes', label: 'pages.imageSizes.name' },
+      ],
+    },
     { id: 'avatar', pages: [soon('/avatar', 'avatar', 'pi pi-face-smile', true)] },
   ]),
   grouped('viewers', 'pi pi-users', [

@@ -22,7 +22,9 @@ import RehearsalPage from './RehearsalPage.vue'
 import { rememberOpener } from './page'
 import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
+import MediaPage from './MediaPage.vue'
 import ScreenToolsPage from './ScreenToolsPage.vue'
+import WarningsPage from './WarningsPage.vue'
 import SoundsPage from './SoundsPage.vue'
 import { SOON_PAGES, closedPageTarget } from './tabs'
 
@@ -52,6 +54,8 @@ export const router = createRouter({
     { path: '/leaderboard', component: LeaderboardPage },
     { path: '/image-sizes', component: ImageSizesPage },
     { path: '/screen-tools', component: ScreenToolsPage },
+    { path: '/warnings', component: WarningsPage },
+    { path: '/media', component: MediaPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     // A page not built yet has a grey tab; its URL leads home.
     ...SOON_PAGES.map((p) => ({ path: p.path, redirect: '/' })),
