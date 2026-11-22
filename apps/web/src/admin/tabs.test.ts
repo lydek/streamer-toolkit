@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { FEATURES } from './features'
+import { FEATURES, shareModules } from './features'
 import { UNBUILT_TILES } from './home'
-import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
+import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, closedPageTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 import { router } from './router'
 
 describe('groupOf', () => {
@@ -106,5 +106,33 @@ describe('categories', () => {
 
   it('has nowhere to go for a category with no built page', () => {
     expect(categoryTarget(categoryOf('/polls')!)).toBeUndefined()
+  })
+})
+
+describe('closedPageTarget', () => {
+  it('leaves an open page alone', () => {
+    expect(closedPageTarget('/checkin', new Set(['/sounds']))).toBeUndefined()
+  })
+
+  it("sends a turned-off page to its group's first open page, or home when the group has none", () => {
+    expect(closedPageTarget('/card-style', new Set(['/checkin', '/card-style']))).toBe('/alerts')
+    expect(closedPageTarget('/alerts', new Set(['/alerts']))).toBe('/checkin')
+    const media = GROUPS.find((g) => g.id === 'media')!.pages.map((p) => p.path)
+    expect(closedPageTarget('/sounds', new Set(media))).toBe('/')
+  })
+})
+
+describe('router', () => {
+  const at = async (path: string) => {
+    await router.push('/')
+    await router.push(path)
+    return router.currentRoute.value.path
+  }
+
+  it('sends a turned-off page elsewhere, whatever its letter case or trailing slash, and opens it once on again', async () => {
+    shareModules([{ id: 'checkin', enabled: false, closed: false }])
+    for (const path of ['/checkin', '/CHECKIN', '/card-style/']) expect(await at(path), path).toBe('/alerts')
+    shareModules([{ id: 'checkin', enabled: true, closed: false }])
+    expect(await at('/card-style')).toBe('/card-style')
   })
 })

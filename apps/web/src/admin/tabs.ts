@@ -170,6 +170,13 @@ export function firstPage(g: TabGroup, hidden: Set<string> = new Set()): string 
   return (pages.find((p) => !p.soon) ?? pages[0] ?? g.pages[0]).path
 }
 
+/** Where a turned-off page leads instead: the first open page of its group, or home when none is left. */
+export function closedPageTarget(path: string, hidden: Set<string>): string | undefined {
+  if (!hidden.has(path)) return undefined
+  const g = groupOf(path)
+  return g && groupUsable(g, hidden) ? firstPage(g, hidden) : '/'
+}
+
 /**
  * How many tabs fit in `available` pixels, given each tab's width and the gap between items. The last slot holds
  * 「編輯分頁」 (`editWidth`) when every tab fits, else "More" (`moreWidth`) in place of the ones that do not.
