@@ -19,9 +19,11 @@ use obws::{
     events::Event,
     requests::{
         EventSubscription,
+        inputs::Create,
         inputs::InputId,
-        scene_items::{SetEnabled, SetLocked},
+        scene_items::{CreateSceneItem, SetEnabled, SetLocked},
         scenes::SceneId,
+        sources::SourceId,
     },
     responses::{StatusCode, scene_items::SourceType},
 };
@@ -183,6 +185,56 @@ impl ObsControl {
             });
         }
         Ok(sources)
+    }
+}
+
+impl ObsControl {
+    /// `CreateInput` of kind `browser_source` with its `url`, `width` and `height`, as an item of `scene`.
+    pub async fn create_browser_source(
+        &self,
+        scene: &str,
+        name: &str,
+        url: &str,
+        (width, height): (u32, u32),
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .inputs()
+            .create(Create {
+                scene: SceneId::Name(scene),
+                input: name,
+                kind: BROWSER_SOURCE,
+                settings: Some(serde_json::json!({"url": url, "width": width, "height": height})),
+                enabled: Some(true),
+            })
+            .await
+            .map(drop)
+            .map_err(command_error)
+    }
+
+    /// `CreateSceneItem`: the existing source `source` as a new item of `scene`.
+    pub async fn add_source(&self, scene: &str, source: &str) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scene_items()
+            .create(CreateSceneItem {
+                scene: SceneId::Name(scene),
+                source: SourceId::Name(source),
+                enabled: Some(true),
+            })
+            .await
+            .map(drop)
+            .map_err(command_error)
+    }
+
+    /// `RemoveSceneItem`.
+    pub async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scene_items()
+            .remove(SceneId::Name(scene), item)
+            .await
+            .map_err(command_error)
     }
 }
 
@@ -571,7 +623,9 @@ mod tests {
                     "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}]}),
                 "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
                 "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
-                t if t.starts_with("Set") => Value::Null,
+                t if t.starts_with("Set") || t.starts_with("Remove") => Value::Null,
+                "CreateInput" => json!({"inputUuid": CHAT, "sceneItemId": 9}),
+                "CreateSceneItem" => json!({"sceneItemId": 10}),
                 "GetInputList" => json!({"inputs": [{"inputName": "Mic", "inputUuid": MIC,
                     "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}, {
                     "inputName": "Logo", "inputUuid": LOGO,
@@ -636,7 +690,10 @@ mod tests {
                             let request: Value = serde_json::from_str(text.as_str()).unwrap();
                             let request_type = request["d"]["requestType"].as_str().unwrap_or_default();
                             let data = &request["d"]["requestData"];
-                            if request_type.starts_with("Set") {
+                            if request_type.starts_with("Set")
+                                || request_type.starts_with("Create")
+                                || request_type.starts_with("Remove")
+                            {
                                 fake.commands.lock().unwrap().push((request_type.into(), data.clone()));
                             }
                             let status = if data["sceneName"] == "Missing" {
@@ -866,6 +923,17 @@ mod tests {
         control.switch_scene("BRB").await.unwrap();
         control.set_item_enabled("Live", 1, false).await.unwrap();
         control.set_item_locked("Live", 2, true).await.unwrap();
+        control
+            .create_browser_source(
+                "Live",
+                "Chat",
+                "http://127.0.0.1:47810/overlay/chat/",
+                (400, 600),
+            )
+            .await
+            .unwrap();
+        control.add_source("BRB", "Chat").await.unwrap();
+        control.remove_item("Live", 9).await.unwrap();
         assert_eq!(
             *fake.commands.lock().unwrap(),
             vec![
@@ -880,6 +948,20 @@ mod tests {
                 (
                     "SetSceneItemLocked".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemLocked": true})
+                ),
+                (
+                    "CreateInput".to_owned(),
+                    json!({"sceneName": "Live", "inputName": "Chat", "inputKind": "browser_source",
+                           "inputSettings": {"url": "http://127.0.0.1:47810/overlay/chat/", "width": 400, "height": 600},
+                           "sceneItemEnabled": true})
+                ),
+                (
+                    "CreateSceneItem".to_owned(),
+                    json!({"sceneName": "BRB", "sourceName": "Chat", "sceneItemEnabled": true})
+                ),
+                (
+                    "RemoveSceneItem".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 9})
                 ),
             ]
         );

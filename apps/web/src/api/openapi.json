@@ -3909,6 +3909,127 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Puts an overlay in a scene: the browser source already showing it gets a new item there, or a new browser\nsource opens the overlay's address on this Host (never with a token). Only while OBS runs on this computer.",
+        "operationId": "add_overlay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddOverlayBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Takes an overlay out of a scene: removes that scene's items whose source shows the overlay. Items of other\nsources are never touched; the sources stay in the other scenes.",
+        "operationId": "remove_overlay",
+        "parameters": [
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "overlay",
+            "in": "query",
+            "description": "The overlay's path and query, as in `GET /api/admin/obs/sources`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/admin/overlays": {
@@ -6189,6 +6310,41 @@
   },
   "components": {
     "schemas": {
+      "AddOverlayBody": {
+        "type": "object",
+        "required": [
+          "scene",
+          "overlay",
+          "name",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The new browser source's height, 1-8192.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "The name for a new browser source (1-100 characters); `name 2` and so on when it is taken."
+          },
+          "overlay": {
+            "type": "string",
+            "description": "The overlay's path and query, e.g. `/overlay/chat/`."
+          },
+          "scene": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The new browser source's width, 1-8192.",
+            "minimum": 0
+          }
+        }
+      },
       "AlertEvent": {
         "type": "object",
         "description": "An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in\nsnapshots, so a reloaded overlay never replays one.",
@@ -9807,6 +9963,7 @@
         "type": "object",
         "required": [
           "connected",
+          "local",
           "live_scene",
           "scenes",
           "sources"
@@ -9822,6 +9979,10 @@
               "null"
             ],
             "description": "The scene on air."
+          },
+          "local": {
+            "type": "boolean",
+            "description": "Whether OBS runs on this computer; overlays can be added to scenes only then, since the Host's addresses\nopen nowhere else."
           },
           "scenes": {
             "type": "array",

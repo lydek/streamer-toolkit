@@ -113,4 +113,24 @@ pub trait StreamingSoftware: Send + Sync {
     fn browser_sources(
         &self,
     ) -> impl Future<Output = Result<Vec<BrowserSource>, StreamingError>> + Send;
+    /// Creates browser source `name` opening `url` at `width` × `height`, as a new item of `scene`.
+    fn create_browser_source(
+        &self,
+        scene: &str,
+        name: &str,
+        url: &str,
+        size: (u32, u32),
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Adds the existing source `source` to `scene` as a new item.
+    fn add_source(
+        &self,
+        scene: &str,
+        source: &str,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Removes item `item` from `scene`; the source stays in the program's other scenes.
+    fn remove_item(
+        &self,
+        scene: &str,
+        item: i64,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
 }

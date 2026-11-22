@@ -13,6 +13,7 @@ use std::{
 
 use axum::{
     Json, Router,
+    extract::Query,
     extract::State,
     http::{StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -278,6 +279,39 @@ impl StreamingSoftware for ObsLink {
         }
         self.control.browser_sources().await
     }
+
+    async fn create_browser_source(
+        &self,
+        scene: &str,
+        name: &str,
+        url: &str,
+        size: (u32, u32),
+    ) -> Result<(), StreamingError> {
+        self.check(scene, None)?;
+        self.control
+            .create_browser_source(scene, name, url, size)
+            .await
+    }
+
+    async fn add_source(&self, scene: &str, source: &str) -> Result<(), StreamingError> {
+        self.check(scene, None)?;
+        self.control.add_source(scene, source).await
+    }
+
+    async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.remove_item(scene, item).await
+    }
+}
+
+impl ObsLink {
+    /// Whether OBS runs on this computer, where the Host's `127.0.0.1` addresses open.
+    fn obs_is_local(&self) -> bool {
+        matches!(
+            settings::load(&self.data_dir).obs.host.as_str(),
+            "127.0.0.1" | "localhost"
+        )
+    }
 }
 
 impl Drop for ObsLink {
@@ -294,7 +328,12 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .route("/api/admin/obs", get(obs_overview).put(update_obs))
         .route("/api/admin/obs/scene", put(switch_scene))
         .route("/api/admin/obs/item", put(update_item))
-        .route("/api/admin/obs/sources", get(overlay_sources))
+        .route(
+            "/api/admin/obs/sources",
+            get(overlay_sources)
+                .post(add_overlay)
+                .delete(remove_overlay),
+        )
         .with_state(link)
 }
 
@@ -394,6 +433,9 @@ fn own_overlay(url: &str, port: u16) -> Option<String> {
 pub(crate) struct ObsSources {
     /// Whether OBS is connected; the rest is empty while it is not.
     connected: bool,
+    /// Whether OBS runs on this computer; overlays can be added to scenes only then, since the Host's addresses
+    /// open nowhere else.
+    local: bool,
     /// The scene on air.
     #[schema(required)]
     live_scene: Option<String>,
@@ -429,6 +471,7 @@ pub(crate) async fn overlay_sources(State(link): State<Arc<ObsLink>>) -> Respons
         Err(StreamingError::NotConnected) => {
             return Json(ObsSources {
                 connected: false,
+                local: link.obs_is_local(),
                 live_scene: None,
                 scenes: Vec::new(),
                 sources: Vec::new(),
@@ -457,11 +500,184 @@ pub(crate) async fn overlay_sources(State(link): State<Arc<ObsLink>>) -> Respons
         .collect();
     Json(ObsSources {
         connected: true,
+        local: link.obs_is_local(),
         live_scene: state.scene.clone(),
         scenes: state.scenes.iter().map(|s| s.name.clone()).collect(),
         sources,
     })
     .into_response()
+}
+
+/// The browser sources showing `overlay`, by name. As in the admin UI, an overlay given with a query (a
+/// leaderboard's board and period) matches exactly; one without matches its path whatever the query.
+fn sources_of(browser: Vec<BrowserSource>, overlay: &str, port: u16) -> Vec<String> {
+    let exact = overlay.contains('?');
+    browser
+        .into_iter()
+        .filter(|s| {
+            own_overlay(&s.url, port).is_some_and(|o| {
+                if exact {
+                    o == overlay
+                } else {
+                    o.split('?').next() == Some(overlay)
+                }
+            })
+        })
+        .map(|s| s.name)
+        .collect()
+}
+
+/// `name`, or `name 2`, `name 3`... when a source already has it.
+fn free_name(name: &str, taken: &[String]) -> String {
+    (1..)
+        .map(|n| {
+            if n == 1 {
+                name.to_owned()
+            } else {
+                format!("{name} {n}")
+            }
+        })
+        .find(|candidate| !taken.contains(candidate))
+        .expect("an unused name")
+}
+
+/// An overlay path this Host serves, with its query: `/overlay/...`, no spaces or control characters.
+fn valid_overlay(overlay: &str) -> bool {
+    overlay.starts_with("/overlay/")
+        && overlay.len() <= 200
+        && !overlay.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct AddOverlayBody {
+    scene: String,
+    /// The overlay's path and query, e.g. `/overlay/chat/`.
+    overlay: String,
+    /// The name for a new browser source (1-100 characters); `name 2` and so on when it is taken.
+    name: String,
+    /// The new browser source's width, 1-8192.
+    width: u32,
+    /// The new browser source's height, 1-8192.
+    height: u32,
+}
+
+/// Puts an overlay in a scene: the browser source already showing it gets a new item there, or a new browser
+/// source opens the overlay's address on this Host (never with a token). Only while OBS runs on this computer.
+#[utoipa::path(
+    post,
+    path = "/api/admin/obs/sources",
+    tag = "admin",
+    request_body = AddOverlayBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn add_overlay(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<AddOverlayBody>,
+) -> Response {
+    let sized = |n| (1..=8192).contains(&n);
+    let name = body.name.trim();
+    if !valid_overlay(&body.overlay)
+        || !(1..=100).contains(&name.chars().count())
+        || !sized(body.width)
+        || !sized(body.height)
+    {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_source");
+    }
+    if !link.obs_is_local() {
+        return error(StatusCode::CONFLICT, "obs.not_local");
+    }
+    let browser = match link.browser_sources().await {
+        Ok(browser) => browser,
+        Err(e) => return command_response(Err(e)),
+    };
+    let state = link.state();
+    let mut taken: Vec<String> = browser.iter().map(|s| s.name.clone()).collect();
+    taken.extend(state.inputs.iter().map(|i| i.name.clone()));
+    taken.extend(
+        state
+            .scenes
+            .iter()
+            .flat_map(|s| s.items.iter().map(|i| i.source.clone())),
+    );
+    let existing = sources_of(browser, &body.overlay, link.port);
+    let in_scene = |source: &String| {
+        state
+            .scenes
+            .iter()
+            .any(|s| s.name == body.scene && s.items.iter().any(|i| &i.source == source))
+    };
+    let result = if existing.iter().any(in_scene) {
+        Ok(())
+    } else if let Some(source) = existing.first() {
+        link.add_source(&body.scene, source).await
+    } else {
+        let url = format!("http://127.0.0.1:{}{}", link.port, body.overlay);
+        let name = free_name(name, &taken);
+        link.create_browser_source(&body.scene, &name, &url, (body.width, body.height))
+            .await
+    };
+    command_response(result)
+}
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct RemoveOverlayQuery {
+    scene: String,
+    /// The overlay's path and query, as in `GET /api/admin/obs/sources`.
+    overlay: String,
+}
+
+/// Takes an overlay out of a scene: removes that scene's items whose source shows the overlay. Items of other
+/// sources are never touched; the sources stay in the other scenes.
+#[utoipa::path(
+    delete,
+    path = "/api/admin/obs/sources",
+    tag = "admin",
+    params(RemoveOverlayQuery),
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn remove_overlay(
+    State(link): State<Arc<ObsLink>>,
+    Query(query): Query<RemoveOverlayQuery>,
+) -> Response {
+    if !valid_overlay(&query.overlay) {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_source");
+    }
+    let browser = match link.browser_sources().await {
+        Ok(browser) => browser,
+        Err(e) => return command_response(Err(e)),
+    };
+    let sources = sources_of(browser, &query.overlay, link.port);
+    let items: Vec<i64> = link
+        .state()
+        .scenes
+        .iter()
+        .filter(|s| s.name == query.scene)
+        .flat_map(|s| s.items.iter())
+        .filter(|i| sources.contains(&i.source))
+        .map(|i| i.id)
+        .collect();
+    if items.is_empty() {
+        return error(StatusCode::NOT_FOUND, "obs.not_found");
+    }
+    for item in items {
+        if let Err(e) = link.remove_item(&query.scene, item).await {
+            return command_response(Err(e));
+        }
+    }
+    command_response(Ok(()))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -631,6 +847,64 @@ mod tests {
             "not a url",
         ] {
             assert_eq!(own(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn a_taken_name_gets_a_number() {
+        let taken = ["Chat".to_owned(), "Chat 2".to_owned()];
+        assert_eq!(free_name("Chat", &taken), "Chat 3");
+        assert_eq!(free_name("Cards", &taken), "Cards");
+    }
+
+    #[test]
+    fn sources_match_an_overlay_as_the_admin_ui_does() {
+        let browser = || {
+            [
+                ("Chat", "http://127.0.0.1:7878/overlay/chat/?x=1"),
+                (
+                    "Bits",
+                    "http://127.0.0.1:7878/overlay/leaderboard/?board=bits&period=stream",
+                ),
+                ("Chat elsewhere", "http://example.com:7878/overlay/chat/"),
+            ]
+            .map(|(name, url)| BrowserSource {
+                name: name.into(),
+                url: url.into(),
+            })
+            .into()
+        };
+        assert_eq!(sources_of(browser(), "/overlay/chat/", 7878), ["Chat"]);
+        assert_eq!(
+            sources_of(
+                browser(),
+                "/overlay/leaderboard/?board=bits&period=stream",
+                7878
+            ),
+            ["Bits"]
+        );
+        assert!(
+            sources_of(
+                browser(),
+                "/overlay/leaderboard/?board=chat&period=stream",
+                7878
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn overlay_paths_are_checked() {
+        assert!(valid_overlay(
+            "/overlay/leaderboard/?board=bits&period=stream"
+        ));
+        for bad in [
+            "/api/admin/obs",
+            "/overlay/chat/ x",
+            "/overlay/\nchat",
+            "overlay/chat/",
+        ] {
+            assert!(!valid_overlay(bad), "{bad}");
         }
     }
 
