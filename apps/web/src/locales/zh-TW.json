@@ -1097,6 +1097,8 @@
     "download": "全部下載"
   },
   "leaderboard": {
+    "inObs": "在 OBS：{periods}",
+    "copyFor": "複製「{board}」的 OBS 網址",
     "period": "期間",
     "periods": {
       "stream": "本場",

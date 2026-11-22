@@ -39,7 +39,6 @@ it('takes the boards from a reconnect snapshot', async () => {
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === '全部')!.trigger('click')
-  await wrapper.findAll('[aria-labelledby="lb-board"] button').find((b) => b.text() === '打卡')!.trigger('click')
   const boards = { boards: [{ board: 'checkins', period: 'all', entries: [{ name: '莓莓', value: 50 }] }] }
   const update = { id: 'u', type: 'leaderboard.update', version: 1, seq: 7, occurredAt: '', source: 'system', payload: boards }
   const kinds = ['chat.removed', 'chat.message', 'obs.status', 'obs.state', 'presentation.queue', 'stream.status', 'bgm.player']
@@ -51,16 +50,30 @@ it('takes the boards from a reconnect snapshot', async () => {
   expect(wrapper.text()).not.toContain('小魚')
 })
 
-it('shows the chosen board and copies its overlay URL with the board and period', async () => {
+it('shows every board side by side for the chosen period, and copies one with its board and period', async () => {
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
-  const pick = async (label: string, text: string) =>
-    wrapper.findAll(`[aria-labelledby="${label}"] button`).find((b) => b.text() === text)!.trigger('click')
-  await pick('lb-period', '全部')
-  await pick('lb-board', '打卡')
-  expect(wrapper.text()).toContain('小魚')
-  expect(wrapper.text()).toContain('打卡頁的累計次數')
-  await wrapper.findAll('button').find((b) => b.text() === '複製 OBS 網址')!.trigger('click')
+  expect(wrapper.findAll('section.board')).toHaveLength(4)
+  await wrapper.findAll('[aria-labelledby="lb-period"] button').find((b) => b.text() === '全部')!.trigger('click')
+  const checkins = wrapper.get('section[aria-labelledby="lb-checkins"]')
+  expect(checkins.text()).toContain('小魚')
+  expect(checkins.text()).toContain('打卡頁的累計次數')
+  await checkins.get('button').trigger('click')
   await flushPromises()
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${location.origin}/overlay/leaderboard/?board=checkins&period=all`)
+})
+
+it('says which periods of each board are in OBS', async () => {
+  vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+    Promise.resolve({
+      data:
+        path === '/api/admin/obs/sources'
+          ? { connected: true, local: true, live_scene: 'Game', scenes: ['Game'], sources: [{ name: 'Bits', overlay: '/overlay/leaderboard/?board=bits&period=stream', scenes: ['Game'] }] }
+          : { boards: [] },
+      response: new Response(null, { status: 200 }),
+    })) as never)
+  const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+  await flushPromises()
+  expect(wrapper.get('section[aria-labelledby="lb-bits"] .in-obs').text()).toBe('在 OBS：本場')
+  expect(wrapper.get('section[aria-labelledby="lb-chat"] .in-obs').text()).toBe('還沒加入 OBS')
 })
