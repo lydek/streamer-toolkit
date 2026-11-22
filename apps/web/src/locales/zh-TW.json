@@ -1306,8 +1306,6 @@
     "otherScenes": "其他場景",
     "size": "建議大小",
     "actions": "動作",
-    "yes": "有",
-    "no": "沒有",
     "moreScenes": "另外 {n} 個場景",
     "live": "直播中",
     "audioOnly": "只有聲音",
@@ -1316,6 +1314,9 @@
     "sources": "{n} 個來源",
     "duplicate": "「{name}」在 OBS 有 {n} 個來源，{effect}。同一個來源放在多個場景不算。",
     "leaderboardRow": "排行榜：{board}・{period}",
+    "sourceName": "{name}（{app}）",
+    "notLocal": "OBS 在另一台電腦：這裡只能看，不能把 Overlay 加進場景，因為本工具的網址在那台電腦打不開。",
+    "inSceneFor": "「{name}」放在「{scene}」",
     "names": {
       "songs": "點歌",
       "chat": "聊天室",
@@ -1553,7 +1554,9 @@
       "not_connected": "OBS 沒有連線。",
       "not_found": "OBS 裡找不到這個場景或物件，可能剛被改名或刪除。",
       "request_failed": "OBS 沒有完成這個動作。",
-      "nothing_to_change": "沒有要變更的項目。"
+      "nothing_to_change": "沒有要變更的項目。",
+      "not_local": "OBS 在另一台電腦，本工具的 Overlay 網址在那台電腦打不開，所以不能從這裡加進場景。",
+      "invalid_source": "這個 Overlay 的資料不正確。"
     },
     "port": {
       "invalid": "連接埠必須介於 1024 到 65535。",

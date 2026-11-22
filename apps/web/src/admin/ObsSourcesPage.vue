@@ -6,6 +6,7 @@
     </p>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="data && !data.connected">{{ t('obsSources.notConnected') }}</p>
+    <p v-else-if="data && !data.local">{{ t('obsSources.notLocal') }}</p>
     <div v-if="data?.connected && data.scenes.length" class="field">
       <label for="obs-scene">{{ t('obsSources.scene') }}</label>
       <Select v-model="scene" input-id="obs-scene" :options="data.scenes" />
@@ -33,10 +34,13 @@
           </th>
           <td class="muted">{{ t(r.key === 'leaderboard-other' ? 'obsSources.desc.leaderboardOther' : `obsSources.desc.${r.entry.id}`) }}</td>
           <td v-if="scene">
-            <template v-if="r.entry.path">
-              <span v-if="r.scenes.includes(scene)"><i class="pi pi-check" aria-hidden="true"></i>{{ t('obsSources.yes') }}</span>
-              <span v-else class="muted">—<span class="sr-only">{{ t('obsSources.no') }}</span></span>
-            </template>
+            <ToggleSwitch
+              v-if="r.url"
+              :model-value="r.scenes.includes(scene)"
+              :disabled="!data?.local || !!busy"
+              :aria-label="t('obsSources.inSceneFor', { name: rowName(r), scene })"
+              @update:model-value="(on: boolean) => setInScene(r, on)"
+            />
           </td>
           <td v-if="scene">
             <details v-if="others(r).length" class="others">
@@ -69,6 +73,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Select from 'primevue/select'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -113,6 +118,33 @@ function rowName(r: OverlayRow) {
     return t('obsSources.leaderboardRow', { board, period: t(`leaderboard.periods.${r.board.period}`) })
   }
   return t(r.key === 'leaderboard-other' ? 'obsSources.names.leaderboardOther' : `obsSources.names.${r.entry.id}`)
+}
+
+// The row whose switch is saving; the others wait so two changes never cross.
+const busy = ref('')
+const sizeOf = (size: string): [number, number] => {
+  const [width, height] = size === 'audio' ? [100, 100] : size.split(' × ').map(Number)
+  return [width, height]
+}
+
+/** Puts the overlay in the picked scene or takes it out; a failure leaves the switch as OBS has it. */
+async function setInScene(r: OverlayRow, on: boolean) {
+  if (!scene.value || !r.url) return
+  busy.value = r.key
+  try {
+    if (on) {
+      const [width, height] = sizeOf(r.entry.size)
+      const name = t('obsSources.sourceName', { name: rowName(r), app: t('app.name') })
+      await api(client.POST('/api/admin/obs/sources', { body: { scene: scene.value, overlay: r.url, name, width, height } }))
+    } else {
+      await api(client.DELETE('/api/admin/obs/sources', { params: { query: { scene: scene.value, overlay: r.url } } }))
+    }
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  } finally {
+    busy.value = ''
+    await load()
+  }
 }
 
 async function copy(path: string) {

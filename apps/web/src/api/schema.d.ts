@@ -1253,8 +1253,16 @@ export interface paths {
         /** Where this Host's overlays are in OBS: one entry per browser source showing one, with the scenes it is in. */
         get: operations["overlay_sources"];
         put?: never;
-        post?: never;
-        delete?: never;
+        /**
+         * Puts an overlay in a scene: the browser source already showing it gets a new item there, or a new browser
+         *     source opens the overlay's address on this Host (never with a token). Only while OBS runs on this computer.
+         */
+        post: operations["add_overlay"];
+        /**
+         * Takes an overlay out of a scene: removes that scene's items whose source shows the overlay. Items of other
+         *     sources are never touched; the sources stay in the other scenes.
+         */
+        delete: operations["remove_overlay"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2071,6 +2079,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddOverlayBody: {
+            /**
+             * Format: int32
+             * @description The new browser source's height, 1-8192.
+             */
+            height: number;
+            /** @description The name for a new browser source (1-100 characters); `name 2` and so on when it is taken. */
+            name: string;
+            /** @description The overlay's path and query, e.g. `/overlay/chat/`. */
+            overlay: string;
+            scene: string;
+            /**
+             * Format: int32
+             * @description The new browser source's width, 1-8192.
+             */
+            width: number;
+        };
         /**
          * @description An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in
          *     snapshots, so a reloaded overlay never replays one.
@@ -3384,6 +3409,11 @@ export interface components {
             connected: boolean;
             /** @description The scene on air. */
             live_scene: string | null;
+            /**
+             * @description Whether OBS runs on this computer; overlays can be added to scenes only then, since the Host's addresses
+             *     open nowhere else.
+             */
+            local: boolean;
             /** @description Every scene, in OBS's order. */
             scenes: string[];
             /** @description The browser sources that show one of this Host's overlays; other browser sources are left out. */
@@ -7631,6 +7661,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ObsSources"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_overlay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddOverlayBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_overlay: {
+        parameters: {
+            query: {
+                scene: string;
+                /** @description The overlay's path and query, as in `GET /api/admin/obs/sources`. */
+                overlay: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             502: {

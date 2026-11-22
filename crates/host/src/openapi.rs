@@ -79,6 +79,8 @@ use crate::{
         obs::switch_scene,
         obs::update_item,
         obs::overlay_sources,
+        obs::add_overlay,
+        obs::remove_overlay,
         templates::chat_template,
         templates::select_chat_template,
         templates::set_chat_text_size,
