@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import AlertEventsPage from './AlertEventsPage.vue'
+import AlertLogPage from './AlertLogPage.vue'
 import AlertsPage from './AlertsPage.vue'
 import CardStylePage from './CardStylePage.vue'
 import ChatLogPage from './ChatLogPage.vue'
@@ -32,6 +34,8 @@ export const router = createRouter({
     { path: '/chat-log', component: ChatLogPage },
     { path: '/chat', component: ChatPage },
     { path: '/alerts', component: AlertsPage },
+    { path: '/alert-events', component: AlertEventsPage },
+    { path: '/alert-log', component: AlertLogPage },
     { path: '/redemptions', component: RedemptionsPage },
     { path: '/checkin', component: CheckinsPage },
     { path: '/card-style', component: CardStylePage },

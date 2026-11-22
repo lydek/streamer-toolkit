@@ -184,7 +184,7 @@ test('alerts and check-ins each choose a sound, and deleting a used sound lists 
   const s = await library(page, [sound('s1', 'Ding')], {
     'alert.raid': 'silent',
   })
-  await page.goto('/admin/alerts')
+  await page.goto('/admin/alert-events')
   const follow = page.getByRole('combobox', { name: zh.alerts.kinds.follow })
   const raid = page.getByRole('combobox', { name: zh.alerts.kinds.raid })
   await expect(follow).toHaveText(zh.sound.builtIn)

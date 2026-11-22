@@ -85,7 +85,14 @@ export const GROUPS: TabGroup[] = [
     },
   ]),
   grouped('interact', 'pi pi-bolt', [
-    { id: 'alerts', pages: [{ path: '/alerts', label: 'modules.names.alerts' }] },
+    {
+      id: 'alerts',
+      pages: [
+        { path: '/alerts', label: 'modules.names.alerts', tabLabel: 'nav.pageTabs.alertTemplates' },
+        { path: '/alert-events', label: 'pages.alertEvents.name' },
+        { path: '/alert-log', label: 'pages.alertLog.name' },
+      ],
+    },
     {
       id: 'checkin',
       pages: [
