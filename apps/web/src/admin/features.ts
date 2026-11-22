@@ -41,7 +41,7 @@ export const FEATURES: Feature[] = [
   { id: 'redemption', group: 'interact', icon: 'pi pi-gift', pages: ['/redemptions'], module: 'redemption' },
   { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters'], module: 'counter' },
   { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes', '/modes'], module: 'scene', needs: 'obs', affects: ['music'] },
-  { id: 'obsSources', group: 'media', icon: 'pi pi-clone', pages: ['/obs-sources'], needs: 'obs' },
+  { id: 'obsSources', group: 'media', icon: 'pi pi-clone', pages: ['/obs-sources'], needs: 'obs', fixed: true },
   { id: 'music', group: 'media', icon: 'pi pi-headphones', pages: ['/music'], module: 'bgm' },
   { id: 'sound', group: 'media', icon: 'pi pi-volume-up', pages: ['/sounds'], module: 'sound' },
   { id: 'screenTools', group: 'media', icon: 'pi pi-desktop', pages: ['/screen-tools'], module: 'screen-tools' },

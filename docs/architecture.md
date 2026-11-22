@@ -255,6 +255,7 @@ apps/
   - `PUT` 修改位址與密碼（`password` 省略表示不變，空字串表示刪除），修改後立即用新設定重連，並清掉舊連線的場景與輸出狀態；被取代的舊連線不再寫入狀態。host 只接受主機名稱與 IPv4、port 不得為 0，否則回 400 `obs.invalid_address`。
   - `PUT` 先存 `settings.json` 再寫密碼：密碼寫入失敗時新位址仍會生效，回 500 `obs.secret_store_failed`；存不了 `settings.json` 時回 500 `settings.save_failed`，位址、密碼與連線都維持原樣。
 - 管理 API `PUT /api/admin/obs/scene`（切換場景，`scene`）與 `PUT /api/admin/obs/item`（`scene`、`item` 加上 `enabled` 和／或 `locked`，兩者都沒給回 400 `obs.nothing_to_change`）：成功回 204；沒連上 OBS 回 409 `obs.not_connected`；目前狀態或 OBS 找不到場景或物件回 404 `obs.not_found`；OBS 拒絕或送出時連線中斷回 502 `obs.request_failed`。場景頁屬於模組 `scene`，停用只隱藏它的頁面與功能磚。
+- OBS 來源頁（`/obs-sources`）：`GET /api/admin/obs/sources` 列出顯示本 Host Overlay 的瀏覽器來源（`GetInputList` 依類型取瀏覽器來源，`GetInputSettings` 讀它的 `url`）：來源名稱、Overlay 的路徑與 query、它是哪些場景的物件（群組裡的不算），另帶直播中的場景與全部場景；OBS 沒連上時 `connected` 為 `false`、其餘為空，讀取失敗回 502 `obs.request_failed`。網址只在 Host 裡比對：`http`、主機是 `127.0.0.1` 或 `localhost`、port 是 Host 目前的 port、路徑以 `/overlay/` 開頭才算本工具的；別的瀏覽器來源，網址裡可能有其他服務的 token，所以不回傳也不寫進 log。同一個 Overlay 網址有兩個以上來源算重複，同一個來源放在多個場景不算。建議大小與各 Overlay 顯示什麼寫在管理 UI。開播前檢查仍看 Overlay 有幾個 WebSocket 連線，判斷它有沒有放進 OBS（真的載入了才算）；OBS 來源頁則看 OBS 裡怎麼設定場景。
 
 ## 6. Host 生命週期
 Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼續運作；關閉 port 修改小頁面也留在系統匣；從系統匣選「結束」才停止。

@@ -12,6 +12,7 @@ import LeaderboardPage from './LeaderboardPage.vue'
 import CountersPage from './CountersPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
+import ObsSourcesPage from './ObsSourcesPage.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import RehearsalPage from './RehearsalPage.vue'
 import { rememberOpener } from './page'
@@ -36,6 +37,7 @@ export const router = createRouter({
     { path: '/card-style', component: CardStylePage },
     { path: '/sounds', component: SoundsPage },
     { path: '/scenes', component: ScenesPage },
+    { path: '/obs-sources', component: ObsSourcesPage },
     { path: '/music', component: MusicPage },
     { path: '/counters', component: CountersPage },
     { path: '/rehearsal', component: RehearsalPage },

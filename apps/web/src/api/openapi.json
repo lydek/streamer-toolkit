@@ -3882,6 +3882,35 @@
         }
       }
     },
+    "/api/admin/obs/sources": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Where this Host's overlays are in OBS: one entry per browser source showing one, with the scenes it is in.",
+        "operationId": "overlay_sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObsSources"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/overlays": {
       "get": {
         "tags": [
@@ -9774,6 +9803,42 @@
           }
         }
       },
+      "ObsSources": {
+        "type": "object",
+        "required": [
+          "connected",
+          "live_scene",
+          "scenes",
+          "sources"
+        ],
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "Whether OBS is connected; the rest is empty while it is not."
+          },
+          "live_scene": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The scene on air."
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every scene, in OBS's order."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverlaySource"
+            },
+            "description": "The browser sources that show one of this Host's overlays; other browser sources are left out."
+          }
+        }
+      },
       "ObsState": {
         "type": "string",
         "enum": [
@@ -9967,6 +10032,31 @@
           "warnings": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "OverlaySource": {
+        "type": "object",
+        "required": [
+          "name",
+          "overlay",
+          "scenes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The source's name in OBS."
+          },
+          "overlay": {
+            "type": "string",
+            "description": "The overlay it shows: its path and query, e.g. `/overlay/leaderboard/?board=bits&period=stream`."
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The scenes it is an item of (items inside a group are not counted)."
           }
         }
       },

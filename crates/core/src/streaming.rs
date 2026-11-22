@@ -50,6 +50,14 @@ pub struct Input {
     pub muted: bool,
 }
 
+/// A browser source and the address it opens. The address may hold another service's token, so it never reaches
+/// the admin UI or a log as is: the Host keeps only the paths of its own overlays.
+#[derive(Clone, PartialEq, Eq)]
+pub struct BrowserSource {
+    pub name: String,
+    pub url: String,
+}
+
 /// Why a command did not reach the streaming software.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamingError {
@@ -101,4 +109,8 @@ pub trait StreamingSoftware: Send + Sync {
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Its counters now.
     fn stats(&self) -> impl Future<Output = Result<StreamingStats, StreamingError>> + Send;
+    /// Every browser source with the address it opens.
+    fn browser_sources(
+        &self,
+    ) -> impl Future<Output = Result<Vec<BrowserSource>, StreamingError>> + Send;
 }
