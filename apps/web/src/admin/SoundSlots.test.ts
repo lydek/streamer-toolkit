@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import SoundSlots from './SoundSlots.vue'
 
+const t = i18n.global.t
+
 const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 
 vi.mock('./api', async (original) => ({
@@ -39,27 +41,28 @@ describe('SoundSlots', () => {
     await flushPromises()
     vi.useFakeTimers()
     const buttons = () => wrapper.findAll('button').map((b) => b.text())
-    expect(buttons()).toEqual(['在 OBS 播放', '在 OBS 播放'])
+    const [play, stop] = [t('sound.playInObs'), t('sound.stopInObs')]
+    expect(buttons()).toEqual([play, play])
 
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 'bell' } } })
-    expect(buttons()).toEqual(['停止播放', '在 OBS 播放'])
+    expect(buttons()).toEqual([stop, play])
 
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
     expect(calls.post).toHaveBeenLastCalledWith('/api/admin/sounds/stop')
-    expect(buttons()).toEqual(['在 OBS 播放', '在 OBS 播放'])
+    expect(buttons()).toEqual([play, play])
 
     // Sending another moves the stop to it; once the sound's length has passed, it plays again.
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
     await wrapper.findAll('button')[1].trigger('click')
     await flushPromises()
-    expect(buttons()).toEqual(['在 OBS 播放', '停止播放'])
+    expect(buttons()).toEqual([play, stop])
     vi.advanceTimersByTime(3000)
     await flushPromises()
-    expect(buttons()).toEqual(['在 OBS 播放', '在 OBS 播放'])
+    expect(buttons()).toEqual([play, play])
     wrapper.unmount()
   })
 })

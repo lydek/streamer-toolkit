@@ -7,6 +7,8 @@ import { type Schemas, client } from './api'
 import { measureUnmeasured } from './media'
 import MediaLibrary from './MediaLibrary.vue'
 
+const t = i18n.global.t
+
 const ok = (data?: unknown) => Promise.resolve({ data, response: new Response(null, { status: data ? 200 : 204 }) })
 let items: Schemas['MediaItem'][]
 let post: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>, del: ReturnType<typeof vi.fn>
@@ -72,9 +74,9 @@ it('imports files, sets a GIF length and deletes after a second press', async ()
     body: { title: '貓咪跳舞', duration_ms: 8000 },
   })
 
-  await wrapper.get('[data-media="g1"] button[aria-label="刪除「貓咪跳舞」"]').trigger('click')
+  await wrapper.get(`[data-media="g1"] button[aria-label="${t('screenTools.media.delete', { title: '貓咪跳舞' })}"]`).trigger('click')
   expect(del).not.toHaveBeenCalled()
-  await wrapper.findAll('[data-media="g1"] button').find((b) => b.text() === '確定刪除')!.trigger('click')
+  await wrapper.findAll('[data-media="g1"] button').find((b) => b.text() === t('screenTools.media.confirmDelete'))!.trigger('click')
   await flushPromises()
   expect(del).toHaveBeenCalledTimes(1)
   expect(wrapper.find('[data-media="g1"]').exists()).toBe(false)

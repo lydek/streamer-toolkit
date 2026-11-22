@@ -6,6 +6,8 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import BackupRestore from './BackupRestore.vue'
 
+const t = i18n.global.t
+
 const { previewRestore, saveBackup, toastAdd } = vi.hoisted(() => ({
   previewRestore: vi.fn(),
   saveBackup: vi.fn(async (): Promise<string | false> => 'mine.stbackup'),
@@ -27,12 +29,13 @@ it('shows each choice with its size, exports the chosen kind and names the saved
   const wrapper = mount(BackupRestore, { global: { plugins: [i18n, PrimeVue] } })
   await flushPromises()
   const choices = wrapper.findAll('[aria-labelledby="backup-choice"] button')
+  // Literal on purpose: the sizes' wording and rounding are what this checks.
   expect(choices.map((b) => b.text())).toEqual(['全部 2.0 GB', '資料 3.0 MB', '媒體 2.0 GB'])
-  await choices.find((b) => b.text().startsWith('媒體'))!.trigger('click')
-  await wrapper.findAll('button').find((b) => b.text() === '匯出備份')!.trigger('click')
+  await choices.find((b) => b.text().startsWith(t('backup.choices.media')))!.trigger('click')
+  await wrapper.findAll('button').find((b) => b.text() === t('backup.export'))!.trigger('click')
   await flushPromises()
   expect(saveBackup).toHaveBeenCalledWith('media')
-  expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: '已匯出備份：mine.stbackup' }))
+  expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: t('backup.exported', { file: 'mine.stbackup' }) }))
 })
 
 it('says which kinds a backup holds and that only those are replaced', async () => {
@@ -52,9 +55,8 @@ it('says which kinds a backup holds and that only those are replaced', async () 
   Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'm.stbackup')], configurable: true })
   await input.trigger('change')
   await flushPromises()
-  expect(wrapper.text()).toContain('包含：媒體')
-  expect(wrapper.text()).toContain('音效 2 個')
-  expect(wrapper.text()).not.toContain('兌換紀錄')
-  expect(wrapper.text()).toContain('設定與紀錄不動')
-  expect(wrapper.text()).toContain('播放清單與獎勵的連結不會回來')
+  expect(wrapper.text()).toContain(t('backup.contains', { kinds: t('backup.choices.media') }))
+  expect(wrapper.text()).toContain(t('backup.files', { templates: 1, sounds: 2, music: 0, media: 0 }))
+  expect(wrapper.text()).not.toContain(t('backup.records', { redemptions: 0, checkins: 0 }))
+  expect(wrapper.text()).toContain(t('backup.restoreOnly.media'))
 })

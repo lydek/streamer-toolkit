@@ -6,6 +6,8 @@ import { i18n } from '../i18n'
 import OutputDevicePicker from './OutputDevicePicker.vue'
 import { chooseOutput, outputDevice } from './outputDevice'
 
+const t = i18n.global.t
+
 beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   vi.stubGlobal('navigator', {
@@ -23,7 +25,7 @@ afterEach(() => {
 it('shows the default device as chosen until another is picked, and back', async () => {
   const wrapper = mount(OutputDevicePicker, { global: { plugins: [i18n, PrimeVue] } })
   await flushPromises()
-  expect(wrapper.get('.p-select-label').text()).toBe('系統預設')
+  expect(wrapper.get('.p-select-label').text()).toBe(t('outputDevice.default'))
 
   wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'cable')
   await flushPromises()
@@ -33,5 +35,5 @@ it('shows the default device as chosen until another is picked, and back', async
   wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'default')
   await flushPromises()
   expect(outputDevice.value).toBeUndefined()
-  expect(wrapper.get('.p-select-label').text()).toBe('系統預設')
+  expect(wrapper.get('.p-select-label').text()).toBe(t('outputDevice.default'))
 })

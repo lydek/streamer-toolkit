@@ -8,6 +8,8 @@ import Select from 'primevue/select'
 import CardStylePage from './CardStylePage.vue'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 const { toastAdd } = vi.hoisted(() => ({ toastAdd: vi.fn() }))
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: toastAdd }) }))
 
@@ -67,7 +69,7 @@ it('switches to the journal colors, uploads a stamp image, saves and tests in OB
   await flushPromises()
   await wrapper.get('#cs-title').setValue('#觀眾# 打卡成功')
 
-  await wrapper.findAll('button').find((b) => b.text() === '在 OBS 試播')!.trigger('click')
+  await wrapper.findAll('button').find((b) => b.text() === t('cardStyle.test'))!.trigger('click')
   await flushPromises()
   expect(put).toHaveBeenCalledWith('/api/admin/checkin/card-style', {
     body: { ...style, preset: 'journal', background_color: '#fbf6ee', stamp_color: '#c0392b', stamp_image: 'img.png', title: '#觀眾# 打卡成功' },
@@ -90,5 +92,7 @@ it('installs an animation pack as a preset and names the file a refused one hold
   Object.defineProperty(input.element, 'files', { value: [new File(['PK'], 'bad.zip')], configurable: true })
   await input.trigger('change')
   await flushPromises()
-  expect(wrapper.get('[role="alert"]').text()).toBe('bad.zip：動畫包不能有程式碼：fx/run.js')
+  expect(wrapper.get('[role="alert"]').text()).toBe(
+    t('cardStyle.uploadFailed', { file: 'bad.zip', reason: t('errors.card_pack.script', { detail: 'fx/run.js' }) }),
+  )
 })

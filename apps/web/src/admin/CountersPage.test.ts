@@ -144,7 +144,7 @@ describe('CountersPage', () => {
     await wrapper.get('#new-counter-command').setValue('!打卡')
     await wrapper.get('#new-counter-name').element.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
-    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: '已被打卡的「!打卡」使用。' }))
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: t('errors.commands.taken', { feature: t('modules.names.checkin'), label: '!打卡' }) }))
     await wrapper.get('#new-counter-command').setValue('抓包')
     await wrapper.get('#new-counter-name').element.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
@@ -180,7 +180,10 @@ describe('CountersPage per-viewer counts', () => {
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
     const results = row().findAll('ul.viewers li')
-    expect(results.map((r) => r.get('.who').text())).toEqual(['小魚（fish）', '魚骨（fishbone）'])
+    expect(results.map((r) => r.get('.who').text())).toEqual([
+      t('counter.viewers.entry', { name: '小魚', login: 'fish' }),
+      t('counter.viewers.entry', { name: '魚骨', login: 'fishbone' }),
+    ])
     await results[1].findAll('button').find((b) => b.text() === t('counter.plusOne'))!.trigger('click')
     await flushPromises()
     expect(post).toHaveBeenCalledWith('/api/admin/counters/viewers/{id}/add', {
@@ -283,7 +286,7 @@ describe('counterTile', () => {
       state: 'ready',
       num: '1,200',
       unit: '死亡次數',
-      text: '被抓包：3',
+      text: t('counter.line', { name: '被抓包', value: 3 }),
     })
     expect(counterTile([{ id: 'a', name: '死亡次數', value: 12 }])).toEqual({ state: 'ready', num: '12', unit: '死亡次數', text: '' })
     expect(counterTile([])).toEqual({ state: 'ready', text: t('counter.empty') })

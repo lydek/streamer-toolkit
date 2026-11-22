@@ -8,6 +8,8 @@ import ImageSizesPage from './ImageSizesPage.vue'
 import { IMAGE_SIZES_MAX_BYTES, zipName } from './imageSizes'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
 
 const image = (px: number, tooLarge = false) => ({ px, bytes: 2048, data_url: 'data:image/png;base64,AA==', too_large: tooLarge })
@@ -53,7 +55,7 @@ it('shows only the latest choice when an earlier answer comes back later', async
   await flushPromises()
   slow({ data: { images: [image(72)] }, response: new Response(null, { status: 200 }) })
   await flushPromises()
-  expect(wrapper.findAll('.sheet.dark figcaption').map((c) => c.text())).toEqual(['36 px · 2.0 KB'])
+  expect(wrapper.findAll('.sheet.dark figcaption').map((c) => c.text())).toEqual([t('imageSizes.size', { px: 36, kb: '2.0' })])
 })
 
 it('sends the picture with the chosen size and fit, and shows each size on dark and light with the over-limit one in red', async () => {
@@ -65,11 +67,11 @@ it('sends the picture with the chosen size and fit, and shows each size on dark 
   )
   expect(wrapper.findAll('.sheet')).toHaveLength(2)
   expect(wrapper.findAll('.sheet.dark img')).toHaveLength(3)
-  expect(wrapper.findAll('figcaption.over').map((c) => c.text())).toEqual(['72 px · 2.0 KB', '72 px · 2.0 KB'])
-  expect(wrapper.text()).toContain('25 KB')
+  expect(wrapper.findAll('figcaption.over').map((c) => c.text())).toEqual([t('imageSizes.size', { px: 72, kb: '2.0' }), t('imageSizes.size', { px: 72, kb: '2.0' })])
+  expect(wrapper.text()).toContain(t('imageSizes.tooLarge'))
 
   // A new choice works the same picture out again.
-  await wrapper.findAll('[aria-labelledby="is-fit"] button').find((b) => b.text() === '裁切置中')!.trigger('click')
+  await wrapper.findAll('[aria-labelledby="is-fit"] button').find((b) => b.text() === t('imageSizes.fits.crop'))!.trigger('click')
   await flushPromises()
   expect(client.POST).toHaveBeenLastCalledWith(
     '/api/admin/image-sizes',
@@ -83,23 +85,23 @@ it('refuses a picture over 10 MB without sending it', async () => {
   Object.defineProperty(big, 'size', { value: IMAGE_SIZES_MAX_BYTES + 1 })
   await pick(wrapper, big)
   expect(client.POST).not.toHaveBeenCalled()
-  expect(wrapper.find('[role="alert"]').text()).toContain('10 MB')
+  expect(wrapper.find('[role="alert"]').text()).toContain(t('errors.image_sizes.too_large'))
 })
 
 it("drops the last picture's sizes for a picked square until the new picture is read, and says when it is not", async () => {
   const wrapper = await page()
   await pick(wrapper, new File(['png'], 'logo.png', { type: 'image/png' }))
-  await wrapper.findAll('[aria-labelledby="is-fit"] button').find((b) => b.text() === '自己選範圍')!.trigger('click')
+  await wrapper.findAll('[aria-labelledby="is-fit"] button').find((b) => b.text() === t('imageSizes.fits.manual'))!.trigger('click')
   await flushPromises()
   // The browser has not read the picture's size yet (jsdom never does): nothing to show or download.
   expect(wrapper.findAll('.sheet')).toHaveLength(0)
-  const download = wrapper.findAll('button').find((b) => b.text() === '全部下載')!
+  const download = wrapper.findAll('button').find((b) => b.text() === t('imageSizes.download'))!
   expect(download.attributes('disabled')).toBeDefined()
 
   const big = new File(['x'], 'big.png', { type: 'image/png' })
   Object.defineProperty(big, 'size', { value: IMAGE_SIZES_MAX_BYTES + 1 })
   await pick(wrapper, big)
-  expect(wrapper.find('[role="alert"]').text()).toContain('10 MB')
+  expect(wrapper.find('[role="alert"]').text()).toContain(t('errors.image_sizes.too_large'))
 })
 
 it('names the zip after the picture and the size', () => {

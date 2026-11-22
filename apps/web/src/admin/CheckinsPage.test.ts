@@ -6,6 +6,8 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '../i18n'
 import CheckinsPage from './CheckinsPage.vue'
 
+const t = i18n.global.t
+
 const { toastAdd } = vi.hoisted(() => ({ toastAdd: vi.fn() }))
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: toastAdd }) }))
 const { client } = vi.hoisted(() => ({ client: { GET: vi.fn(), POST: vi.fn() } }))
@@ -54,10 +56,10 @@ describe('CheckinsPage', () => {
     await router.push('/checkins')
     const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text() === '把集點卡推到畫面')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === t('checkin.push.show'))!.trigger('click')
     await flushPromises()
     expect(client.POST).toHaveBeenCalledWith('/api/admin/checkin/viewers/{id}/card', { params: { path: { id: 'v1' } } })
-    await wrapper.findAll('button').find((b) => b.text() === '隱藏畫面卡片')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === t('checkin.push.hide'))!.trigger('click')
     await flushPromises()
     expect(client.POST).toHaveBeenCalledWith('/api/admin/checkin/card/hide')
   })
@@ -81,11 +83,11 @@ describe('CheckinsPage', () => {
     await router.push('/checkins')
     const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
     await flushPromises()
-    expect(wrapper.text()).toContain('可用印章 3')
-    expect(wrapper.text()).toContain('Ann 扣 2 格')
+    expect(wrapper.text()).toContain(t('checkin.deduct.available', { n: 3 }))
+    expect(wrapper.text()).toContain(t('checkin.deduct.logLine', { name: 'Ann', n: 2 }))
 
     const open = async () => {
-      await wrapper.findAll('button').find((b) => b.text() === '扣印章')!.trigger('click')
+      await wrapper.findAll('button').find((b) => b.text() === t('checkin.deduct.open'))!.trigger('click')
       await flushPromises()
     }
     // Esc cancels: nothing is sent, and the next opening starts empty.
@@ -107,6 +109,6 @@ describe('CheckinsPage', () => {
       params: { path: { id: 'v1' } },
       body: { amount: 2, reason: '換一首歌' },
     })
-    expect(toastAdd.mock.calls.at(-1)?.[0].summary).toBe('已扣 Ann 2 格，還有 1 格可用。')
+    expect(toastAdd.mock.calls.at(-1)?.[0].summary).toBe(t('checkin.deduct.done', { name: 'Ann', n: 2, left: 1 }))
   })
 })

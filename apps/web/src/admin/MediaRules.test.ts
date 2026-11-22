@@ -6,6 +6,8 @@ import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import MediaRules from './MediaRules.vue'
 
+const t = i18n.global.t
+
 const ok = (data?: unknown) => Promise.resolve({ data, response: new Response(null, { status: data ? 200 : 204 }) })
 let rules: Schemas['MediaRuleBody'][]
 let put: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, del: ReturnType<typeof vi.fn>
@@ -60,7 +62,7 @@ it('builds each change from the rule the previous one saved', async () => {
 it('drops the rules of a file deleted from the library', async () => {
   const wrapper = mount(MediaRules, { props: { media }, global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
-  const test = () => wrapper.get('[data-reward="r1"]').findAll('button').find((b) => b.text() === '試播')!
+  const test = () => wrapper.get('[data-reward="r1"]').findAll('button').find((b) => b.text() === t('screenTools.rules.test'))!
   expect(test().attributes('disabled')).toBeUndefined()
   // The Host deleted the rule with the file; the library hands the shorter list down.
   rules = []
@@ -83,8 +85,8 @@ it('lists each reward with its media, switches the volume to its own and tests i
     body: { media_id: 'v1', position: 'full', volume: 100 },
   })
 
-  await row().findAll('button').find((b) => b.text() === '試播')!.trigger('click')
+  await row().findAll('button').find((b) => b.text() === t('screenTools.rules.test'))!.trigger('click')
   await flushPromises()
   expect(post).toHaveBeenCalledWith('/api/admin/screen-tools/media-rules/{reward_id}/test', { params: { path: { reward_id: 'r1' } } })
-  expect(wrapper.get('[data-reward="r2"]').findAll('button').find((b) => b.text() === '試播')!.attributes('disabled')).toBeDefined()
+  expect(wrapper.get('[data-reward="r2"]').findAll('button').find((b) => b.text() === t('screenTools.rules.test'))!.attributes('disabled')).toBeDefined()
 })
