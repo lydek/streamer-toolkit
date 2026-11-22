@@ -1,41 +1,53 @@
-// The app bar: sticky top, group tabs, sub-tabs and "More" (docs/decisions.md 管理 UI 版面), with the API mocked.
+// The app bar: sticky top, group tabs, categories, page tabs and "More" (docs/decisions.md 管理 UI 版面), with the API mocked.
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
 
 const tabs = (page: Page) => page.getByRole('navigation', { name: zh.nav.label })
 const tab = (page: Page, group: string) => tabs(page).getByRole('link', { name: zh.nav.groups[group] })
 const subTab = (page: Page, name: string) => page.getByRole('navigation', { name: zh.nav.sub }).getByRole('link', { name })
+/** The page tabs under the title of a category with several pages. */
+const pageTabs = (page: Page, category: string) => page.getByRole('navigation', { name: zh.nav.categories[category], exact: true })
+const pageTab = (page: Page, category: string, name: string) => pageTabs(page, category).getByRole('link', { name })
 const more = (page: Page) => tabs(page).getByRole('button', { name: zh.nav.more })
 /** A group tab with no built page to open: grey, not a link. */
 const greyTab = (page: Page, group: string) => tabs(page).locator('[data-group-tab][aria-disabled="true"]', { hasText: zh.nav.groups[group] })
 
-test('every group and sub-page is one click away, and the current one is marked', async ({ page }) => {
+test('every group, category and page is one click away, and the current one is marked', async ({ page }) => {
   await openAdmin(page)
-  // Every group has sub-tabs: the group tab marks the current group, the sub-tab the current page.
+  // A group without categories lists its pages in the second row: the group tab marks the group, the sub-tab the page.
   await expect(tab(page, 'home')).toHaveAttribute('aria-current', 'true')
   await expect(subTab(page, zh.nav.groups.home)).toHaveAttribute('aria-current', 'page')
 
-  // A group goes to its first built page (tabs.test.ts covers skipping unbuilt ones).
+  // A group goes to its first built page (tabs.test.ts covers skipping unbuilt ones). Its category marks itself, and
+  // when the category has several pages, the page tab under the title marks the page.
   await tab(page, 'chat').click()
   await expect(page).toHaveURL(/\/admin\/chat-log$/)
   await expect(tab(page, 'chat')).toHaveAttribute('aria-current', 'true')
-  await expect(subTab(page, zh.pages.chatLog.name)).toHaveAttribute('aria-current', 'page')
+  await expect(subTab(page, zh.nav.categories.chatroom)).toHaveAttribute('aria-current', 'true')
+  await expect(pageTab(page, 'chatroom', zh.pages.chatLog.name)).toHaveAttribute('aria-current', 'page')
 
+  // A category with one page is the page itself, with no page tabs.
   await tab(page, 'interact').click()
   await expect(page).toHaveURL(/\/admin\/alerts$/)
   await expect(tab(page, 'interact')).toHaveAttribute('aria-current', 'true')
-  await expect(subTab(page, zh.modules.names.alerts)).toHaveAttribute('aria-current', 'page')
+  await expect(subTab(page, zh.nav.categories.alerts)).toHaveAttribute('aria-current', 'page')
+  await expect(pageTabs(page, 'alerts')).toHaveCount(0)
 
-  await subTab(page, zh.modules.names.checkin).click()
+  // A category goes back to the page last seen in it.
+  await subTab(page, zh.nav.categories.checkin).click()
   await expect(page).toHaveURL(/\/admin\/checkin$/)
-  await subTab(page, zh.modules.names.redemption).click()
+  await pageTab(page, 'checkin', zh.pages.cardStyle.name).click()
+  await expect(page).toHaveURL(/\/admin\/card-style$/)
+  await subTab(page, zh.nav.categories.points).click()
   await expect(page).toHaveURL(/\/admin\/redemptions$/)
+  await subTab(page, zh.nav.categories.checkin).click()
+  await expect(page).toHaveURL(/\/admin\/card-style$/)
 
-  // A group tab goes back to the sub-page last seen in it.
+  // A group tab goes back to the page last seen in it.
   await tab(page, 'media').click()
   await expect(page).toHaveURL(/\/admin\/sounds$/)
   await tab(page, 'interact').click()
-  await expect(page).toHaveURL(/\/admin\/redemptions$/)
+  await expect(page).toHaveURL(/\/admin\/card-style$/)
 
   await tab(page, 'home').click()
   await expect(page).toHaveURL(/\/admin\/$/)

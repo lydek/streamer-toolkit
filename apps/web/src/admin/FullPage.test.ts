@@ -2,17 +2,26 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { computed } from 'vue'
 import { i18n } from '../i18n'
 import FullPage from './FullPage.vue'
 import { testRouter } from './testRouter'
 
 const toastAdd = vi.hoisted(() => vi.fn())
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: toastAdd }) }))
+const hiddenPages = vi.hoisted(() => ({ set: new Set<string>() }))
+vi.mock('./features', async (original) => ({
+  ...(await original<typeof import('./features')>()),
+  useModules: () => ({ hidden: computed(() => hiddenPages.set) }),
+}))
 
 const page = (props: Record<string, string>) =>
   mount(FullPage, { props: { title: '背景音樂', ...props }, global: { plugins: [testRouter(), i18n, PrimeVue] } })
 
-afterEach(() => toastAdd.mockReset())
+afterEach(() => {
+  toastAdd.mockReset()
+  hiddenPages.set = new Set()
+})
 
 describe('FullPage header', () => {
   it('shows the tile icon, the status and copies the overlay URL', async () => {
@@ -32,5 +41,38 @@ describe('FullPage header', () => {
     const wrapper = page({})
     expect(wrapper.find('.page-end').exists()).toBe(false)
     expect(wrapper.find('.badge').exists()).toBe(false)
+  })
+})
+
+describe('FullPage page tabs', () => {
+  const at = async (path: string) => {
+    const router = testRouter()
+    await router.push(path)
+    return mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] } })
+  }
+
+  it("lists the category's pages, marks the open one and names the row after the category", async () => {
+    const wrapper = await at('/checkin')
+    const nav = wrapper.get('nav.page-tabs')
+    expect(nav.attributes('aria-label')).toBe('打卡')
+    expect(nav.findAll('a').map((a) => [a.text(), a.attributes('aria-current')])).toEqual([
+      ['打卡名單', 'page'],
+      ['卡片樣式', undefined],
+    ])
+  })
+
+  it('shows a page not built yet greyed, with no link and out of the tab order', async () => {
+    const off = (await at('/redemptions')).get('nav.page-tabs .off')
+    expect(off.element.tagName).toBe('SPAN')
+    expect(off.attributes('aria-disabled')).toBe('true')
+    expect(off.attributes('tabindex')).toBeUndefined()
+    expect(off.text()).toContain('獎勵')
+  })
+
+  it('has no row for a page without a category, or when only one page of the category is left', async () => {
+    expect((await at('/music')).find('nav.page-tabs').exists()).toBe(false)
+    expect((await at('/songs')).find('nav.page-tabs').exists()).toBe(false)
+    hiddenPages.set = new Set(['/card-style'])
+    expect((await at('/checkin')).find('nav.page-tabs').exists()).toBe(false)
   })
 })

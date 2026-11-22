@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { FEATURES } from './features'
 import { UNBUILT_TILES } from './home'
-import { GROUPS, SOON_PAGES, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
+import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 import { router } from './router'
 
 describe('groupOf', () => {
@@ -78,5 +78,33 @@ describe('what counts as built', () => {
 
   it('sends a page not built yet home', () => {
     for (const p of SOON_PAGES) expect(router.resolve(p.path).matched[0]?.redirect, p.path).toBe('/')
+  })
+})
+
+describe('categories', () => {
+  it('finds the category of a page; home, songs and unknown paths have none', () => {
+    expect(categoryOf('/card-style')?.id).toBe('checkin')
+    expect(categoryOf('/redemptions')?.id).toBe('points')
+    expect(categoryOf('/')).toBeUndefined()
+    expect(categoryOf('/songs')).toBeUndefined()
+    expect(categoryOf('/nope')).toBeUndefined()
+  })
+
+  it('lists a grouped page in exactly one of its categories', () => {
+    for (const g of GROUPS.filter((g) => g.categories))
+      expect(g.categories!.flatMap((c) => c.pages)).toEqual(g.pages)
+  })
+
+  it('goes to the page last seen in a category while it can open, else its first open page', () => {
+    const checkin = categoryOf('/checkin')!
+    expect(categoryTarget(checkin)).toBe('/checkin')
+    expect(categoryTarget(checkin, new Set(), '/card-style')).toBe('/card-style')
+    expect(categoryTarget(checkin, new Set(['/card-style']), '/card-style')).toBe('/checkin')
+    // 獎勵 is not built yet, so 頻道點數 opens 兌換紀錄.
+    expect(categoryTarget(categoryOf('/redemptions')!)).toBe('/redemptions')
+  })
+
+  it('has nowhere to go for a category with no built page', () => {
+    expect(categoryTarget(categoryOf('/polls')!)).toBeUndefined()
   })
 })

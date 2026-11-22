@@ -16,7 +16,7 @@ export interface Feature {
   module?: string
   /** Always on (home). */
   fixed?: boolean
-  needs?: 'obs' | 'program' | 'speech'
+  needs?: 'obs' | 'program'
   /** Twitch scopes it adds, asked for the first time it is turned on. */
   scopes?: string[]
   /** Features it cannot work without. */
@@ -40,17 +40,17 @@ export const FEATURES: Feature[] = [
   { id: 'rewards', group: 'interact', icon: 'pi pi-star', pages: ['/rewards'], scopes: ['channel:manage:redemptions'], affects: ['songs'] },
   { id: 'redemption', group: 'interact', icon: 'pi pi-gift', pages: ['/redemptions'], module: 'redemption' },
   { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters'], module: 'counter' },
-  { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes'], module: 'scene', needs: 'obs', affects: ['music'] },
+  { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes', '/modes'], module: 'scene', needs: 'obs', affects: ['music'] },
+  { id: 'obsSources', group: 'media', icon: 'pi pi-clone', pages: ['/obs-sources'], needs: 'obs' },
   { id: 'music', group: 'media', icon: 'pi pi-headphones', pages: ['/music'], module: 'bgm' },
   { id: 'sound', group: 'media', icon: 'pi pi-volume-up', pages: ['/sounds'], module: 'sound' },
-  { id: 'tts', group: 'media', icon: 'pi pi-comment', pages: ['/tts'], needs: 'speech' },
   { id: 'screenTools', group: 'media', icon: 'pi pi-desktop', pages: ['/screen-tools'], module: 'screen-tools' },
   { id: 'avatar', group: 'media', icon: 'pi pi-face-smile', pages: ['/avatar'], needs: 'program' },
-  { id: 'shoutouts', group: 'media', icon: 'pi pi-video', pages: ['/shoutouts'], scopes: ['moderator:manage:shoutouts'] },
   { id: 'imageSizes', group: 'media', icon: 'pi pi-image', pages: ['/image-sizes'], fixed: true },
   { id: 'viewers', group: 'viewers', icon: 'pi pi-users', pages: ['/viewers'], scopes: ['moderation:read', 'channel:read:vips'] },
   { id: 'roles', group: 'viewers', icon: 'pi pi-tags', pages: ['/roles'], requires: ['viewers'] },
   { id: 'leaderboard', group: 'viewers', icon: 'pi pi-trophy', pages: ['/leaderboard'], fixed: true },
+  { id: 'shoutouts', group: 'viewers', icon: 'pi pi-video', pages: ['/shoutouts'], scopes: ['moderator:manage:shoutouts'] },
   { id: 'credits', group: 'viewers', icon: 'pi pi-list', pages: ['/credits'] },
   { id: 'raids', group: 'viewers', icon: 'pi pi-send', pages: ['/raids'], scopes: ['channel:manage:raids'] },
 ]

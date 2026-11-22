@@ -47,6 +47,28 @@
       "interact": "互動",
       "media": "畫面與聲音",
       "viewers": "觀眾"
+    },
+    "categories": {
+      "chatroom": "聊天室",
+      "bot": "聊天機器人",
+      "alerts": "特效",
+      "checkin": "打卡",
+      "points": "頻道點數",
+      "counters": "計數器",
+      "polls": "投票與預測",
+      "obs": "OBS",
+      "music": "背景音樂",
+      "sound": "音效",
+      "widgets": "畫面小工具",
+      "pictures": "影片與圖片",
+      "avatar": "虛擬形象",
+      "viewers": "觀眾",
+      "leaderboard": "排行榜",
+      "raids": "揪團與 SO"
+    },
+    "pageTabs": {
+      "checkin": "打卡名單",
+      "rewards": "獎勵"
     }
   },
   "chatLog": {
@@ -110,7 +132,6 @@
     "needs": {
       "obs": "需要 OBS",
       "program": "需要外部程式",
-      "speech": "需要 Windows 語音",
       "scopes": "需要 Twitch 權限"
     },
     "confirm": {
@@ -192,10 +213,6 @@
       "name": "音效",
       "desc": "音效庫與各功能的音效"
     },
-    "tts": {
-      "name": "文字轉語音",
-      "desc": "唸出小奇點與兌換的留言"
-    },
     "screenTools": {
       "name": "畫面工具",
       "desc": "休息卡片、目標條、跑馬燈"
@@ -205,8 +222,8 @@
       "desc": "表情、換裝與互動"
     },
     "shoutouts": {
-      "name": "SO 與影片",
-      "desc": "SO 時播放 Clip、觀眾點播影片"
+      "name": "SO",
+      "desc": "SO 時播放對方的 Clip"
     },
     "imageSizes": {
       "name": "圖片尺寸",
@@ -231,6 +248,10 @@
     "raids": {
       "name": "揪團",
       "desc": "發起揪團，出發前播放名單"
+    },
+    "obsSources": {
+      "name": "OBS 來源",
+      "desc": "集中看所有內建 Overlay 在 OBS 的狀態"
     }
   },
   "pages": {
@@ -295,10 +316,6 @@
       "name": "頻道點數",
       "desc": "新增或暫停頻道點數獎勵，退還點數。"
     },
-    "tts": {
-      "name": "文字轉語音",
-      "desc": "唸出小奇點和兌換的留言。"
-    },
     "screenTools": {
       "name": "畫面工具",
       "desc": "休息卡片、目標條和跑馬燈。"
@@ -308,8 +325,8 @@
       "desc": "控制 VTuber Plus、VSeeFace 的表情、換裝與互動。"
     },
     "shoutouts": {
-      "name": "SO 與影片",
-      "desc": "SO 時播放 Clip，觀眾也能點播影片。"
+      "name": "SO",
+      "desc": "SO 時播放對方的 Clip。"
     },
     "imageSizes": {
       "name": "圖片尺寸",
@@ -334,6 +351,14 @@
     "raids": {
       "name": "揪團",
       "desc": "發起揪團，出發前播放感謝名單。"
+    },
+    "modes": {
+      "name": "模式",
+      "desc": "一鍵切換場景、音訊與要顯示的東西。"
+    },
+    "obsSources": {
+      "name": "OBS 來源",
+      "desc": "所有內建 Overlay 在 OBS 的哪些場景，一頁看完。"
     }
   },
   "retention": {

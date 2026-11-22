@@ -2,12 +2,18 @@
 import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { computed } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '../i18n'
 import RedemptionsPage from './RedemptionsPage.vue'
 
 const { client } = vi.hoisted(() => ({ client: { GET: vi.fn() } }))
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), client }))
+// Every GET here answers with the redemption list, so the page row's module states come from a stub.
+vi.mock('./features', async (original) => ({
+  ...(await original<typeof import('./features')>()),
+  useModules: () => ({ hidden: computed(() => new Set<string>()) }),
+}))
 
 const ok = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
 

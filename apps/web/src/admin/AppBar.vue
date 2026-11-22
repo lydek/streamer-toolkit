@@ -129,19 +129,22 @@
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
     <SimulateDialog ref="simulate" :bgm="live.bgm" @closed="simulateButton?.$el.focus()" />
+    <!-- Second row: the group's categories, or its pages when it has none. -->
     <nav
-      v-if="group && subPages.length > 1"
+      v-if="subItems.length > 1"
       ref="subTabsEl"
       class="sub-tabs"
       :class="{ 'at-end': subAtEnd }"
       :aria-label="t('nav.sub')"
       @scroll.passive="checkSubEnd"
     >
-      <template v-for="p in subPages" :key="p.path">
-        <span v-if="p.soon" class="off" aria-disabled="true" :title="t('home.unbuilt')">
-          {{ t(p.label) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+      <template v-for="item in subItems" :key="item.key">
+        <span v-if="!item.to" class="off" aria-disabled="true" :title="t('home.unbuilt')">
+          {{ item.label }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
         </span>
-        <RouterLink v-else :to="p.path">{{ t(p.label) }}</RouterLink>
+        <RouterLink v-else v-slot="{ href, navigate }" :to="item.to" custom>
+          <a :href="href" :aria-current="item.current" @click="navigate">{{ item.label }}</a>
+        </RouterLink>
       </template>
     </nav>
   </header>
@@ -165,7 +168,7 @@ import { useModules } from './features'
 import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
 import SimulateDialog from './SimulateDialog.vue'
-import { GROUPS, type TabGroup, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
+import { GROUPS, type TabGroup, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -218,14 +221,17 @@ function openConnections(section: 'twitch' | 'obs', el: EventTarget | null) {
   else void drawer.open('connections', el)
 }
 
-// A group tab goes back to the sub-page last seen in that group.
+// A group tab goes back to the page last seen in that group, and a category to the one last seen in it.
 const lastPage = reactive<Record<string, string>>({})
+const lastInCategory = reactive<Record<string, string>>({})
 const group = computed(() => groupOf(route.path))
 watch(
   () => route.path,
   (path) => {
     const g = groupOf(path)
     if (g) lastPage[g.id] = path
+    const c = categoryOf(path)
+    if (c) lastInCategory[c.id] = path
   },
   { immediate: true },
 )
@@ -270,7 +276,27 @@ const pinned = computed(() =>
   tabBar.groups === null ? groups.value : tabBar.groups.flatMap((id) => groups.value.find((g) => g.id === id) ?? []),
 )
 const unpinned = computed(() => groups.value.filter((g) => !pinned.value.includes(g)))
-const subPages = computed(() => group.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
+// The second row: categories with a page left (grey when none of them is built), or a group's own pages. A
+// category is the current one while one of its pages is open; it is the page itself when that is its only page.
+const subItems = computed<{ key: string; label: string; to?: string; current?: 'page' | 'true' }[]>(() => {
+  const g = group.value
+  if (!g) return []
+  if (!g.categories)
+    return g.pages
+      .filter((p) => !hidden.value.has(p.path))
+      .map((p) => ({ key: p.path, label: t(p.label), to: p.soon ? undefined : p.path, current: p.path === route.path ? 'page' : undefined }))
+  return g.categories.flatMap((c) => {
+    const pages = c.pages.filter((p) => !hidden.value.has(p.path))
+    if (!pages.length) return []
+    const open = pages.some((p) => p.path === route.path)
+    return [{
+      key: c.id,
+      label: t(`nav.categories.${c.id}`),
+      to: categoryTarget(c, hidden.value, lastInCategory[c.id]),
+      current: open ? (pages.length === 1 ? ('page' as const) : ('true' as const)) : undefined,
+    }]
+  })
+})
 const target = (g: TabGroup) => {
   const last = lastPage[g.id]
   return last && !hidden.value.has(last) ? last : firstPage(g, hidden.value)
@@ -609,7 +635,7 @@ onBeforeUnmount(() => {
   color: var(--p-text-color);
 }
 
-.sub-tabs a[aria-current='page'] {
+.sub-tabs a[aria-current] {
   border-color: var(--p-primary-color);
   color: var(--p-primary-color);
 }
