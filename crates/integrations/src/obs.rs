@@ -327,6 +327,39 @@ impl ObsControl {
             .map_err(command_error)
     }
 
+    /// `SetStudioModeEnabled`.
+    pub async fn set_studio_mode(&self, enabled: bool) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .ui()
+            .set_studio_mode_enabled(enabled)
+            .await
+            .map_err(command_error)
+    }
+
+    /// `SetCurrentPreviewScene`.
+    pub async fn set_preview(&self, scene: &str) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scenes()
+            .set_current_preview_scene(SceneId::Name(scene))
+            .await
+            .map_err(command_error)
+    }
+
+    /// `SetCurrentSceneTransition` when one is given, then `TriggerStudioModeTransition`.
+    pub async fn transition(&self, transition: Option<&str>) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        if let Some(name) = transition {
+            client
+                .transitions()
+                .set_current(name)
+                .await
+                .map_err(command_error)?;
+        }
+        client.transitions().trigger().await.map_err(command_error)
+    }
+
     /// `RemoveSceneItem`.
     pub async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
         let client = self.client()?;
@@ -442,7 +475,9 @@ impl Obs {
                 EventSubscription::SCENES
                     | EventSubscription::SCENE_ITEMS
                     | EventSubscription::INPUTS
-                    | EventSubscription::OUTPUTS,
+                    | EventSubscription::OUTPUTS
+                    | EventSubscription::TRANSITIONS
+                    | EventSubscription::UI,
             ),
             broadcast_capacity: 64,
             // Half the budget, so a silent host ends as `Timeout` (unreachable) before the outer limit fires.
@@ -579,12 +614,25 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
             name: input.id.name,
         });
     }
+    let studio_mode = client.ui().studio_mode_enabled().await?;
+    let transitions = client.transitions().list().await?;
     Ok(StreamingState {
         scene: list.current_program_scene.map(|s| s.name),
         scenes,
         inputs,
         streaming: client.streaming().status().await?.active,
         recording: client.recording().status().await?.active,
+        studio_mode,
+        preview: list
+            .current_preview_scene
+            .filter(|_| studio_mode)
+            .map(|s| s.name),
+        transitions: transitions
+            .transitions
+            .into_iter()
+            .map(|t| t.id.name)
+            .collect(),
+        transition: transitions.current_scene_transition.map(|t| t.name),
     })
 }
 
@@ -642,6 +690,21 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
         }
         Event::RecordStateChanged { active, .. } => {
             state.recording = *active;
+            Change::Updated
+        }
+        // Turning studio mode on picks a preview scene: read it with the rest.
+        Event::StudioModeStateChanged { enabled: true } => Change::Reread,
+        Event::StudioModeStateChanged { enabled: false } => {
+            state.studio_mode = false;
+            state.preview = None;
+            Change::Updated
+        }
+        Event::CurrentPreviewSceneChanged { id } => {
+            state.preview = Some(id.name.clone());
+            Change::Updated
+        }
+        Event::CurrentSceneTransitionChanged { id } => {
+            state.transition = Some(id.name.clone());
             Change::Updated
         }
         Event::SceneListChanged { .. }
@@ -754,9 +817,22 @@ mod tests {
                     "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}]}),
                 "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
                 "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
-                t if t.starts_with("Set") || t.starts_with("Remove") => Value::Null,
+                t if t.starts_with("Set")
+                    || t.starts_with("Remove")
+                    || t.starts_with("Trigger") =>
+                {
+                    Value::Null
+                }
                 "CreateInput" => json!({"inputUuid": CHAT, "sceneItemId": 9}),
                 "CreateSceneItem" => json!({"sceneItemId": 10}),
+                "GetStudioModeEnabled" => json!({"studioModeEnabled": false}),
+                "GetSceneTransitionList" => json!({"currentSceneTransitionName": "Fade",
+                    "currentSceneTransitionUuid": "00000000-0000-0000-0000-000000000010",
+                    "currentSceneTransitionKind": "fade_transition", "transitions": [
+                    {"transitionName": "Cut", "transitionUuid": "00000000-0000-0000-0000-000000000011",
+                     "transitionKind": "cut_transition", "transitionFixed": true, "transitionConfigurable": false},
+                    {"transitionName": "Fade", "transitionUuid": "00000000-0000-0000-0000-000000000010",
+                     "transitionKind": "fade_transition", "transitionFixed": false, "transitionConfigurable": true}]}),
                 "GetVideoSettings" => {
                     json!({"fpsNumerator": 60, "fpsDenominator": 1, "baseWidth": 1920,
                     "baseHeight": 1080, "outputWidth": 1280, "outputHeight": 720})
@@ -997,9 +1073,21 @@ mod tests {
                 }],
                 streaming: false,
                 recording: true,
+                studio_mode: false,
+                preview: None,
+                transitions: vec!["Cut".into(), "Fade".into()],
+                transition: Some("Fade".into()),
             }
         );
         assert_eq!(*status.borrow(), ObsStatus::CONNECTED);
+        fake.event(
+            "CurrentSceneTransitionChanged",
+            json!({"transitionName": "Cut", "transitionUuid": "00000000-0000-0000-0000-000000000011"}),
+        );
+        state_reaches(&mut state, "transition picked", |s| {
+            s.transition.as_deref() == Some("Cut")
+        })
+        .await;
 
         let scene = |name: &str| json!({"sceneName": name, "sceneUuid": LIVE});
         fake.event("CurrentProgramSceneChanged", scene("BRB"));
@@ -1102,6 +1190,9 @@ mod tests {
             )
             .await
             .unwrap();
+        control.set_studio_mode(true).await.unwrap();
+        control.set_preview("BRB").await.unwrap();
+        control.transition(Some("Cut")).await.unwrap();
         assert_eq!(
             *fake.commands.lock().unwrap(),
             vec![
@@ -1139,6 +1230,18 @@ mod tests {
                     "SetSceneItemTransform".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
                         "positionX": 960.0, "positionY": 540.0, "alignment": 0}})
+                ),
+                (
+                    "SetStudioModeEnabled".to_owned(),
+                    json!({"studioModeEnabled": true})
+                ),
+                (
+                    "SetCurrentPreviewScene".to_owned(),
+                    json!({"sceneName": "BRB"})
+                ),
+                (
+                    "SetCurrentSceneTransition".to_owned(),
+                    json!({"transitionName": "Cut"})
                 ),
             ]
         );

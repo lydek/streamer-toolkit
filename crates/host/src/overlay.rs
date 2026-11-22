@@ -553,6 +553,10 @@ mod tests {
                 }],
                 streaming: true,
                 recording: false,
+                studio_mode: true,
+                preview: Some("Live".into()),
+                transitions: vec!["Fade".into()],
+                transition: Some("Fade".into()),
             },
         );
         let wire: serde_json::Value = serde_json::from_str(&bus.subscribe().0).unwrap();

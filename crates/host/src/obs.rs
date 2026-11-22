@@ -339,6 +339,31 @@ impl StreamingSoftware for ObsLink {
         self.control.set_placement(scene, item, placement).await
     }
 
+    async fn set_studio_mode(&self, enabled: bool) -> Result<(), StreamingError> {
+        if self.state.borrow().scene.is_none() {
+            return Err(StreamingError::NotConnected);
+        }
+        self.control.set_studio_mode(enabled).await
+    }
+
+    async fn set_preview(&self, scene: &str) -> Result<(), StreamingError> {
+        self.check(scene, None)?;
+        self.control.set_preview(scene).await
+    }
+
+    async fn transition(&self, transition: Option<&str>) -> Result<(), StreamingError> {
+        {
+            let state = self.state.borrow();
+            if state.scene.is_none() {
+                return Err(StreamingError::NotConnected);
+            }
+            if transition.is_some_and(|t| !state.transitions.iter().any(|known| known == t)) {
+                return Err(StreamingError::NotFound);
+            }
+        }
+        self.control.transition(transition).await
+    }
+
     async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
         self.check(scene, Some(item))?;
         self.control.remove_item(scene, item).await
@@ -368,6 +393,12 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
     Router::new()
         .route("/api/admin/obs", get(obs_overview).put(update_obs))
         .route("/api/admin/obs/scene", put(switch_scene))
+        .route("/api/admin/obs/studio", put(set_studio))
+        .route("/api/admin/obs/preview", put(set_preview_scene))
+        .route(
+            "/api/admin/obs/transition",
+            axum::routing::post(transition_now),
+        )
         .route("/api/admin/obs/item", put(update_item))
         .route("/api/admin/obs/placements", get(scene_placements))
         .route(
@@ -411,6 +442,77 @@ pub(crate) async fn switch_scene(
     Json(body): Json<SceneBody>,
 ) -> Response {
     command_response(link.switch_scene(&body.scene).await)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct StudioBody {
+    enabled: bool,
+}
+
+/// Turns OBS's studio mode on or off; `obs.state` follows once OBS has done it, also when it is changed in OBS.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs/studio",
+    tag = "admin",
+    request_body = StudioBody,
+    responses(
+        (status = 204),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_studio(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<StudioBody>,
+) -> Response {
+    command_response(link.set_studio_mode(body.enabled).await)
+}
+
+/// Puts a scene in the preview while studio mode is on; `obs.state`'s `preview` shows it.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs/preview",
+    tag = "admin",
+    request_body = SceneBody,
+    responses(
+        (status = 204),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn set_preview_scene(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<SceneBody>,
+) -> Response {
+    command_response(link.set_preview(&body.scene).await)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct TransitionBody {
+    /// One of `obs.state`'s `transitions`; absent keeps the one in use.
+    #[serde(default)]
+    transition: Option<String>,
+}
+
+/// Puts the preview on air (studio mode), with the transition given or the one in use.
+#[utoipa::path(
+    post,
+    path = "/api/admin/obs/transition",
+    tag = "admin",
+    request_body = TransitionBody,
+    responses(
+        (status = 204),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn transition_now(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<TransitionBody>,
+) -> Response {
+    command_response(link.transition(body.transition.as_deref()).await)
 }
 
 #[derive(Deserialize, ToSchema)]
