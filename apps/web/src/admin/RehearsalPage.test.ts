@@ -7,6 +7,8 @@ import { client } from './api'
 import RehearsalPage from './RehearsalPage.vue'
 import { testRouter } from './testRouter'
 
+const t = i18n.global.t
+
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
 
 const ok = (data?: unknown) => Promise.resolve({ data, response: new Response(null, { status: data ? 200 : 204 }) })
@@ -32,17 +34,17 @@ afterEach(() => {
 
 it('plays a built-in script at the chosen speed, stops it, and names the line of a broken file', async () => {
   const wrapper = mount(RehearsalPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
-  await wrapper.findAll('[aria-labelledby="rh-speed"] button').find((b) => b.text() === '2 倍')!.trigger('click')
-  await wrapper.findAll('li').find((l) => l.text().includes('多人打卡'))!.get('button').trigger('click')
+  await wrapper.findAll('[aria-labelledby="rh-speed"] button').find((b) => b.text() === t('rehearsal.speeds.double'))!.trigger('click')
+  await wrapper.findAll('li').find((l) => l.text().includes(t('rehearsal.scripts.checkins')))!.get('button').trigger('click')
   await flushPromises()
   const body = post.mock.calls[0][1].body as { script: string; speed: string }
   expect(body.speed).toBe('double')
   const stamps = JSON.parse(body.script).steps.map((s: { stamps: number }) => s.stamps)
   // A card of 5 slots: no step asks for more, and the last one fills it.
   expect(stamps).toEqual([1, 2, 3, 4, 5, 5, 5, 5, 5, 5])
-  expect(wrapper.text()).toContain('演練中')
+  expect(wrapper.text()).toContain(t('rehearsal.running'))
 
-  await wrapper.findAll('button').find((b) => b.text() === '停止演練')!.trigger('click')
+  await wrapper.findAll('button').find((b) => b.text() === t('rehearsal.stop'))!.trigger('click')
   await flushPromises()
   expect(post).toHaveBeenCalledWith('/api/admin/simulate/script/stop')
 
@@ -50,5 +52,5 @@ it('plays a built-in script at the chosen speed, stops it, and names the line of
   Object.defineProperty(input.element, 'files', { value: [new File(['{ broken'], 'mine.json')] })
   await input.trigger('change')
   await flushPromises()
-  expect(wrapper.get('[role="alert"]').text()).toBe('劇本格式不正確：第 3 行。')
+  expect(wrapper.get('[role="alert"]').text()).toBe(t('rehearsal.badLine', { line: 3 }))
 })

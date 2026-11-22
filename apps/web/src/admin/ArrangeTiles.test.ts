@@ -6,6 +6,8 @@ import { i18n } from '../i18n'
 import ArrangeTiles from './ArrangeTiles.vue'
 import { TILES, type Tile } from './home'
 
+const t = i18n.global.t
+
 const extra: Tile[] = [{ id: 'badge', icon: '', tint: 'blue' }]
 const names: Record<string, string> = { chat: '聊天室', alerts: '快訊', badge: '徽章' }
 
@@ -56,14 +58,14 @@ describe('ArrangeTiles', () => {
     await flushPromises()
     expect(save).toHaveBeenCalledWith(['alerts', 'chat', 'feed'])
     expect(document.activeElement).toBe(button('chat', 'later'))
-    expect(live()).toBe('聊天室移到第 2 個')
+    expect(live()).toBe(t('arrange.moved', { name: '聊天室', position: 2 }))
     // At the edge the move button is disabled, so focus goes to the other one.
     await wrapper.setProps({ saved: ['chat', 'alerts'] })
     button('chat', 'later').click()
     await flushPromises()
     expect(wrapper.props('saved')).toEqual(['alerts', 'chat'])
     expect(document.activeElement).toBe(button('chat', 'earlier'))
-    expect(live()).toBe('聊天室移到第 2 個')
+    expect(live()).toBe(t('arrange.moved', { name: '聊天室', position: 2 }))
   })
 
   it('puts focus back and announces nothing when the save fails', async () => {
@@ -90,7 +92,7 @@ describe('ArrangeTiles', () => {
     button('chat', 'remove').click()
     await flushPromises()
     expect(document.activeElement).toBe(button('alerts', 'remove'))
-    expect(live()).toBe('已隱藏聊天室')
+    expect(live()).toBe(t('arrange.removed', { name: '聊天室' }))
 
     await wrapper.setProps({ saved: ['chat', 'alerts'] })
     button('alerts', 'remove').click()
@@ -110,7 +112,7 @@ describe('ArrangeTiles', () => {
     expect(wrapper.props('saved')).toEqual(['badge'])
     // Alone on home: both move buttons are disabled.
     expect(document.activeElement).toBe(button('badge', 'remove'))
-    expect(live()).toBe('徽章已加回第 1 個')
+    expect(live()).toBe(t('arrange.added', { name: '徽章', position: 1 }))
 
     await wrapper.setProps({ saved: ['chat', 'badge'] })
 
@@ -128,19 +130,19 @@ describe('ArrangeTiles', () => {
 
   it('restores the defaults by saving null', async () => {
     const wrapper = arrange([])
-    ;[...document.querySelectorAll('button')].find((b) => b.textContent?.includes('還原預設'))!.click()
+    ;[...document.querySelectorAll('button')].find((b) => b.textContent?.includes(t('arrange.restore')))!.click()
     await flushPromises()
     expect(save).toHaveBeenCalledWith(null)
     expect(wrapper.props('saved')).toBeNull()
-    expect(live()).toBe('已還原預設功能磚')
+    expect(live()).toBe(t('arrange.restored'))
   })
 
   it('shows disabled modules as text and tiles as list items with separate buttons', () => {
     arrange(['chat'], [{ id: 'chat', enabled: false, closed: false }])
     const item = document.querySelector('[data-tile="chat"]')!
     expect(item.tagName).toBe('LI')
-    expect(item.textContent).toContain('未啟用 · 到設定開啟')
+    expect(item.textContent).toContain(t('arrange.notEnabled'))
     expect(item.querySelector('button button')).toBeNull()
-    expect(button('chat', 'remove').getAttribute('aria-label')).toBe('隱藏：聊天室')
+    expect(button('chat', 'remove').getAttribute('aria-label')).toBe(t('arrange.for', { action: t('arrange.remove'), name: '聊天室' }))
   })
 })

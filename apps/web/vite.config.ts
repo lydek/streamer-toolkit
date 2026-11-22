@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -40,6 +41,7 @@ export default defineConfig(({ mode }) => ({
       'e2e/harness/index.html',
     ],
   },
+  test: { setupFiles: ['src/testSetup.ts'] },
   // `--mode port` builds only the small port-change page into Tauri's frontendDist.
   build:
     mode === 'port'

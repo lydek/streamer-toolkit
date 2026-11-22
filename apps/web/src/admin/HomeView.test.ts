@@ -6,9 +6,11 @@ import { i18n } from '../i18n'
 import { client } from './api'
 import { useDock } from './dock'
 import { onDrawerSubmit, useDrawer } from './drawer'
-import { UNBUILT_TILES } from './home'
+import { type Stage, UNBUILT_TILES } from './home'
 import HomeView from './HomeView.vue'
 import { testRouter } from './testRouter'
+
+const t = i18n.global.t
 
 const { toastAdd } = vi.hoisted(() => ({ toastAdd: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -30,10 +32,10 @@ async function home() {
   await flushPromises()
   return wrapper
 }
-const pencil = () => [...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.includes('編輯首頁'))
-const done = () => [...document.querySelectorAll('header button')].find((b) => b.textContent?.includes('完成'))
-const pickStage = async (name: string) => {
-  ;[...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.trim() === name)!.click()
+const pencil = () => [...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.includes(t('home.arrange')))
+const done = () => [...document.querySelectorAll('header button')].find((b) => b.textContent?.includes(t('arrange.done')))
+const pickStage = async (stage: Stage) => {
+  ;[...document.querySelectorAll<HTMLButtonElement>('header button')].find((b) => b.textContent?.trim() === t(`stage.${stage}`))!.click()
   await flushPromises()
 }
 const esc = async () => {
@@ -77,16 +79,16 @@ describe('HomeView stage blocks', () => {
     await home()
     const headings = () => [...document.querySelectorAll('#tiles h2')].map((h) => h.textContent)
     // No stream yet: 開播前, whose home leads with the checklist.
-    expect(headings()).toContain('開播前檢查')
-    expect(document.querySelector('#tiles li.size-w h2')?.textContent).toBe('開播前檢查')
+    expect(headings()).toContain(t('home.blocks.checklist'))
+    expect(document.querySelector('#tiles li.size-w h2')?.textContent).toBe(t('home.blocks.checklist'))
     expect(document.querySelector('[data-expand="queue"]')).toBeNull()
     // 直播中 has its own home: the queue as a small tile, no checklist; 待處理 has no items yet.
-    await pickStage('直播中')
-    expect(headings()).not.toContain('開播前檢查')
-    expect(headings()).not.toContain('待處理')
+    await pickStage('live')
+    expect(headings()).not.toContain(t('home.blocks.checklist'))
+    expect(headings()).not.toContain(t('home.blocks.pending'))
     expect(document.querySelector('[data-expand="queue"]')?.getAttribute('aria-expanded')).toBe('false')
-    await pickStage('下播後')
-    expect(headings()).toContain('本場摘要')
+    await pickStage('after')
+    expect(headings()).toContain(t('home.blocks.summary'))
   })
 })
 
@@ -103,7 +105,7 @@ describe('HomeView stage homes', () => {
     expect(tileIds()).toEqual(['chat'])
     pencil()!.click()
     await flushPromises()
-    await pickStage('直播中')
+    await pickStage('live')
     document.querySelector<HTMLButtonElement>('[data-tile="chat"] [data-action="remove"]')!.click()
     await flushPromises()
     expect(put).toHaveBeenCalledTimes(1)
@@ -112,9 +114,9 @@ describe('HomeView stage homes', () => {
       body: ['pending', 'stats', 'feed', 'queue', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'screen-tools'],
     })
     // The other stages keep their own orders: 開播前 still has its chat tile, 下播後 stays empty.
-    await pickStage('開播前')
+    await pickStage('before')
     expect(tileIds()).toEqual(['chat'])
-    await pickStage('下播後')
+    await pickStage('after')
     expect(tileIds()).toEqual([])
   })
 })
@@ -122,7 +124,7 @@ describe('HomeView stage homes', () => {
 describe('HomeView blocks that open in place', () => {
   it('opens a small tile into its block and back, with focus kept on the same place, and saves nothing', async () => {
     await home()
-    await pickStage('直播中')
+    await pickStage('live')
     const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="queue"]')!
     toggle().click()
     await flushPromises()
@@ -139,7 +141,7 @@ describe('HomeView blocks that open in place', () => {
     await flushPromises()
     expect(document.getElementById('block-feed')?.closest('li')?.classList).toContain('size-l')
     // The feed loads with the live messages, which this test does not send.
-    expect(document.getElementById('block-feed')?.textContent).toContain('載入中')
+    expect(document.getElementById('block-feed')?.textContent).toContain(t('app.loading'))
     expect(put).not.toHaveBeenCalled()
   })
 })
@@ -156,14 +158,14 @@ describe('HomeView tiles', () => {
       )) as never)
     await home()
     const text = (id: string) => document.querySelector(`[data-drawer-tile="${id}"]`)?.textContent?.replace(/\s+/g, '')
-    expect(text('sound')).toContain('2個音效叮咚、歡呼')
+    expect(text('sound')).toContain(`2${t('home.units.sound')}叮咚、歡呼`.replace(/\s+/g, ''))
   })
 
   it('name a tile that is no module after its page', async () => {
     vi.mocked(client.GET).mockImplementation(((path: string) =>
       ok({ ...responses, '/api/admin/home-tiles': ['rehearsal'] }[path])) as never)
     await home()
-    expect(document.querySelector('[data-drawer-tile="rehearsal"]')?.textContent).toContain('演練')
+    expect(document.querySelector('[data-drawer-tile="rehearsal"]')?.textContent).toContain(t('pages.rehearsal.name'))
   })
 })
 
@@ -209,7 +211,7 @@ describe('HomeView skip link', () => {
     ;(document.activeElement as HTMLElement).blur()
     fail()
     await flushPromises()
-    expect(document.getElementById('tiles')!.textContent).toContain('載入失敗')
+    expect(document.getElementById('tiles')!.textContent).toContain(t('home.loadFailed'))
     skip().click()
     expect(document.activeElement).toBe(document.getElementById('tiles'))
   })
@@ -301,6 +303,6 @@ describe('HomeView arrange mode', () => {
     fail()
     await flushPromises()
     expect(document.querySelector('[data-drawer-tile="chat"]')).not.toBeNull()
-    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', summary: '設定儲存失敗。' }))
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', summary: t('errors.settings.save_failed') }))
   })
 })

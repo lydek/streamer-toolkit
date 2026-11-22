@@ -31,6 +31,8 @@ import {
 } from './home'
 import HomeTile from './HomeTile.vue'
 
+const t = i18n.global.t
+
 const chat = (seq: number, text = `msg ${seq}`): Schemas['ChatMessageEvent'] => ({
   id: String(seq),
   type: 'chat.message',
@@ -371,11 +373,11 @@ describe('HomeTile', () => {
   })
 
   it('shows loading text, and failed text with the attention dot and hidden label', () => {
-    expect(tile({ state: 'loading' }).text()).toContain('載入中')
+    expect(tile({ state: 'loading' }).text()).toContain(t('app.loading'))
     const failed = tile({ state: 'failed' })
-    expect(failed.text()).toContain('載入失敗')
+    expect(failed.text()).toContain(t('home.loadFailed'))
     expect(failed.find('.dot').exists()).toBe(true)
-    expect(failed.get('.sr-only').text()).toBe('需要注意')
+    expect(failed.get('.sr-only').text()).toBe(t('home.attention'))
     expect(tile({ state: 'ready', text: 'x' }, true).find('.dot').exists()).toBe(true)
   })
 
@@ -385,10 +387,10 @@ describe('HomeTile', () => {
       global: { plugins: [i18n] },
     })
     expect(wrapper.find('button').exists()).toBe(false)
-    expect(wrapper.get('.tile').attributes('title')).toBe('還沒有這個功能')
+    expect(wrapper.get('.tile').attributes('title')).toBe(t('home.unbuilt'))
     expect(wrapper.get('.tile').attributes('data-drawer-tile')).toBeUndefined()
     expect(wrapper.text()).toContain('點歌')
-    expect(wrapper.text()).toContain('還沒有這個功能')
+    expect(wrapper.text()).toContain(t('home.unbuilt'))
   })
 
   it('shows a big count with its unit, a word smaller, and viewer text only as text', () => {

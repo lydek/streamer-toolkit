@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import { csvCell, exportRecord, recordCsv, recordFileName } from './streamRecord'
+
+const t = i18n.global.t
 
 type Row = Schemas['RecordRow']
 const row = (p: Partial<Row>): Row => ({
@@ -44,19 +47,19 @@ describe('stream record CSV', () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff)
     expect(csv.endsWith('\r\n')).toBe(true)
     const lines = cells(csv)
-    expect(lines[0]).toEqual(['時間', '事件種類', '觀眾', '數量或內容'])
+    expect(lines[0]).toEqual([t('record.at'), t('record.kind'), t('record.viewer'), t('record.detail')])
     expect(lines.length).toBe(1 + record.rows.length)
     const local = new Date('2026-11-21T10:01:00.000Z')
     expect(lines[1][0]).toBe(
       `${local.getFullYear()}-11-${String(local.getDate()).padStart(2, '0')} ${String(local.getHours()).padStart(2, '0')}:01:00`,
     )
     expect(lines.slice(1).map((l) => l.slice(1))).toEqual([
-      ['追隨', '阿凱', ''],
-      ['訂閱', '小魚', '送禮訂閱 · Tier 1'],
-      ['續訂', '阿凱', '6 個月："嗨"'],
-      ['小奇點', '匿名觀眾', '150 小奇點'],
-      ['揪團', 'nightowl', '12 人'],
-      ['兌換', '橘子', '喝水：多喝水'],
+      [t('record.kinds.follow'), '阿凱', ''],
+      [t('record.kinds.subscribe'), '小魚', t('record.gifted', { tier: 1 })],
+      [t('record.kinds.resubscribe'), '阿凱', t('record.withText', { head: t('record.months', { n: 6 }), text: '"嗨"' })],
+      [t('record.kinds.cheer'), t('alerts.anonymous'), t('record.bits', { n: 150 })],
+      [t('record.kinds.raid'), 'nightowl', t('record.raiders', { n: 12 })],
+      [t('record.kinds.redemption'), '橘子', t('record.withText', { head: '喝水', text: '多喝水' })],
     ])
   })
 
@@ -68,7 +71,7 @@ describe('stream record CSV', () => {
     expect(csvCell('a"b')).toBe('"a""b"')
     const csv = recordCsv({ ...record, rows: [row({ viewer: '=cmd|calc', kind: 'redemption', reward: '喝水', input: '@everyone' })] })
     expect(csv).toContain(`"'=cmd|calc"`)
-    expect(csv).toContain('"喝水：@everyone"')
+    expect(csv).toContain(`"${t('record.withText', { head: '喝水', text: '@everyone' })}"`)
   })
 
   it('names the file after the stream start and saves it through the save dialog', async () => {
@@ -87,7 +90,7 @@ describe('stream record CSV', () => {
     expect(await exportRecord(record.startedAt)).toBe('picked.csv')
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({ types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }] }))
     const text = new TextDecoder().decode(new Uint8Array(written.flatMap((c) => [...c])))
-    expect(text).toContain('喝水：多喝水')
+    expect(text).toContain(t('record.withText', { head: '喝水', text: '多喝水' }))
   })
 })
 
