@@ -63,6 +63,14 @@ describe('CheckinsPage', () => {
   })
 
   it('deducts stamps with an optional reason and lists the change', async () => {
+    // jsdom has no modal dialogs: open and close them by the attribute, firing close like a browser.
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open')
+      this.dispatchEvent(new Event('close'))
+    }
     client.GET.mockImplementation(async (path: string) =>
       path === '/api/admin/checkin/deductions'
         ? ok([{ id: 'd1', viewer_id: 'v1', user_name: 'Ann', amount: 2, reason: '換一首歌', deducted_at: '2026-11-22T12:00:00.000Z' }])
@@ -71,17 +79,29 @@ describe('CheckinsPage', () => {
     client.POST.mockResolvedValue(ok({ available: 1 }))
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/checkins', component: CheckinsPage }] })
     await router.push('/checkins')
-    const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] } })
+    const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
     await flushPromises()
     expect(wrapper.text()).toContain('可用印章 3')
     expect(wrapper.text()).toContain('Ann 扣 2 格')
 
-    await wrapper.findAll('button').find((b) => b.text() === '扣印章')!.trigger('click')
-    const amount = wrapper.get('#deduct-amount-v1')
+    const open = async () => {
+      await wrapper.findAll('button').find((b) => b.text() === '扣印章')!.trigger('click')
+      await flushPromises()
+    }
+    // Esc cancels: nothing is sent, and the next opening starts empty.
+    await open()
+    await wrapper.get('#deduct-reason').setValue('typed then cancelled')
+    wrapper.get<HTMLDialogElement>('dialog.deduct').element.close()
+    await flushPromises()
+    await open()
+    expect(wrapper.get<HTMLInputElement>('#deduct-reason').element.value).toBe('')
+    expect(client.POST).not.toHaveBeenCalled()
+
+    const amount = wrapper.get('#deduct-amount')
     await amount.setValue('2')
     await amount.trigger('blur')
-    await wrapper.get('#deduct-reason-v1').setValue('換一首歌')
-    await wrapper.get('form.deduct').trigger('submit')
+    await wrapper.get('#deduct-reason').setValue('換一首歌')
+    await wrapper.get('dialog.deduct form').trigger('submit')
     await flushPromises()
     expect(client.POST).toHaveBeenCalledWith('/api/admin/checkin/viewers/{id}/deductions', {
       params: { path: { id: 'v1' } },
