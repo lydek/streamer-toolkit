@@ -134,14 +134,11 @@ test('switching sections saves a field still being edited, and a failed save kee
   await expect(page.getByRole('alert')).toHaveText(zh.errors.obs.invalid_address)
 })
 
-test("check-in's settings fold open under its row in features", async ({ page }) => {
+test("check-in's row in features links to its rules page, which holds its settings", async ({ page }) => {
   await openAdmin(page, { modules: [{ id: 'checkin', enabled: true, closed: false }] })
   await page.goto('/admin/settings/features')
-  const toggle = page.getByRole('button', { name: `${zh.features.settings}：${zh.features.checkin.name}` })
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toBeHidden()
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await page.getByRole('link', { name: `${zh.features.rules}：${zh.features.checkin.name}` }).click()
+  await expect(page).toHaveURL(/\/admin\/checkin-rules$/)
   await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toBeVisible()
 })
 

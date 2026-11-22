@@ -13,6 +13,7 @@
         <InputText id="cf-date" v-model="date" type="date" :max="today" />
       </div>
       <Button :label="t('checkin.push.hide')" icon="pi pi-eye-slash" outlined class="hide" @click="hideCard" />
+      <Button :label="t('checkin.import.heading')" icon="pi pi-upload" outlined @click="openImport" />
     </form>
 
     <!-- Always in the DOM, so screen readers announce changes to the count. -->
@@ -77,7 +78,13 @@
     </nav>
 
     <CheckinDeductions ref="log" />
-    <CheckinImport @imported="load" />
+    <!-- A fresh import each time it opens; Esc or 關閉 cancels it. -->
+    <dialog ref="importEl" class="sheet import" aria-labelledby="checkin-import" @close="importing = false">
+      <CheckinImport v-if="importing" @imported="imported" />
+      <div class="sheet-actions">
+        <Button :label="t('checkin.import.close')" text @click="importEl?.close()" />
+      </div>
+    </dialog>
   </FullPage>
 </template>
 
@@ -99,6 +106,17 @@ import { pageCount } from './redemptions'
 
 const { t } = useI18n()
 const toast = useToast()
+
+const importEl = ref<HTMLDialogElement>()
+const importing = ref(false)
+function openImport() {
+  importing.value = true
+  importEl.value?.showModal()
+}
+function imported() {
+  importEl.value?.close()
+  void load()
+}
 
 const search = ref('')
 /** The search of the list shown; the form applies on submit. */
@@ -311,5 +329,9 @@ useLiveEvents(2000, (msg) => {
   justify-content: center;
   gap: 0.5rem;
   margin-block: 1rem;
+}
+
+.import {
+  max-width: 36rem;
 }
 </style>

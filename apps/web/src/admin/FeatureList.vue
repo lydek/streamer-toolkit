@@ -27,18 +27,9 @@
               <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
               <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
             </span>
-            <Button
-              v-if="withSettings?.includes(f.id)"
-              :label="t('features.settings')"
-              icon="pi pi-angle-down"
-              icon-pos="right"
-              text
-              size="small"
-              :aria-expanded="openSettings === f.id"
-              :aria-controls="`fs-${f.id}`"
-              :aria-label="`${t('features.settings')}：${name(f)}`"
-              @click="openSettings = openSettings === f.id ? undefined : f.id"
-            />
+            <RouterLink v-if="f.rules && on(f)" :to="f.rules" class="open">
+              {{ t('features.rules') }}<span class="sr-only">：{{ name(f) }}</span>
+            </RouterLink>
             <span v-if="f.fixed" class="fixed"><i class="pi pi-lock" aria-hidden="true"></i>{{ t('features.alwaysOn') }}</span>
             <template v-else>
               <RouterLink v-if="on(f)" :to="openPage(f)" class="open">
@@ -52,8 +43,8 @@
                 @update:model-value="toggle(f)"
               />
             </template>
-            <!-- Kept mounted (v-show) so what it loads stays current while it is folded. -->
-            <div v-if="withSettings?.includes(f.id)" v-show="openSettings === f.id" :id="`fs-${f.id}`" class="feat-settings">
+            <!-- What belongs to the switch itself (check-in's held redemptions), under the row. -->
+            <div v-if="withSettings?.includes(f.id)" class="feat-settings">
               <slot name="settings" :id="f.id" />
             </div>
           </li>
@@ -90,7 +81,6 @@ const emit = defineEmits<{ toggle: [module: Schemas['ModuleState']] }>()
 const { t } = useI18n()
 
 const query = ref('')
-const openSettings = ref<string>()
 const on = (f: Feature) => isOn(f, props.modules ?? [])
 const name = (f: Feature) => t(`features.${f.id}.name`)
 const hidden = computed(() => hiddenPages(props.modules ?? []))
