@@ -5,19 +5,33 @@
     </p>
     <h3 id="ts-perf">{{ t('performance.heading') }}</h3>
     <p v-if="!perf">{{ t('app.loading') }}</p>
-    <dl v-else class="facts">
-      <dt>{{ t('performance.cpu') }}</dt>
-      <dd>{{ percent(perf.cpu_percent) }}</dd>
-      <dt>{{ t('performance.memory') }}</dt>
-      <dd>{{ t('performance.memoryOf', { used: perf.memory_used_mb, total: perf.memory_total_mb }) }}</dd>
-      <dt>{{ t('performance.app') }}</dt>
-      <dd>{{ percent(perf.app_cpu_percent) }} · {{ t('performance.mb', { n: perf.app_memory_mb }) }}</dd>
-      <dt>{{ t('performance.obsCpu') }}</dt>
-      <dd>{{ perf.obs ? percent(perf.obs.cpu_percent) : NONE }}</dd>
-      <dt>{{ t('performance.dropped') }}</dt>
-      <dd>{{ perf.obs?.dropped_percent != null ? percent(perf.obs.dropped_percent) : NONE }}</dd>
-      <dt>{{ t('performance.bitrate') }}</dt>
-      <dd>{{ perf.obs?.bitrate_kbps != null ? t('performance.kbps', { n: perf.obs.bitrate_kbps }) : NONE }}</dd>
+    <dl v-else class="metrics">
+      <div>
+        <dt>{{ t('performance.cpu') }}</dt>
+        <dd>{{ percent(perf.cpu_percent) }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('performance.memory') }}</dt>
+        <dd>{{ t('performance.memoryOf', { used: perf.memory_used_mb, total: perf.memory_total_mb }) }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('performance.app') }}</dt>
+        <dd>{{ percent(perf.app_cpu_percent) }} · {{ t('performance.mb', { n: perf.app_memory_mb }) }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('performance.obsCpu') }}</dt>
+        <dd>{{ perf.obs ? percent(perf.obs.cpu_percent) : NONE }}</dd>
+      </div>
+      <div>
+        <dt>
+          {{ t('performance.dropped') }}<small>{{ t('performance.droppedWindow') }}</small>
+        </dt>
+        <dd>{{ perf.obs?.dropped_percent != null ? percent(perf.obs.dropped_percent) : NONE }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('performance.bitrate') }}</dt>
+        <dd>{{ perf.obs?.bitrate_kbps != null ? t('performance.kbps', { n: perf.obs.bitrate_kbps }) : NONE }}</dd>
+      </div>
     </dl>
   </section>
 </template>
@@ -59,25 +73,26 @@ h3 {
   margin: 0;
 }
 
-.facts {
+/* Each figure with its name; on a phone, two a row. */
+.metrics {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 40%), 1fr));
+  gap: 0.75rem 1rem;
   margin: 0;
 }
 
-.facts dd {
-  margin: 0;
+.metrics dt {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
 }
 
-/* A narrow settings column: each name above its value. */
-@container panel (max-width: 36rem) {
-  .facts {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.metrics dd {
+  margin: 0;
+  font-weight: 600;
+}
 
-  .facts dd {
-    margin-bottom: 0.5rem;
-  }
+.metrics small {
+  margin-inline-start: 0.25rem;
+  font-size: 0.75rem;
 }
 </style>

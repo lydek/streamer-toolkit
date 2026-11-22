@@ -1,12 +1,11 @@
 <template>
   <div class="stack">
-    <p v-if="sizes">{{ t('backup.sizes', { data: formatSize(sizes.data), media: formatSize(sizes.media) }) }}</p>
     <div class="field">
       <span id="backup-choice">{{ t('backup.choice') }}</span>
       <SelectButton
         v-model="choice"
         :options="CHOICES"
-        :option-label="(c: BackupChoice) => t(`backup.choices.${c}`)"
+        :option-label="choiceLabel"
         :allow-empty="false"
         aria-labelledby="backup-choice"
       />
@@ -87,13 +86,20 @@ const progressText = computed(() => {
 onBeforeUnmount(() => controller?.abort())
 // Only a hint for choosing: without it the page works the same.
 backupSizes().then((s) => (sizes.value = s), () => {})
+/** Each choice with its size, when the sizes are known: 「資料 12 MB」. */
+function choiceLabel(c: BackupChoice) {
+  const s = sizes.value
+  const bytes = !s ? undefined : c === 'all' ? s.data + s.media : c === 'data' ? s.data : s.media
+  return bytes === undefined ? t(`backup.choices.${c}`) : t('backup.choiceSize', { choice: t(`backup.choices.${c}`), size: formatSize(bytes) })
+}
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleString(locale.value, { dateStyle: 'medium', timeStyle: 'short' })
 
 async function exportBackup() {
   busy.value = true
   try {
-    if (await saveBackup(choice.value)) toast.add(successToast(t('backup.exported')))
+    const saved = await saveBackup(choice.value)
+    if (saved) toast.add(successToast(t('backup.exported', { file: saved })))
   } catch (e) {
     toast.add(errorToast(message(e)))
   } finally {

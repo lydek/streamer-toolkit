@@ -78,12 +78,13 @@ describe('stream record CSV', () => {
     )
     const written: Uint8Array[] = []
     const picker = vi.fn(async () => ({
+      name: 'picked.csv',
       createWritable: async () => new WritableStream<Uint8Array>({ write: (c) => void written.push(c) }),
     }))
     vi.stubGlobal('showSaveFilePicker', picker)
     vi.spyOn(client, 'GET').mockImplementation((() =>
       Promise.resolve({ data: record, response: new Response(null, { status: 200 }) })) as never)
-    expect(await exportRecord(record.startedAt)).toBe(true)
+    expect(await exportRecord(record.startedAt)).toBe('picked.csv')
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({ types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }] }))
     const text = new TextDecoder().decode(new Uint8Array(written.flatMap((c) => [...c])))
     expect(text).toContain('喝水：多喝水')
