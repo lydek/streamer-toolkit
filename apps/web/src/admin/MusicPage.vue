@@ -1,11 +1,23 @@
 <template>
+  <!-- The background music pages, one part each: 播放 (player and scene rules), 音樂歌單, 音樂庫. -->
   <FullPage :title="t('modules.names.bgm')" tile="bgm" overlay="bgm" :status="live.bgm ? playerLine(live.bgm.payload) : undefined">
-    <section class="stack" aria-labelledby="music-player">
+    <p v-if="part === 'player' && notInScene" role="alert" class="note-bar">
+      <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
+      {{ t('obsSources.problems.bgmNotInScene', { scene: obsSources?.live_scene }) }}
+      <Button
+        :label="t('music.addToScene')"
+        size="small"
+        :disabled="!obsSources?.local || adding"
+        :title="obsSources?.local ? undefined : t('obsSources.notLocal')"
+        @click="addToScene"
+      />
+    </p>
+    <section v-if="part === 'player'" class="stack" aria-labelledby="music-player">
       <h2 id="music-player">{{ t('music.player.heading') }}</h2>
       <MusicPlayer :event="live.bgm" :playlists="library?.playlists ?? []" @error="report" />
     </section>
 
-    <section class="stack" aria-labelledby="music-rules">
+    <section v-if="part === 'player'" class="stack" aria-labelledby="music-rules">
       <h2 id="music-rules">{{ t('music.rules.heading') }}</h2>
       <SceneRules
         v-if="library"
@@ -17,7 +29,7 @@
       />
     </section>
 
-    <section class="stack" aria-labelledby="music-library">
+    <section v-if="part === 'library'" class="stack" aria-labelledby="music-library">
       <h2 id="music-library">{{ t('music.library') }}</h2>
       <label for="music-file">{{ t('music.file') }}</label>
       <input
@@ -49,7 +61,7 @@
       </ul>
     </section>
 
-    <section class="stack" aria-labelledby="music-playlists">
+    <section v-if="part === 'playlists'" class="stack" aria-labelledby="music-playlists">
       <h2 id="music-playlists">{{ t('music.playlists') }}</h2>
       <form class="create" @submit.prevent="create">
         <div class="field">
@@ -76,7 +88,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -85,10 +97,12 @@ import { errorToast, successToast, useLiveEvents } from './home'
 import { importMusic, measureUnmeasured, playerLine } from './music'
 import MusicPlayer from './MusicPlayer.vue'
 import MusicRow from './MusicRow.vue'
+import { addOverlay, obsProblems, overlayRows, useObsSources } from './obsSources'
 import { keepFocus } from './page'
 import PlaylistRow from './PlaylistRow.vue'
 import SceneRules from './SceneRules.vue'
 
+withDefaults(defineProps<{ part?: 'player' | 'playlists' | 'library' }>(), { part: 'player' })
 const { t } = useI18n()
 const toast = useToast()
 const input = ref<HTMLInputElement>()
@@ -100,6 +114,32 @@ const newName = ref('')
 const creating = ref(false)
 
 const live = useLiveEvents()
+
+// The scene on air has a playlist but the music overlay is not in it: say so, and put it there. Read again as
+// OBS's scenes and items change, so the warning follows the scene on air.
+const obsSources = useObsSources()
+watch(
+  () => live.value.obsState,
+  () => void useObsSources(true),
+)
+const notInScene = computed(() =>
+  obsProblems(obsSources.value, library.value?.scene_rules ?? [], new Set(), t).some((p) => p.id === 'bgm:scene'),
+)
+const adding = ref(false)
+async function addToScene() {
+  const scene = obsSources.value?.live_scene
+  const row = overlayRows(obsSources.value?.sources ?? []).find((r) => r.key === 'bgm')
+  if (!scene || !row) return
+  adding.value = true
+  try {
+    await addOverlay(scene, row, t)
+  } catch (e) {
+    report(e)
+  } finally {
+    adding.value = false
+    useObsSources(true)
+  }
+}
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 const report = (e: unknown) => toast.add(errorToast(message(e)))
@@ -192,5 +232,16 @@ void refresh()
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.note-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--p-yellow-700);
+  border-radius: 6px;
+  color: var(--p-yellow-200);
 }
 </style>
