@@ -901,6 +901,23 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
 }
 
+/* Phones: the three stages stay on one row and scroll sideways when they do not fit. */
+@media (max-width: 599.98px) {
+  .stage-switch {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .stage-switch :deep(.p-selectbutton) {
+    flex-wrap: nowrap;
+  }
+
+  .stage-switch :deep(.p-togglebutton) {
+    white-space: nowrap;
+  }
+}
+
 .plain {
   list-style: none;
   padding: 0;
