@@ -127,6 +127,13 @@ pub trait StreamingSoftware: Send + Sync {
         scene: &str,
         source: &str,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Moves item `item` of `scene` to `position`, counted front to back (0 is the front), as `items` lists them.
+    fn set_item_position(
+        &self,
+        scene: &str,
+        item: i64,
+        position: u32,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Removes item `item` from `scene`; the source stays in the program's other scenes.
     fn remove_item(
         &self,

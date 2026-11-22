@@ -1217,7 +1217,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Shows, hides, locks or unlocks a scene item; `obs.state` shows the change once OBS has made it. */
+        /** Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it. */
         put: operations["update_item"];
         post?: never;
         delete?: never;
@@ -3095,6 +3095,12 @@ export interface components {
             item: number;
             /** @description Locks or unlocks the item; absent leaves it. */
             locked?: boolean | null;
+            /**
+             * Format: int32
+             * @description Moves the item to this place in the scene, counted front to back as `obs.state` lists items (0 is the
+             *     front); absent leaves it.
+             */
+            position?: number | null;
             scene: string;
         };
         /**

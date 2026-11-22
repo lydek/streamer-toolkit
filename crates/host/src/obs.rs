@@ -298,6 +298,26 @@ impl StreamingSoftware for ObsLink {
         self.control.add_source(scene, source).await
     }
 
+    async fn set_item_position(
+        &self,
+        scene: &str,
+        item: i64,
+        position: u32,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        let count = self
+            .state
+            .borrow()
+            .scenes
+            .iter()
+            .find(|s| s.name == scene)
+            .map_or(0, |s| s.items.len());
+        if position as usize >= count {
+            return Err(StreamingError::NotFound);
+        }
+        self.control.set_item_position(scene, item, position).await
+    }
+
     async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
         self.check(scene, Some(item))?;
         self.control.remove_item(scene, item).await
@@ -382,9 +402,13 @@ pub(crate) struct ItemBody {
     /// Locks or unlocks the item; absent leaves it.
     #[serde(default)]
     locked: Option<bool>,
+    /// Moves the item to this place in the scene, counted front to back as `obs.state` lists items (0 is the
+    /// front); absent leaves it.
+    #[serde(default)]
+    position: Option<u32>,
 }
 
-/// Shows, hides, locks or unlocks a scene item; `obs.state` shows the change once OBS has made it.
+/// Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it.
 #[utoipa::path(
     put,
     path = "/api/admin/obs/item",
@@ -402,7 +426,7 @@ pub(crate) async fn update_item(
     State(link): State<Arc<ObsLink>>,
     Json(body): Json<ItemBody>,
 ) -> Response {
-    if body.enabled.is_none() && body.locked.is_none() {
+    if body.enabled.is_none() && body.locked.is_none() && body.position.is_none() {
         return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
     }
     if let Some(enabled) = body.enabled
@@ -410,8 +434,16 @@ pub(crate) async fn update_item(
     {
         return command_response(Err(e));
     }
-    if let Some(locked) = body.locked {
-        return command_response(link.set_item_locked(&body.scene, body.item, locked).await);
+    if let Some(locked) = body.locked
+        && let Err(e) = link.set_item_locked(&body.scene, body.item, locked).await
+    {
+        return command_response(Err(e));
+    }
+    if let Some(position) = body.position {
+        return command_response(
+            link.set_item_position(&body.scene, body.item, position)
+                .await,
+        );
     }
     command_response(Ok(()))
 }

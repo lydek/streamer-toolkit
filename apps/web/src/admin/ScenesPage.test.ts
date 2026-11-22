@@ -85,6 +85,19 @@ afterEach(() => {
 })
 
 describe('ScenesPage', () => {
+  it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const forward = (name: string) => wrapper.get(`button[aria-label="${t('scene.forward', { item: name })}"]`)
+    const back = (name: string) => wrapper.get(`button[aria-label="${t('scene.backward', { item: name })}"]`)
+    expect(forward('Chat overlay').attributes('disabled')).toBeDefined()
+    expect(back('Capture').attributes('disabled')).toBeDefined()
+    await back('Chat overlay').trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, position: 1 } })
+  })
+
   it('says OBS is not connected and links to its settings', async () => {
     const wrapper = await page()
     snapshot(empty)
