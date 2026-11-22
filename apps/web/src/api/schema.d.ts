@@ -1974,26 +1974,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/templates/chat/text-size": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once
-         *     (`chat.text_size`).
-         */
-        put: operations["set_chat_text_size"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/admin/text-size": {
         parameters: {
             query?: never;
@@ -4382,25 +4362,12 @@ export interface components {
              */
             error: string | null;
             selected: components["schemas"]["ChatTemplate"];
-            /**
-             * Format: int32
-             * @description The overlay text size in px; `null` keeps each template's own size.
-             */
-            text_size: number | null;
         };
         /**
          * @description Which overlay gets a test value.
          * @enum {string}
          */
         TestOverlay: "counter" | "marathon";
-        /** @description `PUT /api/admin/templates/chat/text-size`. */
-        TextSizeChoice: {
-            /**
-             * Format: int32
-             * @description 16–48 px, or `null` for each template's own size.
-             */
-            text_size: number | null;
-        };
         /** @description One imported track. `title` is broadcaster text: render it as text. Its file is `GET /music/{id}`. */
         Track: {
             /**
@@ -9676,45 +9643,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    set_chat_text_size: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TextSizeChoice"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description `template.invalid_text_size`: not between 16 and 48 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description `settings.save_failed` */
             500: {
                 headers: {
                     [name: string]: unknown;

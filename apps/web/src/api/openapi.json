@@ -6125,48 +6125,6 @@
         }
       }
     },
-    "/api/admin/templates/chat/text-size": {
-      "put": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Sets the chat overlay's text size for every template and saves it; overlays and previews apply it at once\n(`chat.text_size`).",
-        "operationId": "set_chat_text_size",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TextSizeChoice"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {},
-          "400": {
-            "description": "`template.invalid_text_size`: not between 16 and 48",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`settings.save_failed`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/admin/text-size": {
       "get": {
         "tags": [
@@ -12829,8 +12787,7 @@
         "description": "`GET /api/admin/templates/chat`.",
         "required": [
           "selected",
-          "error",
-          "text_size"
+          "error"
         ],
         "properties": {
           "error": {
@@ -12842,15 +12799,6 @@
           },
           "selected": {
             "$ref": "#/components/schemas/ChatTemplate"
-          },
-          "text_size": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "The overlay text size in px; `null` keeps each template's own size.",
-            "minimum": 0
           }
         }
       },
@@ -12861,24 +12809,6 @@
           "counter",
           "marathon"
         ]
-      },
-      "TextSizeChoice": {
-        "type": "object",
-        "description": "`PUT /api/admin/templates/chat/text-size`.",
-        "required": [
-          "text_size"
-        ],
-        "properties": {
-          "text_size": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "16–48 px, or `null` for each template's own size.",
-            "minimum": 0
-          }
-        }
       },
       "Track": {
         "type": "object",

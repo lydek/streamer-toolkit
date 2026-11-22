@@ -229,6 +229,30 @@ pub fn router(config: HostConfig) -> Result<Router, HostError> {
     router_with_chat(config).map(|(router, _)| router)
 }
 
+/// The upgrade that merged the chat overlay's text size into the overlays' appearance: an old size carries over
+/// while the appearance is still 100%, then `chat_text_size` is cleared so this runs once. A failed save keeps the
+/// old size for the next start.
+async fn merge_chat_text_size(
+    data_dir: std::path::PathBuf,
+    screen_tools: Arc<overlays::Overlays>,
+    templates: Arc<templates::Templates>,
+) {
+    let saved = toolkit_core::settings::load(&data_dir);
+    if saved.chat_text_size.is_none() {
+        return;
+    }
+    if let Some(percent) = templates::carried_text_size(saved.chat_text_size, &saved.chat_template)
+        && let Err(e) = screen_tools.adopt_text_size(percent).await
+    {
+        tracing::warn!(error = %e, "chat text size not carried over; trying again on the next start");
+        return;
+    }
+    match toolkit_core::settings::update(&data_dir, |s| s.chat_text_size = None) {
+        Ok(_) => templates.forget_text_size(),
+        Err(e) => tracing::warn!(error = %e, "old chat text size not cleared"),
+    }
+}
+
 fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), HostError> {
     let guard_state = Guard::new(&config);
     let csp = admin_csp(&guard_state.hosts);
@@ -461,6 +485,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         }
     });
     let templates = templates::Templates::start(&config.data_dir, bus.clone());
+    // Once: the chat overlay's own text size (px, settings.json) becomes the overlays' text size (percent).
+    tokio::spawn(merge_chat_text_size(
+        config.data_dir.clone(),
+        screen_tools.clone(),
+        templates.clone(),
+    ));
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
     let tab_bar = tab_bar::routes(config.data_dir.clone());

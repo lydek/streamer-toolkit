@@ -6,6 +6,7 @@ import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import ScreenToolsPage from './ScreenToolsPage.vue'
 import WarningsPage from './WarningsPage.vue'
+import ObsSourcesPage from './ObsSourcesPage.vue'
 import { testRouter } from './testRouter'
 
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
@@ -80,7 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function page(payload = card, w = warnings, component: typeof ScreenToolsPage | typeof WarningsPage = ScreenToolsPage) {
+async function page(payload = card, w = warnings, component: typeof ScreenToolsPage | typeof WarningsPage | typeof ObsSourcesPage = ScreenToolsPage) {
   const wrapper = mount(component, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   socket.onmessage!({ data: JSON.stringify(snapshot(payload, w)) })
   await flushPromises()
@@ -134,8 +135,9 @@ it('saves a warning switch with the other warning settings, and asks for a new m
   expect(gone.text()).toContain('OBS 裡已經沒有「Mic」，請重新選擇麥克風。')
 })
 
+// The overlays' look is at the bottom of the OBS sources page.
 it('saves the overlay theme with the text size', async () => {
-  const wrapper = await page()
+  const wrapper = await page(card, warnings, ObsSourcesPage)
   socket.onmessage!({
     data: JSON.stringify({ id: 'a', type: 'screen.appearance', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { theme: 'dark', textSize: 120 } }),
   })
