@@ -193,6 +193,7 @@ apps/
     - 一個對應都沒有時，切場景與 OBS 斷線都不影響播放器，讓沒有用場景對應的人照樣手動播放。
     - 刪除：`GET /api/admin/music` 的歌單與歌都帶 `used_by`（播它的、或歌單裡有它的場景對應名稱），刪除前的確認框列出。刪除歌單時，用到它的對應改成沒有歌單並停用，頁面顯示「歌單不見了」，不會換成別的歌單；刪除歌曲只列出，不停用對應。
   - bgm 模組停用時隱藏背景音樂頁與首頁磚；`play` 回 409 `music.off`，正在播的播完這首就停止，切場景也不影響播放器。
+  - 背景音樂分成三頁：「播放」（`/admin/music`，播放器與場景對應）、「音樂歌單」（`/admin/music-playlists`）、「音樂庫」（`/admin/music-library`），「觀眾點播」是灰色。直播中的場景有啟用的歌單規則、背景音樂 Overlay 卻不在這個場景時，「播放」頁頁首警示並提供「加進場景」，用 OBS 來源的 `POST /api/admin/obs/sources` 把 Overlay 加到直播中的場景（OBS 不在這台電腦時停用）。
 - **畫面工具**（overlays 模組。休息卡片的模組 ID 與頁面路徑都是 `screen-tools`，首頁磚沿用還沒做時的 ID；警語 `warnings` 與影片與 GIF `media` 各有開關，關掉警語時 Host 當成一切正常，畫面上不顯示警語，關掉影片與 GIF 只停止兌換時播放，特效 Overlay 照常。這些開關與訂閱馬拉松的 `marathon` 是從 `screen-tools`、`counter` 拆出來的：升級後第一次啟動時各自沿用原本的狀態，含停用時選的「關閉」，`settings.json` 的 `modules_split` 記下已經拆過）：
   - 休息中／準備中卡片（`/overlay/break/`，`?kind=break`）：存在 `overlays_break_card`（一筆：文字、倒數結束後的文字、倒數方式 `minutes`／`until`、分鐘、到幾點 `HH:MM`、是否顯示、倒數結束的時間）。管理 API：`GET`／`PUT /api/admin/screen-tools/break`（文字最多 100 字、分鐘 1–1440）、`POST /api/admin/screen-tools/break/show`（`minutes` 或 `until` 擇一；`until` 是 24 小時內的 UTC 時間，「到幾點」由管理視窗換算成下一次到那個時間的時刻）、`POST /api/admin/screen-tools/break/hide`。
   - 顯示時存下倒數結束的時間，重新啟動工具或重新載入 Overlay 都顯示同一個時間；每次變動與啟動時發布 `screen.break`（整張卡片），快照只保留最新一則。Overlay 自己往下算，到 0 換成結束文字，卡片留著直到手動隱藏；倒數結束不會自動切場景。

@@ -70,7 +70,7 @@ describe('FullPage page tabs', () => {
   })
 
   it('has no row for a page without a category, or when only one page of the category is left', async () => {
-    expect((await at('/music')).find('nav.page-tabs').exists()).toBe(false)
+    expect((await at('/leaderboard')).find('nav.page-tabs').exists()).toBe(false)
     expect((await at('/songs')).find('nav.page-tabs').exists()).toBe(false)
     hiddenPages.set = new Set(['/card-style', '/checkin-rules'])
     expect((await at('/checkin')).find('nav.page-tabs').exists()).toBe(false)

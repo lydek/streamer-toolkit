@@ -23,8 +23,9 @@ let lengths: Record<string, number>
 let get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>
 let socket: { onmessage?: (e: { data: string }) => void }
 
-async function page() {
-  const wrapper = mount(MusicPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+/** One of the background music pages: 播放 (the default), 音樂歌單 or 音樂庫. */
+async function page(part?: 'player' | 'playlists' | 'library') {
+  const wrapper = mount(MusicPage, { props: { part }, global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
@@ -102,7 +103,7 @@ afterEach(() => {
 
 describe('MusicPage', () => {
   it('lists each track with its length, or says its file is gone', async () => {
-    const wrapper = await page()
+    const wrapper = await page('library')
     const rows = wrapper.findAll('li.track')
     expect(rows.map((r) => (r.get('input').element as HTMLInputElement).value)).toEqual(['Lo-fi Morning', 'Gone'])
     expect(rows[0].text()).toContain('3:08')
@@ -112,7 +113,7 @@ describe('MusicPage', () => {
 
   it('imports each chosen file, refuses one over the limit, and measures the new tracks', async () => {
     lengths['/music/t3'] = 125.4
-    const wrapper = await page()
+    const wrapper = await page('library')
     const big = new File(['x'], 'big.wav')
     Object.defineProperty(big, 'size', { value: MUSIC_MAX_BYTES + 1 })
     await chooseFiles(wrapper, [new File(['ID3'], 'Opening.mp3'), big])
@@ -131,7 +132,7 @@ describe('MusicPage', () => {
 
   it('shows why the Host refused a file', async () => {
     post.mockImplementation(() => fail('music.unsupported_type', 400))
-    const wrapper = await page()
+    const wrapper = await page('library')
     await chooseFiles(wrapper, [new File(['RIFF'], 'fake.mp3')])
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(t('errors.music.unsupported_type'))
@@ -139,14 +140,16 @@ describe('MusicPage', () => {
   })
 
   it('puts a track into playlists and adds new playlists', async () => {
-    const wrapper = await page()
+    // 音樂歌單 adds playlists; 音樂庫 puts tracks into them.
+    const wrapper = await page('playlists')
     await wrapper.get('#new-playlist').setValue('遊戲 BGM')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(post).toHaveBeenCalledWith('/api/admin/music/playlists', { body: { name: '遊戲 BGM' } })
     expect(wrapper.findAll('li.playlist')).toHaveLength(2)
 
-    const select = wrapper.findAllComponents(MultiSelect)[1]
+    const tracks = await page('library')
+    const select = tracks.findAllComponents(MultiSelect)[1]
     expect(select.props('modelValue')).toEqual([])
     select.vm.$emit('update:modelValue', ['p1', 'p2'])
     await flushPromises()
@@ -330,13 +333,14 @@ describe('MusicPage scene rules', () => {
   it('lists the rules a playlist or track deletion affects', async () => {
     library.playlists[0].used_by = ['聊天']
     library.tracks[0].used_by = ['聊天']
-    const wrapper = await page()
-    const deleteIn = (row: string) =>
+    const playlists = await page('playlists')
+    const deleteIn = (wrapper: typeof playlists, row: string) =>
       wrapper.get(row).findAll('button').find((b) => b.text() === t('music.delete'))!.trigger('click')
-    await deleteIn('li.playlist')
-    expect(wrapper.get('li.playlist').text()).toContain(t('music.playlistUsedBy'))
-    expect(wrapper.get('li.playlist .confirm li').text()).toBe('聊天')
-    await deleteIn('li.track')
-    expect(wrapper.get('li.track').text()).toContain(t('music.trackUsedBy'))
+    await deleteIn(playlists, 'li.playlist')
+    expect(playlists.get('li.playlist').text()).toContain(t('music.playlistUsedBy'))
+    expect(playlists.get('li.playlist .confirm li').text()).toBe('聊天')
+    const tracks = await page('library')
+    await deleteIn(tracks, 'li.track')
+    expect(tracks.get('li.track').text()).toContain(t('music.trackUsedBy'))
   })
 })

@@ -67,6 +67,7 @@
       "raids": "揪團與 SO"
     },
     "pageTabs": {
+      "musicPlayer": "播放",
       "breakCard": "休息卡片",
       "alertTemplates": "樣板",
       "checkin": "打卡名單",
@@ -223,6 +224,10 @@
       "name": "即時字幕",
       "desc": "把你說的話顯示在畫面上"
     },
+    "musicRequests": {
+      "name": "觀眾點播",
+      "desc": "觀眾用指令點播 YouTube 影片或歌曲"
+    },
     "screenTools": {
       "name": "休息卡片",
       "desc": "休息中、準備中的卡片與倒數"
@@ -377,6 +382,18 @@
     "modes": {
       "name": "模式",
       "desc": "一鍵切換場景、音訊與要顯示的東西。"
+    },
+    "musicPlaylists": {
+      "name": "音樂歌單",
+      "desc": "背景音樂的歌單。"
+    },
+    "musicLibrary": {
+      "name": "音樂庫",
+      "desc": "匯入的背景音樂。"
+    },
+    "musicRequests": {
+      "name": "觀眾點播",
+      "desc": "觀眾用指令點播 YouTube 影片或歌曲。"
     },
     "rewardPlayback": {
       "name": "兌換時播放",
@@ -1233,6 +1250,7 @@
     }
   },
   "music": {
+    "addToScene": "加進場景",
     "library": "音樂庫",
     "file": "匯入音樂檔",
     "empty": "還沒有音樂",

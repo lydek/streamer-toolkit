@@ -127,7 +127,15 @@ export const GROUPS: TabGroup[] = [
         { path: '/obs-sources', label: 'pages.obsSources.name' },
       ],
     },
-    { id: 'music', pages: [{ path: '/music', label: 'modules.names.bgm' }] },
+    {
+      id: 'music',
+      pages: [
+        { path: '/music', label: 'modules.names.bgm', tabLabel: 'nav.pageTabs.musicPlayer' },
+        { path: '/music-playlists', label: 'pages.musicPlaylists.name' },
+        { path: '/music-library', label: 'pages.musicLibrary.name' },
+        soon('/music-requests', 'musicRequests', 'pi pi-youtube'),
+      ],
+    },
     { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound' }] },
     {
       id: 'widgets',
