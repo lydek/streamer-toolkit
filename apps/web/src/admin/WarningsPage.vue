@@ -1,6 +1,6 @@
 <template>
   <!-- 警語: the warnings overlay's checks and settings. -->
-  <FullPage :title="t('modules.names.screen-tools')" tile="screen-tools" overlay="warnings">
+  <FullPage :title="t('nav.categories.widgets')" tile="screen-tools" overlay="warnings">
     <WarningSettings :warnings="live.warnings" :inputs="live.obsState?.inputs ?? []" />
   </FullPage>
 </template>

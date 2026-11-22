@@ -201,9 +201,14 @@ fn watch_warnings(
     connections: &Arc<overlay::OverlayConnections>,
     admin: &Arc<admin::AdminState>,
     obs: tokio::sync::watch::Receiver<toolkit_core::streaming::StreamingState>,
+    modules: &Arc<toolkit_core::modules::Modules>,
 ) {
-    let (screen_tools, connections, admin) =
-        (screen_tools.clone(), connections.clone(), admin.clone());
+    let (screen_tools, connections, admin, modules) = (
+        screen_tools.clone(),
+        connections.clone(),
+        admin.clone(),
+        modules.clone(),
+    );
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
         loop {
@@ -213,14 +218,21 @@ fn watch_warnings(
                 // A connected OBS always has a scene; without one, no input can be said to be gone.
                 (!state.scenes.is_empty()).then(|| state.inputs.clone())
             };
-            screen_tools.see(
+            // Turned off, the warnings see nothing wrong, so none shows.
+            let conditions = if modules.is_enabled(toolkit_core::modules::WARNINGS) {
                 overlays::Conditions {
                     chat_overlay_open: connections.count(overlay::OverlayKind::Chat) > 0,
                     twitch_connected: admin.eventsub_up(),
                     inputs,
-                },
-                chrono::Utc::now(),
-            );
+                }
+            } else {
+                overlays::Conditions {
+                    chat_overlay_open: true,
+                    twitch_connected: true,
+                    inputs: None,
+                }
+            };
+            screen_tools.see(conditions, chrono::Utc::now());
         }
     });
 }
@@ -543,9 +555,9 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         activity,
         viewers,
         outbox,
-        modules,
+        modules.clone(),
     ));
-    watch_warnings(&screen_tools, &overlays, &admin, obs.states());
+    watch_warnings(&screen_tools, &overlays, &admin, obs.states(), &modules);
     let eventsub_admin = admin.clone();
     let diagnostics_routes = diagnostics::routes(diagnostics::DiagnosticsState {
         eventsub_up: Arc::new(move || eventsub_admin.eventsub_up()),

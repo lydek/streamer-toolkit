@@ -543,7 +543,7 @@ impl<R: CounterRepository> CounterService<R> {
     /// Subs, resubs, gifts and bits add marathon time. Simulated alerts never do, nor a redelivered one; while the
     /// module is disabled they are dropped like other in-memory events.
     pub fn receive_alert(self: &Arc<Self>, alert: &Alert, source: Source) {
-        if source == Source::Simulation || !self.modules.is_enabled(modules::COUNTER) {
+        if source == Source::Simulation || !self.modules.is_enabled(modules::MARATHON) {
             return;
         }
         {

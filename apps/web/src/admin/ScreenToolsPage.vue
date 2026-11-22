@@ -1,6 +1,6 @@
 <template>
   <!-- 休息卡片, the first of the screen widget pages (警語 is WarningsPage.vue). -->
-  <FullPage :title="t('modules.names.screen-tools')" tile="screen-tools" overlay="break" :status="status">
+  <FullPage :title="t('nav.categories.widgets')" tile="screen-tools" overlay="break" :status="status">
     <BreakCardSettings :card="live.breakCard" @error="report" />
 
 

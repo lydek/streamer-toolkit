@@ -142,7 +142,7 @@ impl<R: OverlayRepository> OverlayService<R> {
     /// redemptions from before a restart never show late.
     pub fn receive_redemption(&self, r: &ChannelPointsRedemption) {
         let deps = &self.playback.deps;
-        if r.change != RedemptionChange::Added || !deps.modules.is_enabled(modules::SCREEN_TOOLS) {
+        if r.change != RedemptionChange::Added || !deps.modules.is_enabled(modules::MEDIA) {
             return;
         }
         let Some((show, title)) = self.show_for(&r.reward_id) else {
@@ -184,7 +184,7 @@ impl<R: OverlayRepository> OverlayService<R> {
             ready: None,
             present: Box::new(move || {
                 // Turned off while it waited: it does not show.
-                if !modules.is_enabled(modules::SCREEN_TOOLS) {
+                if !modules.is_enabled(modules::MEDIA) {
                     return Shown::No;
                 }
                 // Its file is gone: skipped at once, so it holds up nothing behind it.

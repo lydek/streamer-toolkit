@@ -129,8 +129,12 @@ pub(crate) async fn test_overlay(
     let Ok(Json(OverlayTest { overlay })) = body else {
         return error(StatusCode::BAD_REQUEST, "simulate.invalid_overlay");
     };
-    // The marathon timer belongs to the counter module.
-    if !s.modules.is_enabled(modules::COUNTER) {
+    // Each overlay belongs to its own switch.
+    let module = match overlay {
+        TestOverlay::Counter => modules::COUNTER,
+        TestOverlay::Marathon => modules::MARATHON,
+    };
+    if !s.modules.is_enabled(module) {
         return error(StatusCode::CONFLICT, "simulate.feature_off");
     }
     let (event_type, payload) = match overlay {

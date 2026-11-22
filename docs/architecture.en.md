@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: b907209531cfc0d99d894214ae6871c8942748cb2b2b699a11676c1ed5c128cf -->
+<!-- source: docs/architecture.md source-sha256: bb1b743eb62dd29b222ecd5eb9d96b17acd0ab87968330039d2a125dddf1da54 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -19,8 +19,8 @@ crates/
     checkin/       # Daily check-in (complex): subscribes to RedemptionRecorded and chat command events
     sound/         # Sound management (thin)
     bgm/           # Background music: the music library, playlists, the player and scene rules (thin)
-    counter/       # Counters: global counts, per-viewer counts and the sub marathon timer (thin)
-    overlays/      # Screen tools: the break / starting-soon card, on-stream warnings, the built-in overlays' look and the media library for redemptions (thin; module ID `screen-tools`)
+    counter/       # Counters: global counts, per-viewer counts and the sub marathon timer (thin; module ID `counter`, the marathon has its own switch `marathon`)
+    overlays/      # Screen tools: the break / starting-soon card, on-stream warnings, the built-in overlays' look and the media library for redemptions (thin; the break card's module ID is `screen-tools`, the warnings' `warnings`, redemption videos and GIFs' `media`)
     stream/        # Live state and stream sessions (thin)
     activity/      # Activity records: follows, subs, Bits, raids (thin)
     viewers/       # Viewer directory (thin)
@@ -194,7 +194,7 @@ Binding to `127.0.0.1` does not stop malicious web pages in the browser (cross-s
     - With no rules at all, scene switches and OBS disconnecting leave the player alone, so those who use no scene rules can still play by hand.
     - Deleting: playlists and tracks in `GET /api/admin/music` carry `used_by` (the names of the scene rules that play it, or whose playlist has it), which the confirmation lists before deleting. Deleting a playlist leaves the rules that used it without a playlist and disables them, and the page shows "Playlist missing"; they are never moved to another playlist. Deleting a track only lists them and disables no rule.
   - Disabling the bgm module hides the background music page and home tile; `play` gets 409 `music.off`, music that is playing stops at the end of the track, and scene switches leave the player alone.
-- **Screen tools** (overlays module; the module ID and page path are both `screen-tools`, so the home tile keeps the ID it had while unbuilt):
+- **Screen tools** (overlays module. The break card's module ID and page path are both `screen-tools`, so the home tile keeps the ID it had while unbuilt; the warnings (`warnings`) and redemption videos and GIFs (`media`) have switches of their own: with the warnings off the Host sees nothing wrong, so none shows, and with media off only redemption playback stops while the alerts overlay goes on. These switches and the sub marathon's `marathon` were split out of `screen-tools` and `counter`: on the first start after the upgrade each takes the state of the one it came from, "close" included, and `modules_split` in `settings.json` records that the split was done):
   - Break / starting-soon card (`/overlay/break/`, `?kind=break`): stored in `overlays_break_card` (one row: the text, the text after the countdown, the countdown mode `minutes`/`until`, the minutes, the time of day `HH:MM`, whether it is shown, and when the countdown ends). Admin API: `GET`/`PUT /api/admin/screen-tools/break` (text up to 100 characters, minutes 1–1440), `POST /api/admin/screen-tools/break/show` (either `minutes` or `until`; `until` is a UTC time within 24 hours, and the admin window turns "until a time" into the next moment the clock shows it), `POST /api/admin/screen-tools/break/hide`.
   - Showing it stores when the countdown ends, so restarting the toolkit or reloading the overlay shows the same time; every change and every start publishes `screen.break` (the whole card), and the snapshot keeps only the latest one. The overlay counts down by itself, switches to the end text at 0, and the card stays until hidden by hand; the end of the countdown never switches scenes.
   - Warnings (`/overlay/warnings/`, `?kind=warnings`): small text on the stream when something is wrong; viewers see it too. Settings are stored in `overlays_warnings` (one row: three switches, how many seconds the mic may stay muted before a warning, and the name of the OBS audio input to watch); "chat overlay not connected" and "mic muted for more than 30 seconds" are on by default, "Twitch disconnected" is off. Admin API: `GET`/`PUT /api/admin/screen-tools/warnings` (seconds 1–3600).
