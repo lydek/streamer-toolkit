@@ -79,7 +79,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
 import { FEATURES, type Feature, hiddenPages, isOn, turnOffPlan, turnOnPlan } from './features'
@@ -128,18 +128,33 @@ const confirmEl = ref<HTMLDialogElement>()
 const confirm = ref<{ title: string; text: string; lines: string[]; ok: string; then: () => void }>()
 function ask(c: NonNullable<typeof confirm.value>) {
   confirm.value = c
+  // Esc keeps the last return value, so a new question starts without one.
+  if (confirmEl.value) confirmEl.value.returnValue = ''
   confirmEl.value?.showModal()
 }
 function onConfirmClose() {
   if (confirmEl.value?.returnValue === 'ok') confirm.value?.then()
+  else lastSwitched.value = undefined
   if (confirmEl.value) confirmEl.value.returnValue = ''
 }
 
 const moduleOf = (f: Feature) => props.modules?.find((m) => m.id === f.module)
+// A switch is disabled while its change saves, which drops its focus; it gets it back once the save is done.
+const lastSwitched = ref<string>()
+watch(
+  () => props.busy,
+  (busy) => {
+    if (busy || !lastSwitched.value) return
+    const id = lastSwitched.value
+    lastSwitched.value = undefined
+    void nextTick(() => document.getElementById(`module-${id}`)?.focus())
+  },
+)
 const flip = (fs: Feature[]) => fs.forEach((f) => moduleOf(f) && emit('toggle', moduleOf(f)!))
 
 function toggle(f: Feature) {
   if (!f.module) return
+  lastSwitched.value = f.module
   if (!on(f)) {
     // shortcut: scopes are not requested here yet; no built feature adds any. Wire the re-sign-in for
     // `turnOnPlan().scopes` when the first one that does is built (docs/decisions.md Twitch scope).

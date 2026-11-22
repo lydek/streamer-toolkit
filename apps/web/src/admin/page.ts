@@ -19,6 +19,12 @@ import { focusTarget } from './drawer'
 
 const OPENER_ATTRS = ['data-drawer-tile', 'data-page-opener', 'data-drawer-arrange']
 
+/**
+ * The page a category or page tab just opened: that page leaves focus on the category (still there) or moves it to
+ * its own page tab (the old one went with the old page), instead of focusing "← Home".
+ */
+export const navOpened = { path: '' }
+
 // The opener to focus once home has rendered again; undefined when home was not left for a page.
 let returnTo: string | null | undefined
 
