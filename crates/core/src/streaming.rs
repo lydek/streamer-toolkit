@@ -50,6 +50,36 @@ pub struct Input {
     pub muted: bool,
 }
 
+/// Which point of an item its position is: a corner, the middle of an edge, or the center.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Align {
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+}
+
+/// Where an item sits on the canvas: the canvas pixel its `align` point is at.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct Placement {
+    pub x: f32,
+    pub y: f32,
+    pub align: Align,
+}
+
+/// The canvas size in pixels (OBS: the base resolution).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct Canvas {
+    pub width: u32,
+    pub height: u32,
+}
+
 /// A browser source and the address it opens. The address may hold another service's token, so it never reaches
 /// the admin UI or a log as is: the Host keeps only the paths of its own overlays.
 #[derive(Clone, PartialEq, Eq)]
@@ -133,6 +163,18 @@ pub trait StreamingSoftware: Send + Sync {
         scene: &str,
         item: i64,
         position: u32,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// The canvas size and where each of `scene`'s items sits, by item ID.
+    fn placements(
+        &self,
+        scene: &str,
+    ) -> impl Future<Output = Result<(Canvas, Vec<(i64, Placement)>), StreamingError>> + Send;
+    /// Moves item `item` of `scene` to `placement`.
+    fn set_placement(
+        &self,
+        scene: &str,
+        item: i64,
+        placement: Placement,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Removes item `item` from `scene`; the source stays in the program's other scenes.
     fn remove_item(

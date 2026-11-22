@@ -85,6 +85,41 @@ afterEach(() => {
 })
 
 describe('ScenesPage', () => {
+  it('shows and changes where an item sits, and says when it is off the canvas', async () => {
+    vi.spyOn(client, 'GET').mockImplementation((() =>
+      Promise.resolve({
+        data: {
+          canvas: { width: 1920, height: 1080 },
+          items: [
+            { item: 2, x: 40, y: 30, align: 'top_left' },
+            { item: 1, x: 2000, y: 10, align: 'center' },
+          ],
+        },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const rows = wrapper.findAll('tbody tr')
+    expect(rows[0].text()).not.toContain(t('scene.outside'))
+    expect(rows[1].text()).toContain(t('scene.outside'))
+    const x = rows[0].get(`input[aria-label="${t('scene.x', { item: 'Chat overlay' })}"]`)
+    await x.setValue('100')
+    await x.trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/item', {
+      body: { scene: 'Game', item: 2, placement: { x: 100, y: 30, align: 'top_left' } },
+    })
+    // OBS sends no event for a moved item: the next change keeps the X just saved.
+    const y = rows[0].get(`input[aria-label="${t('scene.y', { item: 'Chat overlay' })}"]`)
+    await y.setValue('80')
+    await y.trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
+      body: { scene: 'Game', item: 2, placement: { x: 100, y: 80, align: 'top_left' } },
+    })
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())

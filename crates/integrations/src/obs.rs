@@ -12,6 +12,7 @@ use std::{
 };
 
 use futures_util::StreamExt;
+use obws::common::Alignment;
 use obws::{
     Client,
     client::{ConnectConfig, HandshakeError},
@@ -21,7 +22,10 @@ use obws::{
         EventSubscription,
         inputs::Create,
         inputs::InputId,
-        scene_items::{CreateSceneItem, SetEnabled, SetIndex, SetLocked},
+        scene_items::{
+            CreateSceneItem, Position, SceneItemTransform, SetEnabled, SetIndex, SetLocked,
+            SetTransform,
+        },
         scenes::SceneId,
         sources::SourceId,
     },
@@ -31,7 +35,8 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    BrowserSource, Input, Scene, SceneItem, StreamingError, StreamingState, StreamingStats,
+    Align, BrowserSource, Canvas, Input, Placement, Scene, SceneItem, StreamingError,
+    StreamingState, StreamingStats,
 };
 
 use crate::secrets::SecretStore;
@@ -257,6 +262,71 @@ impl ObsControl {
             .map_err(command_error)
     }
 
+    /// `GetVideoSettings` for the canvas, then `GetSceneItemList` and each item's `GetSceneItemTransform`.
+    pub async fn placements(
+        &self,
+        scene: &str,
+    ) -> Result<(Canvas, Vec<(i64, Placement)>), StreamingError> {
+        let client = self.client()?;
+        let video = client
+            .config()
+            .video_settings()
+            .await
+            .map_err(command_error)?;
+        let items = client
+            .scene_items()
+            .list(SceneId::Name(scene))
+            .await
+            .map_err(command_error)?;
+        let mut placements = Vec::with_capacity(items.len());
+        for item in items {
+            let t = client
+                .scene_items()
+                .transform(SceneId::Name(scene), item.id)
+                .await
+                .map_err(command_error)?;
+            placements.push((
+                item.id,
+                Placement {
+                    x: t.position_x,
+                    y: t.position_y,
+                    align: align_of(t.alignment),
+                },
+            ));
+        }
+        let canvas = Canvas {
+            width: video.base_width,
+            height: video.base_height,
+        };
+        Ok((canvas, placements))
+    }
+
+    /// `SetSceneItemTransform` with the position and alignment only; scale, rotation and crop stay.
+    pub async fn set_placement(
+        &self,
+        scene: &str,
+        item: i64,
+        placement: Placement,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .scene_items()
+            .set_transform(SetTransform {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                transform: SceneItemTransform {
+                    position: Some(Position {
+                        x: Some(placement.x),
+                        y: Some(placement.y),
+                    }),
+                    alignment: Some(alignment_of(placement.align)),
+                    ..Default::default()
+                },
+            })
+            .await
+            .map_err(command_error)
+    }
+
     /// `RemoveSceneItem`.
     pub async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
         let client = self.client()?;
@@ -265,6 +335,37 @@ impl ObsControl {
             .remove(SceneId::Name(scene), item)
             .await
             .map_err(command_error)
+    }
+}
+
+/// OBS's alignment flags as the port's nine points; a combination OBS does not use reads as the nearest one.
+fn align_of(a: Alignment) -> Align {
+    let (left, right) = (a.contains(Alignment::LEFT), a.contains(Alignment::RIGHT));
+    let (top, bottom) = (a.contains(Alignment::TOP), a.contains(Alignment::BOTTOM));
+    match (top, bottom, left, right) {
+        (true, false, true, false) => Align::TopLeft,
+        (true, false, false, true) => Align::TopRight,
+        (true, false, ..) => Align::Top,
+        (false, true, true, false) => Align::BottomLeft,
+        (false, true, false, true) => Align::BottomRight,
+        (false, true, ..) => Align::Bottom,
+        (_, _, true, false) => Align::Left,
+        (_, _, false, true) => Align::Right,
+        _ => Align::Center,
+    }
+}
+
+fn alignment_of(a: Align) -> Alignment {
+    match a {
+        Align::TopLeft => Alignment::TOP | Alignment::LEFT,
+        Align::Top => Alignment::TOP,
+        Align::TopRight => Alignment::TOP | Alignment::RIGHT,
+        Align::Left => Alignment::LEFT,
+        Align::Center => Alignment::CENTER,
+        Align::Right => Alignment::RIGHT,
+        Align::BottomLeft => Alignment::BOTTOM | Alignment::LEFT,
+        Align::Bottom => Alignment::BOTTOM,
+        Align::BottomRight => Alignment::BOTTOM | Alignment::RIGHT,
     }
 }
 
@@ -656,6 +757,16 @@ mod tests {
                 t if t.starts_with("Set") || t.starts_with("Remove") => Value::Null,
                 "CreateInput" => json!({"inputUuid": CHAT, "sceneItemId": 9}),
                 "CreateSceneItem" => json!({"sceneItemId": 10}),
+                "GetVideoSettings" => {
+                    json!({"fpsNumerator": 60, "fpsDenominator": 1, "baseWidth": 1920,
+                    "baseHeight": 1080, "outputWidth": 1280, "outputHeight": 720})
+                }
+                // Alignment 5: top left.
+                "GetSceneItemTransform" => json!({"sceneItemTransform": {"sourceWidth": 400.0,
+                    "sourceHeight": 600.0, "positionX": 40.0, "positionY": 30.0, "rotation": 0.0,
+                    "scaleX": 1.0, "scaleY": 1.0, "width": 400.0, "height": 600.0, "alignment": 5,
+                    "boundsType": "OBS_BOUNDS_NONE", "boundsAlignment": 0, "boundsWidth": 0.0,
+                    "boundsHeight": 0.0, "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0}}),
                 "GetInputList" => json!({"inputs": [{"inputName": "Mic", "inputUuid": MIC,
                     "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}, {
                     "inputName": "Logo", "inputUuid": LOGO,
@@ -966,6 +1077,31 @@ mod tests {
         control.remove_item("Live", 9).await.unwrap();
         // Front to back, position 0 of the two items is OBS's index 1.
         control.set_item_position("Live", 2, 0).await.unwrap();
+        let (canvas, placements) = control.placements("Live").await.unwrap();
+        assert_eq!((canvas.width, canvas.height), (1920, 1080));
+        assert_eq!(
+            placements[0],
+            (
+                1,
+                Placement {
+                    x: 40.0,
+                    y: 30.0,
+                    align: Align::TopLeft
+                }
+            )
+        );
+        control
+            .set_placement(
+                "Live",
+                2,
+                Placement {
+                    x: 960.0,
+                    y: 540.0,
+                    align: Align::Center,
+                },
+            )
+            .await
+            .unwrap();
         assert_eq!(
             *fake.commands.lock().unwrap(),
             vec![
@@ -998,6 +1134,11 @@ mod tests {
                 (
                     "SetSceneItemIndex".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemIndex": 1})
+                ),
+                (
+                    "SetSceneItemTransform".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
+                        "positionX": 960.0, "positionY": 540.0, "alignment": 0}})
                 ),
             ]
         );
@@ -1101,6 +1242,23 @@ mod tests {
         };
         let mut rx = run(start(fake).await, None);
         reaches(&mut rx, ObsStatus::error("obs.password_required")).await;
+    }
+
+    #[test]
+    fn alignment_round_trips_through_obs_flags() {
+        for align in [
+            Align::TopLeft,
+            Align::Top,
+            Align::TopRight,
+            Align::Left,
+            Align::Center,
+            Align::Right,
+            Align::BottomLeft,
+            Align::Bottom,
+            Align::BottomRight,
+        ] {
+            assert_eq!(align_of(alignment_of(align)), align);
+        }
     }
 
     #[test]

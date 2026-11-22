@@ -30,7 +30,10 @@ use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
     settings,
-    streaming::{BrowserSource, StreamingError, StreamingSoftware, StreamingState, StreamingStats},
+    streaming::{
+        BrowserSource, Canvas, Placement, StreamingError, StreamingSoftware, StreamingState,
+        StreamingStats,
+    },
 };
 use utoipa::ToSchema;
 
@@ -318,6 +321,24 @@ impl StreamingSoftware for ObsLink {
         self.control.set_item_position(scene, item, position).await
     }
 
+    async fn placements(
+        &self,
+        scene: &str,
+    ) -> Result<(Canvas, Vec<(i64, Placement)>), StreamingError> {
+        self.check(scene, None)?;
+        self.control.placements(scene).await
+    }
+
+    async fn set_placement(
+        &self,
+        scene: &str,
+        item: i64,
+        placement: Placement,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.set_placement(scene, item, placement).await
+    }
+
     async fn remove_item(&self, scene: &str, item: i64) -> Result<(), StreamingError> {
         self.check(scene, Some(item))?;
         self.control.remove_item(scene, item).await
@@ -348,6 +369,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .route("/api/admin/obs", get(obs_overview).put(update_obs))
         .route("/api/admin/obs/scene", put(switch_scene))
         .route("/api/admin/obs/item", put(update_item))
+        .route("/api/admin/obs/placements", get(scene_placements))
         .route(
             "/api/admin/obs/sources",
             get(overlay_sources)
@@ -406,6 +428,9 @@ pub(crate) struct ItemBody {
     /// front); absent leaves it.
     #[serde(default)]
     position: Option<u32>,
+    /// Puts the item at this canvas position and alignment; absent leaves it. Scale, rotation and crop stay.
+    #[serde(default)]
+    placement: Option<Placement>,
 }
 
 /// Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it.
@@ -426,7 +451,11 @@ pub(crate) async fn update_item(
     State(link): State<Arc<ObsLink>>,
     Json(body): Json<ItemBody>,
 ) -> Response {
-    if body.enabled.is_none() && body.locked.is_none() && body.position.is_none() {
+    if body.enabled.is_none()
+        && body.locked.is_none()
+        && body.position.is_none()
+        && body.placement.is_none()
+    {
         return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
     }
     if let Some(enabled) = body.enabled
@@ -439,6 +468,11 @@ pub(crate) async fn update_item(
     {
         return command_response(Err(e));
     }
+    if let Some(placement) = body.placement
+        && let Err(e) = link.set_placement(&body.scene, body.item, placement).await
+    {
+        return command_response(Err(e));
+    }
     if let Some(position) = body.position {
         return command_response(
             link.set_item_position(&body.scene, body.item, position)
@@ -446,6 +480,56 @@ pub(crate) async fn update_item(
         );
     }
     command_response(Ok(()))
+}
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct PlacementsQuery {
+    scene: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ScenePlacements {
+    canvas: Canvas,
+    items: Vec<ItemPlacement>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ItemPlacement {
+    /// The item's `id` in `obs.state`.
+    item: i64,
+    #[serde(flatten)]
+    placement: Placement,
+}
+
+/// The canvas size and where each item of a scene sits (asked when the scene page shows the scene).
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs/placements",
+    tag = "admin",
+    params(PlacementsQuery),
+    responses(
+        (status = 200, body = ScenePlacements),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn scene_placements(
+    State(link): State<Arc<ObsLink>>,
+    Query(query): Query<PlacementsQuery>,
+) -> Response {
+    match link.placements(&query.scene).await {
+        Ok((canvas, items)) => Json(ScenePlacements {
+            canvas,
+            items: items
+                .into_iter()
+                .map(|(item, placement)| ItemPlacement { item, placement })
+                .collect(),
+        })
+        .into_response(),
+        Err(e) => command_response(Err(e)),
+    }
 }
 
 /// The overlay path, with its query, that `url` opens on this Host (port `port`); `None` for any other address.

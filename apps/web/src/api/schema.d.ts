@@ -1226,6 +1226,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/placements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The canvas size and where each item of a scene sits (asked when the scene page shows the scene). */
+        get: operations["scene_placements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/scene": {
         parameters: {
             query?: never;
@@ -2199,6 +2216,11 @@ export interface components {
         /** @enum {string} */
         AlertType: "alert";
         /**
+         * @description Which point of an item its position is: a corner, the middle of an edge, or the center.
+         * @enum {string}
+         */
+        Align: "top_left" | "top" | "top_right" | "left" | "center" | "right" | "bottom_left" | "bottom" | "bottom_right";
+        /**
          * @description Who may use a chat command. Each level also lets in the ones above it (subscriber, then VIP, then moderator),
          *     and the broadcaster may always use every command.
          * @enum {string}
@@ -2389,6 +2411,13 @@ export interface components {
         };
         /** @enum {string} */
         BreakType: "screen.break";
+        /** @description The canvas size in pixels (OBS: the base resolution). */
+        Canvas: {
+            /** Format: int32 */
+            height: number;
+            /** Format: int32 */
+            width: number;
+        };
         /** @description A stored card image. */
         CardImage: {
             /** @description The name to put in the style. */
@@ -3095,6 +3124,7 @@ export interface components {
             item: number;
             /** @description Locks or unlocks the item; absent leaves it. */
             locked?: boolean | null;
+            placement?: components["schemas"]["Placement"] | null;
             /**
              * Format: int32
              * @description Moves the item to this place in the scene, counted front to back as `obs.state` lists items (0 is the
@@ -3102,6 +3132,13 @@ export interface components {
              */
             position?: number | null;
             scene: string;
+        };
+        ItemPlacement: components["schemas"]["Placement"] & {
+            /**
+             * Format: int64
+             * @description The item's `id` in `obs.state`.
+             */
+            item: number;
         };
         /**
          * @description A `leaderboard.update` event exactly as `/ws/overlay` sends it when the boards change (checked every 30 s); the
@@ -3542,6 +3579,14 @@ export interface components {
         Period: "stream" | "month" | "all";
         /** @enum {string} */
         PeriodKind: "stream" | "offline";
+        /** @description Where an item sits on the canvas: the canvas pixel its `align` point is at. */
+        Placement: {
+            align: components["schemas"]["Align"];
+            /** Format: float */
+            x: number;
+            /** Format: float */
+            y: number;
+        };
         /** @description A library sound to play: `url` is its file (`/sounds/{id}`), `volume` 0–100 (%). */
         PlaySound: {
             url: string;
@@ -3843,6 +3888,10 @@ export interface components {
             locked: boolean;
             /** @description The source the item shows. */
             source: string;
+        };
+        ScenePlacements: {
+            canvas: components["schemas"]["Canvas"];
+            items: components["schemas"]["ItemPlacement"][];
         };
         /** @description A playlist that plays on some OBS scenes. `name` and `scenes` are broadcaster text: render them as text. */
         SceneRuleBody: {
@@ -7579,6 +7628,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    scene_placements: {
+        parameters: {
+            query: {
+                scene: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenePlacements"];
                 };
             };
             404: {
