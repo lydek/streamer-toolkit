@@ -224,8 +224,20 @@
       "desc": "把你說的話顯示在畫面上"
     },
     "screenTools": {
-      "name": "畫面工具",
-      "desc": "休息卡片、目標條、跑馬燈"
+      "name": "休息卡片",
+      "desc": "休息中、準備中的卡片與倒數"
+    },
+    "warnings": {
+      "name": "警語",
+      "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒"
+    },
+    "media": {
+      "name": "影片與 GIF",
+      "desc": "兌換時在特效 Overlay 播放影片或 GIF"
+    },
+    "marathon": {
+      "name": "訂閱馬拉松",
+      "desc": "訂閱、小奇點會延長的倒數計時"
     },
     "avatar": {
       "name": "虛擬形象",
@@ -739,7 +751,10 @@
       "scene": "OBS 場景",
       "bgm": "背景音樂",
       "counter": "計數器",
-      "screen-tools": "畫面工具",
+      "screen-tools": "休息卡片",
+      "warnings": "警語",
+      "media": "影片與 GIF",
+      "marathon": "訂閱馬拉松",
       "feed": "事件流"
     }
   },

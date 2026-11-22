@@ -20,6 +20,9 @@ pub struct Settings {
     pub disabled_modules: Vec<String>,
     /// Disabled modules that skip outbox events instead of keeping them (paused, the default, keeps them).
     pub closed_modules: Vec<String>,
+    /// The warnings, media and marathon switches were split out of screen tools and counters (once, on the first
+    /// start that has them).
+    pub modules_split: bool,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -339,6 +342,7 @@ impl Default for Settings {
             twitch_client_id: String::new(),
             disabled_modules: Vec::new(),
             closed_modules: Vec::new(),
+            modules_split: false,
             obs: ObsSettings::default(),
             skip_close_hint: false,
             home_tiles: None,

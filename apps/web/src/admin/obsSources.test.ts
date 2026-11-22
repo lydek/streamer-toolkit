@@ -33,10 +33,12 @@ describe('overlayRows', () => {
   })
 
   it('leaves out the overlays of modules turned off', () => {
-    const ids = overlayRows([], new Set(['counter'])).map((r) => r.key)
+    const ids = overlayRows([], new Set(['counter', 'warnings'])).map((r) => r.key)
     expect(ids).not.toContain('counter')
-    expect(ids).not.toContain('marathon')
-    expect(ids).toContain('chat')
+    expect(ids).not.toContain('warnings')
+    // The marathon and the break card have switches of their own.
+    expect(ids).toContain('marathon')
+    expect(ids).toContain('break')
   })
 })
 

@@ -47,7 +47,7 @@ beforeEach(() => {
   calls.get.mockImplementation((path: string) => Promise.resolve(answers[path]))
   calls.post.mockReset()
   calls.post.mockResolvedValue(undefined)
-  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin', 'counter', 'bgm'])
+  calls.modules.value = on(['chat', 'alerts', 'sound', 'checkin', 'counter', 'marathon', 'bgm'])
 })
 
 const player = (state: string, playlist: string | null = 'p1') => ({
@@ -120,7 +120,6 @@ describe('SimulateDialog', () => {
     const wrapper = await opened()
     expect(row('sound').textContent).toContain('功能已關閉')
     expect([...row('sound').querySelectorAll('button')].every((b) => b.disabled)).toBe(true)
-    // Both the counter and the marathon timer rows follow the counter feature.
     for (const id of ['counter', 'marathon']) {
       expect(row(id).textContent).toContain('功能已關閉')
       expect(row(id).querySelector('button')!.disabled).toBe(true)
@@ -128,6 +127,16 @@ describe('SimulateDialog', () => {
     await press('chat', '送一則訊息')
     expect(wrapper.get('[role="status"]').text()).toContain('boom')
     wrapper.unmount()
+  })
+
+  it('follows the counter and the marathon timer switches each on its own', async () => {
+    for (const [onlyOn, off] of [['counter', 'marathon'], ['marathon', 'counter']]) {
+      calls.modules.value = on([onlyOn])
+      const wrapper = await opened()
+      expect(row(onlyOn).querySelector('button')!.disabled).toBe(false)
+      expect(row(off).textContent).toContain('功能已關閉')
+      wrapper.unmount()
+    }
   })
 
   it('puts focus on 關閉 when it opens and tells the bar when it closes', async () => {

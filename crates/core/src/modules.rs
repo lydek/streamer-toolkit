@@ -19,8 +19,15 @@ pub const SCENE: &str = "scene";
 pub const BGM: &str = "bgm";
 /// Counters: global counts with chat commands.
 pub const COUNTER: &str = "counter";
-/// Screen tools: the break card; the ID is its page's path, so its home tile keeps the ID it had while unbuilt.
+/// The sub marathon timer: time added by subs and bits, on its own overlay.
+pub const MARATHON: &str = "marathon";
+/// The break card; the ID is its page's path, so its home tile keeps the ID it had while unbuilt (it was all of
+/// the screen tools until the warnings and media got switches of their own).
 pub const SCREEN_TOOLS: &str = "screen-tools";
+/// The on-stream warnings.
+pub const WARNINGS: &str = "warnings";
+/// Videos and GIFs played on a redemption (on the alerts overlay).
+pub const MEDIA: &str = "media";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -30,7 +37,17 @@ pub const ALL: &[&str] = &[
     SCENE,
     BGM,
     COUNTER,
+    MARATHON,
     SCREEN_TOOLS,
+    WARNINGS,
+    MEDIA,
+];
+
+/// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).
+const SPLIT: &[(&str, &str)] = &[
+    (WARNINGS, SCREEN_TOOLS),
+    (MEDIA, SCREEN_TOOLS),
+    (MARATHON, COUNTER),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +78,19 @@ pub struct Modules {
     switches: RwLock<Switches>,
 }
 
+/// Gives each split-out module the state of the module it came from.
+fn split(s: &mut settings::Settings) {
+    for (new, old) in SPLIT {
+        for list in [&mut s.disabled_modules, &mut s.closed_modules] {
+            if list.iter().any(|m| m == old) && !list.iter().any(|m| m == new) {
+                list.push((*new).to_owned());
+            }
+        }
+    }
+    s.disabled_modules.sort();
+    s.closed_modules.sort();
+}
+
 fn sorted(set: &HashSet<String>) -> Vec<String> {
     let mut list: Vec<String> = set.iter().cloned().collect();
     list.sort();
@@ -69,7 +99,18 @@ fn sorted(set: &HashSet<String>) -> Vec<String> {
 
 impl Modules {
     pub fn load(data_dir: PathBuf) -> Self {
-        let s = settings::load(&data_dir);
+        let mut s = settings::load(&data_dir);
+        if !s.modules_split {
+            split(&mut s);
+            // Saved so it happens once; a failed save tries again next start, which gives the same states.
+            if let Err(e) = settings::update(&data_dir, |saved| {
+                saved.disabled_modules = s.disabled_modules.clone();
+                saved.closed_modules = s.closed_modules.clone();
+                saved.modules_split = true;
+            }) {
+                tracing::warn!(error = %e, "split module switches not saved");
+            }
+        }
         let disabled: HashSet<String> = s.disabled_modules.into_iter().collect();
         let closed = s
             .closed_modules
@@ -143,6 +184,26 @@ impl Modules {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn split_out_modules_start_in_the_state_of_the_one_they_came_from_once() {
+        let dir = std::env::temp_dir().join(format!("st-modules-split-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        settings::update(&dir, |s| {
+            s.disabled_modules = vec!["counter".into(), "screen-tools".into()];
+            s.closed_modules = vec!["screen-tools".into()];
+        })
+        .unwrap();
+        let m = Modules::load(dir.clone());
+        for id in [SCREEN_TOOLS, WARNINGS, MEDIA] {
+            assert!(!m.is_enabled(id) && m.is_closed(id), "{id}");
+        }
+        assert!(!m.is_enabled(MARATHON) && !m.is_closed(MARATHON));
+        // Turned back on afterwards, it stays on after a restart: the split happens once.
+        m.set_enabled(WARNINGS, true).unwrap();
+        assert!(Modules::load(dir.clone()).is_enabled(WARNINGS));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     use super::*;
 
     #[test]

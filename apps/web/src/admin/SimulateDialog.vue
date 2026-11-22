@@ -152,10 +152,10 @@ const rows = computed(() =>
           },
         ],
       },
-      // The marathon timer belongs to the counter module.
+      // The counter and the marathon timer each have their own switch.
       ...(['counter', 'marathon'] as const).map((id) => ({
         id,
-        module: 'counter',
+        module: id,
         overlay: id,
         buttons: [{ label: t('simulate.dialog.showTest'), run: () => testOverlay(id) }],
       })),
