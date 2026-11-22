@@ -98,6 +98,12 @@ async function reloadModules() {
   modules.value = await api(client.GET('/api/admin/modules'))
 }
 
+/** Waits for the first load of the shared module states (a failed load leaves every page shown). */
+export async function modulesLoaded() {
+  useModules()
+  await loading
+}
+
 /** The shared module states, loaded on first use (a failed load leaves every page shown). */
 export function useModules() {
   loading ??= reloadModules().catch(() => {

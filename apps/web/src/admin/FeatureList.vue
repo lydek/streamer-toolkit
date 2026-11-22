@@ -1,6 +1,6 @@
 <template>
-  <!-- Settings › features: every feature by group (features.ts). Built ones switch their module on and off; the
-       rest say 「即將推出」. -->
+  <!-- Settings › features: every feature by group, under its category (tabs.ts). Built ones switch their module on
+       and off; the rest say 「即將推出」. -->
   <div class="feat-head">
     <InputText v-model="query" type="search" :placeholder="t('features.search')" :aria-label="t('features.search')" />
     <span v-if="modules" role="status">{{ t('features.count', count(switchable)) }}</span>
@@ -13,49 +13,52 @@
         <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
         <span class="group-count">{{ t('features.groupCount', count(g.all)) }}</span>
       </h3>
-      <ul class="feat-list">
-        <li v-for="f in g.features" :key="f.id" class="feat" :class="{ off: !on(f) }">
-          <i :class="f.icon" class="feat-icon" aria-hidden="true"></i>
-          <span class="feat-text">
-            <span class="name">{{ name(f) }}</span>
-            <span :id="`fd-${f.id}`" class="desc">{{ t(`features.${f.id}.desc`) }}</span>
-          </span>
-          <span class="tags">
-            <span v-if="f.needs" class="tag">{{ t(`features.needs.${f.needs}`) }}</span>
-            <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
-            <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
-          </span>
-          <Button
-            v-if="withSettings?.includes(f.id)"
-            :label="t('features.settings')"
-            icon="pi pi-angle-down"
-            icon-pos="right"
-            text
-            size="small"
-            :aria-expanded="openSettings === f.id"
-            :aria-controls="`fs-${f.id}`"
-            :aria-label="`${t('features.settings')}：${name(f)}`"
-            @click="openSettings = openSettings === f.id ? undefined : f.id"
-          />
-          <span v-if="f.fixed" class="fixed"><i class="pi pi-lock" aria-hidden="true"></i>{{ t('features.alwaysOn') }}</span>
-          <template v-else>
-            <RouterLink v-if="on(f)" :to="openPage(f)" class="open">
-              {{ t('features.open') }}<span class="sr-only">：{{ name(f) }}</span>
-            </RouterLink>
-            <ToggleSwitch
-              :input-id="f.module ? `module-${f.module}` : undefined"
-              :model-value="on(f)"
-              :disabled="busy || !f.module"
-              :aria-label="name(f)"
-              @update:model-value="toggle(f)"
+      <template v-for="s in g.sections" :key="s.id ?? ''">
+        <h4 v-if="s.id" class="feat-cat">{{ t(`nav.categories.${s.id}`) }}</h4>
+        <ul class="feat-list">
+          <li v-for="f in s.features" :key="f.id" class="feat" :class="{ off: !on(f) }">
+            <i :class="f.icon" class="feat-icon" aria-hidden="true"></i>
+            <span class="feat-text">
+              <span class="name">{{ name(f) }}</span>
+              <span :id="`fd-${f.id}`" class="desc">{{ t(`features.${f.id}.desc`) }}</span>
+            </span>
+            <span class="tags">
+              <span v-if="f.needs" class="tag">{{ t(`features.needs.${f.needs}`) }}</span>
+              <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
+              <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
+            </span>
+            <Button
+              v-if="withSettings?.includes(f.id)"
+              :label="t('features.settings')"
+              icon="pi pi-angle-down"
+              icon-pos="right"
+              text
+              size="small"
+              :aria-expanded="openSettings === f.id"
+              :aria-controls="`fs-${f.id}`"
+              :aria-label="`${t('features.settings')}：${name(f)}`"
+              @click="openSettings = openSettings === f.id ? undefined : f.id"
             />
-          </template>
-          <!-- Kept mounted (v-show) so what it loads stays current while it is folded. -->
-          <div v-if="withSettings?.includes(f.id)" v-show="openSettings === f.id" :id="`fs-${f.id}`" class="feat-settings">
-            <slot name="settings" :id="f.id" />
-          </div>
-        </li>
-      </ul>
+            <span v-if="f.fixed" class="fixed"><i class="pi pi-lock" aria-hidden="true"></i>{{ t('features.alwaysOn') }}</span>
+            <template v-else>
+              <RouterLink v-if="on(f)" :to="openPage(f)" class="open">
+                {{ t('features.open') }}<span class="sr-only">：{{ name(f) }}</span>
+              </RouterLink>
+              <ToggleSwitch
+                :input-id="f.module ? `module-${f.module}` : undefined"
+                :model-value="on(f)"
+                :disabled="busy || !f.module"
+                :aria-label="name(f)"
+                @update:model-value="toggle(f)"
+              />
+            </template>
+            <!-- Kept mounted (v-show) so what it loads stays current while it is folded. -->
+            <div v-if="withSettings?.includes(f.id)" v-show="openSettings === f.id" :id="`fs-${f.id}`" class="feat-settings">
+              <slot name="settings" :id="f.id" />
+            </div>
+          </li>
+        </ul>
+      </template>
     </section>
   </template>
 
@@ -109,8 +112,15 @@ const shownGroups = computed(() => {
   const matches = (f: Feature) => !q || `${name(f)} ${t(`features.${f.id}.desc`)}`.toLowerCase().includes(q)
   return GROUPS.map((g) => {
     const all = FEATURES.filter((f) => f.group === g.id)
-    return { id: g.id, icon: g.icon, all, features: all.filter(matches) }
-  }).filter((g) => g.features.length)
+    const shown = all.filter(matches)
+    // A feature sits under the category of its first page; a group without categories lists its features as one.
+    const category = (f: Feature) => g.categories?.find((c) => c.pages.some((p) => p.path === f.pages[0]))
+    const sections = [
+      ...(g.categories ?? []).map((c) => ({ id: c.id as string | undefined, features: shown.filter((f) => category(f) === c) })),
+      { id: undefined, features: shown.filter((f) => !category(f)) },
+    ].filter((s) => s.features.length)
+    return { id: g.id, icon: g.icon, all, sections }
+  }).filter((g) => g.sections.length)
 })
 
 // One confirmation dialog for what a switch takes along (features.ts plans).
@@ -186,6 +196,13 @@ function toggle(f: Feature) {
 .feat-settings {
   flex-basis: 100%;
   padding: 0.5rem 0 0.5rem 2rem;
+}
+
+.feat-cat {
+  margin: 0.75rem 0 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+  font-weight: 400;
 }
 
 .feat-list {

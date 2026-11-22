@@ -5,6 +5,7 @@ import ChatLogPage from './ChatLogPage.vue'
 import ChatPage from './ChatPage.vue'
 import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
+import { modulesLoaded, useModules } from './features'
 import HomeView from './HomeView.vue'
 import ImageSizesPage from './ImageSizesPage.vue'
 import LeaderboardPage from './LeaderboardPage.vue'
@@ -18,7 +19,7 @@ import SettingsView from './SettingsView.vue'
 import ScenesPage from './ScenesPage.vue'
 import ScreenToolsPage from './ScreenToolsPage.vue'
 import SoundsPage from './SoundsPage.vue'
-import { SOON_PAGES } from './tabs'
+import { SOON_PAGES, closedPageTarget } from './tabs'
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
 export const router = createRouter({
@@ -49,9 +50,14 @@ export const router = createRouter({
 })
 
 // Leaving the page (incl. "Open full page") submits the open drawer's or the full page's changed settings; a
-// failed one keeps them and cancels the navigation so its error stays visible.
+// failed one keeps them and cancels the navigation so its error stays visible. A page whose feature is off cannot
+// be opened from anywhere (tab, URL, back): it leads to an open page of its group instead.
 router.beforeEach(async (to, from) => {
   const focused = document.activeElement
   if (!(await useDrawer().close())) return false
+  await modulesLoaded()
+  // The matched route's path: the router also takes other letter cases and a trailing slash.
+  const instead = closedPageTarget(to.matched.at(-1)?.path ?? to.path, useModules().hidden.value)
+  if (instead) return instead
   rememberOpener(to, from, focused)
 })
