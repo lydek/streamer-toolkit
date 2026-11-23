@@ -246,6 +246,31 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, locked: false } })
   })
 
+  it('aligns an item once below another, centred, with an offset, keeping its own align point', async () => {
+    vi.spyOn(client, 'GET').mockImplementation((() =>
+      Promise.resolve({
+        data: {
+          canvas: { width: 1920, height: 1080 },
+          items: [
+            { item: 2, x: 0, y: 0, align: 'top_left', width: 100, height: 50 },
+            { item: 1, x: 100, y: 200, align: 'top_left', width: 300, height: 100 },
+          ],
+        },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    const vm = wrapper.vm as unknown as { rel: { ref: string; side: string; cross: string; ox: number; oy: number } }
+    Object.assign(vm.rel, { ref: '1', side: 'bottom', cross: 'middle', ox: 0, oy: 10 })
+    await wrapper.findAll('tr.editor button').find((b) => b.text() === t('scene.apply'))!.trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
+      body: { scene: 'Game', item: 2, placement: { x: 200, y: 310, align: 'top_left' } },
+    })
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())
