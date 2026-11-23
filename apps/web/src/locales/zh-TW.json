@@ -1410,6 +1410,8 @@
     "width": "「{item}」的寬",
     "height": "「{item}」的高",
     "ratio": "等比例",
+    "lockedNote": "鎖定中：位置、大小和對齊都不能改，順序可以。",
+    "unlock": "解鎖",
     "moreMoves": "更多排序：{item}",
     "toFront": "移到最上",
     "toBack": "移到最下",
