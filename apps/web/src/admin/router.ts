@@ -16,6 +16,7 @@ import CountersPage from './CountersPage.vue'
 import MarathonPage from './MarathonPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
+import OverlayLookPage from './OverlayLookPage.vue'
 import ObsSourcesPage from './ObsSourcesPage.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import RehearsalPage from './RehearsalPage.vue'
@@ -59,6 +60,7 @@ export const router = createRouter({
     { path: '/image-sizes', component: ImageSizesPage },
     { path: '/screen-tools', component: ScreenToolsPage },
     { path: '/warnings', component: WarningsPage },
+    { path: '/overlay-look', component: OverlayLookPage },
     { path: '/media', component: MediaPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0).
     // A page not built yet has a grey tab; its URL leads home.

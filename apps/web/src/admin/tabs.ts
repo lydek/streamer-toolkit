@@ -142,6 +142,7 @@ export const GROUPS: TabGroup[] = [
       pages: [
         { path: '/screen-tools', label: 'modules.names.screen-tools', tabLabel: 'nav.pageTabs.breakCard' },
         { path: '/warnings', label: 'pages.warnings.name' },
+        { path: '/overlay-look', label: 'pages.overlayLook.name' },
         soon('/goals', 'goals', 'pi pi-flag'),
         soon('/captions', 'captions', 'pi pi-align-left'),
       ],

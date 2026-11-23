@@ -59,6 +59,7 @@ export const FEATURES: Feature[] = [
   { id: 'goals', group: 'media', icon: 'pi pi-flag', pages: ['/goals'] },
   { id: 'captions', group: 'media', icon: 'pi pi-align-left', pages: ['/captions'] },
   { id: 'avatar', group: 'media', icon: 'pi pi-face-smile', pages: ['/avatar'], needs: 'program' },
+  { id: 'overlayLook', group: 'media', icon: 'pi pi-palette', pages: ['/overlay-look'], fixed: true },
   { id: 'imageSizes', group: 'media', icon: 'pi pi-image', pages: ['/image-sizes'], fixed: true },
   { id: 'viewers', group: 'viewers', icon: 'pi pi-users', pages: ['/viewers'], scopes: ['moderation:read', 'channel:read:vips'] },
   { id: 'roles', group: 'viewers', icon: 'pi pi-tags', pages: ['/roles'], requires: ['viewers'] },
