@@ -39,15 +39,36 @@ void measureUnmeasured().catch(() => {})
   align-items: flex-start;
 }
 
+/* At least the window's height, so the bottom tabs sit at the window bottom even on a short page. */
 .app-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-/* Holds the group tabs when the user put them at the bottom. */
+/* A page sizes by its container (`container: inline-size`, so no width of its own) and centers with auto margins,
+   which in this column would shrink it to nothing: it takes the full width, up to its max-width. */
+.app-main > main {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Holds the group tabs (and the group's sub-tabs above them) when the user put them at the bottom. */
 #bottom-tabs {
   position: sticky;
   bottom: 0;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+}
+
+/* Below 600px the group tabs are a fixed bar (AppBar.vue); the sub-tabs stay just above it. */
+@media (max-width: 599.98px) {
+  #bottom-tabs {
+    bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
 }
 </style>

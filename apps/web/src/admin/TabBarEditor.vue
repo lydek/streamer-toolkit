@@ -5,8 +5,21 @@
     <p v-if="error" role="alert">{{ error }}</p>
     <fieldset>
       <legend>{{ t('nav.editor.pinned') }}</legend>
+      <!-- Drag a row by its grip (or anywhere on it); the arrow buttons do the same from the keyboard. -->
       <ul class="rows">
-        <li v-for="(row, i) in draft" :key="row.id">
+        <li
+          v-for="(row, i) in draft"
+          :key="row.id"
+          :data-row="row.id"
+          draggable="true"
+          :class="{ moved: row.id === moved, dragging: row.id === dragged, [`drop-${dropSide}`]: row.id === over }"
+          @dragstart="onDragstart($event, row.id)"
+          @dragover="onDragover($event, row.id)"
+          @dragleave="over = null"
+          @drop="onDrop($event, row.id)"
+          @dragend="dragged = over = null"
+        >
+          <i class="pi pi-bars grip" aria-hidden="true"></i>
           <Checkbox v-model="row.pinned" :input-id="`pin-${row.id}`" binary />
           <label :for="`pin-${row.id}`">{{ t(`nav.groups.${row.id}`) }}</label>
           <Button
@@ -14,6 +27,7 @@
             text
             rounded
             size="small"
+            data-dir="up"
             :disabled="i === 0"
             :aria-label="`${t('arrange.earlier')}：${t(`nav.groups.${row.id}`)}`"
             @click="move(i, -1)"
@@ -23,12 +37,14 @@
             text
             rounded
             size="small"
+            data-dir="down"
             :disabled="i === draft.length - 1"
             :aria-label="`${t('arrange.later')}：${t(`nav.groups.${row.id}`)}`"
             @click="move(i, 1)"
           />
         </li>
       </ul>
+      <p class="sr-only" aria-live="polite">{{ announce }}</p>
     </fieldset>
     <fieldset class="position">
       <legend>{{ t('nav.editor.position') }}</legend>
@@ -50,7 +66,7 @@
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import RadioButton from 'primevue/radiobutton'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
@@ -79,10 +95,57 @@ function open() {
 }
 defineExpose({ open })
 
-function move(i: number, step: -1 | 1) {
-  const rows = [...draft.value]
-  ;[rows[i], rows[i + step]] = [rows[i + step], rows[i]]
+const moved = ref<string | null>(null)
+const announce = ref('')
+const dragged = ref<string | null>(null)
+const over = ref<string | null>(null)
+const dropSide = ref<'before' | 'after'>('before')
+let movedTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Puts the row at `to`, flashes it and says where it went, so it is not lost after the move. */
+function place(id: string, to: number, focusDir?: 'up' | 'down') {
+  const rows = draft.value.filter((r) => r.id !== id)
+  rows.splice(to, 0, draft.value.find((r) => r.id === id)!)
   draft.value = rows
+  moved.value = id
+  clearTimeout(movedTimer)
+  movedTimer = setTimeout(() => (moved.value = null), 1600)
+  announce.value = t('arrange.moved', { name: t(`nav.groups.${id}`), position: to + 1 })
+  // The row's buttons move with it; keep focus on the one pressed, or its pair once it hits an end.
+  if (focusDir)
+    void nextTick(() => {
+      const li = dialog.value?.querySelector(`[data-row="${id}"]`)
+      const want = li?.querySelector<HTMLButtonElement>(`[data-dir="${focusDir}"]`)
+      ;(want && !want.disabled ? want : li?.querySelector<HTMLButtonElement>(`[data-dir="${focusDir === 'up' ? 'down' : 'up'}"]`))?.focus()
+    })
+}
+
+function move(i: number, step: -1 | 1) {
+  place(draft.value[i].id, i + step, step < 0 ? 'up' : 'down')
+}
+
+function onDragstart(e: DragEvent, id: string) {
+  dragged.value = id
+  e.dataTransfer?.setData('text/plain', id)
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragover(e: DragEvent, id: string) {
+  if (!dragged.value || dragged.value === id) return
+  e.preventDefault()
+  const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropSide.value = e.clientY < box.top + box.height / 2 ? 'before' : 'after'
+  over.value = id
+}
+
+function onDrop(e: DragEvent, id: string) {
+  const from = dragged.value
+  dragged.value = over.value = null
+  if (!from || from === id) return
+  e.preventDefault()
+  const rest = draft.value.filter((r) => r.id !== from)
+  const at = rest.findIndex((r) => r.id === id) + (dropSide.value === 'after' ? 1 : 0)
+  place(from, at)
 }
 
 // Groups hidden right now (their features are off) keep their saved place after the shown ones.
@@ -154,6 +217,42 @@ legend {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  padding-inline: 0.25rem;
+  border-radius: var(--p-content-border-radius);
+  cursor: grab;
+}
+
+.grip {
+  color: var(--p-text-muted-color);
+}
+
+.rows li.dragging {
+  opacity: 0.4;
+}
+
+.rows li.drop-before {
+  box-shadow: inset 0 2px 0 var(--p-primary-color);
+}
+
+.rows li.drop-after {
+  box-shadow: inset 0 -2px 0 var(--p-primary-color);
+}
+
+.rows li.moved {
+  animation: moved 1.6s ease-out;
+}
+
+@keyframes moved {
+  from {
+    background: color-mix(in srgb, var(--p-primary-color) 25%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rows li.moved {
+    animation: none;
+    outline: 1px solid var(--p-primary-color);
+  }
 }
 
 .rows label {
