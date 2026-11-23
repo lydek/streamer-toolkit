@@ -128,6 +128,7 @@ onMounted(() => {
 
 .page-header h1 {
   margin: 0;
+  font-size: 1.3125rem;
 }
 
 /* Positioned, so the sr-only text of a grey tab scrolls with the row instead of widening the page. */
@@ -135,7 +136,7 @@ onMounted(() => {
   position: relative;
   display: flex;
   gap: 0.25rem;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   overflow-x: auto;
   border-bottom: 1px solid var(--p-surface-800);
   scrollbar-width: none;
@@ -201,6 +202,28 @@ onMounted(() => {
 
 .service-warn a {
   margin-left: auto;
+}
+
+/* Short windows (760px or less): a smaller title and icon, and closer tabs. */
+@media (max-height: 760px) {
+  .page-header h1 {
+    font-size: 1.125rem;
+  }
+
+  .badge {
+    width: 2rem;
+    height: 2rem;
+    font-size: 1rem;
+  }
+
+  .page-tabs {
+    margin-top: 0.375rem;
+  }
+
+  .page-tabs a,
+  .page-tabs .off {
+    padding: 0.375rem 0.75rem;
+  }
 }
 
 .page-error {
