@@ -234,6 +234,53 @@
                         />
                         <span v-if="outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
                       </span>
+                      <!-- Against the canvas (inside it) or another item (outside it), once: nothing follows later. -->
+                      <template v-if="placements.get(item.id)!.width">
+                        <span>{{ t('scene.relative') }}</span>
+                        <span class="fields">
+                          <Select
+                            v-model="rel.ref"
+                            :options="refOptions(item)"
+                            option-label="label"
+                            option-value="value"
+                            :aria-label="t('scene.relativeRef', { item: item.source })"
+                            :disabled="busy.has(item.id) || item.locked"
+                          />
+                          <SelectButton
+                            v-model="rel.side"
+                            :options="SIDES"
+                            :option-label="(v: Side) => t(`scene.sides.${v}`)"
+                            :allow-empty="false"
+                            :aria-label="t('scene.relativeSide')"
+                            :disabled="busy.has(item.id) || item.locked"
+                          />
+                          <SelectButton
+                            v-model="rel.cross"
+                            :options="CROSSES"
+                            :option-label="(v: Cross) => t(`scene.crosses.${v}`)"
+                            :allow-empty="false"
+                            :aria-label="t('scene.relativeCross')"
+                            :disabled="busy.has(item.id) || item.locked || rel.side === 'center'"
+                          />
+                          <InputNumber
+                            v-model="rel.ox"
+                            :use-grouping="false"
+                            :aria-label="t('scene.offsetX')"
+                            class="coord"
+                            :disabled="busy.has(item.id) || item.locked"
+                          />
+                          <InputNumber
+                            v-model="rel.oy"
+                            :use-grouping="false"
+                            :aria-label="t('scene.offsetY')"
+                            class="coord"
+                            :disabled="busy.has(item.id) || item.locked"
+                          />
+                          <Button :label="t('scene.apply')" size="small" outlined :disabled="busy.has(item.id) || item.locked" @click="alignOnce(item)" />
+                        </span>
+                        <span></span>
+                        <span class="hint">{{ t('scene.relativeHint') }}</span>
+                      </template>
                     </template>
                     <p v-else class="muted">{{ t('scene.noPlacement') }}</p>
                     <!-- Order: a number counted from the front (1), or right below another item. -->
@@ -282,6 +329,7 @@ import InputNumber from 'primevue/inputnumber'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import Select from 'primevue/select'
+import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -291,6 +339,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast, servicesDown, useLiveEvents } from './home'
 import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSources'
+import { type Cross, type Side, alignedCorner, boxOf, pointOf } from './relativeAlign'
 import SceneList from './SceneList.vue'
 import { type SceneItem, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
 
@@ -454,6 +503,26 @@ const geoText = (item: SceneItem) => {
   if (!p) return '—'
   const at = `${Math.round(p.x)}, ${Math.round(p.y)}`
   return p.width ? `${at} · ${Math.round(p.width)} × ${Math.round(p.height)}` : at
+}
+
+// Relative alignment (computed once): the reference, the side, along it, and an offset.
+const SIDES: Side[] = ['top', 'bottom', 'left', 'right', 'center']
+const CROSSES: Cross[] = ['start', 'middle', 'end']
+const rel = ref<{ ref: string; side: Side; cross: Cross; ox: number; oy: number }>({ ref: 'canvas', side: 'top', cross: 'middle', ox: 0, oy: 0 })
+const refOptions = (item: SceneItem) => [
+  { value: 'canvas', label: t('scene.canvas') },
+  ...(current.value?.items ?? [])
+    .filter((o) => o.id !== item.id && placements.value.get(o.id)?.width)
+    .map((o) => ({ value: String(o.id), label: o.source })),
+]
+function alignOnce(item: SceneItem) {
+  const own = placements.value.get(item.id)
+  if (!own?.width || !canvas.value) return
+  const r = rel.value
+  const other = r.ref === 'canvas' ? undefined : placements.value.get(Number(r.ref))
+  const refBox = other ? boxOf(other, other) : { left: 0, top: 0, width: canvas.value.width, height: canvas.value.height }
+  const corner = alignedCorner(own, refBox, r.side, r.cross, { x: r.ox ?? 0, y: r.oy ?? 0 }, !other)
+  void place(item, pointOf(corner.left, corner.top, own.align, own))
 }
 
 // Size: with 等比例 (the default) the other side follows, at least 1; OBS gets the new scale.
@@ -669,6 +738,12 @@ tr.moved > * {
     animation: none;
     outline: 1px solid var(--p-primary-color);
   }
+}
+
+.hint {
+  margin-top: -0.25rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
 }
 
 .locked-note {
