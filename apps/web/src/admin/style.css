@@ -134,6 +134,36 @@ form,
   gap: 0.5rem;
 }
 
+/* Fields stacked in a form (or a .stack) share one width per kind, so same-purpose fields line up: text and choices
+   20rem, numbers 8rem. Wide fields (`.wide`) and multi-line text keep their own. */
+main :is(form, .stack) > :is(.p-select, input.p-inputtext):not(.wide) {
+  width: min(20rem, 100%);
+}
+
+main :is(form, .stack) > .p-inputnumber:not(.wide) {
+  width: min(8rem, 100%);
+}
+
+main :is(form, .stack) > .p-inputnumber:not(.wide) .p-inputnumber-input {
+  width: 1%;
+}
+
+/* Short windows (760px or less): one step tighter, so the controls keep the room. */
+@media (max-height: 760px) {
+  main {
+    padding: 0.75rem 1rem;
+  }
+
+  form,
+  .stack {
+    gap: 0.375rem;
+  }
+
+  .table :is(th, td) {
+    padding: 0.375rem 0.5rem;
+  }
+}
+
 code {
   font-size: 0.875rem;
 }
