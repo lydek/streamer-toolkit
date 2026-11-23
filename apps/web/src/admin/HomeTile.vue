@@ -15,7 +15,7 @@
       :aria-controls="controls ?? drawerId(id)"
       :data-drawer-tile="controls ? undefined : id"
     >
-      <TileFace :name="name" :icon="icon" :tint="tint" :line="shown" rows />
+      <TileFace :name="name" :icon="icon" :tint="tint" :line="shown" rows :masked="masked" />
       <template v-if="attention || shown.state === 'failed'">
         <span class="dot" aria-hidden="true"></span>
         <span class="sr-only">{{ t('home.attention') }}</span>
@@ -44,6 +44,8 @@ const props = defineProps<{
   controls?: string
   /** A feature not built yet: grey, and it does nothing. */
   unbuilt?: boolean
+  /** Its number shows as 「––」 (下播後, masked). */
+  masked?: boolean
 }>()
 const { t } = useI18n()
 

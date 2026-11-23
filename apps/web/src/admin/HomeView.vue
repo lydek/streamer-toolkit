@@ -20,6 +20,18 @@
             <span class="manual">{{ t('stage.manual') }}</span>
             <Button :label="t('stage.backToAuto')" size="small" text @click="stage.backToAuto()" />
           </template>
+          <!-- 下播後: show the numbers, mask them, or fold the whole home away (no number anxiety). -->
+          <template v-if="shownStage === 'after'">
+            <span id="numbers-heading" class="sr-only">{{ t('home.numbers.label') }}</span>
+            <SelectButton
+              :model-value="numbers.mode"
+              :options="NUMBER_MODES"
+              :option-label="(m: NumbersMode) => t(`home.numbers.${m}`)"
+              :allow-empty="false"
+              aria-labelledby="numbers-heading"
+              @update:model-value="(mode: NumbersMode) => saveNumbers({ mode })"
+            />
+          </template>
         </div>
         <div class="lights">
           <Button v-if="arranging" ref="doneButton" :label="t('arrange.done')" icon="pi pi-check" @click="leaveArrange" />
@@ -51,6 +63,10 @@
           :name="moduleName"
           :lines="lines"
         />
+        <div v-else-if="folded" class="block folded">
+          <p>{{ t('home.numbers.folded') }}</p>
+          <Button :label="t('home.numbers.peek')" outlined @click="peek = true" />
+        </div>
         <div v-else-if="!tiles.length" class="stack">
           <p>{{ t('home.empty') }}</p>
           <Button :label="t('home.arrange')" icon="pi pi-pencil" outlined data-drawer-arrange @click="enterArrange" />
@@ -67,7 +83,7 @@
               </ul>
             </section>
             <StageCard v-else-if="tile.id === 'checklist'" part="checklist" :stage="stage" />
-            <StageCard v-else-if="tile.id === 'summary'" part="session" :stage="stage" />
+            <StageCard v-else-if="tile.id === 'summary'" part="session" :stage="stage" :masked="maskedNumber" @reveal="revealNumber" />
             <!-- 本場直播 and 事件流: a small tile that opens in place into its block, and back. -->
             <HomeTile
               v-else-if="tile.id in EXPANDS && !opened.has(tile.id)"
@@ -81,7 +97,7 @@
               :data-expand="tile.id"
               @click="openBlock(tile.id)"
             />
-            <StageCard v-else-if="tile.id === 'stats'" id="block-stats" part="session" :stage="stage">
+            <StageCard v-else-if="tile.id === 'stats'" id="block-stats" part="session" :stage="stage" :masked="maskedNumber" @reveal="revealNumber">
               <template #actions><BlockClose :name="moduleName('stats')" expand-id="stats" @close="closeBlock('stats')" /></template>
             </StageCard>
             <section v-else-if="tile.id === 'feed'" id="block-feed" class="block" aria-labelledby="feed-heading">
@@ -115,10 +131,21 @@
               :attention="attention[tile.id]"
               :unbuilt="!!tile.unbuilt"
               :expanded="drawer.current.value === tile.id"
+              :masked="maskedNumber(tile.id)"
               @click="!tile.unbuilt && toggle(tile.id, $event.currentTarget)"
             >
+              <!-- A masked number has a button that shows just that one. -->
+              <template v-if="maskedNumber(tile.id)" #actions>
+                <Button
+                  :label="t('home.numbers.reveal')"
+                  :aria-label="`${t('home.numbers.reveal')}：${moduleName(tile.id)}`"
+                  size="small"
+                  text
+                  @click="revealNumber(tile.id)"
+                />
+              </template>
               <!-- A few tiles act in place: the first counter, the first three sounds, the break card. -->
-              <template v-if="tile.id === 'counter' && live.counters?.length" #actions>
+              <template v-else-if="tile.id === 'counter' && live.counters?.length" #actions>
                 <Button
                   v-for="d in [-1, 1] as const"
                   :key="d"
@@ -421,6 +448,7 @@ import {
   type Tile,
   useLiveEvents,
 } from './home'
+import { isMasked, reveal, saveAfterNumbers, useAfterNumbers } from './afterNumbers'
 import HomeTile from './HomeTile.vue'
 import { FEATURES } from './features'
 import ObsStatusLink from './ObsStatusLink.vue'
@@ -687,6 +715,22 @@ function breakLine(card: Schemas['BreakPayload']): Line {
   return { state: 'ready', num: t('screenTools.break.shownShort'), text: card.text || t('screenTools.break.heading') }
 }
 
+// 下播後 numbers: masked ones show 「––」 (a tile's only when it has a number); 整頁不顯示 folds the tiles behind one
+// card, and 「這次看一下」 opens them for this visit only.
+type NumbersMode = Schemas['NumbersMode']
+const NUMBER_MODES: NumbersMode[] = ['show', 'mask', 'hide']
+const numbers = useAfterNumbers()
+const peek = ref(false)
+watch(shownStage, () => (peek.value = false))
+const folded = computed(() => shownStage.value === 'after' && numbers.mode === 'hide' && !peek.value)
+const maskedNumber = (id: string) => {
+  if (shownStage.value !== 'after' || !isMasked(id)) return false
+  const line = lines.value[id]
+  return id.startsWith('stats.') || (line?.state === 'ready' && !!line.num)
+}
+const saveNumbers = (change: Partial<Schemas['AfterNumbers']>) => tileAction(saveAfterNumbers(change))
+const revealNumber = (id: string) => tileAction(reveal(id))
+
 // A tile's in-place action reports a failure as a toast: its drawer, where notices show, is closed.
 const tileAction = (p: Promise<unknown>) =>
   p.catch((e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e))))
@@ -703,7 +747,9 @@ function statsLine(): Line {
   if (stage.failed.value) return { state: 'failed' }
   const s = stage.session.value
   if (!s) return { state: 'ready', text: t(stage.notLive.value ? 'stage.notLive' : 'stage.waiting') }
-  return { state: 'ready', num: stage.when.value, text: t('home.statsLine', { redemptions: s.redemptions, subs: s.subs }) }
+  // 下播後 with numbers masked: its counts too, each until revealed.
+  const n = (key: string, v: number) => (shownStage.value === 'after' && isMasked(`stats.${key}`) ? '––' : v)
+  return { state: 'ready', num: stage.when.value, text: t('home.statsLine', { redemptions: n('redemptions', s.redemptions), subs: n('subs', s.subs) }) }
 }
 
 /** The small 呈現佇列 tile: how many wait, and what plays. */
@@ -911,6 +957,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.25rem 0;
+}
+
+.folded {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.folded p {
+  margin: 0;
 }
 
 .tile-switch {

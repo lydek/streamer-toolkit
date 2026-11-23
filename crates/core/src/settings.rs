@@ -46,6 +46,9 @@ pub struct Settings {
     /// How the admin UI shows chat. `None`: never changed, the admin UI's defaults.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_display: Option<ChatDisplay>,
+    /// How the 下播後 home shows its numbers. `None`: never changed, they show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_numbers: Option<AfterNumbers>,
     /// The admin UI's tab bar. `None`: never edited, every group is in the bar on top.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tab_bar: Option<TabBar>,
@@ -95,6 +98,25 @@ pub enum DockSide {
     Left,
     #[default]
     Right,
+}
+
+/// How the admin UI's 下播後 home shows its numbers, so a streamer can look back without number anxiety. `revealed`:
+/// numbers shown one by one while masked (the admin UI's IDs, kept until shown all or hidden again).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct AfterNumbers {
+    pub mode: NumbersMode,
+    pub revealed: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum NumbersMode {
+    /// Every number shows.
+    Show,
+    /// Each number shows as 「––」 until revealed.
+    Mask,
+    /// The tiles are folded away behind one card.
+    Hide,
 }
 
 /// How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template.
@@ -363,6 +385,7 @@ impl Default for Settings {
             home_tiles_version: 0,
             chat_dock: None,
             chat_display: None,
+            after_numbers: None,
             tab_bar: None,
             text_size: None,
             record_retention: None,

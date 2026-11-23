@@ -631,6 +631,82 @@ async fn tab_bar_persists_and_rejects_bad_bodies() {
 }
 
 #[tokio::test]
+async fn after_numbers_persists_and_rejects_bad_bodies() {
+    let dir = std::env::temp_dir().join(format!("st-host-after-{}", std::process::id()));
+    let app_for = |dir: &PathBuf| {
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        router(config).unwrap()
+    };
+    let put = |body: &str| {
+        get_req("/api/admin/after-numbers", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    };
+    let get = |app: Router| async move {
+        let res = app
+            .oneshot(
+                get_req("/api/admin/after-numbers", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+    };
+
+    let app = app_for(&dir);
+    assert_eq!(get(app.clone()).await, serde_json::Value::Null);
+    let saved = r#"{"mode":"mask","revealed":["stats.redemptions","counter"]}"#;
+    let res = app.clone().oneshot(put(saved)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    // A new router on the same data folder stands in for a restart.
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!({ "mode": "mask", "revealed": ["stats.redemptions", "counter"] })
+    );
+
+    let too_many = format!(
+        r#"{{"mode":"mask","revealed":[{}]}}"#,
+        (0..51)
+            .map(|i| format!("\"t{i}\""))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    for bad in [
+        r#"{"mode":"blur","revealed":[]}"#,
+        r#"{"mode":"mask","revealed":["Bad ID"]}"#,
+        r#"{"mode":"mask","revealed":[""]}"#,
+        r#"{"mode":"mask"}"#,
+        too_many.as_str(),
+        "not json",
+    ] {
+        let res = app.clone().oneshot(put(bad)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(
+        get(app.clone()).await,
+        serde_json::json!({ "mode": "mask", "revealed": ["stats.redemptions", "counter"] }),
+        "bad bodies change nothing"
+    );
+    let unauthorized = get_req("/api/admin/after-numbers", "127.0.0.1:47810")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.oneshot(unauthorized).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn chat_dock_persists_and_rejects_bad_bodies() {
     let dir = std::env::temp_dir().join(format!("st-host-dock-{}", std::process::id()));
     let app_for = |dir: &PathBuf| {

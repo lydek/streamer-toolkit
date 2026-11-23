@@ -508,7 +508,8 @@
       "raids": "揪團",
       "redemptions": "兌換",
       "chatMessages": "聊天訊息",
-      "firstChats": "第一次聊天"
+      "firstChats": "第一次聊天",
+      "peak": "最高觀眾數"
     }
   },
   "queue": {
@@ -544,6 +545,16 @@
     "stopped": "已停止正在播的 {stopped} 個、取消排隊中的 {cancelled} 個；已記錄的資料不受影響。"
   },
   "home": {
+    "numbers": {
+      "label": "下播後的數字",
+      "show": "顯示數字",
+      "mask": "遮起來",
+      "hide": "整頁不顯示",
+      "masked": "數字遮起來了",
+      "reveal": "顯示數字",
+      "folded": "下播後的數字收起來了，想看的時候再看。",
+      "peek": "這次看一下"
+    },
     "skip": "跳到功能磚",
     "tiles": "功能磚",
     "attention": "需要注意",
@@ -1586,6 +1597,9 @@
     },
     "chat_dock": {
       "invalid": "聊天室的寬度不正確。"
+    },
+    "after_numbers": {
+      "invalid": "下播後數字的設定格式不正確。"
     },
     "tab_bar": {
       "invalid": "分頁列設定的格式不正確。"

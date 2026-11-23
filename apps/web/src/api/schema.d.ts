@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+    "/api/admin/after-numbers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The saved choice; `null` when never changed (numbers show). */
+        get: operations["after_numbers"];
+        /** Saves the choice; at most 50 revealed IDs of 1-32 characters `[a-z0-9.-]`. */
+        put: operations["set_after_numbers"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/alerts/recent": {
         parameters: {
             query?: never;
@@ -2145,6 +2163,14 @@ export interface components {
             width: number;
         };
         /**
+         * @description How the admin UI's 下播後 home shows its numbers, so a streamer can look back without number anxiety. `revealed`:
+         *     numbers shown one by one while masked (the admin UI's IDs, kept until shown all or hidden again).
+         */
+        AfterNumbers: {
+            mode: components["schemas"]["NumbersMode"];
+            revealed: string[];
+        };
+        /**
          * @description An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in
          *     snapshots, so a reloaded overlay never replays one.
          */
@@ -3451,6 +3477,8 @@ export interface components {
             /** @description `checkin.not_enough_stamps`. */
             code: string;
         };
+        /** @enum {string} */
+        NumbersMode: "show" | "mask" | "hide";
         ObsOverview: {
             host: string;
             /** @description Whether a password is stored; the password itself is never returned. */
@@ -4547,6 +4575,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    after_numbers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AfterNumbers"] | null;
+                };
+            };
+        };
+    };
+    set_after_numbers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AfterNumbers"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     recent: {
         parameters: {
             query?: never;
