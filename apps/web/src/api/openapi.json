@@ -5365,6 +5365,71 @@
         }
       }
     },
+    "/api/admin/services": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The saved choice; `null` when never changed (both services in use).",
+        "operationId": "services",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ServiceUse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the choice; at most 50 parked modules with IDs of 1-32 characters `[a-z0-9-]`, each service listed once.",
+        "operationId": "set_services",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceUse"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/simulate/alert": {
       "post": {
         "tags": [
@@ -9176,6 +9241,13 @@
           }
         }
       },
+      "ExternalService": {
+        "type": "string",
+        "enum": [
+          "twitch",
+          "obs"
+        ]
+      },
       "FeedEvent": {
         "oneOf": [
           {
@@ -10681,6 +10753,23 @@
           }
         }
       },
+      "ParkedModule": {
+        "type": "object",
+        "required": [
+          "service",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The module's ID."
+          },
+          "service": {
+            "$ref": "#/components/schemas/ExternalService",
+            "description": "The service whose switch turned it off."
+          }
+        }
+      },
       "Performance": {
         "type": "object",
         "required": [
@@ -11845,6 +11934,28 @@
           "steps": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "ServiceUse": {
+        "type": "object",
+        "description": "Twitch or OBS not used at all (設定 › 功能): `unused` lists them; `parked` are the modules that were on and were\nturned off because of it, so turning the service back on turns exactly those on again.",
+        "required": [
+          "unused",
+          "parked"
+        ],
+        "properties": {
+          "parked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParkedModule"
+            }
+          },
+          "unused": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalService"
+            }
           }
         }
       },

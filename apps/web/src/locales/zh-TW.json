@@ -555,6 +555,13 @@
     "stopped": "已停止正在播的 {stopped} 個、取消排隊中的 {cancelled} 個；已記錄的資料不受影響。"
   },
   "services": {
+    "use": "使用 {service}",
+    "useDesc": "關掉後，需要 {service} 的功能和它們的分頁、功能磚都收起來；改回使用就恢復原本的開關。",
+    "unused": "不使用 {service}",
+    "offTitle": "不使用 {service}？",
+    "offText": "這些開著的功能會關閉並鎖住，分頁和功能磚會收起來；改回使用時會再打開：",
+    "offNone": "目前沒有開著的功能需要它。",
+    "offOk": "不使用",
     "down": "{service} 沒連上",
     "banner": "{service} 沒連上，這一頁的功能暫時不能用。",
     "connect": "去連線"
@@ -1623,6 +1630,9 @@
     },
     "chat_dock": {
       "invalid": "聊天室的寬度不正確。"
+    },
+    "services": {
+      "invalid": "使用的服務設定格式不正確。"
     },
     "after_numbers": {
       "invalid": "下播後數字的設定格式不正確。"

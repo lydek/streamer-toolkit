@@ -119,4 +119,16 @@ describe('FeatureList group switches', () => {
     expect(wrapper.emitted('bulk')).toBeUndefined()
     wrapper.unmount()
   })
+
+  it('shows a service switch on again when not using it is cancelled', async () => {
+    const wrapper = mounted(interact)
+    const use = () => wrapper.get<HTMLInputElement>('#use-twitch')
+    await use().setValue(false)
+    expect(document.querySelector('.confirm')?.hasAttribute('open')).toBe(true)
+    ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.cancel')))!.click()
+    await nextTick()
+    expect(wrapper.emitted('service')).toBeUndefined()
+    expect(use().element.checked).toBe(true)
+    wrapper.unmount()
+  })
 })

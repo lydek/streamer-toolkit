@@ -1,5 +1,6 @@
 import { computed, shallowRef } from 'vue'
 import { type Schemas, api, client } from './api'
+import { useServices } from './services'
 
 /*
  * Every feature of the design, for the feature page in settings (docs/scope.md 階段 0). A feature owns one or more
@@ -93,9 +94,10 @@ export function turnOffPlan(f: Feature, on: (f: Feature) => boolean, all = FEATU
  * (`openWith`) once all of them are: the tabs and sub-tabs hide them. A module not listed (not loaded yet, or the
  * load failed) hides nothing.
  */
-export function hiddenPages(modules: Schemas['ModuleState'][], all = FEATURES): Set<string> {
+export function hiddenPages(modules: Schemas['ModuleState'][], all = FEATURES, unused: Service[] = []): Set<string> {
   const off = new Set(modules.filter((m) => !m.enabled).map((m) => m.id))
-  const closed = (f: Feature) => (f.module ? off.has(f.module) : !!f.openWith?.every((m) => off.has(m)))
+  const closed = (f: Feature) =>
+    unusedBy(f, unused).length > 0 || (f.module ? off.has(f.module) : !!f.openWith?.every((m) => off.has(m)))
   return new Set(all.filter(closed).flatMap((f) => f.pages))
 }
 
@@ -123,10 +125,11 @@ export function useModules() {
   loading ??= reloadModules().catch(() => {
     loading = undefined
   })
-  return { modules, hidden: computed(() => hiddenPages(modules.value ?? [])) }
+  const services = useServices()
+  return { modules, hidden: computed(() => hiddenPages(modules.value ?? [], FEATURES, services.unused)) }
 }
 
-export type Service = 'twitch' | 'obs'
+export type Service = Schemas['ExternalService']
 /** The features that cannot work without each service (built or not); the pages and the feature list warn by it. */
 export const SERVICE_NEEDS: Record<Service, string[]> = {
   twitch: ['streamInfo', 'songs', 'chat', 'chatFilter', 'bot', 'alerts', 'polls', 'rewards', 'redemption', 'checkin', 'viewers', 'roles', 'leaderboard', 'credits', 'shoutouts', 'raids', 'marathon', 'goals'],
@@ -135,3 +138,18 @@ export const SERVICE_NEEDS: Record<Service, string[]> = {
 export const servicesOf = (featureId: string) => (Object.keys(SERVICE_NEEDS) as Service[]).filter((s) => SERVICE_NEEDS[s].includes(featureId))
 /** The feature a page belongs to. */
 export const featureOfPage = (path: string) => FEATURES.find((f) => f.pages.includes(path))
+
+/**
+ * The unused services a feature cannot do without: needed by the feature itself or by a feature it requires (練唱台
+ * needs 點歌, which needs Twitch). Such a feature is off, locked, and its pages and tiles are hidden.
+ */
+export function unusedBy(f: Feature, unused: Service[], all = FEATURES, seen = new Set<string>()): Service[] {
+  if (!unused.length || seen.has(f.id)) return []
+  seen.add(f.id)
+  const own = unused.filter((s) => SERVICE_NEEDS[s].includes(f.id))
+  const via = (f.requires ?? []).flatMap((id) => {
+    const d = all.find((x) => x.id === id)
+    return d ? unusedBy(d, unused, all, seen) : []
+  })
+  return [...new Set([...own, ...via])]
+}

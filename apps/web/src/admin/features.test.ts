@@ -80,3 +80,23 @@ describe('hiddenPages', () => {
     expect(hiddenPages(states(['sound'])).has('/sounds')).toBe(true)
   })
 })
+
+describe('unused services', () => {
+  it('lock a feature that needs the service itself or through a feature it requires', async () => {
+    const { FEATURES, unusedBy } = await import('./features')
+    const f = (id: string) => FEATURES.find((x) => x.id === id)!
+    expect(unusedBy(f('chat'), ['twitch'])).toEqual(['twitch'])
+    // 練唱台 needs 點歌, which needs Twitch.
+    expect(unusedBy(f('singingBooth'), ['twitch'])).toEqual(['twitch'])
+    expect(unusedBy(f('chat'), ['obs'])).toEqual([])
+    expect(unusedBy(f('counters'), ['twitch', 'obs'])).toEqual([])
+  })
+
+  it("hide the pages of what they lock, always-on ones included", async () => {
+    const { hiddenPages } = await import('./features')
+    const hidden = hiddenPages([{ id: 'scene', enabled: true, closed: false }], undefined, ['obs'])
+    expect(hidden.has('/scenes')).toBe(true)
+    expect(hidden.has('/obs-sources')).toBe(true)
+    expect(hiddenPages([{ id: 'scene', enabled: true, closed: false }]).has('/scenes')).toBe(false)
+  })
+})

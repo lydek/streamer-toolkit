@@ -1671,6 +1671,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The saved choice; `null` when never changed (both services in use). */
+        get: operations["services"];
+        /** Saves the choice; at most 50 parked modules with IDs of 1-32 characters `[a-z0-9-]`, each service listed once. */
+        put: operations["set_services"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/simulate/alert": {
         parameters: {
             query?: never;
@@ -3096,6 +3114,8 @@ export interface components {
              */
             count: number;
         };
+        /** @enum {string} */
+        ExternalService: "twitch" | "obs";
         /** @description What happened. */
         FeedEvent: {
             alert: string;
@@ -3623,6 +3643,12 @@ export interface components {
             code: string;
             detail: string;
         };
+        ParkedModule: {
+            /** @description The module's ID. */
+            id: string;
+            /** @description The service whose switch turned it off. */
+            service: components["schemas"]["ExternalService"];
+        };
         Performance: {
             /**
              * Format: double
@@ -4016,6 +4042,14 @@ export interface components {
              */
             duration_ms: number;
             steps: number;
+        };
+        /**
+         * @description Twitch or OBS not used at all (設定 › 功能): `unused` lists them; `parked` are the modules that were on and were
+         *     turned off because of it, so turning the service back on turns exactly those on again.
+         */
+        ServiceUse: {
+            parked: components["schemas"]["ParkedModule"][];
+            unused: components["schemas"]["ExternalService"][];
         };
         /** @description Another channel in a shared chat. */
         SharedChannelPayload: {
@@ -8981,6 +9015,62 @@ export interface operations {
                 };
             };
             /** @description `overlays.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    services: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUse"] | null;
+                };
+            };
+        };
+    };
+    set_services: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceUse"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             500: {
                 headers: {
                     [name: string]: unknown;
