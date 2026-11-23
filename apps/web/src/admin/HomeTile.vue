@@ -46,10 +46,12 @@ const props = defineProps<{
   unbuilt?: boolean
   /** Its number shows as 「––」 (下播後, masked). */
   masked?: boolean
+  /** Its line shows every change at once (the mic's mute, masked numbers), not at most every few seconds. */
+  immediate?: boolean
 }>()
 const { t } = useI18n()
 
-const shown = useThrottled(() => props.line)
+const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
 </script>
 
 <style scoped>

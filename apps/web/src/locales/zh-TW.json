@@ -1419,6 +1419,14 @@
     "mic": "麥克風",
     "micNone": "沒有指定",
     "micMissing": "OBS 裡找不到「{input}」",
+    "tile": {
+      "on": "開著",
+      "muted": "靜音中",
+      "mute": "麥克風靜音",
+      "unmute": "打開麥克風",
+      "noMic": "到音訊混音頁指定麥克風",
+      "inputs": "這個場景 {n} 個聲音來源"
+    },
     "followLive": "跟著直播中（{scene}）",
     "followPreview": "跟著預覽（{scene}）",
     "shared": "音量、靜音和監聽是整個來源共用的，每個場景都一樣；換場景只會換列出哪些來源。",

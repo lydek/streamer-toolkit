@@ -12,14 +12,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Line, Tile } from './home'
+import { COUNT, type Line, type Tile } from './home'
 
 // What a home tile shows, for the tile button and for the same tile while home is edited. The parent is a two-column
 // grid (`auto minmax(0, 1fr)`).
 // `rows`: a small tile, which always shows the name, number and line rows at fixed heights.
 const props = defineProps<{ name: string; icon: string; tint: Tile['tint']; line: Line; rows?: boolean; masked?: boolean }>()
-// A count (12, 1,234, +3) or a time (1:23, 2.5); anything else is a word (a scene, a state) and reads smaller.
-const COUNT = /^[\d,+:.]+$/
 const { t } = useI18n()
 
 const text = computed(() =>
