@@ -1,8 +1,8 @@
 /* Sizes in rem so text follows the user's zoom and font size. */
 :root {
   color-scheme: dark;
-  /* Focused or linked elements scroll clear of the sticky app bar. */
-  scroll-padding-top: var(--appbar-h, 0px);
+  /* Focused or linked elements scroll clear of the sticky app bar and a page's pinned title (FullPage.vue). */
+  scroll-padding-top: calc(var(--appbar-h, 0px) + var(--page-top-h, 0px));
   font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
 }
 
