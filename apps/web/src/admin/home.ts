@@ -294,10 +294,11 @@ export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
   return tiles.filter((t) => t.always || t.unbuilt || enabled.has(t.id))
 }
 
-/** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). */
+/** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). A saved arrangement always
+ * wins, so changing these never rewrites a home the user arranged. */
 export const STAGE_DEFAULTS: Record<Stage, string[]> = {
   before: ['checklist', 'scene', 'screen-tools', 'bgm', 'sound', 'alerts', 'chat'],
-  live: ['pending', 'stats', 'feed', 'queue', 'chat', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'screen-tools'],
+  live: ['pending', 'chat', 'alerts', 'scene', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
   after: ['summary', 'counter', 'redemption', 'checkin', 'chat'],
 }
 export const stageDefaults = (stage: Stage, tiles = TILES) =>

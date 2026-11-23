@@ -111,7 +111,7 @@ describe('HomeView stage homes', () => {
     expect(put).toHaveBeenCalledTimes(1)
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
       params: { query: { stage: 'live' } },
-      body: ['pending', 'stats', 'feed', 'queue', 'alerts', 'redemption', 'checkin', 'sound', 'scene', 'bgm', 'counter', 'screen-tools'],
+      body: ['pending', 'alerts', 'scene', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
     })
     // The other stages keep their own orders: 開播前 still has its chat tile, 下播後 stays empty.
     await pickStage('before')
@@ -123,6 +123,9 @@ describe('HomeView stage homes', () => {
 
 describe('HomeView blocks that open in place', () => {
   it('opens a small tile into its block and back, with focus kept on the same place, and saves nothing', async () => {
+    // The feed is not on the live home by default; this home was arranged with it.
+    vi.mocked(client.GET).mockImplementation(((path: string, init?: { params?: { query?: { stage?: string } } }) =>
+      ok(path === '/api/admin/home-tiles' ? (init!.params!.query!.stage === 'live' ? ['queue', 'feed'] : null) : responses[path])) as never)
     await home()
     await pickStage('live')
     const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="queue"]')!

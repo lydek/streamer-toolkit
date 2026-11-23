@@ -302,6 +302,12 @@ describe('stageDefaults', () => {
     expect(arrangedTiles(null, TILES, stageDefaults('after')).map((t) => t.id)).toEqual(STAGE_DEFAULTS.after)
     expect(arrangedTiles([], TILES, stageDefaults('after'))).toEqual([])
   })
+
+  it('keeps tools and look-back blocks out of the live home by default; a saved home keeps them', () => {
+    for (const id of ['image-sizes', 'stats', 'feed']) expect(STAGE_DEFAULTS.live).not.toContain(id)
+    for (const stage of ['before', 'live', 'after'] as const) expect(STAGE_DEFAULTS[stage]).not.toContain('image-sizes')
+    expect(arrangedTiles(['stats', 'image-sizes'], TILES, stageDefaults('live')).map((t) => t.id)).toEqual(['stats', 'image-sizes'])
+  })
 })
 
 describe('homeTiles', () => {
