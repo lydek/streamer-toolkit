@@ -108,7 +108,7 @@ describe('StageCard checks', () => {
     expect(link.text()).toBe(t('obsStatus.missing'))
   })
 
-  it('folds to the checks not ready, keeps the count of all, and unfolds to every check', async () => {
+  it('starts with every check, folds to none even with checks not ready, keeps the count, and unfolds again', async () => {
     vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
       Promise.resolve({
         data:
@@ -123,12 +123,18 @@ describe('StageCard checks', () => {
       attachTo: document.body,
     })
     await flushPromises()
+    const list = () => wrapper.get('.checks')
     const rows = () => wrapper.findAll('.checks li')
-    expect(rows().some((li) => li.classes('ok'))).toBe(false)
-    const folded = rows().length
-    expect(wrapper.get('.ready').text()).toBe(t('stage.checks.ready', { ok: 1, all: folded + 1 }))
-    await wrapper.findAll('button').find((b) => b.attributes('aria-expanded') === 'false')!.trigger('click')
-    expect(rows()).toHaveLength(folded + 1)
+    const all = rows().length
     expect(rows().filter((li) => li.classes('ok'))).toHaveLength(1)
+    expect(rows().some((li) => !li.classes('ok'))).toBe(true)
+    const ready = t('stage.checks.ready', { ok: 1, all })
+    expect(wrapper.get('.ready').text()).toBe(ready)
+    await wrapper.findAll('button').find((b) => b.attributes('aria-expanded') === 'true')!.trigger('click')
+    expect(list().isVisible()).toBe(false)
+    expect(wrapper.get('.ready').text()).toBe(ready)
+    await wrapper.findAll('button').find((b) => b.attributes('aria-expanded') === 'false')!.trigger('click')
+    expect(list().isVisible()).toBe(true)
+    expect(rows()).toHaveLength(all)
   })
 })
