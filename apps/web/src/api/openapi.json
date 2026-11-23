@@ -9905,6 +9905,10 @@
           "muted"
         ],
         "properties": {
+          "global": {
+            "type": "boolean",
+            "description": "One of OBS's global audio devices (desktop audio, mic/aux in its audio settings): heard in every scene."
+          },
           "monitor": {
             "$ref": "#/components/schemas/Monitor"
           },
@@ -9913,6 +9917,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The scenes that contain the input: as an item, inside a group, or through a nested scene. Containing it does\nnot mean viewers hear it (it may be muted or monitored only)."
           },
           "volumeDb": {
             "type": "number",

@@ -3299,9 +3299,16 @@ export interface components {
          *     the input, not to a scene.
          */
         Input: {
+            /** @description One of OBS's global audio devices (desktop audio, mic/aux in its audio settings): heard in every scene. */
+            global?: boolean;
             monitor?: components["schemas"]["Monitor"];
             muted: boolean;
             name: string;
+            /**
+             * @description The scenes that contain the input: as an item, inside a group, or through a nested scene. Containing it does
+             *     not mean viewers hear it (it may be muted or monitored only).
+             */
+            scenes?: string[];
             /**
              * Format: float
              * @description The fader in dB (0 is full; very low values mean silent).

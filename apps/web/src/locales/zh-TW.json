@@ -464,6 +464,10 @@
       "name": "Overlay 外觀",
       "desc": "所有內建 Overlay 共用的主題與文字大小。"
     },
+    "mixer": {
+      "name": "音訊混音",
+      "desc": "OBS 聲音來源的音量、靜音和監聽。"
+    },
     "obsSources": {
       "name": "OBS 來源",
       "desc": "所有內建 Overlay 在 OBS 的哪些場景，一頁看完。"
@@ -1403,6 +1407,28 @@
     },
     "trackUsedBy": "這些場景對應的歌單裡有這首歌：",
     "playlistUsedBy": "這些場景對應會停用，並顯示「歌單不見了」："
+  },
+  "mixer": {
+    "inputs": "聲音來源",
+    "scene": "場景",
+    "followLive": "跟著直播中（{scene}）",
+    "followPreview": "跟著預覽（{scene}）",
+    "shared": "音量、靜音和監聽是整個來源共用的，每個場景都一樣；換場景只會換列出哪些來源。",
+    "inScene": "在「{scene}」",
+    "none": "這個場景沒有聲音來源。",
+    "notInScene": "這個場景沒有（{n}）",
+    "global": "全域，每個場景都有",
+    "scenes": "{n} 個場景",
+    "noScene": "沒有用在任何場景",
+    "volume": "{input}的音量",
+    "silent": "−∞ dB",
+    "mute": "靜音：{input}",
+    "monitorOf": "監聽：{input}",
+    "monitor": {
+      "off": "不監聽",
+      "monitor_only": "只監聽（不送出）",
+      "monitor_and_output": "監聽並送出"
+    }
   },
   "scene": {
     "notConnected": "OBS 未連線",

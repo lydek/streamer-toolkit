@@ -865,12 +865,23 @@ impl Obs {
 async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
     let list = client.scenes().list().await?;
     let mut scenes = Vec::with_capacity(list.scenes.len());
+    // Each scene's sources, with the ones inside its groups, for the inputs' scenes.
+    let mut contents: Vec<(String, Vec<String>)> = Vec::with_capacity(list.scenes.len());
     for scene in list.scenes {
         let id = SceneId::Uuid(scene.id.uuid);
         let mut items = Vec::new();
+        let mut sources = Vec::new();
         // OBS lists index 0 (the bottom item) first; the port lists front to back.
         for item in client.scene_items().list(id).await?.into_iter().rev() {
+            sources.push(item.source_name.clone());
             let kind = if item.is_group == Some(true) {
+                for child in client
+                    .scene_items()
+                    .list_group(SceneId::Name(&item.source_name))
+                    .await?
+                {
+                    sources.push(child.source_name);
+                }
                 "group".to_owned()
             } else if item.source_type == SourceType::Scene {
                 "scene".to_owned()
@@ -885,11 +896,21 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
                 kind,
             });
         }
+        contents.push((scene.id.name.clone(), sources));
         scenes.push(Scene {
             name: scene.id.name,
             items,
         });
     }
+    let specials = client.inputs().specials().await?;
+    let globals = [
+        specials.desktop1,
+        specials.desktop2,
+        specials.mic1,
+        specials.mic2,
+        specials.mic3,
+        specials.mic4,
+    ];
     let mut inputs = Vec::new();
     for input in client.inputs().list(None).await? {
         let muted = match client.inputs().muted(InputId::Uuid(input.id.uuid)).await {
@@ -915,6 +936,8 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
         );
         inputs.push(Input {
             muted,
+            global: globals.iter().flatten().any(|g| *g == input.id.name),
+            scenes: scenes_with(&contents, &input.id.name),
             name: input.id.name,
             volume_db,
             monitor,
@@ -940,6 +963,33 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
             .collect(),
         transition: transitions.current_scene_transition.map(|t| t.name),
     })
+}
+
+/// The scenes that reach `source` through `contents` (each scene's sources, its groups' included): directly or
+/// through scenes nested in it, at any depth. A scene nested in itself is followed once.
+fn scenes_with(contents: &[(String, Vec<String>)], source: &str) -> Vec<String> {
+    fn reaches<'a>(
+        contents: &'a [(String, Vec<String>)],
+        scene: &'a str,
+        source: &str,
+        seen: &mut Vec<&'a str>,
+    ) -> bool {
+        if seen.contains(&scene) {
+            return false;
+        }
+        seen.push(scene);
+        let Some((_, sources)) = contents.iter().find(|(name, _)| name == scene) else {
+            return false;
+        };
+        sources
+            .iter()
+            .any(|s| s == source || reaches(contents, s, source, seen))
+    }
+    contents
+        .iter()
+        .filter(|(scene, _)| reaches(contents, scene, source, &mut Vec::new()))
+        .map(|(scene, _)| scene.clone())
+        .collect()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1149,6 +1199,8 @@ mod tests {
                     "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}, {
                     "sceneItemId": 2, "sceneItemIndex": 1, "sourceName": "Frame",
                     "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}]}),
+                "GetSpecialInputs" => json!({"desktop1": null, "desktop2": null, "mic1": "Mic",
+                    "mic2": null, "mic3": null, "mic4": null}),
                 "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
                 "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
                 t if t.starts_with("Set")
@@ -1406,6 +1458,8 @@ mod tests {
                     muted: false,
                     volume_db: -6.0,
                     monitor: Monitor::MonitorOnly,
+                    global: true,
+                    scenes: vec![],
                 }],
                 streaming: false,
                 recording: true,
@@ -1827,6 +1881,26 @@ mod tests {
                 height: 200.0
             }
         );
+    }
+
+    #[test]
+    fn an_input_is_in_the_scenes_that_reach_it_through_groups_and_nested_scenes() {
+        let contents = |list: &[(&str, &[&str])]| -> Vec<(String, Vec<String>)> {
+            list.iter()
+                .map(|(s, items)| (s.to_string(), items.iter().map(|i| i.to_string()).collect()))
+                .collect()
+        };
+        // "Game" holds the game audio inside a group ("Game set" lists the group's children after it); "Duo" nests
+        // "Game"; "Loop" nests itself and "Duo"; "Chat" has nothing of it.
+        let c = contents(&[
+            ("Game", &["Game set", "Game audio", "Cam"]),
+            ("Duo", &["Game", "Discord"]),
+            ("Loop", &["Loop", "Duo"]),
+            ("Chat", &["Cam", "Missing scene"]),
+        ]);
+        assert_eq!(scenes_with(&c, "Game audio"), ["Game", "Duo", "Loop"]);
+        assert_eq!(scenes_with(&c, "Discord"), ["Duo", "Loop"]);
+        assert!(scenes_with(&c, "Mic").is_empty());
     }
 
     #[test]

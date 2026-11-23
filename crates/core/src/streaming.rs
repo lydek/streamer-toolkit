@@ -70,6 +70,13 @@ pub struct Input {
     pub volume_db: f32,
     #[serde(default)]
     pub monitor: Monitor,
+    /// One of OBS's global audio devices (desktop audio, mic/aux in its audio settings): heard in every scene.
+    #[serde(default)]
+    pub global: bool,
+    /// The scenes that contain the input: as an item, inside a group, or through a nested scene. Containing it does
+    /// not mean viewers hear it (it may be muted or monitored only).
+    #[serde(default)]
+    pub scenes: Vec<String>,
 }
 
 /// Whether OBS plays the input on the monitoring device, and whether it still goes to the stream.

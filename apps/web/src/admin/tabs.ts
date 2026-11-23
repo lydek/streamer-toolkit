@@ -124,6 +124,7 @@ export const GROUPS: TabGroup[] = [
       pages: [
         { path: '/scenes', label: 'modules.names.scene' },
         soon('/modes', 'modes', 'pi pi-sliders-h'),
+        { path: '/mixer', label: 'pages.mixer.name' },
         { path: '/obs-sources', label: 'pages.obsSources.name' },
       ],
     },
