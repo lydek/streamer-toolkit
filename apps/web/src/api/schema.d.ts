@@ -7004,12 +7004,13 @@ export interface operations {
                 /** @description `zip`: every size in one zip file; otherwise JSON with a preview of each. */
                 zip?: boolean;
                 /**
-                 * @description With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the
-                 *     picture.
+                 * @description With `fit=manual`: the rectangle's left edge, top edge, width and height in the picture's pixels; it must lie
+                 *     inside the picture.
                  */
                 crop_x?: number;
                 crop_y?: number;
-                crop_side?: number;
+                crop_w?: number;
+                crop_h?: number;
             };
             header?: never;
             path?: never;
@@ -7031,7 +7032,7 @@ export interface operations {
                     "application/json": components["schemas"]["SizedImages"];
                 };
             };
-            /** @description `image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture */
+            /** @description `image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture */
             400: {
                 headers: {
                     [name: string]: unknown;

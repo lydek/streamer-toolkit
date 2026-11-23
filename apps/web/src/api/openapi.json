@@ -2966,7 +2966,7 @@
           {
             "name": "crop_x",
             "in": "query",
-            "description": "With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the\npicture.",
+            "description": "With `fit=manual`: the rectangle's left edge, top edge, width and height in the picture's pixels; it must lie\ninside the picture.",
             "required": false,
             "schema": {
               "type": "integer",
@@ -2985,7 +2985,17 @@
             }
           },
           {
-            "name": "crop_side",
+            "name": "crop_w",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "crop_h",
             "in": "query",
             "required": false,
             "schema": {
@@ -3018,7 +3028,7 @@
             }
           },
           "400": {
-            "description": "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture",
+            "description": "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture",
             "content": {
               "application/json": {
                 "schema": {

@@ -1102,7 +1102,12 @@
     "exported": "已匯出診斷報告（不含 token、密碼、聊天內容與觀眾資料）。"
   },
   "imageSizes": {
-    "cropLabel": "裁切範圍：左 {x}、上 {y}、邊長 {side} px",
+    "cropLabel": "裁切範圍：左 {x}、上 {y}、寬 {w}、高 {h} px",
+    "cropFields": "範圍",
+    "cropW": "寬",
+    "cropH": "高",
+    "cropLock": "等比例",
+    "cropReset": "回到置中",
     "cropKeys": "方向鍵移動，Shift 加方向鍵縮放。",
     "tile": "轉成徽章與點數圖示的尺寸",
     "kind": "規格",
