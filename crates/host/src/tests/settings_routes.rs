@@ -154,6 +154,17 @@ async fn obs_commands_need_a_connection_and_something_to_change() {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
         assert_eq!(code(res).await, "obs.invalid_transform");
     }
+    // A position too far off (or not a number once read) is refused before OBS is asked.
+    let res = app
+        .clone()
+        .oneshot(put(
+            "/api/admin/obs/item",
+            r#"{"scene":"Live","item":1,"placement":{"x":1e39,"y":0,"align":"top_left"}}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(code(res).await, "obs.invalid_placement");
     let res = app
         .clone()
         .oneshot(put(

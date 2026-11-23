@@ -160,7 +160,8 @@ void load()
 // Scenes and items come and go with OBS; read the sources again when its state changes.
 const live = useLiveEvents()
 watch(
-  () => live.value.obsState,
+  // Scenes, items and the scene on air: not a fader or mute moving.
+  () => JSON.stringify([live.value.obsState?.scene, live.value.obsState?.scenes]),
   () => void load(),
 )
 </script>

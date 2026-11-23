@@ -253,12 +253,7 @@ impl ObsControl {
         position: u32,
     ) -> Result<(), StreamingError> {
         let client = self.client()?;
-        let count = client
-            .scene_items()
-            .list(SceneId::Name(scene))
-            .await
-            .map_err(command_error)?
-            .len();
+        let count = items_of(&client, scene).await?.len();
         let index = u32::try_from(count)
             .ok()
             .and_then(|count| count.checked_sub(position + 1))
@@ -285,11 +280,7 @@ impl ObsControl {
             .video_settings()
             .await
             .map_err(command_error)?;
-        let items = client
-            .scene_items()
-            .list(SceneId::Name(scene))
-            .await
-            .map_err(command_error)?;
+        let items = items_of(&client, scene).await?;
         let mut placements = Vec::with_capacity(items.len());
         for item in items {
             let t = client
@@ -942,26 +933,35 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
         // OBS lists index 0 (the bottom item) first; the port lists front to back.
         for item in client.scene_items().list(id).await?.into_iter().rev() {
             sources.push(item.source_name.clone());
-            let kind = if item.is_group == Some(true) {
+            let mut children = Vec::new();
+            if item.is_group == Some(true) {
+                // A group is a scene of its own for its items' commands; OBS lists them bottom first too.
+                let group = SceneId::Name(&item.source_name);
                 for child in client
                     .scene_items()
-                    .list_group(SceneId::Name(&item.source_name))
+                    .list_group(group)
                     .await?
+                    .into_iter()
+                    .rev()
                 {
-                    sources.push(child.source_name);
+                    sources.push(child.source_name.clone());
+                    children.push(SceneItem {
+                        id: child.id,
+                        enabled: client.scene_items().enabled(group, child.id).await?,
+                        locked: client.scene_items().locked(group, child.id).await?,
+                        kind: kind_of(&child),
+                        source: child.source_name,
+                        children: Vec::new(),
+                    });
                 }
-                "group".to_owned()
-            } else if item.source_type == SourceType::Scene {
-                "scene".to_owned()
-            } else {
-                item.input_kind.unwrap_or_default()
-            };
+            }
             items.push(SceneItem {
                 id: item.id,
                 enabled: client.scene_items().enabled(id, item.id).await?,
                 locked: client.scene_items().locked(id, item.id).await?,
+                kind: kind_of(&item),
                 source: item.source_name,
-                kind,
+                children,
             });
         }
         contents.push((scene.id.name.clone(), sources));
@@ -1033,6 +1033,17 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
     })
 }
 
+/// `group`, `scene` (nested) or the input kind; empty when OBS does not say.
+fn kind_of(item: &obws::responses::scene_items::SceneItem) -> String {
+    if item.is_group == Some(true) {
+        "group".to_owned()
+    } else if item.source_type == SourceType::Scene {
+        "scene".to_owned()
+    } else {
+        item.input_kind.clone().unwrap_or_default()
+    }
+}
+
 /// The scenes that reach `source` through `contents` (each scene's sources, its groups' included): directly or
 /// through scenes nested in it, at any depth. A scene nested in itself is followed once.
 fn scenes_with(contents: &[(String, Vec<String>)], source: &str) -> Vec<String> {
@@ -1076,29 +1087,17 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
             state.scene = Some(id.name.clone());
             Change::Updated
         }
-        // Items inside a group are not listed, so their changes are ignored.
+        // An item inside a group reports the group as its scene.
         Event::SceneItemEnableStateChanged {
             scene,
             item_id,
             enabled,
-        } => match item_mut(state, &scene.name, *item_id) {
-            Some(item) => {
-                item.enabled = *enabled;
-                Change::Updated
-            }
-            None => Change::None,
-        },
+        } => update_item(state, &scene.name, *item_id, |item| item.enabled = *enabled),
         Event::SceneItemLockStateChanged {
             scene,
             item_id,
             locked,
-        } => match item_mut(state, &scene.name, *item_id) {
-            Some(item) => {
-                item.locked = *locked;
-                Change::Updated
-            }
-            None => Change::None,
-        },
+        } => update_item(state, &scene.name, *item_id, |item| item.locked = *locked),
         Event::InputMuteStateChanged { id, muted } => {
             match state.inputs.iter_mut().find(|i| i.name == id.name) {
                 Some(input) => {
@@ -1145,6 +1144,10 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
             state.preview = Some(id.name.clone());
             Change::Updated
         }
+        // OBS sends no event when transitions are added or renamed: one not listed yet means reading them again.
+        Event::CurrentSceneTransitionChanged { id } if !state.transitions.contains(&id.name) => {
+            Change::Reread
+        }
         Event::CurrentSceneTransitionChanged { id } => {
             state.transition = Some(id.name.clone());
             Change::Updated
@@ -1163,13 +1166,47 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
     }
 }
 
-fn item_mut<'a>(state: &'a mut StreamingState, scene: &str, id: u64) -> Option<&'a mut SceneItem> {
-    state
-        .scenes
-        .iter_mut()
-        .filter(|s| s.name == scene)
-        .flat_map(|s| s.items.iter_mut())
-        .find(|i| u64::try_from(i.id).ok() == Some(id))
+/// Changes item `id` of scene `scene`, or of the group named `scene` in every scene that holds it (each keeps its
+/// own copy of the group's items).
+fn update_item(
+    state: &mut StreamingState,
+    scene: &str,
+    id: u64,
+    change: impl Fn(&mut SceneItem),
+) -> Change {
+    let Ok(id) = i64::try_from(id) else {
+        return Change::None;
+    };
+    let mut found = Change::None;
+    for s in &mut state.scenes {
+        let own = s.name == scene;
+        for item in &mut s.items {
+            if own && item.id == id {
+                change(item);
+                found = Change::Updated;
+            } else if item.kind == "group" && item.source == scene {
+                for child in item.children.iter_mut().filter(|c| c.id == id) {
+                    change(child);
+                    found = Change::Updated;
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The items of `scene`, or of the group named `scene`: `SceneItemList` takes scenes only, its group request groups.
+async fn items_of(
+    client: &Client,
+    scene: &str,
+) -> Result<Vec<obws::responses::scene_items::SceneItem>, StreamingError> {
+    match client.scene_items().list(SceneId::Name(scene)).await {
+        Ok(items) => Ok(items),
+        Err(e) => match client.scene_items().list_group(SceneId::Name(scene)).await {
+            Ok(items) => Ok(items),
+            Err(_) => Err(command_error(e)),
+        },
+    }
 }
 
 fn classify(error: &ObwsError, has_password: bool) -> ObsStatus {
@@ -1224,6 +1261,8 @@ mod tests {
         scene_lists: Arc<Mutex<u32>>,
         /// Sends a flood of volume meters right after answering the first scene list, in the middle of the read.
         flood: bool,
+        /// Fields that replace the scene item transform's defaults (a flip, crop or bounding box).
+        transform: Arc<Mutex<Value>>,
         /// `Set…` requests as `(requestType, requestData)`.
         commands: Arc<Mutex<Vec<(String, Value)>>>,
     }
@@ -1272,11 +1311,23 @@ mod tests {
                            "scenes": [{"sceneName": "Live", "sceneUuid": LIVE, "sceneIndex": 0}]})
                 }
                 // Index 0 is the bottom item, as OBS lists it.
+                // Read by UUID (the state), the scene also has a group on top; commands by name see two items.
+                "GetSceneItemList" if data.get("sceneUuid").is_some() => json!({"sceneItems": [{
+                    "sceneItemId": 1, "sceneItemIndex": 0, "sourceName": "Camera",
+                    "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}, {
+                    "sceneItemId": 2, "sceneItemIndex": 1, "sourceName": "Frame",
+                    "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}, {
+                    "sceneItemId": 3, "sceneItemIndex": 2, "sourceName": "Cam set",
+                    "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": true}]}),
                 "GetSceneItemList" => json!({"sceneItems": [{
                     "sceneItemId": 1, "sceneItemIndex": 0, "sourceName": "Camera",
                     "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}, {
                     "sceneItemId": 2, "sceneItemIndex": 1, "sourceName": "Frame",
                     "sourceType": "OBS_SOURCE_TYPE_SCENE", "inputKind": null, "isGroup": false}]}),
+                // The group's items: the same item ID as the scene's camera, unique only within the group.
+                "GetGroupSceneItemList" => json!({"sceneItems": [{
+                    "sceneItemId": 1, "sceneItemIndex": 0, "sourceName": "Webcam",
+                    "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}]}),
                 "GetSpecialInputs" => json!({"desktop1": null, "desktop2": null, "mic1": "Mic",
                     "mic2": null, "mic3": null, "mic4": null}),
                 "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
@@ -1302,11 +1353,17 @@ mod tests {
                     "baseHeight": 1080, "outputWidth": 1280, "outputHeight": 720})
                 }
                 // Alignment 5: top left.
-                "GetSceneItemTransform" => json!({"sceneItemTransform": {"sourceWidth": 400.0,
+                "GetSceneItemTransform" => {
+                    let mut t = json!({"sourceWidth": 400.0,
                     "sourceHeight": 600.0, "positionX": 40.0, "positionY": 30.0, "rotation": 0.0,
                     "scaleX": 1.0, "scaleY": 1.0, "width": 400.0, "height": 600.0, "alignment": 5,
                     "boundsType": "OBS_BOUNDS_NONE", "boundsAlignment": 0, "boundsWidth": 0.0,
-                    "boundsHeight": 0.0, "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0}}),
+                    "boundsHeight": 0.0, "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0});
+                    if let Some(extra) = self.transform.lock().unwrap().as_object() {
+                        t.as_object_mut().unwrap().extend(extra.clone());
+                    }
+                    json!({ "sceneItemTransform": t })
+                }
                 "GetInputList" => json!({"inputs": [{"inputName": "Mic", "inputUuid": MIC,
                     "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}, {
                     "inputName": "Logo", "inputUuid": LOGO,
@@ -1377,7 +1434,10 @@ mod tests {
                             {
                                 fake.commands.lock().unwrap().push((request_type.into(), data.clone()));
                             }
-                            let status = if data["sceneName"] == "Missing" {
+                            // A group is no scene for the scene's item list: OBS answers with an error.
+                            let status = if data["sceneName"] == "Missing"
+                                || (request_type == "GetSceneItemList" && data["sceneName"] == "Cam set")
+                            {
                                 json!({"result": false, "code": 600})
                             } else if request_type == "GetInputMute" && data["inputUuid"] == LOGO {
                                 // InvalidResourceState: the input does not support audio.
@@ -1528,14 +1588,30 @@ mod tests {
                 scene: Some("Live".into()),
                 scenes: vec![Scene {
                     name: "Live".into(),
-                    // Front to back: the nested scene sits above the camera.
+                    // Front to back: the group on top, then the nested scene above the camera.
                     items: vec![
+                        SceneItem {
+                            id: 3,
+                            source: "Cam set".into(),
+                            enabled: true,
+                            locked: false,
+                            kind: "group".into(),
+                            children: vec![SceneItem {
+                                id: 1,
+                                source: "Webcam".into(),
+                                enabled: true,
+                                locked: false,
+                                kind: "dshow_input".into(),
+                                children: vec![],
+                            }],
+                        },
                         SceneItem {
                             id: 2,
                             source: "Frame".into(),
                             enabled: true,
                             locked: false,
                             kind: "scene".into(),
+                            children: vec![],
                         },
                         SceneItem {
                             id: 1,
@@ -1543,6 +1619,7 @@ mod tests {
                             enabled: true,
                             locked: false,
                             kind: "dshow_input".into(),
+                            children: vec![],
                         },
                     ],
                 }],
@@ -1572,6 +1649,17 @@ mod tests {
             s.transition.as_deref() == Some("Cut")
         })
         .await;
+        // A transition not listed yet (added in OBS, which sends no event for that): all is read again.
+        let lists = *fake.scene_lists.lock().unwrap();
+        fake.event(
+            "CurrentSceneTransitionChanged",
+            json!({"transitionName": "Swipe", "transitionUuid": "00000000-0000-0000-0000-000000000012"}),
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while *fake.scene_lists.lock().unwrap() == lists {
+            assert!(tokio::time::Instant::now() < deadline, "not read again");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
         let scene = |name: &str| json!({"sceneName": name, "sceneUuid": LIVE});
         fake.event("CurrentProgramSceneChanged", scene("BRB"));
@@ -1583,12 +1671,25 @@ mod tests {
             "SceneItemEnableStateChanged",
             json!({"sceneName": "Live", "sceneUuid": LIVE, "sceneItemId": 1, "sceneItemEnabled": false}),
         );
-        state_reaches(&mut state, "item hidden", |s| !s.scenes[0].items[1].enabled).await;
+        state_reaches(&mut state, "item hidden", |s| !s.scenes[0].items[2].enabled).await;
+        // An item in a group reports the group as its scene.
+        fake.event(
+            "SceneItemEnableStateChanged",
+            json!({"sceneName": "Cam set", "sceneUuid": LIVE, "sceneItemId": 1, "sceneItemEnabled": false}),
+        );
+        state_reaches(&mut state, "group item hidden", |s| {
+            !s.scenes[0].items[0].children[0].enabled
+        })
+        .await;
+        assert!(
+            state.borrow().scenes[0].items[1].enabled,
+            "the scene's own items stay as they were"
+        );
         fake.event(
             "SceneItemLockStateChanged",
             json!({"sceneName": "Live", "sceneUuid": LIVE, "sceneItemId": 2, "sceneItemLocked": true}),
         );
-        state_reaches(&mut state, "item locked", |s| s.scenes[0].items[0].locked).await;
+        state_reaches(&mut state, "item locked", |s| s.scenes[0].items[1].locked).await;
         fake.event(
             "InputMuteStateChanged",
             json!({"inputName": "Mic", "inputUuid": MIC, "inputMuted": true}),
@@ -1651,6 +1752,72 @@ mod tests {
         );
         // Connecting again reads the state again.
         state_reaches(&mut state, "read on reconnect", |s| s.scene.is_some()).await;
+    }
+
+    #[tokio::test]
+    async fn a_new_size_keeps_flips_leaves_out_the_crop_or_sets_the_bounding_box() {
+        let fake = FakeObs::default();
+        let (mut status, _, control) = run_with_state(start(fake.clone()).await, None);
+        reaches(&mut status, ObsStatus::CONNECTED).await;
+        let last = || fake.commands.lock().unwrap().last().unwrap().1["sceneItemTransform"].clone();
+        // Flipped horizontally, 100 px cropped off each side: 200 px shown at scale 1.
+        *fake.transform.lock().unwrap() =
+            json!({"scaleX": -1.0, "cropLeft": 100, "cropRight": 100});
+        control
+            .set_item_size(
+                "Live",
+                1,
+                ItemSize {
+                    width: 100.0,
+                    height: 300.0,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(last()["scaleX"], json!(-0.5));
+        assert_eq!(last()["scaleY"], json!(0.5));
+        let (_, placements) = control.placements("Live").await.unwrap();
+        assert_eq!(
+            placements[0].2,
+            ItemSize {
+                width: 200.0,
+                height: 600.0
+            }
+        );
+        // A bounding box sets the size instead of the scale.
+        *fake.transform.lock().unwrap() = json!({"boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 400.0, "boundsHeight": 600.0});
+        control
+            .set_item_size(
+                "Live",
+                1,
+                ItemSize {
+                    width: 200.0,
+                    height: 300.0,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(last()["boundsWidth"], json!(200.0));
+        assert_eq!(last()["boundsHeight"], json!(300.0));
+        assert!(last().get("scaleX").is_none());
+    }
+
+    #[tokio::test]
+    async fn a_group_lists_its_items_through_the_group_request() {
+        let fake = FakeObs::default();
+        let (mut status, _, control) = run_with_state(start(fake.clone()).await, None);
+        reaches(&mut status, ObsStatus::CONNECTED).await;
+        let (_, placements) = control.placements("Cam set").await.unwrap();
+        assert_eq!(placements.len(), 1);
+        // One item in the group: front position 0 is OBS's index 0.
+        control.set_item_position("Cam set", 1, 0).await.unwrap();
+        assert_eq!(
+            fake.commands.lock().unwrap().last().unwrap(),
+            &(
+                "SetSceneItemIndex".to_owned(),
+                json!({"sceneName": "Cam set", "sceneItemId": 1, "sceneItemIndex": 0})
+            )
+        );
     }
 
     #[tokio::test]
@@ -1990,6 +2157,45 @@ mod tests {
                 width: 300.0,
                 height: 200.0
             }
+        );
+    }
+
+    #[test]
+    fn an_item_in_a_group_changes_in_every_scene_holding_the_group() {
+        let item = |id, source: &str, kind: &str, children| SceneItem {
+            id,
+            source: source.into(),
+            enabled: true,
+            locked: false,
+            kind: kind.into(),
+            children,
+        };
+        let group = item(
+            3,
+            "Cam set",
+            "group",
+            vec![item(1, "Webcam", "dshow_input", vec![])],
+        );
+        let mut state = StreamingState {
+            scenes: ["Live", "BRB"]
+                .map(|name| Scene {
+                    name: name.into(),
+                    items: vec![group.clone(), item(1, "Capture", "spout_capture", vec![])],
+                })
+                .into(),
+            ..StreamingState::default()
+        };
+        assert_eq!(
+            update_item(&mut state, "Cam set", 1, |i| i.enabled = false),
+            Change::Updated
+        );
+        for s in &state.scenes {
+            assert!(!s.items[0].children[0].enabled, "{}", s.name);
+            assert!(s.items[1].enabled, "the scene's own item 1 stays");
+        }
+        assert_eq!(
+            update_item(&mut state, "Cam set", 9, |i| i.enabled = false),
+            Change::None
         );
     }
 

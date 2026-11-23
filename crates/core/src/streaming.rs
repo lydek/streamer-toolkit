@@ -56,6 +56,11 @@ pub struct SceneItem {
     /// What the source is: the program's input kind (OBS: `browser_source`, `game_capture`…), `scene` for a nested
     /// scene, `group` for a group; empty when the program does not say.
     pub kind: String,
+    /// A group's items, front to back; empty for anything else. Commands on them take the group's name (`source`)
+    /// as the scene, and their `id`s are unique within the group.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schema(no_recursion)]
+    pub children: Vec<SceneItem>,
 }
 
 /// An input that has sound (the ones OBS can mute), with its fader and monitoring. Volume and monitoring belong to

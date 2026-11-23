@@ -545,6 +545,7 @@ mod tests {
                         enabled: true,
                         locked: false,
                         kind: "dshow_input".into(),
+                        children: vec![],
                     }],
                 }],
                 inputs: vec![toolkit_core::streaming::Input {

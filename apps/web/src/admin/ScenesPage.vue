@@ -78,9 +78,16 @@
             </tr>
           </thead>
           <tbody>
-            <template v-for="(item, i) in current.items" :key="`${item.id}:${resets}`">
+            <template v-for="item in rows" :key="`${item.id}:${resets}`">
               <tr
-                :class="{ open: open === item.id, moved: moved === item.id, dragging: dragged === item.id, [`drop-${dropSide}`]: over === item.id }"
+                :class="{
+                  open: open === item.id,
+                  moved: moved === item.id,
+                  dragging: dragged === item.id,
+                  [`drop-${dropSide}`]: over === item.id,
+                  child: !!item.group,
+                  faded: item.groupHidden,
+                }"
                 :data-item="item.id"
                 draggable="true"
                 @dragstart="onDragstart($event, item)"
@@ -90,6 +97,19 @@
                 @dragend="dragged = over = null"
               >
                 <th scope="row">
+                  <!-- A group folds its items away; they are numbered under it (9.1) and fade while it is hidden. -->
+                  <span class="num">{{ item.num }}</span>
+                  <Button
+                    v-if="item.kind === 'group'"
+                    :icon="folded.has(item.source) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
+                    text
+                    rounded
+                    size="small"
+                    class="fold"
+                    :aria-expanded="!folded.has(item.source)"
+                    :aria-label="t('scene.foldGroup', { group: item.source })"
+                    @click="toggleFold(item.source)"
+                  />
                   <button
                     type="button"
                     class="item-name"
@@ -124,17 +144,17 @@
                     icon="pi pi-arrow-up"
                     text
                     rounded
-                    :disabled="i === 0 || busy.has(item.id)"
+                    :disabled="sib(item).at === 0 || busy.has(item.id)"
                     :aria-label="t('scene.forward', { item: item.source })"
-                    @click="move(item, i - 1)"
+                    @click="move(item, sib(item).at - 1)"
                   />
                   <Button
                     icon="pi pi-arrow-down"
                     text
                     rounded
-                    :disabled="i === current.items.length - 1 || busy.has(item.id)"
+                    :disabled="sib(item).at === sib(item).count - 1 || busy.has(item.id)"
                     :aria-label="t('scene.backward', { item: item.source })"
-                    @click="move(item, i + 1)"
+                    @click="move(item, sib(item).at + 1)"
                   />
                   <Button
                     icon="pi pi-ellipsis-v"
@@ -144,7 +164,7 @@
                     :aria-label="t('scene.moreMoves', { item: item.source })"
                     aria-haspopup="true"
                     aria-controls="move-menu"
-                    @click="openMoveMenu($event, item, i)"
+                    @click="openMoveMenu($event, item, sib(item).at)"
                   />
                 </td>
               </tr>
@@ -232,10 +252,14 @@
                           :aria-label="t('scene.alignOf', { item: item.source })"
                           @update:model-value="(align: Align) => place(item, { align })"
                         />
-                        <span v-if="outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
+                        <span v-if="!item.group && outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
                       </span>
+                      <template v-if="item.group">
+                        <span></span>
+                        <span class="hint">{{ t('scene.inGroup', { group: item.group }) }}</span>
+                      </template>
                       <!-- Against the canvas (inside it) or another item (outside it), once: nothing follows later. -->
-                      <template v-if="placements.get(item.id)!.width">
+                      <template v-if="placements.get(item.id)!.width && !item.group">
                         <span>{{ t('scene.relative') }}</span>
                         <span class="fields">
                           <Select
@@ -289,9 +313,9 @@
                       <label :for="`index-${item.id}`">{{ t('scene.indexBefore') }}</label>
                       <InputNumber
                         :input-id="`index-${item.id}`"
-                        :model-value="i + 1"
+                        :model-value="sib(item).at + 1"
                         :min="1"
-                        :max="current.items.length"
+                        :max="sib(item).count"
                         :use-grouping="false"
                         :disabled="busy.has(item.id)"
                         class="index"
@@ -300,13 +324,13 @@
                       <span>{{ t('scene.indexAfter') }}</span>
                       <Select
                         :model-value="null"
-                        :options="current.items.filter((o) => o.id !== item.id)"
-                        :option-label="(o: SceneItem) => o.source"
+                        :options="siblings(item).filter((o) => o.id !== item.id)"
+                        :option-label="(o: ItemRow) => o.source"
                         :placeholder="t('scene.belowPick')"
                         :input-id="`below-${item.id}`"
                         :aria-label="t('scene.belowLabel', { item: item.source })"
                         :disabled="busy.has(item.id)"
-                        @update:model-value="(o: SceneItem) => moveBelow(item, o)"
+                        @update:model-value="(o: ItemRow) => moveBelow(item, o)"
                       />
                       <span>{{ t('scene.belowAfter') }}</span>
                     </span>
@@ -561,7 +585,7 @@ import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSource
 import { type Cross, type Side, alignedCorner, boxOf, pointOf } from './relativeAlign'
 import SceneList from './SceneList.vue'
 import { colorOf, hexOf } from './sourceColor'
-import { type SceneItem, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
+import { type ItemRow, childId, itemRows, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -571,6 +595,20 @@ const state = computed(() => live.value.obsState)
 const editingPreview = computed(() => !!state.value?.studioMode && !!state.value.preview)
 const target = computed(() => (editingPreview.value ? state.value?.preview : state.value?.scene) ?? undefined)
 const current = computed(() => state.value?.scenes.find((s) => s.name === target.value))
+// The list's rows: the scene's items, each group's under it unless folded (this window only).
+const folded = ref(new Set<string>())
+function toggleFold(group: string) {
+  const next = new Set(folded.value)
+  if (!next.delete(group)) next.add(group)
+  folded.value = next
+}
+const rows = computed(() => (current.value && target.value ? itemRows(target.value, current.value.items, folded.value) : []))
+// Order counts among an item's own scene or group: items move inside it, never across.
+const siblings = (item: ItemRow) => rows.value.filter((r) => r.scene === item.scene)
+const sib = (item: ItemRow) => {
+  const s = siblings(item)
+  return { at: s.findIndex((r) => r.id === item.id), count: s.length }
+}
 // Items with a command in flight; their switches wait for it.
 const busy = ref(new Set<number>())
 // A switch shows the change it asked for until OBS reports it; a refused one is rebuilt from OBS's state.
@@ -584,7 +622,7 @@ const report = (e: unknown) => toast.add(errorToast(e instanceof ApiError ? erro
 
 // Sources showing an overlay that has another source too; read again as OBS's scenes and items change.
 const obsSources = useObsSources()
-watch(state, () => void useObsSources(true))
+watch(() => JSON.stringify([state.value?.scene, state.value?.scenes]), () => void useObsSources(true))
 const duplicates = computed(
   () =>
     new Set(
@@ -643,17 +681,17 @@ const open = ref<number | null>(null)
 const editorTab = ref<EditorTab>('layout')
 // What each item can edit; later tabs join as they are built.
 // 變形 needs something to turn: not a group, and not an item with sound only.
-const tabsOf = (item: SceneItem): EditorTab[] => {
+const tabsOf = (item: ItemRow): EditorTab[] => {
   if (item.kind === 'group') return ['layout']
   return placements.value.get(item.id)?.width ? ['layout', 'transform', 'source'] : ['layout', 'source']
 }
-const shownTab = (item: SceneItem) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
+const shownTab = (item: ItemRow) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
 // Order: OBS counts from the bottom, the admin API front to back from 0 (P2-12); `move` takes that index. The moved
 // row flashes and keeps the keyboard once OBS reports the new order.
 const moved = ref<number | null>(null)
 let movedTimer: ReturnType<typeof setTimeout> | undefined
-async function move(item: SceneItem, to: number) {
-  const items = current.value?.items ?? []
+async function move(item: ItemRow, to: number) {
+  const items = siblings(item)
   const target = Math.max(0, Math.min(items.length - 1, to))
   if (items.findIndex((o) => o.id === item.id) === target) return
   if (!(await change(item, { position: target }))) return
@@ -666,8 +704,8 @@ watch(current, () => {
   const id = moved.value
   void nextTick(() => document.querySelector<HTMLElement>(`tr[data-item="${id}"] .item-name`)?.focus())
 })
-const moveBelow = (item: SceneItem, other: SceneItem) => {
-  const items = current.value?.items ?? []
+const moveBelow = (item: ItemRow, other: ItemRow) => {
+  const items = siblings(item)
   const from = items.findIndex((o) => o.id === item.id)
   const at = items.findIndex((o) => o.id === other.id)
   return move(item, from < at ? at : at + 1)
@@ -676,8 +714,8 @@ const moveBelow = (item: SceneItem, other: SceneItem) => {
 // The row menu: to the front or the back, or right below another item (opens the editor at that field).
 const moveMenu = ref<InstanceType<typeof Menu>>()
 const moveItems = ref<MenuItem[]>([])
-function openMoveMenu(e: Event, item: SceneItem, i: number) {
-  const last = (current.value?.items.length ?? 1) - 1
+function openMoveMenu(e: Event, item: ItemRow, i: number) {
+  const last = siblings(item).length - 1
   moveItems.value = [
     { label: t('scene.toFront'), icon: 'pi pi-angle-double-up', disabled: i === 0, command: () => move(item, 0) },
     { label: t('scene.toBack'), icon: 'pi pi-angle-double-down', disabled: i === last, command: () => move(item, last) },
@@ -698,31 +736,33 @@ function openMoveMenu(e: Event, item: SceneItem, i: number) {
 const dragged = ref<number | null>(null)
 const over = ref<number | null>(null)
 const dropSide = ref<'before' | 'after'>('before')
-function onDragstart(e: DragEvent, item: SceneItem) {
+function onDragstart(e: DragEvent, item: ItemRow) {
   dragged.value = item.id
   e.dataTransfer?.setData('text/plain', String(item.id))
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
 }
-function onDragover(e: DragEvent, item: SceneItem) {
+function onDragover(e: DragEvent, item: ItemRow) {
   if (dragged.value === null || dragged.value === item.id) return
+  // Only among the same scene's or group's items.
+  if (rows.value.find((r) => r.id === dragged.value)?.scene !== item.scene) return
   e.preventDefault()
   const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
   dropSide.value = e.clientY < box.top + box.height / 2 ? 'before' : 'after'
   over.value = item.id
 }
-function onDrop(e: DragEvent, target: SceneItem) {
-  const from = current.value?.items.find((o) => o.id === dragged.value)
+function onDrop(e: DragEvent, target: ItemRow) {
+  const from = rows.value.find((o) => o.id === dragged.value)
   dragged.value = over.value = null
-  if (!from || from.id === target.id) return
+  if (!from || from.id === target.id || from.scene !== target.scene) return
   e.preventDefault()
-  const items = current.value!.items
+  const items = siblings(from)
   const fromAt = items.indexOf(from)
   let at = items.indexOf(target) + (dropSide.value === 'after' ? 1 : 0)
   if (fromAt < at) at--
   void move(from, at)
 }
 
-const geoText = (item: SceneItem) => {
+const geoText = (item: ItemRow) => {
   const p = placements.value.get(item.id)
   if (!p) return '—'
   const at = `${Math.round(p.x)}, ${Math.round(p.y)}`
@@ -737,26 +777,43 @@ type BoundsKind = Schemas['Bounds']
 const BOUNDS: BoundsKind[] = ['none', 'scale_inner', 'scale_outer', 'stretch', 'scale_to_width', 'scale_to_height', 'max_only']
 const RESET: Schemas['TransformChange'] = { rotation: 0, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' }
 const transforms = ref(new Map<number, Schemas['ItemTransform']>())
-watch([open, editorTab, target], async ([id]) => {
-  const item = current.value?.items.find((o) => o.id === id)
+// Item IDs repeat across scenes: another scene starts empty, and only the latest read's answer is kept.
+let transformRead = 0
+watch(target, () => {
+  transforms.value = new Map()
+  transformRead++
+})
+// Also when the open row's shown tab turns into 變形 later (its size read in after a scene change).
+watch([open, editorTab, target, () => {
+  const r = rows.value.find((o) => o.id === open.value)
+  return r && shownTab(r)
+}], async ([id]) => {
+  const item = rows.value.find((o) => o.id === id)
   if (!item || shownTab(item) !== 'transform' || !target.value) return
+  const mine = ++transformRead
   try {
-    const got = await api(client.GET('/api/admin/obs/transform', { params: { query: { scene: target.value, item: item.id } } }))
-    transforms.value = new Map(transforms.value).set(item.id, got)
+    const got = await api(client.GET('/api/admin/obs/transform', { params: { query: { scene: item.scene, item: item.obsId } } }))
+    if (mine === transformRead) transforms.value = new Map(transforms.value).set(item.id, got)
   } catch (e) {
-    report(e)
+    if (mine === transformRead) report(e)
   }
 })
 // The source's form: a field changed is sent alone (the Host merges it) and kept here once OBS has it.
-const field = (item: SceneItem, key: string) => sources.value.get(item.source)?.fields[key] as unknown
-const fontOf = (item: SceneItem) => (field(item, 'font') ?? {}) as { face?: string; size?: number }
+const field = (item: ItemRow, key: string) => sources.value.get(item.source)?.fields[key] as unknown
+const fontOf = (item: ItemRow) => (field(item, 'font') ?? {}) as { face?: string; size?: number }
 // Shown at once, so the next change (the font size after its face) starts from it; a source's writes go one after
-// another, so OBS ends with the last; a refused one goes back unless changed again meanwhile.
+// another, so OBS ends with the last; after a refused one the source is read again.
 const writes = new Map<string, Promise<unknown>>()
+// Changes made to each source, and those not yet answered: a read that overlaps one would show older fields.
+const edits = new Map<string, number>()
+const unanswered = new Map<string, number>()
+const bump = (counts: Map<string, number>, source: string, by: number) => counts.set(source, (counts.get(source) ?? 0) + by)
 // `also`: fields that must change along with it (a capture resolution applies only in its custom mode).
-async function setField(item: SceneItem, key: string, value: unknown, also: Record<string, unknown> = {}) {
+async function setField(item: ItemRow, key: string, value: unknown, also: Record<string, unknown> = {}) {
   const now = sources.value.get(item.source)
   if (!now) return
+  bump(edits, item.source, 1)
+  bump(unanswered, item.source, 1)
   const before = now.fields[key]
   const show = (v: unknown) => {
     const latest = sources.value.get(item.source)
@@ -770,15 +827,25 @@ async function setField(item: SceneItem, key: string, value: unknown, also: Reco
   writes.set(item.source, write.catch(() => {}))
   try {
     await write
+    // A page size, file, font or text may change the source's size on the canvas, which OBS sends no event for.
+    geometry.value++
   } catch (e) {
-    if (sources.value.get(item.source)?.fields[key] === value) show(before)
     report(e)
+    // What OBS has now, rather than a guess (another change may have failed too).
+    try {
+      const got = await api(client.GET('/api/admin/obs/source', { params: { query: { input: item.source } } }))
+      sources.value = new Map(sources.value).set(item.source, got)
+    } catch {
+      if (sources.value.get(item.source)?.fields[key] === value) show(before)
+    }
+  } finally {
+    bump(unanswered, item.source, -1)
   }
 }
 // The Windows text source keeps `color`, the FreeType one `color1`.
-const colorKey = (item: SceneItem) => (field(item, 'color1') !== undefined && field(item, 'color') === undefined ? 'color1' : 'color')
-const textColor = (item: SceneItem) => hexOf(Number(field(item, colorKey(item)) ?? 0xffffff))
-const setTextColor = (item: SceneItem, hex: string) => setField(item, colorKey(item), colorOf(hex, colorKey(item) === 'color1'))
+const colorKey = (item: ItemRow) => (field(item, 'color1') !== undefined && field(item, 'color') === undefined ? 'color1' : 'color')
+const textColor = (item: ItemRow) => hexOf(Number(field(item, colorKey(item)) ?? 0xffffff))
+const setTextColor = (item: ItemRow, hex: string) => setField(item, colorKey(item), colorOf(hex, colorKey(item) === 'color1'))
 // Capture and audio choices, asked when a list opens (devices and windows change while OBS runs).
 const LISTED: Record<string, string[]> = {
   video_capture: ['video_device_id', 'resolution'],
@@ -786,13 +853,13 @@ const LISTED: Record<string, string[]> = {
   game: ['capture_mode', 'window'],
 }
 const options = ref(new Map<string, Schemas['SourceOption'][]>())
-const listedFields = (item: SceneItem) => {
+const listedFields = (item: ItemRow) => {
   const s = sources.value.get(item.source)
   const keys = LISTED[s?.family ?? ''] ?? []
   // Game capture's window applies only to capturing a specific window.
   return s?.family === 'game' && field(item, 'capture_mode') !== 'window' ? keys.filter((k) => k !== 'window') : keys
 }
-async function loadOptions(item: SceneItem, key: string) {
+async function loadOptions(item: ItemRow, key: string) {
   try {
     const got = await api(client.GET('/api/admin/obs/source/options', { params: { query: { input: item.source, property: key } } }))
     options.value = new Map(options.value).set(`${item.source}/${key}`, got)
@@ -801,7 +868,7 @@ async function loadOptions(item: SceneItem, key: string) {
   }
 }
 
-async function refreshSource(item: SceneItem) {
+async function refreshSource(item: ItemRow) {
   try {
     await api(client.POST('/api/admin/obs/source/refresh', { body: { input: item.source } }))
     toast.add(successToast(t('scene.src.refreshed', { source: item.source })))
@@ -810,23 +877,30 @@ async function refreshSource(item: SceneItem) {
   }
 }
 
-// 來源設定: read when its tab opens; only the fields of the source's form come back.
+// 來源設定: read when its tab opens, and again when the open row shows another source (another scene was picked
+// whose item has the same ID); only the fields of the source's form come back, kept per source.
 const sources = ref(new Map<string, Schemas['SourceSettings']>())
-watch([open, editorTab], async ([id]) => {
-  const item = current.value?.items.find((o) => o.id === id)
+watch([open, editorTab, () => rows.value.find((o) => o.id === open.value)?.source], async ([id]) => {
+  const item = rows.value.find((o) => o.id === id)
   if (!item || shownTab(item) !== 'source') return
+  const changed = edits.get(item.source)
+  const writing = !!unanswered.get(item.source)
   try {
     const got = await api(client.GET('/api/admin/obs/source', { params: { query: { input: item.source } } }))
+    // A change made or still on its way meanwhile is newer than this read: the form keeps it.
+    if (writing || edits.get(item.source) !== changed) return
     sources.value = new Map(sources.value).set(item.source, got)
   } catch (e) {
     report(e)
   }
 })
 
-async function transform(item: SceneItem, what: Schemas['TransformChange']) {
+async function transform(item: ItemRow, what: Schemas['TransformChange']) {
   const now = transforms.value.get(item.id)
   if (!now) return
-  if (!(await change(item, { transform: what }))) return
+  // A read started meanwhile (another scene, maybe with the same item ID) has the newer values: keep those.
+  const read = transformRead
+  if (!(await change(item, { transform: what })) || read !== transformRead) return
   const next = { ...now, ...Object.fromEntries(Object.entries(what).filter(([, v]) => v !== undefined && v !== null)) }
   transforms.value = new Map(transforms.value).set(item.id, next as Schemas['ItemTransform'])
   // Crop and the bounding box change its size on the canvas, which OBS sends no event for.
@@ -837,16 +911,32 @@ async function transform(item: SceneItem, what: Schemas['TransformChange']) {
 const SIDES: Side[] = ['top', 'bottom', 'left', 'right', 'center']
 const CROSSES: Cross[] = ['start', 'middle', 'end']
 const rel = ref<{ ref: string; side: Side; cross: Cross; ox: number; oy: number }>({ ref: 'canvas', side: 'top', cross: 'middle', ox: 0, oy: 0 })
-const refOptions = (item: SceneItem) => [
+const refOptions = (item: ItemRow) => [
   { value: 'canvas', label: t('scene.canvas') },
-  ...(current.value?.items ?? [])
+  ...siblings(item)
     .filter((o) => o.id !== item.id && placements.value.get(o.id)?.width)
     .map((o) => ({ value: String(o.id), label: o.source })),
 ]
-function alignOnce(item: SceneItem) {
+// The boxes are worked out unturned: an item or reference that is turned or flipped is refused, not misplaced.
+async function alignOnce(item: ItemRow) {
   const own = placements.value.get(item.id)
   if (!own?.width || !canvas.value) return
   const r = rel.value
+  const refRow = r.ref === 'canvas' ? undefined : rows.value.find((o) => o.id === Number(r.ref))
+  try {
+    const turned = await Promise.all(
+      [item, ...(refRow ? [refRow] : [])].map((o) =>
+        api(client.GET('/api/admin/obs/transform', { params: { query: { scene: o.scene, item: o.obsId } } })),
+      ),
+    )
+    if (turned.some((tr) => tr.rotation % 360 !== 0 || tr.flip_h || tr.flip_v)) {
+      report(t('scene.relativeTurned'))
+      return
+    }
+  } catch (e) {
+    report(e)
+    return
+  }
   const other = r.ref === 'canvas' ? undefined : placements.value.get(Number(r.ref))
   const refBox = other ? boxOf(other, other) : { left: 0, top: 0, width: canvas.value.width, height: canvas.value.height }
   const corner = alignedCorner(own, refBox, r.side, r.cross, { x: r.ox ?? 0, y: r.oy ?? 0 }, !other)
@@ -855,12 +945,12 @@ function alignOnce(item: SceneItem) {
 
 // Size: with 等比例 (the default) the other side follows, at least 1; OBS gets the new scale.
 const unlocked = ref(new Set<number>())
-function toggleRatio(item: SceneItem) {
+function toggleRatio(item: ItemRow) {
   const next = new Set(unlocked.value)
   if (!next.delete(item.id)) next.add(item.id)
   unlocked.value = next
 }
-async function resize(item: SceneItem, side: 'width' | 'height', value: number) {
+async function resize(item: ItemRow, side: 'width' | 'height', value: number) {
   const now = placements.value.get(item.id)
   if (!now?.width || !now.height) return
   const v = Math.max(1, value)
@@ -870,7 +960,8 @@ async function resize(item: SceneItem, side: 'width' | 'height', value: number) 
     : side === 'width'
       ? { width: v, height: Math.max(1, Math.round(v / ratio)) }
       : { width: Math.max(1, Math.round(v * ratio)), height: v }
-  if (await change(item, { size })) placements.value = new Map(placements.value).set(item.id, { ...now, ...size })
+  const read = placementRead
+  if ((await change(item, { size })) && read === placementRead) placements.value = new Map(placements.value).set(item.id, { ...now, ...size })
 }
 
 type Align = Schemas['Align']
@@ -883,15 +974,24 @@ let placementRead = 0
 // Read again after a change that moves or sizes items without an OBS event.
 const geometry = ref(0)
 watch(
-  [state, target, geometry],
+  // Scenes and items only: a fader or mute moving in OBS changes the state too, but no position.
+  [() => JSON.stringify(state.value?.scenes), target, geometry],
   async ([, scene]) => {
     if (!scene) return
     const mine = ++placementRead
     try {
-      const got = await api(client.GET('/api/admin/obs/placements', { params: { query: { scene } } }))
+      // Each group's items too, in the group's own coordinates (as OBS shows them); a failed group shows none.
+      const groups = (current.value?.items ?? []).filter((o) => o.kind === 'group')
+      const read = (s: string) => api(client.GET('/api/admin/obs/placements', { params: { query: { scene: s } } }))
+      const [got, ...inGroups] = await Promise.all([
+        read(scene),
+        ...groups.map((g) => read(g.source).catch(() => ({ items: [] as Schemas['ItemPlacement'][] }))),
+      ])
       if (mine !== placementRead) return
       canvas.value = got.canvas
-      placements.value = new Map(got.items.map(({ item, ...p }) => [item, p]))
+      const next = new Map<number, Schemas['Placement'] & Schemas['ItemSize']>(got.items.map(({ item, ...p }) => [item, p]))
+      inGroups.forEach((g, k) => g.items.forEach(({ item, ...p }) => next.set(childId(groups[k].id, item), p)))
+      placements.value = next
     } catch {
       if (mine === placementRead) placements.value = new Map()
     }
@@ -901,16 +1001,18 @@ watch(
 const outside = (p: Schemas['Placement']) =>
   !!canvas.value && (p.x < 0 || p.y < 0 || p.x > canvas.value.width || p.y > canvas.value.height)
 
-async function place(item: SceneItem, what: Partial<Schemas['Placement']>) {
+async function place(item: ItemRow, what: Partial<Schemas['Placement']>) {
   const now = placements.value.get(item.id)
   if (!now) return
   const next = { x: now.x, y: now.y, align: now.align, ...what }
-  // OBS sends no event when an item moves, so the next change starts from this one, not the last read.
-  if (await change(item, { placement: next })) placements.value = new Map(placements.value).set(item.id, { ...now, ...next })
+  // OBS sends no event when an item moves, so the next change starts from this one, not the last read; unless a
+  // read started meanwhile (another scene, maybe with the same item ID), whose values are newer.
+  const read = placementRead
+  if ((await change(item, { placement: next })) && read === placementRead) placements.value = new Map(placements.value).set(item.id, { ...now, ...next })
 }
 
 async function change(
-  item: SceneItem,
+  item: ItemRow,
   what: {
     enabled?: boolean
     locked?: boolean
@@ -920,11 +1022,11 @@ async function change(
     transform?: Schemas['TransformChange']
   },
 ) {
-  const scene = target.value
+  const scene = item.scene
   if (!scene) return false
   busy.value = new Set(busy.value).add(item.id)
   try {
-    await updateItem(scene, item.id, what)
+    await updateItem(scene, item.obsId, what)
     return true
   } catch (e) {
     resets.value++
@@ -1168,6 +1270,27 @@ caption {
 
 tbody th {
   font-weight: normal;
+}
+
+/* Numbers from the front; a group's items are indented under it and fade while it is hidden. */
+.num {
+  display: inline-block;
+  min-width: 2rem;
+  color: var(--p-text-muted-color);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+}
+
+.fold {
+  margin-right: 0.125rem;
+}
+
+tr.child > th {
+  padding-left: 2rem;
+}
+
+tr.faded > * {
+  opacity: 0.55;
 }
 
 .dup {

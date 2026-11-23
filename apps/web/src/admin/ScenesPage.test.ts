@@ -126,6 +126,92 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', expect.objectContaining({ body: expect.objectContaining({ scene: 'Opening', item: 9 }) }))
   })
 
+  it('shows a group with its items under it, folds it, and changes an item inside it through the group', async () => {
+    const get = vi.fn((_path: string, init?: { params?: { query?: { scene?: string } } }) =>
+      Promise.resolve({
+        data: {
+          canvas: { width: 1920, height: 1080 },
+          // The group's item has the same ID as the scene's capture; each keeps its own place.
+          items: init?.params?.query?.scene === 'Cam set' ? [{ item: 1, x: 5, y: 6, align: 'top_left' }] : [{ item: 1, x: 70, y: 80, align: 'top_left' }],
+        },
+        response: new Response(null, { status: 200 }),
+      }),
+    )
+    vi.spyOn(client, 'GET').mockImplementation(get as never)
+    const wrapper = await page()
+    const group = { ...item(3, 'Cam set', 'group', false), children: [item(1, 'Webcam', 'dshow_input'), item(2, 'Frame', 'image_source')] }
+    snapshot(connected('Game', [group, item(1, 'Capture', 'spout_capture')] as never))
+    await flushPromises()
+    const rows = () => wrapper.findAll('tbody tr').filter((r) => !r.classes('editor'))
+    expect(rows().map((r) => [r.get('.num').text(), r.get('.item-name').text()])).toEqual([
+      ['1', 'Cam set'],
+      ['1.1', 'Webcam'],
+      ['1.2', 'Frame'],
+      ['2', 'Capture'],
+    ])
+    // The group is hidden: its items fade.
+    expect(rows()[1].classes()).toEqual(expect.arrayContaining(['child', 'faded']))
+    expect(get).toHaveBeenCalledWith('/api/admin/obs/placements', { params: { query: { scene: 'Cam set' } } })
+    expect(rows()[1].get('.geo').text()).toBe('5, 6')
+    expect(rows()[3].get('.geo').text()).toBe('70, 80')
+
+    await wrapper.get(`[aria-label="${t('scene.showItem', { item: 'Webcam' })}"]`).trigger('change')
+    await wrapper.get(`[aria-label="${t('scene.backward', { item: 'Webcam' })}"]`).trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/item', { body: { scene: 'Cam set', item: 1, enabled: false } })
+    // Moved inside the group: position 1 of its two items.
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/item', { body: { scene: 'Cam set', item: 1, position: 1 } })
+    // The last item of the group cannot go further back, even with an item below the group.
+    expect(wrapper.get(`[aria-label="${t('scene.backward', { item: 'Frame' })}"]`).attributes('disabled')).toBeDefined()
+
+    await wrapper.get(`[aria-label="${t('scene.foldGroup', { group: 'Cam set' })}"]`).trigger('click')
+    expect(rows().map((r) => r.get('.item-name').text())).toEqual(['Cam set', 'Capture'])
+  })
+
+  it('reads positions again when scenes or items change, not when only a fader moves', async () => {
+    const get = vi.fn(() => Promise.resolve({ data: { canvas: { width: 1920, height: 1080 }, items: [] }, response: new Response(null, { status: 200 }) }))
+    vi.spyOn(client, 'GET').mockImplementation(get as never)
+    await page()
+    snapshot(connected())
+    await flushPromises()
+    const reads = () => get.mock.calls.filter((c) => (c as unknown[])[0] === '/api/admin/obs/placements').length
+    const before = reads()
+    send({ type: 'obs.state', payload: { ...connected(), inputs: [{ name: 'Mic', muted: false, volumeDb: -12 }] } })
+    await flushPromises()
+    expect(reads()).toBe(before)
+    send({ type: 'obs.state', payload: connected('Game', [item(2, 'Chat overlay', 'browser_source')]) })
+    await flushPromises()
+    expect(reads()).toBe(before + 1)
+  })
+
+  it('keeps the position read for another scene when an older move answers late', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((_path: string, init?: { params?: { query?: { scene?: string } } }) =>
+      Promise.resolve({
+        data: {
+          canvas: { width: 1920, height: 1080 },
+          items: [init?.params?.query?.scene === 'Opening' ? { item: 2, x: 500, y: 600, align: 'top_left' } : { item: 2, x: 40, y: 30, align: 'top_left' }],
+        },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    let answer!: () => void
+    put.mockImplementationOnce(() => new Promise((r) => (answer = () => r({ data: undefined, response: new Response(null, { status: 204 }) }))))
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    const x = wrapper.get(`input[aria-label="${t('scene.x', { item: 'Chat overlay' })}"]`)
+    await x.setValue('100')
+    await x.trigger('blur')
+    // Another scene with an item 2 goes on air before the move is answered.
+    const other = connected('Opening')
+    other.scenes[0].items = [item(2, 'Logo', 'image_source')] as never[]
+    send({ type: 'obs.state', payload: other })
+    await flushPromises()
+    answer()
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toBe('500, 600')
+  })
+
   it('shows and changes where an item sits, and says when it is off the canvas', async () => {
     vi.spyOn(client, 'GET').mockImplementation((() =>
       Promise.resolve({
@@ -249,15 +335,19 @@ describe('ScenesPage', () => {
   })
 
   it('aligns an item once below another, centred, with an offset, keeping its own align point', async () => {
-    vi.spyOn(client, 'GET').mockImplementation((() =>
+    let rotation = 0
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
       Promise.resolve({
-        data: {
-          canvas: { width: 1920, height: 1080 },
-          items: [
-            { item: 2, x: 0, y: 0, align: 'top_left', width: 100, height: 50 },
-            { item: 1, x: 100, y: 200, align: 'top_left', width: 300, height: 100 },
-          ],
-        },
+        data:
+          path === '/api/admin/obs/transform'
+            ? { rotation, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' }
+            : {
+                canvas: { width: 1920, height: 1080 },
+                items: [
+                  { item: 2, x: 0, y: 0, align: 'top_left', width: 100, height: 50 },
+                  { item: 1, x: 100, y: 200, align: 'top_left', width: 300, height: 100 },
+                ],
+              },
         response: new Response(null, { status: 200 }),
       })) as never)
     const wrapper = await page()
@@ -271,6 +361,13 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
       body: { scene: 'Game', item: 2, placement: { x: 200, y: 310, align: 'top_left' } },
     })
+    // Turned: refused with the reason, nothing sent.
+    rotation = 90
+    put.mockClear()
+    await wrapper.findAll('tr.editor button').find((b) => b.text() === t('scene.apply'))!.trigger('click')
+    await flushPromises()
+    expect(put).not.toHaveBeenCalled()
+    expect(toastAdd).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('scene.relativeTurned') }))
   })
 
   it('turns, flips and resets an item under 變形, sending only the part changed', async () => {
@@ -307,6 +404,56 @@ describe('ScenesPage', () => {
     expect(placementReads()).toBe(before + 1)
   })
 
+  it('keeps the 變形 of the scene now edited when an older read answers late', async () => {
+    let lateAnswer!: () => void
+    const transform = (rotation: number) => ({ rotation, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' })
+    const reply = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
+    vi.spyOn(client, 'GET').mockImplementation(((path: string, init?: { params?: { query?: { scene?: string } } }) => {
+      if (path !== '/api/admin/obs/transform')
+        return Promise.resolve(reply({ canvas: { width: 1920, height: 1080 }, items: [{ item: 2, x: 0, y: 0, align: 'top_left', width: 400, height: 600 }] }))
+      if (init?.params?.query?.scene === 'Game') return new Promise((r) => (lateAnswer = () => r(reply(transform(0)))))
+      return Promise.resolve(reply(transform(90)))
+    }) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.transform'))!.trigger('click')
+    await flushPromises()
+    // Another scene goes on air whose item 2 is turned 90°; then the first read answers.
+    const other = connected('Opening')
+    other.scenes[0].items = [item(2, 'Logo', 'image_source')] as never[]
+    send({ type: 'obs.state', payload: other })
+    await flushPromises()
+    lateAnswer()
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toContain('90°')
+  })
+
+  it('drops a late 變形 read once another scene is edited, even without a 變形 tab there', async () => {
+    let lateAnswer!: () => void
+    const transform = { rotation: 45, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' }
+    const reply = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      path === '/api/admin/obs/transform'
+        ? new Promise((r) => (lateAnswer = () => r(reply(transform))))
+        : Promise.resolve(reply({ canvas: { width: 1920, height: 1080 }, items: [{ item: 2, x: 0, y: 0, align: 'top_left', width: 400, height: 600 }] }))) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.transform'))!.trigger('click')
+    await flushPromises()
+    // The other scene's item 2 is a group: no 變形 tab, so nothing is read for it.
+    const other = connected('Opening')
+    other.scenes[0].items = [item(2, 'Cam set', 'group')] as never[]
+    send({ type: 'obs.state', payload: other })
+    await flushPromises()
+    lateAnswer()
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).not.toContain('45°')
+  })
+
   it("reads a source's settings under 來源設定, saying where only OBS can change them", async () => {
     vi.spyOn(client, 'GET').mockImplementation(((path: string, init?: { params?: { query?: { input?: string } } }) =>
       Promise.resolve({
@@ -331,6 +478,11 @@ describe('ScenesPage', () => {
     expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceUrlHidden'))
     await openSource('Capture')
     expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceInObs'))
+    // The open row shows another source now (an item with the same ID): that source's settings are read.
+    send({ type: 'obs.state', payload: connected('Game', [item(1, 'Other overlay', 'browser_source')]) })
+    await flushPromises()
+    expect(client.GET).toHaveBeenCalledWith('/api/admin/obs/source', { params: { query: { input: 'Other overlay' } } })
+    expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceUrlHidden'))
   })
 
   it("changes a browser source's CSS and refreshes it, and a text source's color, one field at a time", async () => {
@@ -355,11 +507,23 @@ describe('ScenesPage', () => {
       await flushPromises()
     }
     await openSource('Chat overlay')
+    const placementReads = () => vi.mocked(client.GET).mock.calls.filter((c) => (c[0] as string) === '/api/admin/obs/placements').length
+    const reads = placementReads()
     const css = wrapper.get(`textarea[aria-label="${t('scene.src.css')}"]`)
     await css.setValue('body { color: red; }')
     await css.trigger('change')
     await flushPromises()
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/source', { body: { input: 'Chat overlay', fields: { css: 'body { color: red; }' } } })
+    // A source change may resize it on the canvas: positions and sizes are read again.
+    expect(placementReads()).toBeGreaterThan(reads)
+    // Refused: the source is read again, so the form shows what OBS has.
+    const sourceReads = () => vi.mocked(client.GET).mock.calls.filter((c) => (c[0] as string) === '/api/admin/obs/source').length
+    const readsBefore = sourceReads()
+    put.mockImplementationOnce(() => Promise.resolve({ error: { code: 'obs.command_failed' }, response: new Response(null, { status: 502 }) }))
+    await css.setValue('body { color: blue; }')
+    await css.trigger('change')
+    await flushPromises()
+    expect(sourceReads()).toBe(readsBefore + 1)
     await wrapper.findAll('tr.editor button').find((b) => b.text() === t('scene.src.refresh'))!.trigger('click')
     await flushPromises()
     expect(post).toHaveBeenLastCalledWith('/api/admin/obs/source/refresh', { body: { input: 'Chat overlay' } })
@@ -384,6 +548,37 @@ describe('ScenesPage', () => {
     release()
     await flushPromises()
     expect(fonts()).toEqual([{ face: 'Noto Sans TC' }, { face: 'Noto Sans TC', size: 48 }])
+  })
+
+  it("keeps a change made while the source is read again, rather than the read's older fields", async () => {
+    let late!: () => void
+    let reads = 0
+    vi.spyOn(client, 'GET').mockImplementation(((path: string, init?: { params?: { query?: { input?: string } } }) => {
+      const reply = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
+      if (path !== '/api/admin/obs/source') return Promise.resolve(reply({ canvas: { width: 1920, height: 1080 }, items: [] }))
+      if (init?.params?.query?.input === 'Capture') return Promise.resolve(reply({ family: 'text', fields: { text: 'hi' }, url_hidden: false }))
+      const old = reply({ family: 'browser', fields: { url: 'http://127.0.0.1:47810/overlay/chat/', css: 'old' }, url_hidden: false })
+      // The second read of the overlay answers only after the change below.
+      return ++reads === 2 ? new Promise((r) => (late = () => r(old))) : Promise.resolve(old)
+    }) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const openSource = async (name: string) => {
+      await wrapper.findAll('.item-name').find((b) => b.text() === name)!.trigger('click')
+      await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.source'))!.trigger('click')
+      await flushPromises()
+    }
+    await openSource('Chat overlay')
+    await openSource('Capture')
+    await openSource('Chat overlay')
+    const css = () => wrapper.get(`textarea[aria-label="${t('scene.src.css')}"]`)
+    await css().setValue('new')
+    await css().trigger('change')
+    await flushPromises()
+    late()
+    await flushPromises()
+    expect((css().element as HTMLTextAreaElement).value).toBe('new')
   })
 
   it('lists capture choices from OBS, showing the window only for a specific window', async () => {
@@ -494,9 +689,9 @@ describe('ScenesPage', () => {
     await flushPromises()
     const rows = wrapper.findAll('tbody tr')
     // A known kind reads as its name; another shows as OBS names it.
-    expect(rows.map((r) => [r.get('th').text(), r.findAll('td')[0].text()])).toEqual([
-      ['Chat overlay', t('scene.kinds.browser')],
-      ['Capture', 'spout_capture'],
+    expect(rows.map((r) => [r.get('th .num').text(), r.get('th .item-name').text(), r.findAll('td')[0].text()])).toEqual([
+      ['1', 'Chat overlay', t('scene.kinds.browser')],
+      ['2', 'Capture', 'spout_capture'],
     ])
 
     const show = () => wrapper.get(`[aria-label="${t('scene.showItem', { item: 'Capture' })}"]`)
