@@ -1,6 +1,8 @@
 <template>
   <!-- The layout of every full page (usage in page.ts). -->
   <main ref="root">
+    <!-- Title and page tabs stay under the app bar while the page scrolls (wide and tall enough windows). -->
+    <div ref="top" class="page-top">
     <header class="page-header">
       <Button :label="t('app.home')" icon="pi pi-arrow-left" text @click="goHome(router)" />
       <span v-if="look" class="badge" :class="`tint-${look.tint}`" aria-hidden="true"><i :class="look.icon"></i></span>
@@ -20,6 +22,7 @@
         <RouterLink v-else :to="p.path" @click="navOpened.path = p.path">{{ t(p.tabLabel ?? p.label) }}</RouterLink>
       </template>
     </nav>
+    </div>
     <!-- Sticky, so a failed setting further down the page still shows its error. -->
     <p v-if="error" role="alert" class="page-error">{{ error }}</p>
     <slot />
@@ -28,7 +31,7 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useDrawer } from './drawer'
@@ -59,6 +62,26 @@ const { hidden } = useModules()
 const category = computed(() => categoryOf(route.path))
 const pageTabs = computed(() => category.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
 
+// The pinned block's height (0 when the window is too small to pin it) is --page-top-h, so the error bar, focused
+// elements and anchor targets land below it instead of under it.
+const top = ref<HTMLElement>()
+const setTopHeight = () => {
+  const el = top.value
+  const pinned = el && getComputedStyle(el).position === 'sticky'
+  document.documentElement.style.setProperty('--page-top-h', `${pinned ? el.offsetHeight : 0}px`)
+}
+const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(setTopHeight)
+onMounted(() => {
+  setTopHeight()
+  if (top.value) observer?.observe(top.value)
+  addEventListener('resize', setTopHeight)
+})
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  removeEventListener('resize', setTopHeight)
+  document.documentElement.style.removeProperty('--page-top-h')
+})
+
 // A hash names a section to land on (it needs tabindex="-1"); a page opened from a category or page tab keeps the
 // keyboard there (navOpened); otherwise "← Home" takes focus.
 onMounted(() => {
@@ -73,6 +96,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Short or narrow windows let it scroll away to keep room for the page. */
+@media (min-width: 601px) and (min-height: 560px) {
+  .page-top {
+    position: sticky;
+    top: var(--appbar-h, 0px);
+    z-index: 2;
+    margin-top: -0.5rem;
+    padding-top: 0.5rem;
+    background: var(--p-surface-950);
+  }
+}
+
 .page-header {
   display: flex;
   flex-wrap: wrap;
@@ -144,7 +179,7 @@ onMounted(() => {
 
 .page-error {
   position: sticky;
-  top: var(--appbar-h, 0px);
+  top: calc(var(--appbar-h, 0px) + var(--page-top-h, 0px));
   z-index: 1;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;

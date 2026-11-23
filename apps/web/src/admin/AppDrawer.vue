@@ -187,11 +187,18 @@ onUnmounted(() => {
   gap: 1rem;
 }
 
+/* The title and close button stay put while the drawer's content scrolls (it sits in the content's padding). */
 .drawer-header {
+  position: sticky;
+  top: -1rem;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  margin: -1rem -1rem 0;
+  padding: 1rem 1rem 0.5rem;
+  background: var(--p-surface-900);
 }
 
 .drawer-header h2,
