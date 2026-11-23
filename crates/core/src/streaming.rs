@@ -287,6 +287,12 @@ pub trait StreamingSoftware: Send + Sync {
         input: &str,
         property: &str,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// The choices of list property `property` in input `input`'s properties, as (shown name, value).
+    fn input_list_items(
+        &self,
+        input: &str,
+        property: &str,
+    ) -> impl Future<Output = Result<Vec<(String, serde_json::Value)>, StreamingError>> + Send;
     /// Turns studio mode on or off.
     fn set_studio_mode(
         &self,

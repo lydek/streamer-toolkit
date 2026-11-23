@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import InputNumber from 'primevue/inputnumber'
 import Menu from 'primevue/menu'
+import Select from 'primevue/select'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
@@ -383,6 +384,65 @@ describe('ScenesPage', () => {
     release()
     await flushPromises()
     expect(fonts()).toEqual([{ face: 'Noto Sans TC' }, { face: 'Noto Sans TC', size: 48 }])
+  })
+
+  it('lists capture choices from OBS, showing the window only for a specific window', async () => {
+    let mode = 'any'
+    const get = vi.fn((path: string) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/obs/source'
+            ? { family: 'game', fields: { capture_mode: mode }, url_hidden: false }
+            : path === '/api/admin/obs/source/options'
+              ? [{ name: 'My Game', value: 'game.exe:My Game' }]
+              : { canvas: { width: 1920, height: 1080 }, items: [] },
+        response: new Response(null, { status: 200 }),
+      }),
+    )
+    vi.spyOn(client, 'GET').mockImplementation(get as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const openSource = async () => {
+      await wrapper.findAll('.item-name').find((b) => b.text() === 'Capture')!.trigger('click')
+      await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.source'))!.trigger('click')
+      await flushPromises()
+    }
+    await openSource()
+    const labels = () => wrapper.findAllComponents(Select).map((c) => c.props('ariaLabel'))
+    expect(labels()).toContain(t('scene.src.capture_mode'))
+    expect(labels()).not.toContain(t('scene.src.window'))
+    // Closing and opening the editor again reads the source again.
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Capture')!.trigger('click')
+    mode = 'window'
+    await openSource()
+    const window = wrapper.findAllComponents(Select).find((c) => c.props('ariaLabel') === t('scene.src.window'))!
+    window.vm.$emit('show')
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith('/api/admin/obs/source/options', { params: { query: { input: 'Capture', property: 'window' } } })
+    window.vm.$emit('update:modelValue', 'game.exe:My Game')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/source', { body: { input: 'Capture', fields: { window: 'game.exe:My Game' } } })
+  })
+
+  it('switches a video capture to its custom mode when a resolution is picked, or OBS ignores it', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/obs/source'
+            ? { family: 'video_capture', fields: { res_type: 0 }, url_hidden: false }
+            : { canvas: { width: 1920, height: 1080 }, items: [] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Capture')!.trigger('click')
+    await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.source'))!.trigger('click')
+    await flushPromises()
+    wrapper.findAllComponents(Select).find((c) => c.props('ariaLabel') === t('scene.src.resolution'))!.vm.$emit('update:modelValue', '1920x1080')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/source', { body: { input: 'Capture', fields: { res_type: 1, resolution: '1920x1080' } } })
   })
 
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {

@@ -4217,6 +4217,84 @@
         }
       }
     },
+    "/api/admin/obs/source/options": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The choices OBS offers for one listed field of a capture or audio source.",
+        "operationId": "source_options",
+        "parameters": [
+          {
+            "name": "input",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "property",
+            "in": "query",
+            "description": "One of the form's listed fields: `video_device_id`, `resolution`, `window`, `capture_mode`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOption"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/source/refresh": {
       "post": {
         "tags": [
@@ -12913,6 +12991,23 @@
           "game",
           "other"
         ]
+      },
+      "SourceOption": {
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "As OBS shows it."
+          },
+          "value": {
+            "type": "object",
+            "description": "What the field is set to for this choice."
+          }
+        }
       },
       "SourceSettings": {
         "type": "object",

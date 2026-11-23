@@ -379,6 +379,14 @@ impl StreamingSoftware for ObsLink {
         self.control.press_input_button(input, property).await
     }
 
+    async fn input_list_items(
+        &self,
+        input: &str,
+        property: &str,
+    ) -> Result<Vec<(String, serde_json::Value)>, StreamingError> {
+        self.control.input_list_items(input, property).await
+    }
+
     async fn set_item_size(
         &self,
         scene: &str,
