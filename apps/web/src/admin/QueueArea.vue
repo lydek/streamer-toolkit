@@ -1,8 +1,9 @@
 <template>
-  <!-- The presentation queue on home: what plays (with 跳過), how many wait and about how long, and 清空排隊. -->
-  <section class="queue" aria-labelledby="queue-heading">
+  <!-- The presentation queue on home: what plays (with 跳過), how many wait and about how long, and 清空排隊. In the
+       drawer, the drawer's title names it. -->
+  <section class="queue" :aria-labelledby="inDrawer ? undefined : 'queue-heading'" :aria-label="inDrawer ? t('queue.title') : undefined">
     <div class="queue-head">
-      <h2 id="queue-heading">{{ t('queue.title') }}</h2>
+      <h2 v-if="!inDrawer" id="queue-heading">{{ t('queue.title') }}</h2>
       <span class="summary">{{ summary }}</span>
       <Button :label="t('queue.clear')" text size="small" :disabled="busy" @click="clear" />
       <slot name="actions" />
@@ -29,7 +30,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import { errorToast, successToast } from './home'
 import { subjectText, waitMs } from './queue'
 
-const props = defineProps<{ status?: Schemas['QueueStatus'] }>()
+const props = defineProps<{ status?: Schemas['QueueStatus']; inDrawer?: boolean }>()
 const { t } = useI18n()
 const toast = useToast()
 const busy = ref(false)

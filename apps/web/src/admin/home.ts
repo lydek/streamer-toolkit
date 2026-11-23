@@ -250,7 +250,7 @@ export interface Tile {
 }
 
 /** The small tiles that open in place into a block, and how wide the block is (prototype `NATURAL`). */
-export const EXPANDS: Record<string, 'm' | 'l' | 'w'> = { stats: 'w', feed: 'l', queue: 'm' }
+export const EXPANDS: Record<string, 'm' | 'l' | 'w'> = { stats: 'w', feed: 'l' }
 
 /** Default home order: the stage blocks, then one tile per module (and the event feed); a disabled module shows no tile. */
 const BUILT_TILES: Tile[] = [

@@ -81,12 +81,12 @@ describe('HomeView stage blocks', () => {
     // No stream yet: 開播前, whose home leads with the checklist.
     expect(headings()).toContain(t('home.blocks.checklist'))
     expect(document.querySelector('#tiles li.size-w h2')?.textContent).toBe(t('home.blocks.checklist'))
-    expect(document.querySelector('[data-expand="queue"]')).toBeNull()
+    expect(document.querySelector('[data-drawer-tile="queue"]')).toBeNull()
     // 直播中 has its own home: the queue as a small tile, no checklist; 待處理 has no items yet.
     await pickStage('live')
     expect(headings()).not.toContain(t('home.blocks.checklist'))
     expect(headings()).not.toContain(t('home.blocks.pending'))
-    expect(document.querySelector('[data-expand="queue"]')?.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('[data-drawer-tile="queue"]')?.getAttribute('aria-expanded')).toBe('false')
     await pickStage('after')
     expect(headings()).toContain(t('home.blocks.summary'))
   })
@@ -123,29 +123,40 @@ describe('HomeView stage homes', () => {
 
 describe('HomeView blocks that open in place', () => {
   it('opens a small tile into its block and back, with focus kept on the same place, and saves nothing', async () => {
-    // The feed is not on the live home by default; this home was arranged with it.
+    // 本場直播 and 事件流 are not on the live home by default; this home was arranged with them.
     vi.mocked(client.GET).mockImplementation(((path: string, init?: { params?: { query?: { stage?: string } } }) =>
-      ok(path === '/api/admin/home-tiles' ? (init!.params!.query!.stage === 'live' ? ['queue', 'feed'] : null) : responses[path])) as never)
+      ok(path === '/api/admin/home-tiles' ? (init!.params!.query!.stage === 'live' ? ['feed', 'stats', 'queue'] : null) : responses[path])) as never)
     await home()
     await pickStage('live')
-    const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="queue"]')!
+    const toggle = () => document.querySelector<HTMLButtonElement>('#tiles [data-expand="feed"]')!
     toggle().click()
     await flushPromises()
-    expect(document.getElementById('block-queue')?.closest('li')?.classList).toContain('size-m')
+    expect(document.getElementById('block-feed')?.closest('li')?.classList).toContain('size-l')
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
     expect(document.activeElement).toBe(toggle())
+    // The feed loads with the live messages, which this test does not send.
+    expect(document.getElementById('block-feed')?.textContent).toContain(t('app.loading'))
     toggle().click()
     await flushPromises()
-    expect(document.getElementById('block-queue')).toBeNull()
+    expect(document.getElementById('block-feed')).toBeNull()
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(toggle())
 
-    document.querySelector<HTMLButtonElement>('#tiles [data-expand="feed"]')!.click()
+    document.querySelector<HTMLButtonElement>('#tiles [data-expand="stats"]')!.click()
     await flushPromises()
-    expect(document.getElementById('block-feed')?.closest('li')?.classList).toContain('size-l')
-    // The feed loads with the live messages, which this test does not send.
-    expect(document.getElementById('block-feed')?.textContent).toContain(t('app.loading'))
+    expect(document.getElementById('block-stats')?.closest('li')?.classList).toContain('size-w')
     expect(put).not.toHaveBeenCalled()
+  })
+
+  it('opens the presentation queue in a drawer like other tiles, not in place', async () => {
+    await home()
+    await pickStage('live')
+    expect(document.querySelector('#tiles [data-expand="queue"]')).toBeNull()
+    document.querySelector<HTMLButtonElement>('#tiles [data-drawer-tile="queue"]')!.click()
+    await flushPromises()
+    expect(drawer.current.value).toBe('queue')
+    expect(document.getElementById('block-queue')).toBeNull()
+    expect(document.querySelector('.drawer-content .queue')).not.toBeNull()
   })
 })
 
