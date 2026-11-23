@@ -63,96 +63,125 @@
         </div>
         <div class="items-scroll">
         <p v-if="!current.items.length">{{ t('scene.noItems') }}</p>
+        <!-- One row per item; its name opens an editor row under it (one at a time), whose tabs group what can be
+             changed. Field changes update in place, so the next click lands where it was aimed. -->
         <table v-else class="table">
           <caption>{{ t('scene.order') }}</caption>
           <thead>
             <tr>
               <th scope="col">{{ t('scene.item') }}</th>
               <th scope="col">{{ t('scene.kind') }}</th>
+              <th scope="col">{{ t('scene.position') }}</th>
               <th scope="col">{{ t('scene.shown') }}</th>
               <th scope="col">{{ t('scene.locked') }}</th>
               <th scope="col">{{ t('scene.move') }}</th>
-              <th scope="col">X</th>
-              <th scope="col">Y</th>
-              <th scope="col">{{ t('scene.align') }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, i) in current.items" :key="`${item.id}:${resets}`">
-              <th scope="row">
-                {{ item.source }}
-                <RouterLink v-if="duplicates.has(item.source)" to="/obs-sources" class="dup">{{ t('scene.duplicate') }}</RouterLink>
-              </th>
-              <td>{{ kindText(item.kind) }}</td>
-              <td>
-                <ToggleSwitch
-                  :model-value="item.enabled"
-                  :disabled="busy.has(item.id)"
-                  :aria-label="t('scene.showItem', { item: item.source })"
-                  @update:model-value="(v: boolean) => change(item, { enabled: v })"
-                />
-              </td>
-              <td>
-                <ToggleSwitch
-                  :model-value="item.locked"
-                  :disabled="busy.has(item.id)"
-                  :aria-label="t('scene.lockItem', { item: item.source })"
-                  @update:model-value="(v: boolean) => change(item, { locked: v })"
-                />
-              </td>
-              <td class="move">
-                <Button
-                  icon="pi pi-arrow-up"
-                  text
-                  rounded
-                  :disabled="i === 0 || busy.has(item.id)"
-                  :aria-label="t('scene.forward', { item: item.source })"
-                  @click="change(item, { position: i - 1 })"
-                />
-                <Button
-                  icon="pi pi-arrow-down"
-                  text
-                  rounded
-                  :disabled="i === current.items.length - 1 || busy.has(item.id)"
-                  :aria-label="t('scene.backward', { item: item.source })"
-                  @click="change(item, { position: i + 1 })"
-                />
-              </td>
-              <template v-if="placements.get(item.id)">
+            <template v-for="(item, i) in current.items" :key="`${item.id}:${resets}`">
+              <tr :class="{ open: open === item.id }">
+                <th scope="row">
+                  <button
+                    type="button"
+                    class="item-name"
+                    :aria-expanded="open === item.id"
+                    :aria-controls="`editor-${item.id}`"
+                    @click="open = open === item.id ? null : item.id"
+                  >
+                    <i class="pi pi-angle-right" aria-hidden="true"></i>{{ item.source }}
+                  </button>
+                  <RouterLink v-if="duplicates.has(item.source)" to="/obs-sources" class="dup">{{ t('scene.duplicate') }}</RouterLink>
+                </th>
+                <td>{{ kindText(item.kind) }}</td>
+                <td class="geo">{{ geoText(item) }}</td>
                 <td>
-                  <InputNumber
-                    :model-value="placements.get(item.id)!.x"
-                    :max-fraction-digits="1"
+                  <ToggleSwitch
+                    :model-value="item.enabled"
                     :disabled="busy.has(item.id)"
-                    :aria-label="t('scene.x', { item: item.source })"
-                    class="coord"
-                    @update:model-value="(x: number | null) => x !== null && place(item, { x })"
+                    :aria-label="t('scene.showItem', { item: item.source })"
+                    @update:model-value="(v: boolean) => change(item, { enabled: v })"
                   />
                 </td>
                 <td>
-                  <InputNumber
-                    :model-value="placements.get(item.id)!.y"
-                    :max-fraction-digits="1"
+                  <ToggleSwitch
+                    :model-value="item.locked"
                     :disabled="busy.has(item.id)"
-                    :aria-label="t('scene.y', { item: item.source })"
-                    class="coord"
-                    @update:model-value="(y: number | null) => y !== null && place(item, { y })"
+                    :aria-label="t('scene.lockItem', { item: item.source })"
+                    @update:model-value="(v: boolean) => change(item, { locked: v })"
                   />
                 </td>
-                <td>
-                  <Select
-                    :model-value="placements.get(item.id)!.align"
-                    :options="ALIGNS"
-                    :option-label="(a: Align) => t(`scene.aligns.${a}`)"
-                    :disabled="busy.has(item.id)"
-                    :aria-label="t('scene.alignOf', { item: item.source })"
-                    @update:model-value="(align: Align) => place(item, { align })"
+                <td class="move">
+                  <Button
+                    icon="pi pi-arrow-up"
+                    text
+                    rounded
+                    :disabled="i === 0 || busy.has(item.id)"
+                    :aria-label="t('scene.forward', { item: item.source })"
+                    @click="change(item, { position: i - 1 })"
                   />
-                  <span v-if="outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
+                  <Button
+                    icon="pi pi-arrow-down"
+                    text
+                    rounded
+                    :disabled="i === current.items.length - 1 || busy.has(item.id)"
+                    :aria-label="t('scene.backward', { item: item.source })"
+                    @click="change(item, { position: i + 1 })"
+                  />
                 </td>
-              </template>
-              <td v-else colspan="3"></td>
-            </tr>
+              </tr>
+              <tr v-if="open === item.id" :id="`editor-${item.id}`" class="editor">
+                <td colspan="6">
+                  <!-- Tabs only when there is more than one thing to edit. -->
+                  <nav v-if="tabsOf(item).length > 1" class="editor-tabs" :aria-label="t('scene.editItem', { item: item.source })">
+                    <button
+                      v-for="tab in tabsOf(item)"
+                      :key="tab"
+                      type="button"
+                      :aria-current="shownTab(item) === tab ? 'page' : undefined"
+                      @click="editorTab = tab"
+                    >
+                      {{ t(`scene.tabs.${tab}`) }}
+                    </button>
+                  </nav>
+                  <div v-if="shownTab(item) === 'layout'" class="editor-grid">
+                    <template v-if="placements.get(item.id)">
+                      <span>{{ t('scene.position') }}</span>
+                      <span class="fields">
+                        <InputNumber
+                          :model-value="placements.get(item.id)!.x"
+                          :max-fraction-digits="1"
+                          :disabled="busy.has(item.id)"
+                          :aria-label="t('scene.x', { item: item.source })"
+                          class="coord"
+                          @update:model-value="(x: number | null) => x !== null && place(item, { x })"
+                        />
+                        <InputNumber
+                          :model-value="placements.get(item.id)!.y"
+                          :max-fraction-digits="1"
+                          :disabled="busy.has(item.id)"
+                          :aria-label="t('scene.y', { item: item.source })"
+                          class="coord"
+                          @update:model-value="(y: number | null) => y !== null && place(item, { y })"
+                        />
+                      </span>
+                      <span>{{ t('scene.align') }}</span>
+                      <span class="fields">
+                        <Select
+                          :model-value="placements.get(item.id)!.align"
+                          :options="ALIGNS"
+                          :option-label="(a: Align) => t(`scene.aligns.${a}`)"
+                          :disabled="busy.has(item.id)"
+                          :aria-label="t('scene.alignOf', { item: item.source })"
+                          @update:model-value="(align: Align) => place(item, { align })"
+                        />
+                        <span v-if="outside(placements.get(item.id)!)" class="warn">{{ t('scene.outside') }}</span>
+                      </span>
+                    </template>
+                    <p v-else class="muted">{{ t('scene.noPlacement') }}</p>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
         </div>
@@ -252,6 +281,18 @@ const addable = computed<MenuItem[]>(() => {
       },
     }))
 })
+
+// The item whose editor is open, and the tab shown (kept while another item opens, if that one has it too).
+type EditorTab = 'layout' | 'transform' | 'source'
+const open = ref<number | null>(null)
+const editorTab = ref<EditorTab>('layout')
+// What each item can edit; later tabs join as they are built.
+const tabsOf = (item: SceneItem): EditorTab[] => (item ? ['layout'] : [])
+const shownTab = (item: SceneItem) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
+const geoText = (item: SceneItem) => {
+  const p = placements.value.get(item.id)
+  return p ? `${Math.round(p.x)}, ${Math.round(p.y)}` : '—'
+}
 
 type Align = Schemas['Align']
 const ALIGNS: Align[] = ['top_left', 'top', 'top_right', 'left', 'center', 'right', 'bottom_left', 'bottom', 'bottom_right']
@@ -378,7 +419,87 @@ async function change(
 }
 
 .table {
-  max-width: 40rem;
+  width: 100%;
+  max-width: 60rem;
+}
+
+.item-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.item-name:hover {
+  background: var(--p-surface-800);
+}
+
+.item-name .pi {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+  transition: transform 0.15s;
+}
+
+.item-name[aria-expanded='true'] .pi {
+  transform: rotate(90deg);
+}
+
+tr.open > *,
+tr.editor > td {
+  background: var(--p-surface-900);
+}
+
+.geo {
+  font-variant-numeric: tabular-nums;
+  color: var(--p-text-muted-color);
+}
+
+.editor-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--p-surface-800);
+}
+
+.editor-tabs button {
+  padding: 0.375rem 0.75rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--p-text-muted-color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-tabs button[aria-current='page'] {
+  border-bottom-color: var(--p-primary-color);
+  color: var(--p-primary-color);
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.editor-grid > span:nth-child(odd) {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 caption {

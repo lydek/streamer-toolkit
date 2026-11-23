@@ -1403,6 +1403,14 @@
     "current": "目前場景：{scene}",
     "onAir": "直播中",
     "items": "「{scene}」的物件",
+    "position": "位置",
+    "editItem": "編輯「{item}」",
+    "noPlacement": "讀不到這個物件的位置。",
+    "tabs": {
+      "layout": "排列",
+      "transform": "變形",
+      "source": "來源設定"
+    },
     "order": "由上到下＝由前到後",
     "noItems": "這個場景沒有物件。",
     "item": "物件",

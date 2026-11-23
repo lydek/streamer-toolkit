@@ -138,18 +138,26 @@ describe('ScenesPage', () => {
     const wrapper = await page()
     snapshot(connected())
     await flushPromises()
-    const rows = wrapper.findAll('tbody tr')
-    expect(rows[0].text()).not.toContain(t('scene.outside'))
-    expect(rows[1].text()).toContain(t('scene.outside'))
-    const x = rows[0].get(`input[aria-label="${t('scene.x', { item: 'Chat overlay' })}"]`)
+    // The row shows where it sits; its name opens the editor (one at a time) with the fields.
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toBe('40, 30')
+    const opener = (name: string) => wrapper.findAll('.item-name').find((b) => b.text() === name)!
+    await opener('Capture').trigger('click')
+    expect(wrapper.get('tr.editor').text()).toContain(t('scene.outside'))
+    await opener('Chat overlay').trigger('click')
+    expect(wrapper.findAll('tr.editor')).toHaveLength(1)
+    expect(wrapper.get('tr.editor').text()).not.toContain(t('scene.outside'))
+    const x = wrapper.get(`input[aria-label="${t('scene.x', { item: 'Chat overlay' })}"]`)
     await x.setValue('100')
     await x.trigger('blur')
     await flushPromises()
     expect(put).toHaveBeenCalledWith('/api/admin/obs/item', {
       body: { scene: 'Game', item: 2, placement: { x: 100, y: 30, align: 'top_left' } },
     })
+    // The editor stays as it was (no rebuild), and the row's summary follows.
+    expect(wrapper.find('tr.editor').exists()).toBe(true)
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toBe('100, 30')
     // OBS sends no event for a moved item: the next change keeps the X just saved.
-    const y = rows[0].get(`input[aria-label="${t('scene.y', { item: 'Chat overlay' })}"]`)
+    const y = wrapper.get(`input[aria-label="${t('scene.y', { item: 'Chat overlay' })}"]`)
     await y.setValue('80')
     await y.trigger('blur')
     await flushPromises()
