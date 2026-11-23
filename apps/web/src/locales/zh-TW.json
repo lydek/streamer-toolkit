@@ -130,7 +130,12 @@
       "played": "已播放「{title}」的效果。",
       "none": "「{title}」沒有設定可播放的效果。",
       "empty": "還沒有頻道點數獎勵。",
-      "loadFailed": "讀不到獎勵清單。"
+      "loadFailed": "讀不到獎勵清單。",
+      "viewer": "給哪位觀眾",
+      "viewerHint": "觀眾名稱（不填就用測試觀眾）",
+      "simulate": "模擬兌換",
+      "simulateLabel": "模擬兌換：{title}",
+      "simulated": "已模擬「{title}」的兌換（測試，不留紀錄）。"
     }
   },
   "features": {
