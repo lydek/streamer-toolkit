@@ -119,7 +119,31 @@
               :unbuilt="!!tile.unbuilt"
               :expanded="drawer.current.value === tile.id"
               @click="!tile.unbuilt && toggle(tile.id, $event.currentTarget)"
-            />
+            >
+              <!-- A few tiles act in place: the first counter, the first three sounds, the break card. -->
+              <template v-if="tile.id === 'counter' && live.counters?.length" #actions>
+                <Button
+                  v-for="d in [-1, 1] as const"
+                  :key="d"
+                  :label="d < 0 ? '−1' : '+1'"
+                  :aria-label="`${t(d < 0 ? 'counter.minusOne' : 'counter.plusOne')}：${live.counters[0].name}`"
+                  size="small"
+                  outlined
+                  @click="tileAction(stepCounter(live.counters[0].id, d))"
+                />
+              </template>
+              <template v-else-if="tile.id === 'sound' && sounds.state === 'ready' && sounds.items.length" #actions>
+                <Button v-for="s in sounds.items.slice(0, 3)" :key="s.id" :label="s.label" size="small" outlined @click="tileAction(testSound(s.id))" />
+              </template>
+              <template v-else-if="tile.id === 'screen-tools' && live.breakCard" #actions>
+                <ToggleSwitch
+                  input-id="tile-break"
+                  :model-value="live.breakCard.shown"
+                  @update:model-value="(on: boolean) => tileAction(on ? showBreak(breakAgain(live.breakCard!)) : hideBreak())"
+                />
+                <label for="tile-break" class="tile-switch">{{ t('screenTools.break.cover') }}</label>
+              </template>
+            </HomeTile>
           </li>
         </ul>
       </section>
@@ -357,13 +381,14 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import ToggleSwitch from 'primevue/toggleswitch'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import QueueArea from './QueueArea.vue'
 import StageCard from './StageCard.vue'
-import { simulateAlert, simulateChat, simulateCheckin } from './simulate'
+import { simulateAlert, simulateChat, simulateCheckin, testSound } from './simulate'
 import BlockClose from './BlockClose.vue'
 import { subjectText } from './queue'
 import { STAGES, useStage } from './stage'
@@ -658,6 +683,13 @@ function breakLine(card: Schemas['BreakPayload']): Line {
   return { state: 'ready', num: t('screenTools.break.shownShort'), text: card.text || t('screenTools.break.heading') }
 }
 
+// A tile's in-place action reports a failure as a toast: its drawer, where notices show, is closed.
+const tileAction = (p: Promise<unknown>) =>
+  p.catch((e: unknown) => toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e))))
+// The break card from a tile shows again the way it was last set (minutes or until a time).
+const breakAgain = (card: Schemas['BreakPayload']) =>
+  card.mode === 'until' ? { until: card.untilTime } : { minutes: card.minutes }
+
 const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
 const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
@@ -875,6 +907,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.25rem 0;
+}
+
+.tile-switch {
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
 }
 
 .break-quick {

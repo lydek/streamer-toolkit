@@ -149,6 +149,72 @@ describe('HomeView blocks that open in place', () => {
   })
 })
 
+describe('HomeView tiles that act in place', () => {
+  it('count, play and show the break card from the tile without opening its drawer, and report a failure', async () => {
+    let socket: { onmessage?: (e: { data: string }) => void } = {}
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        onmessage?: (e: { data: string }) => void
+        constructor() {
+          // eslint-disable-next-line @typescript-eslint/no-this-alias
+          socket = this
+        }
+        close() {}
+      },
+    )
+    const data: Record<string, unknown> = {
+      ...responses,
+      '/api/admin/home-tiles': ['counter', 'sound', 'screen-tools'],
+      '/api/admin/checkin/today': { count: 0, recent: [] },
+      '/api/admin/modules': ['counter', 'sound', 'screen-tools'].map((id) => ({ id, enabled: true, closed: false })),
+      '/api/admin/sounds': { sounds: ['叮咚', '歡呼', '喝水', '拍手'].map((label, i) => ({ id: `s${i}`, label })), slots: {}, volume: 100 },
+    }
+    vi.mocked(client.GET).mockImplementation(((path: string) => ok(data[path])) as never)
+    const post = vi.fn(() => ok(undefined))
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    await home()
+    await pickStage('live')
+    const event = (type: string, payload: unknown) => [{ id: type, type, version: 1, seq: 1, occurredAt: '', source: 'system', payload }]
+    socket.onmessage!({
+      data: JSON.stringify({
+        type: 'snapshot',
+        version: 1,
+        seq: 1,
+        payload: {
+          ...Object.fromEntries(
+            ['chat.message', 'chat.removed', 'obs.status', 'obs.state', 'presentation.queue', 'stream.status', 'bgm.player', 'counter.marathon', 'screen.warnings', 'screen.appearance', 'leaderboard.update', 'chat.text_size'].map((k) => [k, []]),
+          ),
+          'counter.values': event('counter.values', { counters: [{ id: 'c1', name: '死亡次數', value: 12 }] }),
+          'screen.break': event('screen.break', { shown: false, mode: 'minutes', minutes: 10, untilTime: '21:00', text: '', endText: '' }),
+        },
+      }),
+    })
+    await flushPromises()
+    const actions = (tile: string) => document.querySelector(`[data-drawer-tile="${tile}"]`)!.parentElement!.querySelector('.tile-actions')!
+    const button = (tile: string, label: string) =>
+      [...actions(tile).querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label)!
+
+    button('counter', '+1').click()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/counters/{id}/add', { params: { path: { id: 'c1' } }, body: { delta: 1 } })
+    button('counter', '−1').click()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/counters/{id}/add', { params: { path: { id: 'c1' } }, body: { delta: -1 } })
+    // The first three sounds only.
+    expect([...actions('sound').querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['叮咚', '歡呼', '喝水'])
+    button('sound', '歡呼').click()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/sounds/{id}/play', { params: { path: { id: 's1' } } })
+    actions('screen-tools').querySelector<HTMLInputElement>('input')!.click()
+    await flushPromises()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/screen-tools/break/show', { body: { minutes: 10 } })
+    expect(drawer.current.value).toBeNull()
+
+    post.mockImplementationOnce(() => Promise.reject(new Error('down')))
+    button('counter', '+1').click()
+    await flushPromises()
+    expect(toastAdd).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('HomeView tiles', () => {
   it('show a big count with its unit and the latest on the line', async () => {
     vi.mocked(client.GET).mockImplementation(((path: string) =>
