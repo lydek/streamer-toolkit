@@ -1448,6 +1448,9 @@
     "boundsNone": "「大小」直接縮放內容",
     "boundsBox": "「大小」變成外框，內容依這裡的方式放進去",
     "resetTransform": "變形全部還原",
+    "sourceShared": "來源設定整個來源共用：其他場景裡的「{source}」也會一起變。",
+    "sourceInObs": "這種來源（例如外掛的）只能在 OBS 的「屬性」修改。",
+    "sourceUrlHidden": "這個瀏覽器來源開的不是本工具的 Overlay，網址不在這裡顯示，請在 OBS 修改。",
     "relative": "相對對齊",
     "relativeRef": "「{item}」對齊哪裡",
     "relativeSide": "放在哪一側",
@@ -1869,6 +1872,8 @@
       "nothing_to_change": "沒有要變更的項目。",
       "invalid_size": "大小要在 1 到 100000 之間。",
       "invalid_transform": "旋轉要在 -360 到 360 度之間，裁切每邊最多 100000 px。",
+      "invalid_source": "這個來源設定的格式不正確，或網址不是本工具的 Overlay。",
+      "source_not_editable": "這種來源只能在 OBS 修改。",
       "not_local": "OBS 在另一台電腦，本工具的 Overlay 網址在那台電腦打不開，所以不能從這裡加進場景。",
       "invalid_source": "這個 Overlay 的資料不正確。"
     },

@@ -305,6 +305,32 @@ describe('ScenesPage', () => {
     expect(placementReads()).toBe(before + 1)
   })
 
+  it("reads a source's settings under 來源設定, saying where only OBS can change them", async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string, init?: { params?: { query?: { input?: string } } }) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/obs/source'
+            ? init?.params?.query?.input === 'Capture'
+              ? { family: 'other', fields: {}, url_hidden: false }
+              : { family: 'browser', fields: { width: 400 }, url_hidden: true }
+            : { canvas: { width: 1920, height: 1080 }, items: [] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const openSource = async (name: string) => {
+      await wrapper.findAll('.item-name').find((b) => b.text() === name)!.trigger('click')
+      await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.source'))!.trigger('click')
+      await flushPromises()
+    }
+    await openSource('Chat overlay')
+    expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceShared', { source: 'Chat overlay' }))
+    expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceUrlHidden'))
+    await openSource('Capture')
+    expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceInObs'))
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())

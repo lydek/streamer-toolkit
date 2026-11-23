@@ -21,6 +21,7 @@ mod performance;
 mod queue;
 mod rehearsal;
 mod services;
+mod source_settings;
 mod stream_summary;
 mod tab_bar;
 mod templates;
@@ -585,6 +586,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             )
             .merge(
                 overlay::admin_routes(overlays).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(
+                source_settings::routes(obs.clone()).layer(middleware::from_fn_with_state(
                     admin.clone(),
                     admin::require_token,
                 )),
