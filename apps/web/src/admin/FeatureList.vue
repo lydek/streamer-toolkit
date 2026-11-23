@@ -7,6 +7,23 @@
   </div>
   <p v-if="!modules">{{ loadText }}</p>
   <template v-else>
+    <!-- Not using Twitch or OBS at all: what needs it goes off and is locked, its tabs and tiles fold away. -->
+    <div class="svc-use" role="group" :aria-label="t('settings.features')">
+      <div v-for="s in SERVICES" :key="s" class="svc">
+        <span class="svc-text">
+          <label :for="`use-${s}`" class="name">{{ t('services.use', { service: SERVICE_NAMES[s] }) }}</label>
+          <span :id="`use-${s}-desc`" class="desc">{{ t('services.useDesc', { service: SERVICE_NAMES[s] }) }}</span>
+        </span>
+        <ToggleSwitch
+          :key="`use-${s}-${drawn}`"
+          :input-id="`use-${s}`"
+          :model-value="!services.unused.includes(s)"
+          :disabled="busy"
+          :aria-describedby="`use-${s}-desc`"
+          @update:model-value="(use: boolean) => switchService(s, use)"
+        />
+      </div>
+    </div>
     <p v-if="!shownGroups.length">{{ t('features.empty') }}</p>
     <section v-for="g in shownGroups" :key="g.id" class="feat-group" :aria-labelledby="`fg-${g.id}`">
       <div class="group-head">
@@ -44,9 +61,10 @@
               <span :id="`fd-${f.id}`" class="desc">{{ t(`features.${f.id}.desc`) }}</span>
             </span>
             <span class="tags">
+              <span v-for="s in blockedBy(f)" :key="`u-${s}`" class="tag unused">{{ t('services.unused', { service: SERVICE_NAMES[s] }) }}</span>
               <span v-if="f.needs" class="tag">{{ t(`features.needs.${f.needs}`) }}</span>
-              <span v-for="s in servicesOf(f.id).filter((s) => servicesDown[s])" :key="s" class="tag down">
-                {{ t('services.down', { service: s === 'obs' ? 'OBS' : 'Twitch' }) }}
+              <span v-for="s in servicesOf(f.id).filter((s) => servicesDown[s] && !services.unused.includes(s))" :key="s" class="tag down">
+                {{ t('services.down', { service: SERVICE_NAMES[s] }) }}
               </span>
               <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
               <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
@@ -60,9 +78,10 @@
                 {{ t('features.open') }}<span class="sr-only">：{{ name(f) }}</span>
               </RouterLink>
               <ToggleSwitch
+                :key="`${f.id}-${drawn}`"
                 :input-id="f.module ? `module-${f.module}` : undefined"
                 :model-value="on(f)"
-                :disabled="busy || !f.module"
+                :disabled="busy || !f.module || blockedBy(f).length > 0"
                 :aria-label="name(f)"
                 @update:model-value="toggle(f)"
               />
@@ -97,19 +116,25 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
-import { FEATURES, type Feature, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan } from './features'
+import { FEATURES, type Feature, type Service, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan, unusedBy } from './features'
 import { servicesDown } from './home'
+import { useServices } from './services'
 import { GROUPS, SOON_PAGES } from './tabs'
 
 const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string; withSettings?: string[] }>()
-/** `bulk`: a whole group's changes, confirmed once; the page applies them (and asks check-in's pause or close). */
-const emit = defineEmits<{ toggle: [module: Schemas['ModuleState']]; bulk: [changes: { id: string; enabled: boolean }[]] }>()
+/** `bulk`: a whole group's changes, confirmed once; the page applies them (and asks check-in's pause or close).
+ * `service`: Twitch or OBS used or not, with what goes off for it (confirmed); the page saves and applies it. */
+const emit = defineEmits<{
+  toggle: [module: Schemas['ModuleState']]
+  bulk: [changes: { id: string; enabled: boolean }[]]
+  service: [service: Service, use: boolean, off: string[]]
+}>()
 const { t } = useI18n()
 
 const query = ref('')
 const on = (f: Feature) => isOn(f, props.modules ?? [])
 const name = (f: Feature) => t(`features.${f.id}.name`)
-const hidden = computed(() => hiddenPages(props.modules ?? []))
+const hidden = computed(() => hiddenPages(props.modules ?? [], FEATURES, services.unused))
 const SOON = new Set(SOON_PAGES.map((p) => p.path))
 // Like a group tab (firstPage): the first built page that is shown, else the first shown page.
 const openPage = (f: Feature) => {
@@ -150,9 +175,15 @@ function ask(c: NonNullable<typeof confirm.value>) {
 }
 function onConfirmClose() {
   if (confirmEl.value?.returnValue === 'ok') confirm.value?.then()
-  else lastSwitched.value = undefined
+  else {
+    lastSwitched.value = undefined
+    drawn.value++
+  }
   if (confirmEl.value) confirmEl.value.returnValue = ''
 }
+// A switch keeps the side it was flipped to until its value changes: after a cancel or a save (which may have
+// failed and kept the value), the switches are drawn again from what is saved.
+const drawn = ref(0)
 
 const moduleOf = (f: Feature) => props.modules?.find((m) => m.id === f.module)
 // A switch is disabled while its change saves, which drops its focus; it gets it back once the save is done.
@@ -160,6 +191,7 @@ const lastSwitched = ref<string>()
 watch(
   () => props.busy,
   (busy) => {
+    if (!busy) drawn.value++
     if (busy || !lastSwitched.value) return
     const id = lastSwitched.value
     lastSwitched.value = undefined
@@ -168,8 +200,28 @@ watch(
 )
 const flip = (fs: Feature[]) => fs.forEach((f) => moduleOf(f) && emit('toggle', moduleOf(f)!))
 
-// A group's built features that have a switch.
-const bulkable = (fs: Feature[]) => fs.filter((f) => f.module && !f.fixed)
+const SERVICES: Service[] = ['twitch', 'obs']
+const SERVICE_NAMES: Record<Service, string> = { twitch: 'Twitch', obs: 'OBS' }
+const services = useServices()
+// Unused services a feature needs (itself or through what it requires): it is locked off.
+const blockedBy = (f: Feature) => unusedBy(f, services.unused)
+
+/** Not using a service lists the built features on that need it (confirmed); using it again restores them. */
+function switchService(s: Service, use: boolean) {
+  if (use) return emit('service', s, true, [])
+  const off = FEATURES.filter((f) => f.module && on(f) && unusedBy(f, [s]).length)
+  const service = SERVICE_NAMES[s]
+  ask({
+    title: t('services.offTitle', { service }),
+    text: t(off.length ? 'services.offText' : 'services.offNone'),
+    lines: off.map(name),
+    ok: t('services.offOk'),
+    then: () => emit('service', s, false, off.map((f) => f.module!)),
+  })
+}
+
+// A group's built features that have a switch (and no unused service locking them).
+const bulkable = (fs: Feature[]) => fs.filter((f) => f.module && !f.fixed && !blockedBy(f).length)
 const unique = (fs: Feature[]) => [...new Map(fs.map((f) => [f.id, f])).values()]
 const changes = (fs: Feature[], enabled: boolean) => fs.map((f) => ({ id: f.module!, enabled }))
 
@@ -339,6 +391,36 @@ function toggle(f: Feature) {
 }
 
 /* yellow-400 on surface-800: well above 4.5:1. */
+.svc-use {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--p-surface-700);
+  border-radius: 6px;
+}
+
+.svc {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.svc-text {
+  display: grid;
+  margin-right: auto;
+}
+
+.svc-text .desc {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+.tag.unused {
+  background: var(--p-surface-700);
+}
+
 .tag.down {
   border-color: var(--p-red-400);
   color: var(--p-red-300);

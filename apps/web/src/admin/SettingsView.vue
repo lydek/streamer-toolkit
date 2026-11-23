@@ -110,6 +110,7 @@
             :with-settings="['checkin']"
             @toggle="toggleModule"
             @bulk="bulkModules"
+            @service="switchService"
           >
             <!-- Check-in's held redemptions belong to its switch; its rules have their own page (打卡規則). -->
             <template #settings>
@@ -148,7 +149,7 @@
         </section>
       </div>
     </div>
-    <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" @cancel="pendingBulk = undefined" />
+    <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" @cancel="pendingBulk = pendingService = undefined" />
   </FullPage>
 </template>
 
@@ -172,7 +173,8 @@ import CheckinOutbox from './CheckinOutbox.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
 import FeatureList from './FeatureList.vue'
-import { FEATURES, isOn, shareModules } from './features'
+import { FEATURES, type Service, isOn, shareModules, unusedBy } from './features'
+import { saveServices, useServices } from './services'
 import { GROUPS } from './tabs'
 import { errorToast } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
@@ -365,9 +367,77 @@ const toggleModule = (m: Schemas['ModuleState']) =>
   m.id === 'checkin' && m.enabled ? disableDialog.value?.open() : putModule(m.id, !m.enabled)
 const disableCheckin = (mode: 'pause' | 'close') => {
   const bulk = pendingBulk.value
-  pendingBulk.value = undefined
+  const service = pendingService.value
+  pendingBulk.value = pendingService.value = undefined
+  if (service) return applyService(service.service, service.off, mode === 'close')
   return bulk ? applyBulk(bulk, mode === 'close') : putModule('checkin', false, mode === 'close')
 }
+
+// 使用 Twitch／OBS (FeatureList, already confirmed). Off: the choice and what goes off are saved first, then those
+// modules are turned off (check-in asks pause or close first; a cancel changes nothing). On: the modules parked for
+// it are turned on again, except those still needing the other service while that is unused.
+const services = useServices()
+const pendingService = ref<{ service: Service; off: string[] }>()
+function switchService(service: Service, use: boolean, off: string[]) {
+  if (use) return restoreService(service)
+  if (off.includes('checkin') && checkinState.value?.enabled) {
+    pendingService.value = { service, off }
+    return disableDialog.value?.open()
+  }
+  return applyService(service, off, false)
+}
+const applyService = (service: Service, off: string[], closeCheckin: boolean) =>
+  run(async () => {
+    const before = { unused: [...services.unused], parked: [...services.parked] }
+    const done: string[] = []
+    try {
+      await saveServices({
+        unused: [...services.unused.filter((s) => s !== service), service],
+        parked: [...services.parked, ...off.map((id) => ({ service, id }))],
+      })
+      for (const id of off) {
+        await api(client.PUT('/api/admin/modules/{id}', { params: { path: { id } }, body: { enabled: false, close: id === 'checkin' && closeCheckin } }))
+        done.push(id)
+      }
+    } catch (e) {
+      // All goes back as it was (the modules already off, then the choice), so switching the service off again
+      // retries.
+      for (const id of done)
+        await api(client.PUT('/api/admin/modules/{id}', { params: { path: { id } }, body: { enabled: true, close: false } })).catch(() => {})
+      await saveServices(before).catch(() => {})
+      await refresh().catch(() => {})
+      throw e
+    } finally {
+      await checkinOutbox.value?.load()
+    }
+  })
+const restoreService = (service: Service) =>
+  run(async () => {
+    const unused = services.unused.filter((s) => s !== service)
+    const stillBlocked = (id: string) => FEATURES.some((f) => f.module === id && unusedBy(f, unused).length)
+    const back = services.parked.filter((p) => p.service === service && !stillBlocked(p.id))
+    const before = { unused: [...services.unused], parked: [...services.parked] }
+    const done: string[] = []
+    try {
+      // Still needing the other unused service: parked for that one now, back when it is.
+      const parked = services.parked.filter((p) => !back.includes(p)).map((p) => (p.service === service ? { ...p, service: unused[0] } : p))
+      await saveServices({ unused, parked })
+      for (const p of back) {
+        await api(client.PUT('/api/admin/modules/{id}', { params: { path: { id: p.id } }, body: { enabled: true, close: false } }))
+        done.push(p.id)
+      }
+    } catch (e) {
+      // All goes back as it was (the choice, parked modules, and the ones already on again), so switching the
+      // service on again retries.
+      for (const id of done)
+        await api(client.PUT('/api/admin/modules/{id}', { params: { path: { id } }, body: { enabled: false, close: false } })).catch(() => {})
+      await saveServices(before).catch(() => {})
+      await refresh().catch(() => {})
+      throw e
+    } finally {
+      await checkinOutbox.value?.load()
+    }
+  })
 
 // A whole group at once (FeatureList, already confirmed): check-in going off asks pause or close first, and nothing
 // is sent if that is cancelled. Applied one by one; a failure shows its reason and the real state is read again.

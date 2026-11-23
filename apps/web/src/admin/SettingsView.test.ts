@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import SettingsView from './SettingsView.vue'
 import { testRouter } from './testRouter'
+import { useServices } from './services'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const { client } = vi.hoisted(() => ({ client: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn() } }))
@@ -252,6 +253,81 @@ describe('SettingsView', () => {
       await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(3))
       expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'checkin' } }, body: { enabled: false, close: true } })
       expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'alerts' } }, body: { enabled: false, close: false } })
+      wrapper.unmount()
+    })
+
+    it('stops using Twitch: saves the choice, turns its features off (check-in asks first), and turns them on again', async () => {
+      GETS['/api/admin/modules'] = ['chat', 'checkin', 'counter'].map((id) => ({ id, enabled: true, closed: false }))
+      GETS['/api/admin/services'] = null
+      client.PUT.mockResolvedValue(ok())
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#use-twitch').exists()).toBe(true))
+      await wrapper.get('#use-twitch').trigger('change')
+      expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual(
+        ['chat', 'checkin'].map((id) => i18n.global.t(`features.${id}.name`)),
+      )
+      ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(i18n.global.t('services.offOk')))!.click()
+      await flushPromises()
+      // Check-in asks pause or close before anything is saved.
+      expect(client.PUT).not.toHaveBeenCalled()
+      await wrapper.get('dialog[aria-labelledby="checkin-disable-title"]').findAll('button')[0].trigger('click')
+      await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(3))
+      expect(client.PUT.mock.calls[0]).toEqual([
+        '/api/admin/services',
+        { body: { unused: ['twitch'], parked: [{ service: 'twitch', id: 'chat' }, { service: 'twitch', id: 'checkin' }] } },
+      ])
+      expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'checkin' } }, body: { enabled: false, close: false } })
+
+      client.PUT.mockClear()
+      await wrapper.get('#use-twitch').trigger('change')
+      await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(3))
+      expect(client.PUT.mock.calls[0]).toEqual(['/api/admin/services', { body: { unused: [], parked: [] } }])
+      expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'chat' } }, body: { enabled: true, close: false } })
+      wrapper.unmount()
+    })
+
+    it('puts all back when turning a feature off for an unused service fails, so switching off retries', async () => {
+      GETS['/api/admin/modules'] = ['chat', 'alerts'].map((id) => ({ id, enabled: true, closed: false }))
+      GETS['/api/admin/services'] = null
+      Object.assign(useServices(), { unused: [], parked: [] })
+      client.PUT.mockImplementation(((path: string, init: { params?: { path?: { id?: string } }; body?: { enabled?: boolean } }) =>
+        Promise.resolve(
+          init.params?.path?.id === 'alerts' && init.body?.enabled === false
+            ? { error: { code: 'modules.save_failed' }, response: new Response(null, { status: 500 }) }
+            : ok(),
+        )) as never)
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#use-twitch').exists()).toBe(true))
+      await wrapper.get('#use-twitch').trigger('change')
+      ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(i18n.global.t('services.offOk')))!.click()
+      await flushPromises()
+      const calls = () => client.PUT.mock.calls.map((c) => [c[0], (c[1] as { params?: { path?: { id?: string } } }).params?.path?.id, (c[1] as { body: unknown }).body])
+      await vi.waitFor(() => expect(calls().at(-1)).toEqual(['/api/admin/services', undefined, { unused: [], parked: [] }]))
+      // Chat went off before alerts failed: it goes on again, then the choice goes back.
+      expect(calls().at(-2)).toEqual(['/api/admin/modules/{id}', 'chat', { enabled: true, close: false }])
+      wrapper.unmount()
+    })
+
+    it('puts the choice back when turning a parked feature on again fails, so switching on retries', async () => {
+      GETS['/api/admin/modules'] = [{ id: 'chat', enabled: false, closed: false }, { id: 'checkin', enabled: false, closed: false }]
+      const before = { unused: ['twitch'], parked: [{ service: 'twitch', id: 'chat' }, { service: 'twitch', id: 'checkin' }] }
+      GETS['/api/admin/services'] = before
+      // The services choice loads once per window; this one starts with Twitch unused.
+      Object.assign(useServices(), structuredClone(before))
+      client.PUT.mockImplementation(((path: string, init: { params?: { path?: { id?: string } } }) =>
+        Promise.resolve(
+          init.params?.path?.id === 'checkin'
+            ? { error: { code: 'modules.save_failed' }, response: new Response(null, { status: 500 }) }
+            : ok(),
+        )) as never)
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#use-twitch').exists()).toBe(true))
+      await wrapper.get('#use-twitch').trigger('change')
+      await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(5))
+      expect(client.PUT.mock.calls[0]).toEqual(['/api/admin/services', { body: { unused: [], parked: [] } }])
+      // Chat went on before check-in failed: it goes off again.
+      expect(client.PUT.mock.calls[3]).toEqual(['/api/admin/modules/{id}', { params: { path: { id: 'chat' } }, body: { enabled: false, close: false } }])
+      expect(client.PUT.mock.calls[4]).toEqual(['/api/admin/services', { body: before }])
       wrapper.unmount()
     })
 

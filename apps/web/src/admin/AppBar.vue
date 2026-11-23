@@ -19,7 +19,9 @@
         <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
              warning button instead, and only while a connection has a problem. -->
+        <!-- A service the broadcaster does not use (設定 › 功能) has no light and is never a problem. -->
         <StatusLight
+          v-if="!unused.includes('twitch')"
           name="Twitch"
           :light="twitch"
           :class="{ healthy: twitch.state === 'connected' }"
@@ -27,6 +29,7 @@
           @click="openConnections('twitch', $event.currentTarget)"
         />
         <StatusLight
+          v-if="!unused.includes('obs')"
           name="OBS"
           :light="obs"
           :class="{ healthy: obs.state === 'connected' }"
@@ -34,12 +37,12 @@
           @click="openConnections('obs', $event.currentTarget)"
         />
         <StatusLight
-          v-if="twitch.state === 'connected' && obs.state === 'connected'"
+          v-if="summary"
           class="all-healthy"
           :name="t('nav.connections')"
-          :light="twitch"
+          :light="summary.light"
           v-bind="lightAttrs"
-          @click="openConnections('twitch', $event.currentTarget)"
+          @click="openConnections(summary.service, $event.currentTarget)"
         />
         <Button
           v-if="problems.length"
@@ -168,6 +171,7 @@ import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
 import { clockText, errorToast, isDown, obsLight, servicesDown, twitchLight, twitchOverview, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
+import { summaryLight, useServices } from './services'
 import { DOCK_WIDE_QUERY, saveDock, useDock } from './dock'
 import { useModules } from './features'
 import { useTabBar } from './tabbar'
@@ -203,16 +207,19 @@ const liveMeta = computed(() => {
 })
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
+const summary = computed(() => summaryLight(unused.value, twitch.value, obs.value))
+const services = useServices()
+const unused = computed(() => services.unused)
 // Pages and the feature list warn from these (servicesDown, home.ts).
 watchEffect(() => {
-  servicesDown.twitch = isDown(twitch.value)
-  servicesDown.obs = isDown(obs.value)
+  servicesDown.twitch = !unused.value.includes('twitch') && isDown(twitch.value)
+  servicesDown.obs = !unused.value.includes('obs') && isDown(obs.value)
 })
 const problems = computed(() =>
   [
     { name: 'Twitch', section: 'twitch' as const, light: twitch.value },
     { name: 'OBS', section: 'obs' as const, light: obs.value },
-  ].filter((c) => c.light.state === 'error' || c.light.state === 'reconnecting'),
+  ].filter((c) => !unused.value.includes(c.section) && (c.light.state === 'error' || c.light.state === 'reconnecting')),
 )
 
 async function pollTwitch() {

@@ -49,6 +49,9 @@ pub struct Settings {
     /// How the 下播後 home shows its numbers. `None`: never changed, they show.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after_numbers: Option<AfterNumbers>,
+    /// Services the broadcaster chose not to use, and the modules turned off for that. `None`: both in use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub services: Option<ServiceUse>,
     /// The admin UI's tab bar. `None`: never edited, every group is in the bar on top.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tab_bar: Option<TabBar>,
@@ -117,6 +120,29 @@ pub enum NumbersMode {
     Mask,
     /// The tiles are folded away behind one card.
     Hide,
+}
+
+/// Twitch or OBS not used at all (設定 › 功能): `unused` lists them; `parked` are the modules that were on and were
+/// turned off because of it, so turning the service back on turns exactly those on again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ServiceUse {
+    pub unused: Vec<ExternalService>,
+    pub parked: Vec<ParkedModule>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ExternalService {
+    Twitch,
+    Obs,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ParkedModule {
+    /// The service whose switch turned it off.
+    pub service: ExternalService,
+    /// The module's ID.
+    pub id: String,
 }
 
 /// How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template.
@@ -386,6 +412,7 @@ impl Default for Settings {
             chat_dock: None,
             chat_display: None,
             after_numbers: None,
+            services: None,
             tab_bar: None,
             text_size: None,
             record_retention: None,

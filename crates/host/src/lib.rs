@@ -20,6 +20,7 @@ mod overlay_test;
 mod performance;
 mod queue;
 mod rehearsal;
+mod services;
 mod stream_summary;
 mod tab_bar;
 mod templates;
@@ -507,6 +508,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
     let after_numbers = after_numbers::routes(config.data_dir.clone());
+    let services = services::routes(config.data_dir.clone());
     let tab_bar = tab_bar::routes(config.data_dir.clone());
     let text_size = text_size::routes(config.data_dir.clone());
     let card_packs = card_packs::routes(config.data_dir.clone());
@@ -632,6 +634,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(after_numbers.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(services.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )))
