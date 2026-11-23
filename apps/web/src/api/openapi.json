@@ -10,6 +10,71 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/admin/after-numbers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The saved choice; `null` when never changed (numbers show).",
+        "operationId": "after_numbers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AfterNumbers"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Saves the choice; at most 50 revealed IDs of 1-32 characters `[a-z0-9.-]`.",
+        "operationId": "set_after_numbers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AfterNumbers"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/alerts/recent": {
       "get": {
         "tags": [
@@ -6529,6 +6594,25 @@
           }
         }
       },
+      "AfterNumbers": {
+        "type": "object",
+        "description": "How the admin UI's 下播後 home shows its numbers, so a streamer can look back without number anxiety. `revealed`:\nnumbers shown one by one while masked (the admin UI's IDs, kept until shown all or hidden again).",
+        "required": [
+          "mode",
+          "revealed"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/NumbersMode"
+          },
+          "revealed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "AlertEvent": {
         "type": "object",
         "description": "An `alert` event exactly as `/ws/overlay` sends it: the event envelope around its payload. Not kept in\nsnapshots, so a reloaded overlay never replays one.",
@@ -10147,6 +10231,14 @@
             "description": "`checkin.not_enough_stamps`."
           }
         }
+      },
+      "NumbersMode": {
+        "type": "string",
+        "enum": [
+          "show",
+          "mask",
+          "hide"
+        ]
       },
       "ObsOverview": {
         "type": "object",

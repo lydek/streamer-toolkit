@@ -74,6 +74,32 @@ describe('StageCard export', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
   })
 
+  it('masks the peak viewer count with the other numbers, and reveals just that one', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      Promise.resolve({
+        data: path === '/api/admin/stream/summary' ? summary('2026-11-21T12:00:00.000Z') : undefined,
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const live = { status: 'open' as const, lastSeq: 1, stream: { state: 'offline' as const, startedAt: null, viewers: null } }
+    const reveal = vi.fn()
+    const Masked = defineComponent({
+      setup() {
+        const stage = useStage({ live: () => live as LiveState, modules: () => undefined })
+        return () => h(StageCard, { part: 'session', stage, masked: () => true, onReveal: reveal })
+      },
+    })
+    const wrapper = mount(Masked, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.get('.line').text()).toContain(t('stage.peak', { n: '––' }))
+    expect(wrapper.get('.line').text()).not.toContain('42')
+    await wrapper.get('.line button').trigger('click')
+    expect(reveal).toHaveBeenCalledWith('stats.peak')
+    // Every ID must pass the Host's check (lowercase, digits, `.`, `-`), or the reveal is refused.
+    for (const b of wrapper.findAll('.stats button')) await b.trigger('click')
+    expect(reveal.mock.calls.map(([id]) => id)).toContain('stats.chat-messages')
+    for (const [id] of reveal.mock.calls) expect(id).toMatch(/^[a-z0-9.-]+$/)
+  })
+
   it('offers nothing while live', async () => {
     const wrapper = await card(null)
     expect(wrapper.findAll('button').some((b) => b.text() === t('record.export'))).toBe(false)

@@ -36,10 +36,27 @@
     <p v-else-if="notLive" class="muted">{{ t('stage.notLive') }}</p>
     <p v-else-if="!session" class="muted">{{ shown === 'live' ? t('stage.waiting') : t('stage.noStream') }}</p>
     <template v-else>
-      <p class="line">{{ line }}</p>
+      <!-- The peak viewer count is a number too: masked like the others. -->
+      <p v-if="session.peakViewers != null && masked?.('stats.peak')" class="line">
+        {{ when }} ·
+        <button type="button" class="value masked inline" :aria-label="`${t('home.numbers.reveal')}：${t('stage.stats.peak')}`" @click="emit('reveal', 'stats.peak')">
+          {{ t('stage.peak', { n: '––' }) }}
+        </button>
+      </p>
+      <p v-else class="line">{{ line }}</p>
       <ul class="plain stats">
         <li v-for="s in stats" :key="s.key">
-          <span class="value">{{ s.value.toLocaleString('zh-TW') }}</span>
+          <!-- A masked number (下播後) is a button that shows just that one. -->
+          <button
+            v-if="masked?.(numberId(s.key))"
+            type="button"
+            class="value masked"
+            :aria-label="`${t('home.numbers.reveal')}：${t(`stage.stats.${s.key}`)}`"
+            @click="emit('reveal', numberId(s.key))"
+          >
+            ––
+          </button>
+          <span v-else class="value">{{ s.value.toLocaleString('zh-TW') }}</span>
           <span class="label">{{ t(`stage.stats.${s.key}`) }}</span>
         </li>
       </ul>
@@ -58,12 +75,16 @@ import { useI18n } from 'vue-i18n'
 import type { StageState } from './stage'
 import ObsStatusLink from './ObsStatusLink.vue'
 
-const props = defineProps<{ part: 'checklist' | 'session'; stage: StageState }>()
+/** `masked`: which session numbers show as 「––」 until revealed (`reveal` with the number's ID). */
+const props = defineProps<{ part: 'checklist' | 'session'; stage: StageState; masked?: (id: string) => boolean }>()
+const emit = defineEmits<{ reveal: [id: string] }>()
 const { t } = useI18n()
+// The Host keeps revealed IDs in lowercase, digits, `.` and `-`: `chatMessages` is `stats.chat-messages`.
+const numberId = (key: string) => `stats.${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`
 // A stage may hold both 本場直播 and 本場摘要 (both `session`), so each block names its own heading.
 const headingId = useId()
 // The state object never changes for a block, so its refs are unpacked once for the template.
-const { shown, failed, notLive, checks, session, line, stats, exporting, exportNotice, exportIt } =
+const { shown, failed, notLive, checks, session, when, line, stats, exporting, exportNotice, exportIt } =
   props.stage
 // 開播前檢查 starts unfolded.
 const openChecks = ref(true)
@@ -170,6 +191,20 @@ const openChecks = ref(true)
   font-size: 1.25rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+button.value.masked.inline {
+  font-size: inherit;
+}
+
+button.value.masked {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-text-muted-color);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
 .label {

@@ -1,6 +1,7 @@
 //! Local Host: HTTP + WebSocket bound to 127.0.0.1 (see docs/architecture.md §5).
 
 mod admin;
+mod after_numbers;
 mod backup;
 mod card_packs;
 mod chat_display;
@@ -505,6 +506,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     ));
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
+    let after_numbers = after_numbers::routes(config.data_dir.clone());
     let tab_bar = tab_bar::routes(config.data_dir.clone());
     let text_size = text_size::routes(config.data_dir.clone());
     let card_packs = card_packs::routes(config.data_dir.clone());
@@ -626,6 +628,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(chat_dock.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(after_numbers.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )))

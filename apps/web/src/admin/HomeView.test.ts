@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
+import { useAfterNumbers } from './afterNumbers'
 import { useDock } from './dock'
 import { onDrawerSubmit, useDrawer } from './drawer'
 import { type Stage, UNBUILT_TILES } from './home'
@@ -157,6 +158,76 @@ describe('HomeView blocks that open in place', () => {
     expect(drawer.current.value).toBe('queue')
     expect(document.getElementById('block-queue')).toBeNull()
     expect(document.querySelector('.drawer-content .queue')).not.toBeNull()
+  })
+})
+
+describe('HomeView numbers after the stream', () => {
+  afterEach(() => Object.assign(useAfterNumbers(), { mode: 'show', revealed: [] }))
+
+  it('masks a tile number with a button that shows only that one, and folds the tiles away for 整頁不顯示', async () => {
+    const data: Record<string, unknown> = {
+      ...responses,
+      '/api/admin/home-tiles': ['sound'],
+      '/api/admin/modules': [{ id: 'sound', enabled: true, closed: false }],
+      '/api/admin/sounds': { sounds: [{ id: 'a', label: '叮咚' }], slots: {}, volume: 100 },
+    }
+    vi.mocked(client.GET).mockImplementation(((path: string) => ok(data[path])) as never)
+    vi.spyOn(client, 'POST').mockImplementation((() => ok(undefined)) as never)
+    await home()
+    Object.assign(useAfterNumbers(), { mode: 'mask', revealed: [] })
+    await pickStage('after')
+    const tile = () => document.querySelector('[data-drawer-tile="sound"]')!
+    expect(tile().querySelector('.num')!.textContent).toContain('––')
+    const show = [...tile().parentElement!.querySelectorAll<HTMLButtonElement>('.tile-actions button')].find(
+      (b) => b.textContent?.trim() === t('home.numbers.reveal'),
+    )!
+    show.click()
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/after-numbers', { body: { mode: 'mask', revealed: ['sound'] } })
+    expect(tile().querySelector('.num')!.textContent).toContain('1')
+    expect(drawer.current.value).toBeNull()
+
+    Object.assign(useAfterNumbers(), { mode: 'hide' })
+    await flushPromises()
+    expect(document.querySelector('[data-drawer-tile="sound"]')).toBeNull()
+    ;[...document.querySelectorAll<HTMLButtonElement>('#tiles button')].find((b) => b.textContent?.trim() === t('home.numbers.peek'))!.click()
+    await flushPromises()
+    expect(document.querySelector('[data-drawer-tile="sound"]')).not.toBeNull()
+    // Only for this visit: back on another stage and again, the tiles are folded.
+    await pickStage('live')
+    await pickStage('after')
+    expect(document.querySelector('[data-drawer-tile="sound"]')).toBeNull()
+  })
+})
+
+describe('HomeView stats tile after the stream', () => {
+  afterEach(() => Object.assign(useAfterNumbers(), { mode: 'show', revealed: [] }))
+
+  it('masks its counts, folded and opened, when the numbers are masked', async () => {
+    const data: Record<string, unknown> = {
+      ...responses,
+      '/api/admin/home-tiles': ['stats'],
+      '/api/admin/stream/summary': {
+        startedAt: '2026-11-21T10:00:00.000Z', endedAt: '2026-11-21T12:00:00.000Z', endedSinceLaunch: true, peakViewers: 42,
+        follows: 3, subs: 47, bits: 150, raids: 1, redemptions: 58, chatMessages: 10, firstChats: 2,
+      },
+    }
+    vi.mocked(client.GET).mockImplementation(((path: string) => ok(data[path])) as never)
+    Object.assign(useAfterNumbers(), { mode: 'mask', revealed: [] })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await home()
+    await pickStage('after')
+    // A tile's line follows a change after its few seconds.
+    vi.advanceTimersByTime(3100)
+    await flushPromises()
+    vi.useRealTimers()
+    const tile = () => document.querySelector('[data-expand="stats"]')!
+    expect(tile().textContent).not.toMatch(/58|47/)
+    ;(tile() as HTMLButtonElement).click()
+    await flushPromises()
+    const block = document.getElementById('block-stats')!
+    expect(block.textContent).not.toMatch(/58|47|42/)
+    expect(block.querySelectorAll('button.masked').length).toBeGreaterThan(0)
   })
 })
 
