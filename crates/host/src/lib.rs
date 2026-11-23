@@ -13,6 +13,7 @@ mod event_feed;
 mod home_tiles;
 mod image_sizes;
 mod leaderboard;
+mod mixer;
 mod obs;
 mod openapi;
 mod overlay;
@@ -509,6 +510,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
     let after_numbers = after_numbers::routes(config.data_dir.clone());
+    let mixer = mixer::routes(config.data_dir.clone());
     let services_dir = config.data_dir.clone();
     let tab_bar = tab_bar::routes(config.data_dir.clone());
     let text_size = text_size::routes(config.data_dir.clone());
@@ -646,6 +648,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin::require_token,
             )))
             .merge(after_numbers.layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
+            .merge(mixer.layer(middleware::from_fn_with_state(
                 admin.clone(),
                 admin::require_token,
             )))

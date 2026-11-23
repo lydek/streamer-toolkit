@@ -257,6 +257,10 @@
       "name": "休息卡片",
       "desc": "休息中、準備中的卡片與倒數"
     },
+    "mixer": {
+      "name": "音訊混音",
+      "desc": "麥克風、桌面音訊這些聲音來源的電平、音量、靜音和監聽"
+    },
     "warnings": {
       "name": "警語",
       "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒"
@@ -845,6 +849,7 @@
       "warnings": "警語",
       "media": "影片與 GIF",
       "marathon": "訂閱馬拉松",
+      "mixer": "音訊混音",
       "feed": "事件流"
     }
   },
@@ -1411,6 +1416,9 @@
   "mixer": {
     "inputs": "聲音來源",
     "scene": "場景",
+    "mic": "麥克風",
+    "micNone": "沒有指定",
+    "micMissing": "OBS 裡找不到「{input}」",
     "followLive": "跟著直播中（{scene}）",
     "followPreview": "跟著預覽（{scene}）",
     "shared": "音量、靜音和監聽是整個來源共用的，每個場景都一樣；換場景只會換列出哪些來源。",
@@ -1784,6 +1792,9 @@
     },
     "after_numbers": {
       "invalid": "下播後數字的設定格式不正確。"
+    },
+    "mixer": {
+      "invalid_mic": "麥克風要選一個 OBS 的聲音來源。"
     },
     "tab_bar": {
       "invalid": "分頁列設定的格式不正確。"

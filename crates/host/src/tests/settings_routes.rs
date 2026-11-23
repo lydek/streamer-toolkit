@@ -818,6 +818,80 @@ async fn after_numbers_persists_and_rejects_bad_bodies() {
 }
 
 #[tokio::test]
+async fn mixer_mic_persists_and_rejects_bad_names() {
+    let dir = std::env::temp_dir().join(format!("st-host-mic-{}", std::process::id()));
+    let app_for = |dir: &PathBuf| {
+        let mut config = test_config();
+        config.data_dir = dir.clone();
+        router(config).unwrap()
+    };
+    let put = |body: &str| {
+        get_req("/api/admin/mixer/mic", "127.0.0.1:47810")
+            .method(Method::PUT)
+            .header(header::ORIGIN, "http://127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    };
+    let get = |app: Router| async move {
+        let res = app
+            .oneshot(
+                get_req("/api/admin/mixer/mic", "127.0.0.1:47810")
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+    };
+
+    let app = app_for(&dir);
+    assert_eq!(get(app.clone()).await, serde_json::json!({ "input": null }));
+    let res = app
+        .clone()
+        .oneshot(put(r#"{"input":"Mic/Aux"}"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    // A new router on the same data folder stands in for a restart.
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!({ "input": "Mic/Aux" })
+    );
+
+    let long = format!(r#"{{"input":"{}"}}"#, "m".repeat(257));
+    for bad in [
+        r#"{"input":""}"#,
+        r#"{"input":"a\nb"}"#,
+        long.as_str(),
+        "nope",
+    ] {
+        let res = app.clone().oneshot(put(bad)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(
+        get(app.clone()).await,
+        serde_json::json!({ "input": "Mic/Aux" }),
+        "bad bodies change nothing"
+    );
+    let res = app.clone().oneshot(put(r#"{"input":null}"#)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(get(app.clone()).await, serde_json::json!({ "input": null }));
+    let unauthorized = get_req("/api/admin/mixer/mic", "127.0.0.1:47810")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.oneshot(unauthorized).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn chat_dock_persists_and_rejects_bad_bodies() {
     let dir = std::env::temp_dir().join(format!("st-host-dock-{}", std::process::id()));
     let app_for = |dir: &PathBuf| {

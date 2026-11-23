@@ -31,8 +31,8 @@ use toolkit_core::{
     events::Source,
     settings::{self, ExternalService},
     streaming::{
-        BrowserSource, Canvas, ItemSize, ItemTransform, Monitor, Placement, StreamingError,
-        StreamingSoftware, StreamingState, StreamingStats, TransformChange,
+        BrowserSource, Canvas, InputMeter, ItemSize, ItemTransform, Monitor, Placement,
+        StreamingError, StreamingSoftware, StreamingState, StreamingStats, TransformChange,
     },
 };
 use utoipa::ToSchema;
@@ -392,6 +392,10 @@ impl StreamingSoftware for ObsLink {
         self.control.input_list_items(input, property).await
     }
 
+    fn input_meters(&self) -> Vec<InputMeter> {
+        self.control.meters()
+    }
+
     async fn set_input_volume(&self, input: &str, db: f32) -> Result<(), StreamingError> {
         self.control.set_input_volume(input, db).await
     }
@@ -488,6 +492,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .route("/api/admin/obs/placements", get(scene_placements))
         .route("/api/admin/obs/transform", get(item_transform))
         .route("/api/admin/obs/input", put(update_input))
+        .route("/api/admin/obs/meters", get(input_meters))
         .route(
             "/api/admin/obs/sources",
             get(overlay_sources)
@@ -715,6 +720,18 @@ pub(crate) async fn update_item(
 #[into_params(parameter_in = Query)]
 pub(crate) struct PlacementsQuery {
     scene: String,
+}
+
+/// The inputs' latest audio levels (OBS's volume meters), for the mixer to poll while it shows; empty while OBS is
+/// not connected.
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs/meters",
+    tag = "admin",
+    responses((status = 200, body = [InputMeter]))
+)]
+pub(crate) async fn input_meters(State(link): State<Arc<ObsLink>>) -> Json<Vec<InputMeter>> {
+    Json(link.input_meters())
 }
 
 #[derive(Deserialize, ToSchema)]

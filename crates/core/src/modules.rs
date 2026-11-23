@@ -28,6 +28,9 @@ pub const SCREEN_TOOLS: &str = "screen-tools";
 pub const WARNINGS: &str = "warnings";
 /// Videos and GIFs played on a redemption (on the alerts overlay).
 pub const MEDIA: &str = "media";
+/// 音訊混音: OBS's audio inputs, through the streaming-software port; the switch only shows or hides its page and
+/// tile.
+pub const MIXER: &str = "mixer";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -41,6 +44,7 @@ pub const ALL: &[&str] = &[
     SCREEN_TOOLS,
     WARNINGS,
     MEDIA,
+    MIXER,
 ];
 
 /// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).

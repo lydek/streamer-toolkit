@@ -79,6 +79,15 @@ pub struct Input {
     pub scenes: Vec<String>,
 }
 
+/// An input's latest audio level, from OBS's volume meters.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InputMeter {
+    pub name: String,
+    /// The loudest channel's peak in dB, after the fader; -100 means silent.
+    pub peak_db: f32,
+}
+
 /// Whether OBS plays the input on the monitoring device, and whether it still goes to the stream.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -337,6 +346,8 @@ pub trait StreamingSoftware: Send + Sync {
         input: &str,
         monitor: Monitor,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// The inputs' latest audio levels; empty while not connected.
+    fn input_meters(&self) -> Vec<InputMeter>;
     /// Turns studio mode on or off.
     fn set_studio_mode(
         &self,

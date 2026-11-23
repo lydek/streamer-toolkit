@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { FOLLOW_PREVIEW, mixScene, mixSections } from './mixer'
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest'
+import { effectScope, nextTick, ref } from 'vue'
+import { client } from './api'
+import { FOLLOW_PREVIEW, meterFill, mixScene, mixSections, useMeters } from './mixer'
 
 const input = (name: string, scenes: string[] = [], global = false) => ({ name, muted: false, scenes, global })
 const state = {
@@ -26,5 +29,33 @@ describe('the mixer', () => {
     expect(mixSections(state, 'Game')).toEqual({ on: [state.inputs[0], state.inputs[1]], off: [state.inputs[2]] })
     expect(mixSections(state, 'Chat').on.map((i) => i.name)).toEqual(['Mic', 'Discord'])
     expect(mixSections(state, undefined).on.map((i) => i.name)).toEqual(['Mic'])
+  })
+
+  it('fills the meter from the fader floor to 0 dB, and not while muted', () => {
+    expect(meterFill(-30, false)).toBe(50)
+    expect(meterFill(-100, false)).toBe(0)
+    expect(meterFill(3, false)).toBe(100)
+    expect(meterFill(-6, true)).toBe(0)
+    expect(meterFill(undefined, false)).toBe(0)
+  })
+
+  it('polls the meters in one loop, even switched off and on while a request is out', async () => {
+    let answer!: () => void
+    const pending = () =>
+      new Promise((r) => {
+        answer = () => r({ data: [], response: new Response(null, { status: 200 }) })
+      })
+    const get = vi.spyOn(client, 'GET').mockImplementation(pending as never)
+    const active = ref(true)
+    const scope = effectScope()
+    scope.run(() => useMeters(active))
+    active.value = false
+    await nextTick()
+    active.value = true
+    await nextTick()
+    expect(get).toHaveBeenCalledTimes(1)
+    answer()
+    scope.stop()
+    get.mockRestore()
   })
 })

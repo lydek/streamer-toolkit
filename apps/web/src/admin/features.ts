@@ -48,7 +48,8 @@ export const FEATURES: Feature[] = [
   { id: 'redemption', group: 'interact', icon: 'pi pi-gift', pages: ['/redemptions'], module: 'redemption' },
   { id: 'counters', group: 'interact', icon: 'pi pi-hashtag', pages: ['/counters'], module: 'counter' },
   { id: 'marathon', group: 'interact', icon: 'pi pi-stopwatch', pages: ['/marathon'], module: 'marathon' },
-  { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes', '/modes', '/mixer'], module: 'scene', needs: 'obs', affects: ['music'] },
+  { id: 'scenes', group: 'media', icon: 'pi pi-images', pages: ['/scenes', '/modes'], module: 'scene', needs: 'obs', affects: ['music'] },
+  { id: 'mixer', group: 'media', icon: 'pi pi-sliders-v', pages: ['/mixer'], module: 'mixer', needs: 'obs' },
   { id: 'obsSources', group: 'media', icon: 'pi pi-clone', pages: ['/obs-sources'], needs: 'obs', fixed: true },
   { id: 'music', group: 'media', icon: 'pi pi-headphones', pages: ['/music', '/music-playlists', '/music-library'], module: 'bgm' },
   { id: 'musicRequests', group: 'media', icon: 'pi pi-youtube', pages: ['/music-requests'] },
@@ -134,7 +135,7 @@ export type Service = Schemas['ExternalService']
 /** The features that cannot work without each service (built or not); the pages and the feature list warn by it. */
 export const SERVICE_NEEDS: Record<Service, string[]> = {
   twitch: ['streamInfo', 'songs', 'chat', 'chatFilter', 'bot', 'alerts', 'polls', 'rewards', 'redemption', 'checkin', 'viewers', 'roles', 'leaderboard', 'credits', 'shoutouts', 'raids', 'marathon', 'goals'],
-  obs: ['scenes', 'music', 'obsSources'],
+  obs: ['scenes', 'mixer', 'music', 'obsSources'],
 }
 export const servicesOf = (featureId: string) => (Object.keys(SERVICE_NEEDS) as Service[]).filter((s) => SERVICE_NEEDS[s].includes(featureId))
 /** The feature a page belongs to. */
