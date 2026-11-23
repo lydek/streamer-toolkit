@@ -55,16 +55,17 @@ pub(crate) enum Fit {
     Pad,
     /// The middle.
     Crop,
-    /// The square the broadcaster picked (`crop_x`, `crop_y`, `crop_side`).
+    /// The rectangle the broadcaster picked (`crop_x`, `crop_y`, `crop_w`, `crop_h`), padded to a square.
     Manual,
 }
 
-/// A square of the picture, in its own pixels.
+/// A rectangle of the picture, in its own pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Crop {
     pub(crate) x: u32,
     pub(crate) y: u32,
-    pub(crate) side: u32,
+    pub(crate) w: u32,
+    pub(crate) h: u32,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -75,11 +76,12 @@ pub(crate) struct SizeQuery {
     /// `zip`: every size in one zip file; otherwise JSON with a preview of each.
     #[serde(default)]
     zip: bool,
-    /// With `fit=manual`: the square's left edge, top edge and side in the picture's pixels; it must lie inside the
-    /// picture.
+    /// With `fit=manual`: the rectangle's left edge, top edge, width and height in the picture's pixels; it must lie
+    /// inside the picture.
     crop_x: Option<u32>,
     crop_y: Option<u32>,
-    crop_side: Option<u32>,
+    crop_w: Option<u32>,
+    crop_h: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
@@ -125,35 +127,40 @@ fn decode(bytes: &[u8]) -> Result<DynamicImage, &'static str> {
     })
 }
 
-/// Square, by transparent edges, by the middle, or by the square picked (which must lie inside the picture).
+/// The picture in the middle of a square with transparent edges.
+fn padded(rgba: &RgbaImage) -> RgbaImage {
+    let (w, h) = rgba.dimensions();
+    let side = w.max(h);
+    let mut canvas = RgbaImage::new(side, side);
+    imageops::overlay(
+        &mut canvas,
+        rgba,
+        i64::from((side - w) / 2),
+        i64::from((side - h) / 2),
+    );
+    canvas
+}
+
+/// Square, by transparent edges, by the middle, or by the rectangle picked (which must lie inside the picture), padded.
 fn square(img: &DynamicImage, fit: Fit, crop: Option<Crop>) -> Result<RgbaImage, &'static str> {
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
     Ok(match fit {
-        Fit::Pad => {
-            let side = w.max(h);
-            let mut canvas = RgbaImage::new(side, side);
-            imageops::overlay(
-                &mut canvas,
-                &rgba,
-                i64::from((side - w) / 2),
-                i64::from((side - h) / 2),
-            );
-            canvas
-        }
+        Fit::Pad => padded(&rgba),
         Fit::Crop => {
             let side = w.min(h);
             imageops::crop_imm(&rgba, (w - side) / 2, (h - side) / 2, side, side).to_image()
         }
         Fit::Manual => {
             let c = crop.ok_or("image_sizes.invalid_crop")?;
-            let inside = c.side > 0
-                && c.x.checked_add(c.side).is_some_and(|r| r <= w)
-                && c.y.checked_add(c.side).is_some_and(|b| b <= h);
+            let inside = c.w > 0
+                && c.h > 0
+                && c.x.checked_add(c.w).is_some_and(|r| r <= w)
+                && c.y.checked_add(c.h).is_some_and(|b| b <= h);
             if !inside {
                 return Err("image_sizes.invalid_crop");
             }
-            imageops::crop_imm(&rgba, c.x, c.y, c.side, c.side).to_image()
+            padded(&imageops::crop_imm(&rgba, c.x, c.y, c.w, c.h).to_image())
         }
     })
 }
@@ -248,7 +255,7 @@ fn zip_of(kind: ImageKind, files: &[Sized]) -> Vec<u8> {
     request_body(content = String, content_type = "application/octet-stream", description = "The picture"),
     responses(
         (status = 200, body = SizedImages, description = "Or, with `zip=true`, an `application/zip` file"),
-        (status = 400, description = "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual square missing or outside the picture", body = ErrorBody),
+        (status = 400, description = "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture", body = ErrorBody),
         (status = 413, description = "`image_sizes.too_large`: more than 10 MB or 4096 px a side", body = ErrorBody),
     )
 )]
@@ -263,8 +270,8 @@ pub(crate) async fn make_sizes(
         }
         Err(_) => return error(StatusCode::BAD_REQUEST, "image_sizes.unsupported"),
     };
-    let crop = match (q.crop_x, q.crop_y, q.crop_side) {
-        (Some(x), Some(y), Some(side)) => Some(Crop { x, y, side }),
+    let crop = match (q.crop_x, q.crop_y, q.crop_w, q.crop_h) {
+        (Some(x), Some(y), Some(w), Some(h)) => Some(Crop { x, y, w, h }),
         _ => None,
     };
     let result = tokio::task::spawn_blocking(move || sized(&bytes, q.kind, q.fit, crop)).await;
@@ -348,17 +355,33 @@ mod tests {
     }
 
     #[test]
-    fn a_picked_square_is_cut_out_and_must_lie_inside() {
+    fn a_picked_rectangle_is_cut_out_padded_and_must_lie_inside() {
         let pic = picture(300, 120, false);
-        let crop = |x, y, side| Some(Crop { x, y, side });
-        let out = sized(&pic, ImageKind::Points, Fit::Manual, crop(10, 20, 100)).unwrap();
+        let crop = |x, y, w, h| Some(Crop { x, y, w, h });
+        let out = sized(&pic, ImageKind::Points, Fit::Manual, crop(10, 20, 100, 100)).unwrap();
         assert!(out.iter().all(|(px, file, _)| side(file) == (*px, *px)));
+        // A wide rectangle keeps its shape: transparent above and below it, opaque in the middle.
+        let wide = sized(&pic, ImageKind::Points, Fit::Manual, crop(10, 20, 200, 50)).unwrap();
+        assert!(wide.iter().all(|(px, file, _)| side(file) == (*px, *px)));
+        let img = image::load_from_memory(&wide[0].1).unwrap().to_rgba8();
+        assert_eq!(img.get_pixel(56, 0)[3], 0, "padding above the rectangle");
+        assert_eq!(img.get_pixel(56, 56)[3], 255);
+        // A very narrow one still gives every size.
+        let narrow = sized(
+            &picture(20, 1000, false),
+            ImageKind::Points,
+            Fit::Manual,
+            crop(0, 0, 20, 1000),
+        )
+        .unwrap();
+        assert!(narrow.iter().all(|(px, file, _)| side(file) == (*px, *px)));
         for bad in [
             None,
-            crop(250, 0, 100),
-            crop(0, 30, 100),
-            crop(0, 0, 0),
-            crop(u32::MAX, 0, 2),
+            crop(250, 0, 100, 100),
+            crop(0, 30, 100, 100),
+            crop(0, 0, 0, 10),
+            crop(0, 0, 10, 0),
+            crop(u32::MAX, 0, 2, 2),
         ] {
             assert_eq!(
                 sized(&pic, ImageKind::Points, Fit::Manual, bad).err(),

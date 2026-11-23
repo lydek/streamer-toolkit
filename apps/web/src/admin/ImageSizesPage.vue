@@ -30,14 +30,33 @@
       <input type="file" :accept="IMAGE_SIZES_ACCEPT" class="sr-only" @change="onPick" />
     </label>
 
-    <ImageCropper
-      v-if="fit === 'manual' && source"
-      v-model="crop"
-      :src="source.url"
-      :width="source.width"
-      :height="source.height"
-      @commit="run"
-    />
+    <template v-if="fit === 'manual' && source">
+      <ImageCropper v-model="crop" :src="source.url" :width="source.width" :height="source.height" :ratio="ratio" @commit="run" />
+      <!-- The same rectangle as numbers, in the picture's pixels; 等比例 keeps its width ÷ height. -->
+      <fieldset class="crop-fields">
+        <legend>{{ t('imageSizes.cropFields') }}</legend>
+        <span v-for="f in FIELDS" :key="f" class="crop-field">
+          <label :for="`crop-${f}`">{{ f === 'w' ? t('imageSizes.cropW') : f === 'h' ? t('imageSizes.cropH') : f.toUpperCase() }}</label>
+          <InputNumber
+            :input-id="`crop-${f}`"
+            :model-value="crop[f]"
+            :min="0"
+            :use-grouping="false"
+            input-class="crop-input"
+            @update:model-value="(v: number | null) => setField(f, v)"
+          />
+        </span>
+        <Button
+          :label="t('imageSizes.cropLock')"
+          :icon="ratio ? 'pi pi-lock' : 'pi pi-lock-open'"
+          :aria-pressed="!!ratio"
+          size="small"
+          outlined
+          @click="ratio = ratio ? undefined : crop.w / crop.h"
+        />
+        <Button :label="t('imageSizes.cropReset')" size="small" text @click="resetCrop" />
+      </fieldset>
+    </template>
 
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="busy">{{ t('app.loading') }}</p>
@@ -61,6 +80,7 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputNumber from 'primevue/inputnumber'
 import SelectButton from 'primevue/selectbutton'
 import { ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -76,6 +96,7 @@ import {
   type ImageKind,
   centeredCrop,
   makeSizes,
+  setCropField,
   sizesZip,
   zipName,
 } from './imageSizes'
@@ -95,7 +116,23 @@ const over = ref(false)
 const failed = ref('')
 // The picture as shown under the frame, with its own size; the frame starts centered and as large as it fits.
 const source = shallowRef<{ url: string; width: number; height: number }>()
-const crop = ref<Crop>({ x: 0, y: 0, side: 1 })
+const crop = ref<Crop>({ x: 0, y: 0, w: 1, h: 1 })
+// Width ÷ height while 等比例 is on.
+const ratio = ref<number>()
+const FIELDS = ['x', 'y', 'w', 'h'] as const
+
+function setField(field: keyof Crop, value: number | null) {
+  if (value === null || !source.value) return
+  crop.value = setCropField(crop.value, field, value, source.value.width, source.value.height, ratio.value)
+  void run()
+}
+
+function resetCrop() {
+  if (!source.value) return
+  crop.value = centeredCrop(source.value.width, source.value.height)
+  ratio.value = undefined
+  void run()
+}
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 // Each request's number; only the latest one's answer (result, error, busy) shows.
@@ -153,6 +190,7 @@ function choose(f: File | undefined) {
       if (file.value !== f) return
       source.value = { url, width: img.naturalWidth, height: img.naturalHeight }
       crop.value = centeredCrop(img.naturalWidth, img.naturalHeight)
+      ratio.value = undefined
       if (fit.value === 'manual') void run()
     }
     img.src = url
@@ -187,6 +225,32 @@ async function download() {
 </script>
 
 <style scoped>
+.crop-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.crop-fields legend {
+  float: left;
+  margin-right: 0.25rem;
+  font-weight: 600;
+}
+
+.crop-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.crop-field :deep(.crop-input) {
+  width: 5.5rem;
+}
+
 .pickers {
   display: flex;
   flex-wrap: wrap;
