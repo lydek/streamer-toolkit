@@ -12,7 +12,7 @@ use std::{
 };
 
 use futures_util::StreamExt;
-use obws::common::Alignment;
+use obws::common::{Alignment, BoundsType};
 use obws::{
     Client,
     client::{ConnectConfig, HandshakeError},
@@ -23,8 +23,8 @@ use obws::{
         inputs::Create,
         inputs::InputId,
         scene_items::{
-            CreateSceneItem, Position, Scale, SceneItemTransform, SetEnabled, SetIndex, SetLocked,
-            SetTransform,
+            Bounds as ObsBounds, CreateSceneItem, Crop as ObsCrop, Position, Scale,
+            SceneItemTransform, SetEnabled, SetIndex, SetLocked, SetTransform,
         },
         scenes::SceneId,
         sources::SourceId,
@@ -35,8 +35,8 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    Align, BrowserSource, Canvas, Input, ItemSize, Placement, Scene, SceneItem, StreamingError,
-    StreamingState, StreamingStats,
+    Align, Bounds, BrowserSource, Canvas, Input, ItemCrop, ItemSize, ItemTransform, Placement,
+    Scene, SceneItem, StreamingError, StreamingState, StreamingStats, TransformChange,
 };
 
 use crate::secrets::SecretStore;
@@ -294,10 +294,7 @@ impl ObsControl {
                     y: t.position_y,
                     align: align_of(t.alignment),
                 },
-                ItemSize {
-                    width: t.width,
-                    height: t.height,
-                },
+                shown_size(&t),
             ));
         }
         let canvas = Canvas {
@@ -333,8 +330,9 @@ impl ObsControl {
             .map_err(command_error)
     }
 
-    /// `GetSceneItemTransform` for the source's size (less the crop), then `SetSceneItemTransform` with the scale
-    /// that gives `size`; position, rotation and crop stay.
+    /// `GetSceneItemTransform`, then `SetSceneItemTransform` with what sets the size on the canvas: the bounding box
+    /// when one is on, else the scale of the source's size less the crop (flips kept); position, rotation and crop
+    /// stay.
     pub async fn set_item_size(
         &self,
         scene: &str,
@@ -347,21 +345,113 @@ impl ObsControl {
             .transform(SceneId::Name(scene), item)
             .await
             .map_err(command_error)?;
-        let shown_w = t.source_width - (t.crop_left + t.crop_right) as f32;
-        let shown_h = t.source_height - (t.crop_top + t.crop_bottom) as f32;
-        if shown_w <= 0.0 || shown_h <= 0.0 {
-            return Err(StreamingError::NotFound);
-        }
+        let transform = if t.bounds_type == BoundsType::None {
+            let shown_w = t.source_width - (t.crop_left + t.crop_right) as f32;
+            let shown_h = t.source_height - (t.crop_top + t.crop_bottom) as f32;
+            if shown_w <= 0.0 || shown_h <= 0.0 {
+                return Err(StreamingError::NotFound);
+            }
+            // A flip is a negative scale: the new scale keeps each side's sign.
+            SceneItemTransform {
+                scale: Some(Scale {
+                    x: Some(size.width / shown_w * t.scale_x.signum()),
+                    y: Some(size.height / shown_h * t.scale_y.signum()),
+                }),
+                ..Default::default()
+            }
+        } else {
+            SceneItemTransform {
+                bounds: Some(ObsBounds {
+                    width: Some(size.width),
+                    height: Some(size.height),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        };
+        client
+            .scene_items()
+            .set_transform(SetTransform {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                transform,
+            })
+            .await
+            .map_err(command_error)
+    }
+
+    /// `GetSceneItemTransform`: rotation, flips (negative scales), crop and bounding box type.
+    pub async fn item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+    ) -> Result<ItemTransform, StreamingError> {
+        let client = self.client()?;
+        let t = client
+            .scene_items()
+            .transform(SceneId::Name(scene), item)
+            .await
+            .map_err(command_error)?;
+        Ok(ItemTransform {
+            rotation: t.rotation,
+            flip_h: t.scale_x < 0.0,
+            flip_v: t.scale_y < 0.0,
+            crop: ItemCrop {
+                top: t.crop_top,
+                right: t.crop_right,
+                bottom: t.crop_bottom,
+                left: t.crop_left,
+            },
+            bounds: bounds_of(t.bounds_type),
+        })
+    }
+
+    /// `SetSceneItemTransform` with only the parts `change` gives. A flip turns a scale's sign; a bounding box
+    /// turned on starts at the item's size now, so nothing jumps.
+    pub async fn set_item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+        change: TransformChange,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        let t = client
+            .scene_items()
+            .transform(SceneId::Name(scene), item)
+            .await
+            .map_err(command_error)?;
+        let flip = |want: Option<bool>, scale: f32| {
+            want.map(|f| if f { -scale.abs() } else { scale.abs() })
+        };
+        let scale = match (
+            flip(change.flip_h, t.scale_x),
+            flip(change.flip_v, t.scale_y),
+        ) {
+            (None, None) => None,
+            (x, y) => Some(Scale { x, y }),
+        };
+        let bounds = change.bounds.map(|b| ObsBounds {
+            r#type: Some(bounds_type_of(b)),
+            width: (b != Bounds::None).then_some(shown_size(&t).width.max(1.0)),
+            height: (b != Bounds::None).then_some(shown_size(&t).height.max(1.0)),
+            ..Default::default()
+        });
+        let crop = change.crop.map(|c| ObsCrop {
+            top: Some(c.top),
+            right: Some(c.right),
+            bottom: Some(c.bottom),
+            left: Some(c.left),
+        });
         client
             .scene_items()
             .set_transform(SetTransform {
                 scene: SceneId::Name(scene),
                 item_id: item,
                 transform: SceneItemTransform {
-                    scale: Some(Scale {
-                        x: Some(size.width / shown_w),
-                        y: Some(size.height / shown_h),
-                    }),
+                    rotation: change.rotation,
+                    scale,
+                    bounds,
+                    crop,
                     ..Default::default()
                 },
             })
@@ -410,6 +500,47 @@ impl ObsControl {
             .remove(SceneId::Name(scene), item)
             .await
             .map_err(command_error)
+    }
+}
+
+/// The item's size on the canvas: its bounding box when one is on, else the source's size less the crop, scaled
+/// (OBS's own `width`/`height` leave the crop in and carry a flip's sign).
+fn shown_size(t: &obws::responses::scene_items::SceneItemTransform) -> ItemSize {
+    if t.bounds_type != BoundsType::None {
+        return ItemSize {
+            width: t.bounds_width,
+            height: t.bounds_height,
+        };
+    }
+    ItemSize {
+        width: ((t.source_width - (t.crop_left + t.crop_right) as f32) * t.scale_x.abs()).max(0.0),
+        height: ((t.source_height - (t.crop_top + t.crop_bottom) as f32) * t.scale_y.abs())
+            .max(0.0),
+    }
+}
+
+fn bounds_of(b: BoundsType) -> Bounds {
+    match b {
+        BoundsType::None => Bounds::None,
+        BoundsType::Stretch => Bounds::Stretch,
+        BoundsType::ScaleInner => Bounds::ScaleInner,
+        BoundsType::ScaleOuter => Bounds::ScaleOuter,
+        BoundsType::ScaleToWidth => Bounds::ScaleToWidth,
+        BoundsType::ScaleToHeight => Bounds::ScaleToHeight,
+        BoundsType::MaxOnly => Bounds::MaxOnly,
+        _ => Bounds::None,
+    }
+}
+
+fn bounds_type_of(b: Bounds) -> BoundsType {
+    match b {
+        Bounds::None => BoundsType::None,
+        Bounds::Stretch => BoundsType::Stretch,
+        Bounds::ScaleInner => BoundsType::ScaleInner,
+        Bounds::ScaleOuter => BoundsType::ScaleOuter,
+        Bounds::ScaleToWidth => BoundsType::ScaleToWidth,
+        Bounds::ScaleToHeight => BoundsType::ScaleToHeight,
+        Bounds::MaxOnly => BoundsType::MaxOnly,
     }
 }
 
@@ -1248,6 +1379,22 @@ mod tests {
             )
             .await
             .unwrap();
+        let t = control.item_transform("Live", 2).await.unwrap();
+        assert_eq!((t.rotation, t.flip_h, t.bounds), (0.0, false, Bounds::None));
+        // A flip turns the scale's sign; a bounding box starts at the item's size now.
+        control
+            .set_item_transform(
+                "Live",
+                2,
+                TransformChange {
+                    rotation: Some(90.0),
+                    flip_h: Some(true),
+                    bounds: Some(Bounds::ScaleInner),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
         control.set_studio_mode(true).await.unwrap();
         control.set_preview("BRB").await.unwrap();
         control.transition(Some("Cut")).await.unwrap();
@@ -1293,6 +1440,12 @@ mod tests {
                     "SetSceneItemTransform".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
                         "scaleX": 0.5, "scaleY": 0.5}})
+                ),
+                (
+                    "SetSceneItemTransform".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
+                        "rotation": 90.0, "scaleX": -1.0, "boundsType": "OBS_BOUNDS_SCALE_INNER",
+                        "boundsWidth": 400.0, "boundsHeight": 600.0}})
                 ),
                 (
                     "SetStudioModeEnabled".to_owned(),
@@ -1425,6 +1578,36 @@ mod tests {
         ] {
             assert_eq!(align_of(alignment_of(align)), align);
         }
+    }
+
+    #[test]
+    fn the_size_on_the_canvas_leaves_out_the_crop_and_the_flip_or_is_the_bounding_box() {
+        let t = |extra: Value| {
+            let mut v = json!({"sourceWidth": 1920.0, "sourceHeight": 1080.0, "positionX": 0.0, "positionY": 0.0,
+                "rotation": 0.0, "scaleX": -0.5, "scaleY": 0.5, "width": -960.0, "height": 540.0, "alignment": 5,
+                "boundsType": "OBS_BOUNDS_NONE", "boundsAlignment": 0, "boundsWidth": 0.0, "boundsHeight": 0.0,
+                "cropLeft": 100, "cropRight": 100, "cropTop": 0, "cropBottom": 80});
+            v.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            serde_json::from_value::<obws::responses::scene_items::SceneItemTransform>(v).unwrap()
+        };
+        assert_eq!(
+            shown_size(&t(json!({}))),
+            ItemSize {
+                width: 860.0,
+                height: 500.0
+            }
+        );
+        assert_eq!(
+            shown_size(&t(
+                json!({"boundsType": "OBS_BOUNDS_STRETCH", "boundsWidth": 300.0, "boundsHeight": 200.0})
+            )),
+            ItemSize {
+                width: 300.0,
+                height: 200.0
+            }
+        );
     }
 
     #[test]

@@ -95,6 +95,54 @@ pub struct ItemSize {
     pub height: f32,
 }
 
+/// How an item is turned, flipped, cropped and fitted, besides where it sits and how large it is.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct ItemTransform {
+    /// Degrees clockwise around its align point, 0-360.
+    pub rotation: f32,
+    pub flip_h: bool,
+    pub flip_v: bool,
+    /// Source pixels cut off each side before scaling.
+    pub crop: ItemCrop,
+    pub bounds: Bounds,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+pub struct ItemCrop {
+    pub top: u32,
+    pub right: u32,
+    pub bottom: u32,
+    pub left: u32,
+}
+
+/// How an item fills its bounding box: `none` scales its content by its size; the rest make its size the box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Bounds {
+    None,
+    Stretch,
+    ScaleInner,
+    ScaleOuter,
+    ScaleToWidth,
+    ScaleToHeight,
+    MaxOnly,
+}
+
+/// A transform change: only the parts given change; the rest of the item's transform stays.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, ToSchema)]
+pub struct TransformChange {
+    #[serde(default)]
+    pub rotation: Option<f32>,
+    #[serde(default)]
+    pub flip_h: Option<bool>,
+    #[serde(default)]
+    pub flip_v: Option<bool>,
+    #[serde(default)]
+    pub crop: Option<ItemCrop>,
+    #[serde(default)]
+    pub bounds: Option<Bounds>,
+}
+
 /// The canvas size in pixels (OBS: the base resolution).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Canvas {
@@ -206,6 +254,19 @@ pub trait StreamingSoftware: Send + Sync {
         scene: &str,
         item: i64,
         placement: Placement,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// How item `item` of `scene` is turned, flipped, cropped and fitted.
+    fn item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+    ) -> impl Future<Output = Result<ItemTransform, StreamingError>> + Send;
+    /// Changes the parts of item `item`'s transform that `change` gives; position and size stay.
+    fn set_item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+        change: TransformChange,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Turns studio mode on or off.
     fn set_studio_mode(

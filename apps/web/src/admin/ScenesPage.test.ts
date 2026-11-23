@@ -271,6 +271,40 @@ describe('ScenesPage', () => {
     })
   })
 
+  it('turns, flips and resets an item under 變形, sending only the part changed', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/obs/transform'
+            ? { rotation: 0, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' }
+            : { canvas: { width: 1920, height: 1080 }, items: [{ item: 2, x: 40, y: 30, align: 'top_left', width: 400, height: 600 }] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.transform'))!.trigger('click')
+    await flushPromises()
+    const button = (label: string) => wrapper.findAll('tr.editor button').find((b) => b.text() === label)!
+    await button('90°').trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, transform: { rotation: 90 } } })
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toContain('90°')
+    await button(t('scene.flip_h')).trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, transform: { flip_h: true } } })
+    const placementReads = () => vi.mocked(client.GET).mock.calls.filter((c) => c[0] === '/api/admin/obs/placements').length
+    const before = placementReads()
+    await button(t('scene.resetTransform')).trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
+      body: { scene: 'Game', item: 2, transform: { rotation: 0, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' } },
+    })
+    // Crop and bounding box change the size on the canvas: the positions and sizes are read again.
+    expect(placementReads()).toBe(before + 1)
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())

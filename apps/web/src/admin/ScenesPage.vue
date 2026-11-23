@@ -311,6 +311,93 @@
                       <span>{{ t('scene.belowAfter') }}</span>
                     </span>
                   </div>
+                  <!-- 變形: turn, flip, crop and fit; only the part changed is sent, the rest of OBS's transform stays. -->
+                  <div v-else-if="shownTab(item) === 'transform'" class="editor-grid">
+                    <template v-if="item.locked">
+                      <span></span>
+                      <span class="locked-note">
+                        <i class="pi pi-lock" aria-hidden="true"></i>{{ t('scene.lockedNote') }}
+                        <Button :label="t('scene.unlock')" size="small" text :disabled="busy.has(item.id)" @click="change(item, { locked: false })" />
+                      </span>
+                    </template>
+                    <template v-if="transforms.get(item.id)">
+                      <span>{{ t('scene.rotation') }}</span>
+                      <span class="fields">
+                        <InputNumber
+                          :model-value="transforms.get(item.id)!.rotation"
+                          :min="-360"
+                          :max="360"
+                          :use-grouping="false"
+                          :aria-label="t('scene.rotationOf', { item: item.source })"
+                          :disabled="busy.has(item.id) || item.locked"
+                          class="index"
+                          @update:model-value="(v: number | null) => v !== null && transform(item, { rotation: v })"
+                        />
+                        <Button
+                          v-for="d in [0, 90, 180, 270]"
+                          :key="d"
+                          :label="`${d}°`"
+                          size="small"
+                          text
+                          :aria-pressed="transforms.get(item.id)!.rotation === d"
+                          :disabled="busy.has(item.id) || item.locked"
+                          @click="transform(item, { rotation: d })"
+                        />
+                      </span>
+                      <span>{{ t('scene.flip') }}</span>
+                      <span class="fields">
+                        <Button
+                          v-for="f in (['flip_h', 'flip_v'] as const)"
+                          :key="f"
+                          :label="t(`scene.${f}`)"
+                          size="small"
+                          outlined
+                          :aria-pressed="transforms.get(item.id)![f]"
+                          :disabled="busy.has(item.id) || item.locked"
+                          @click="transform(item, { [f]: !transforms.get(item.id)![f] })"
+                        />
+                      </span>
+                      <span>{{ t('scene.crop') }}</span>
+                      <span class="fields">
+                        <template v-for="side in (['top', 'right', 'bottom', 'left'] as const)" :key="side">
+                          <span>{{ t(`scene.cropSides.${side}`) }}</span>
+                          <InputNumber
+                            :model-value="transforms.get(item.id)!.crop[side]"
+                            :min="0"
+                            :use-grouping="false"
+                            :aria-label="t('scene.cropOf', { item: item.source, side: t(`scene.cropSides.${side}`) })"
+                            :disabled="busy.has(item.id) || item.locked"
+                            class="index"
+                            @update:model-value="(v: number | null) => v !== null && transform(item, { crop: { ...transforms.get(item.id)!.crop, [side]: Math.max(0, v) } })"
+                          />
+                        </template>
+                      </span>
+                      <span>{{ t('scene.bounds') }}</span>
+                      <span class="fields">
+                        <Select
+                          :model-value="transforms.get(item.id)!.bounds"
+                          :options="BOUNDS"
+                          :option-label="(b: BoundsKind) => t(`scene.boundsKinds.${b}`)"
+                          :aria-label="t('scene.boundsOf', { item: item.source })"
+                          :disabled="busy.has(item.id) || item.locked"
+                          @update:model-value="(b: BoundsKind) => transform(item, { bounds: b })"
+                        />
+                        <span class="hint">{{ t(transforms.get(item.id)!.bounds === 'none' ? 'scene.boundsNone' : 'scene.boundsBox') }}</span>
+                      </span>
+                      <span></span>
+                      <span class="fields">
+                        <Button
+                          :label="t('scene.resetTransform')"
+                          icon="pi pi-undo"
+                          size="small"
+                          text
+                          :disabled="busy.has(item.id) || item.locked"
+                          @click="transform(item, RESET)"
+                        />
+                      </span>
+                    </template>
+                    <p v-else class="muted">{{ t('app.loading') }}</p>
+                  </div>
                 </td>
               </tr>
             </template>
@@ -422,7 +509,9 @@ type EditorTab = 'layout' | 'transform' | 'source'
 const open = ref<number | null>(null)
 const editorTab = ref<EditorTab>('layout')
 // What each item can edit; later tabs join as they are built.
-const tabsOf = (item: SceneItem): EditorTab[] => (item ? ['layout'] : [])
+// 變形 needs something to turn: not a group, and not an item with sound only.
+const tabsOf = (item: SceneItem): EditorTab[] =>
+  item.kind !== 'group' && placements.value.get(item.id)?.width ? ['layout', 'transform'] : ['layout']
 const shownTab = (item: SceneItem) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
 // Order: OBS counts from the bottom, the admin API front to back from 0 (P2-12); `move` takes that index. The moved
 // row flashes and keeps the keyboard once OBS reports the new order.
@@ -502,7 +591,35 @@ const geoText = (item: SceneItem) => {
   const p = placements.value.get(item.id)
   if (!p) return '—'
   const at = `${Math.round(p.x)}, ${Math.round(p.y)}`
-  return p.width ? `${at} · ${Math.round(p.width)} × ${Math.round(p.height)}` : at
+  const tr = transforms.value.get(item.id)
+  const turned = tr?.rotation ? ` · ${tr.rotation}°` : ''
+  const flipped = tr && (tr.flip_h || tr.flip_v) ? ` · ${t('scene.flipped')}` : ''
+  return (p.width ? `${at} · ${Math.round(p.width)} × ${Math.round(p.height)}` : at) + turned + flipped
+}
+
+// 變形: read when its tab opens, changed part by part (the rest of OBS's transform stays).
+type BoundsKind = Schemas['Bounds']
+const BOUNDS: BoundsKind[] = ['none', 'scale_inner', 'scale_outer', 'stretch', 'scale_to_width', 'scale_to_height', 'max_only']
+const RESET: Schemas['TransformChange'] = { rotation: 0, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' }
+const transforms = ref(new Map<number, Schemas['ItemTransform']>())
+watch([open, editorTab, target], async ([id]) => {
+  const item = current.value?.items.find((o) => o.id === id)
+  if (!item || shownTab(item) !== 'transform' || !target.value) return
+  try {
+    const got = await api(client.GET('/api/admin/obs/transform', { params: { query: { scene: target.value, item: item.id } } }))
+    transforms.value = new Map(transforms.value).set(item.id, got)
+  } catch (e) {
+    report(e)
+  }
+})
+async function transform(item: SceneItem, what: Schemas['TransformChange']) {
+  const now = transforms.value.get(item.id)
+  if (!now) return
+  if (!(await change(item, { transform: what }))) return
+  const next = { ...now, ...Object.fromEntries(Object.entries(what).filter(([, v]) => v !== undefined && v !== null)) }
+  transforms.value = new Map(transforms.value).set(item.id, next as Schemas['ItemTransform'])
+  // Crop and the bounding box change its size on the canvas, which OBS sends no event for.
+  if (what.crop || what.bounds) geometry.value++
 }
 
 // Relative alignment (computed once): the reference, the side, along it, and an offset.
@@ -552,8 +669,10 @@ const canvas = ref<Schemas['Canvas']>()
 const placements = ref(new Map<number, Schemas['Placement'] & Schemas['ItemSize']>())
 // Each read's number; only the latest one's answer shows, so an older scene's never replaces the edited one.
 let placementRead = 0
+// Read again after a change that moves or sizes items without an OBS event.
+const geometry = ref(0)
 watch(
-  [state, target],
+  [state, target, geometry],
   async ([, scene]) => {
     if (!scene) return
     const mine = ++placementRead
@@ -581,7 +700,14 @@ async function place(item: SceneItem, what: Partial<Schemas['Placement']>) {
 
 async function change(
   item: SceneItem,
-  what: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement']; size?: Schemas['ItemSize'] },
+  what: {
+    enabled?: boolean
+    locked?: boolean
+    position?: number
+    placement?: Schemas['Placement']
+    size?: Schemas['ItemSize']
+    transform?: Schemas['TransformChange']
+  },
 ) {
   const scene = target.value
   if (!scene) return false
