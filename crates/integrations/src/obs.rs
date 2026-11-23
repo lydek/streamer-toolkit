@@ -22,6 +22,7 @@ use obws::{
         EventSubscription,
         inputs::Create,
         inputs::InputId,
+        inputs::SetSettings,
         scene_items::{
             Bounds as ObsBounds, CreateSceneItem, Crop as ObsCrop, Position, Scale,
             SceneItemTransform, SetEnabled, SetIndex, SetLocked, SetTransform,
@@ -454,6 +455,45 @@ impl ObsControl {
                     crop,
                     ..Default::default()
                 },
+            })
+            .await
+            .map_err(command_error)
+    }
+
+    /// `GetInputSettings` over its kind's `GetInputDefaultSettings`: the input's kind and settings object, fields
+    /// never changed included (OBS leaves them out of the settings).
+    pub async fn input_settings(
+        &self,
+        input: &str,
+    ) -> Result<(String, serde_json::Map<String, serde_json::Value>), StreamingError> {
+        let client = self.client()?;
+        let got = client
+            .inputs()
+            .settings::<serde_json::Map<String, serde_json::Value>>(InputId::Name(input))
+            .await
+            .map_err(command_error)?;
+        let mut settings = client
+            .inputs()
+            .default_settings::<serde_json::Map<String, serde_json::Value>>(&got.kind)
+            .await
+            .map_err(command_error)?;
+        settings.extend(got.settings);
+        Ok((got.kind, settings))
+    }
+
+    /// `SetInputSettings` with `overlay`, so fields not given keep their values.
+    pub async fn set_input_settings(
+        &self,
+        input: &str,
+        settings: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .inputs()
+            .set_settings(SetSettings {
+                input: InputId::Name(input),
+                settings: &settings,
+                overlay: Some(true),
             })
             .await
             .map_err(command_error)
@@ -974,6 +1014,9 @@ mod tests {
                 "GetInputList" if data["inputKind"] == "browser_source" => json!({"inputs": [{
                     "inputName": "Chat", "inputUuid": CHAT, "inputKind": "browser_source",
                     "unversionedInputKind": "browser_source"}]}),
+                "GetInputDefaultSettings" => {
+                    json!({"defaultInputSettings": {"width": 800, "height": 600}})
+                }
                 "GetInputSettings" => json!({"inputKind": "browser_source",
                     "inputSettings": {"url": "http://127.0.0.1:47810/overlay/chat/", "width": 800}}),
                 "GetSceneList" => {
@@ -1395,6 +1438,16 @@ mod tests {
             )
             .await
             .unwrap();
+        let (kind, settings) = control.input_settings("Chat").await.unwrap();
+        assert_eq!(
+            (kind.as_str(), &settings["width"]),
+            ("browser_source", &json!(800))
+        );
+        // A field never changed comes from the kind's defaults.
+        assert_eq!(settings["height"], json!(600));
+        let mut change = serde_json::Map::new();
+        change.insert("css".to_owned(), json!("body { color: red; }"));
+        control.set_input_settings("Chat", change).await.unwrap();
         control.set_studio_mode(true).await.unwrap();
         control.set_preview("BRB").await.unwrap();
         control.transition(Some("Cut")).await.unwrap();
@@ -1446,6 +1499,10 @@ mod tests {
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
                         "rotation": 90.0, "scaleX": -1.0, "boundsType": "OBS_BOUNDS_SCALE_INNER",
                         "boundsWidth": 400.0, "boundsHeight": 600.0}})
+                ),
+                (
+                    "SetInputSettings".to_owned(),
+                    json!({"inputName": "Chat", "inputSettings": {"css": "body { color: red; }"}, "overlay": true})
                 ),
                 (
                     "SetStudioModeEnabled".to_owned(),

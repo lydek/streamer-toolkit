@@ -1295,6 +1295,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The listed settings of one source, for its form. */
+        get: operations["source"];
+        /**
+         * Changes listed settings of one source; refused for a kind without a form, a field not on its form, a value of
+         *     the wrong shape, or an address that is not one of this Host's overlays.
+         */
+        put: operations["set_source"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/sources": {
         parameters: {
             query?: never;
@@ -4306,6 +4327,23 @@ export interface components {
          * @enum {string}
          */
         Source: "twitch" | "obs" | "simulation" | "system";
+        SourceBody: {
+            /** @description Fields of the source's form to change; the rest of its settings stay. */
+            fields: Record<string, never>;
+            input: string;
+        };
+        /**
+         * @description The kinds of source with a form; any other (a plugin's included) is shown as "change it in OBS".
+         * @enum {string}
+         */
+        SourceFamily: "browser" | "text" | "image" | "video_capture" | "app_audio" | "game" | "other";
+        SourceSettings: {
+            family: components["schemas"]["SourceFamily"];
+            /** @description Only the fields of this kind's form; a browser source's `url` only when it opens this Host's overlay. */
+            fields: Record<string, never>;
+            /** @description A browser source opening another address: it is not shown, and can be changed in OBS only. */
+            url_hidden: boolean;
+        };
         /** @enum {string} */
         Speed: "normal" | "double" | "burst";
         /**
@@ -8020,6 +8058,105 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    source: {
+        parameters: {
+            query: {
+                /** @description The source's name (a scene item's `source` in `obs.state`). */
+                input: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSettings"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

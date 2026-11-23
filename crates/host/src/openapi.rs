@@ -6,7 +6,8 @@ use utoipa::OpenApi;
 use crate::{
     admin, after_numbers, backup, card_packs, chat_display, chat_dock, chat_log, diagnostics,
     event_feed, home_tiles, image_sizes, leaderboard, obs, overlay, overlay_test, performance,
-    queue, rehearsal, services, stream_summary, tab_bar, templates, text_size, update,
+    queue, rehearsal, services, source_settings, stream_summary, tab_bar, templates, text_size,
+    update,
 };
 
 #[derive(OpenApi)]
@@ -87,6 +88,8 @@ use crate::{
         obs::update_item,
         obs::scene_placements,
         obs::item_transform,
+        source_settings::source,
+        source_settings::set_source,
         obs::overlay_sources,
         obs::add_overlay,
         obs::remove_overlay,

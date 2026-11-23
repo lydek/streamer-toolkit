@@ -398,6 +398,22 @@
                     </template>
                     <p v-else class="muted">{{ t('app.loading') }}</p>
                   </div>
+                  <!-- 來源設定: the source's own settings, shared by every scene that shows it. -->
+                  <div v-else-if="shownTab(item) === 'source'" class="editor-grid">
+                    <span></span>
+                    <span class="hint">{{ t('scene.sourceShared', { source: item.source }) }}</span>
+                    <template v-if="sources.get(item.source)">
+                      <template v-if="sources.get(item.source)!.family === 'other'">
+                        <span></span>
+                        <span class="muted">{{ t('scene.sourceInObs') }}</span>
+                      </template>
+                      <template v-if="sources.get(item.source)!.url_hidden">
+                        <span></span>
+                        <span class="muted">{{ t('scene.sourceUrlHidden') }}</span>
+                      </template>
+                    </template>
+                    <p v-else class="muted">{{ t('app.loading') }}</p>
+                  </div>
                 </td>
               </tr>
             </template>
@@ -510,8 +526,10 @@ const open = ref<number | null>(null)
 const editorTab = ref<EditorTab>('layout')
 // What each item can edit; later tabs join as they are built.
 // 變形 needs something to turn: not a group, and not an item with sound only.
-const tabsOf = (item: SceneItem): EditorTab[] =>
-  item.kind !== 'group' && placements.value.get(item.id)?.width ? ['layout', 'transform'] : ['layout']
+const tabsOf = (item: SceneItem): EditorTab[] => {
+  if (item.kind === 'group') return ['layout']
+  return placements.value.get(item.id)?.width ? ['layout', 'transform', 'source'] : ['layout', 'source']
+}
 const shownTab = (item: SceneItem) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
 // Order: OBS counts from the bottom, the admin API front to back from 0 (P2-12); `move` takes that index. The moved
 // row flashes and keeps the keyboard once OBS reports the new order.
@@ -612,6 +630,19 @@ watch([open, editorTab, target], async ([id]) => {
     report(e)
   }
 })
+// 來源設定: read when its tab opens; only the fields of the source's form come back.
+const sources = ref(new Map<string, Schemas['SourceSettings']>())
+watch([open, editorTab], async ([id]) => {
+  const item = current.value?.items.find((o) => o.id === id)
+  if (!item || shownTab(item) !== 'source') return
+  try {
+    const got = await api(client.GET('/api/admin/obs/source', { params: { query: { input: item.source } } }))
+    sources.value = new Map(sources.value).set(item.source, got)
+  } catch (e) {
+    report(e)
+  }
+})
+
 async function transform(item: SceneItem, what: Schemas['TransformChange']) {
   const now = transforms.value.get(item.id)
   if (!now) return

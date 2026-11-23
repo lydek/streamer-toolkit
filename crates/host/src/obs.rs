@@ -134,6 +134,7 @@ pub(crate) fn publish(bus: &EventBus, status: ObsStatus) {
 pub(crate) struct ObsLink {
     data_dir: PathBuf,
     /// The port this Host serves on: a browser source shows one of its overlays when its address uses it.
+    /// (Read by the source settings routes too.)
     port: u16,
     secrets: Arc<dyn SecretStore>,
     status: Arc<watch::Sender<ObsStatus>>,
@@ -189,6 +190,11 @@ impl ObsLink {
         });
         link.restart();
         link
+    }
+
+    /// The port this Host serves on (its overlays' addresses use it).
+    pub(crate) fn port(&self) -> u16 {
+        self.port
     }
 
     /// Follows the streaming state, the scene on air included.
@@ -354,6 +360,21 @@ impl StreamingSoftware for ObsLink {
         self.control.set_item_transform(scene, item, change).await
     }
 
+    async fn input_settings(
+        &self,
+        input: &str,
+    ) -> Result<(String, serde_json::Map<String, serde_json::Value>), StreamingError> {
+        self.control.input_settings(input).await
+    }
+
+    async fn set_input_settings(
+        &self,
+        input: &str,
+        settings: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), StreamingError> {
+        self.control.set_input_settings(input, settings).await
+    }
+
     async fn set_item_size(
         &self,
         scene: &str,
@@ -446,7 +467,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .with_state(link)
 }
 
-fn command_response(result: Result<(), StreamingError>) -> Response {
+pub(crate) fn command_response(result: Result<(), StreamingError>) -> Response {
     match result {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(StreamingError::NotConnected) => error(StatusCode::CONFLICT, "obs.not_connected"),
@@ -748,7 +769,7 @@ pub(crate) async fn scene_placements(
 
 /// The overlay path, with its query, that `url` opens on this Host (port `port`); `None` for any other address.
 /// Other addresses go no further than this: they may hold another service's token.
-fn own_overlay(url: &str, port: u16) -> Option<String> {
+pub(crate) fn own_overlay(url: &str, port: u16) -> Option<String> {
     let uri: Uri = url.parse().ok()?;
     let ours = uri.scheme_str() == Some("http")
         && matches!(uri.host(), Some("127.0.0.1" | "localhost"))

@@ -268,6 +268,19 @@ pub trait StreamingSoftware: Send + Sync {
         item: i64,
         change: TransformChange,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Input `input`'s kind and its settings as the program stores them (callers pick the fields they show).
+    fn input_settings(
+        &self,
+        input: &str,
+    ) -> impl Future<
+        Output = Result<(String, serde_json::Map<String, serde_json::Value>), StreamingError>,
+    > + Send;
+    /// Merges `settings` into input `input`'s settings; fields not given stay.
+    fn set_input_settings(
+        &self,
+        input: &str,
+        settings: serde_json::Map<String, serde_json::Value>,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Turns studio mode on or off.
     fn set_studio_mode(
         &self,

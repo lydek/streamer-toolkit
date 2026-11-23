@@ -4103,6 +4103,120 @@
         }
       }
     },
+    "/api/admin/obs/source": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The listed settings of one source, for its form.",
+        "operationId": "source",
+        "parameters": [
+          {
+            "name": "input",
+            "in": "query",
+            "description": "The source's name (a scene item's `source` in `obs.state`).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSettings"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Changes listed settings of one source; refused for a kind without a form, a field not on its form, a value of\nthe wrong shape, or an address that is not one of this Host's overlays.",
+        "operationId": "set_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/sources": {
       "get": {
         "tags": [
@@ -12701,6 +12815,56 @@
           "simulation",
           "system"
         ]
+      },
+      "SourceBody": {
+        "type": "object",
+        "required": [
+          "input",
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "type": "object",
+            "description": "Fields of the source's form to change; the rest of its settings stay."
+          },
+          "input": {
+            "type": "string"
+          }
+        }
+      },
+      "SourceFamily": {
+        "type": "string",
+        "description": "The kinds of source with a form; any other (a plugin's included) is shown as \"change it in OBS\".",
+        "enum": [
+          "browser",
+          "text",
+          "image",
+          "video_capture",
+          "app_audio",
+          "game",
+          "other"
+        ]
+      },
+      "SourceSettings": {
+        "type": "object",
+        "required": [
+          "family",
+          "fields",
+          "url_hidden"
+        ],
+        "properties": {
+          "family": {
+            "$ref": "#/components/schemas/SourceFamily"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Only the fields of this kind's form; a browser source's `url` only when it opens this Host's overlay."
+          },
+          "url_hidden": {
+            "type": "boolean",
+            "description": "A browser source opening another address: it is not shown, and can be changed in OBS only."
+          }
+        }
       },
       "Speed": {
         "type": "string",
