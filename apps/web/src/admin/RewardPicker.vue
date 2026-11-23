@@ -1,6 +1,7 @@
 <template>
   <!-- Next to the chat box: the channel's rewards, each with 播放效果 (only the local effect it is set to play:
-       its sound and its video or GIF; no points spent, no record written). -->
+       its sound and its video or GIF) and 模擬兌換 (that effect, plus the check-in stamp card when it is the check-in
+       reward, all as `source=simulation`). No points are spent and nothing is recorded. -->
   <div class="reward-picker">
     <Button
       icon="pi pi-star"
@@ -15,7 +16,10 @@
       <p v-if="failed" role="alert">{{ t('dock.rewards.loadFailed') }}</p>
       <p v-else-if="!rewards">{{ t('app.loading') }}</p>
       <p v-else-if="!rewards.length">{{ t('dock.rewards.empty') }}</p>
-      <ul v-else class="list">
+      <template v-else>
+      <label :for="`${panelId}-viewer`" class="viewer-label">{{ t('dock.rewards.viewer') }}</label>
+      <InputText :id="`${panelId}-viewer`" v-model="viewer" size="small" maxlength="25" :placeholder="t('dock.rewards.viewerHint')" class="viewer" />
+      <ul class="list">
         <li v-for="r in rewards" :key="r.id">
           <span class="title">{{ r.title }}</span>
           <Button
@@ -26,21 +30,31 @@
             :disabled="busy"
             @click="play(r)"
           />
+          <Button
+            :label="t('dock.rewards.simulate')"
+            :aria-label="t('dock.rewards.simulateLabel', { title: r.title })"
+            size="small"
+            text
+            :disabled="busy"
+            @click="simulate(r)"
+          />
         </li>
       </ul>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { nextTick, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { errorToast, successToast } from './home'
-import { testSound } from './simulate'
+import { simulateCheckin, testSound } from './simulate'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -50,6 +64,9 @@ const busy = ref(false)
 const failed = ref(false)
 const rewards = ref<Schemas['Reward'][]>()
 const slots = ref<Record<string, string>>({})
+const viewer = ref('')
+// The check-in reward, while check-ins are on (a simulated redemption of it shows a stamp card).
+const checkinReward = ref<string | null>(null)
 
 // Read on every open: rewards, sound slots and the check-in reward change on other pages while the dock stays.
 async function toggle() {
@@ -58,9 +75,16 @@ async function toggle() {
   void keepInView()
   failed.value = false
   try {
-    const [list, library] = await Promise.all([api(client.GET('/api/admin/checkin/rewards')), api(client.GET('/api/admin/sounds'))])
+    const [list, library, modules, checkin] = await Promise.all([
+      api(client.GET('/api/admin/checkin/rewards')),
+      api(client.GET('/api/admin/sounds')),
+      api(client.GET('/api/admin/modules')),
+      api(client.GET('/api/admin/checkin/settings')).catch(() => null),
+    ])
     rewards.value = list
     slots.value = library.slots
+    const checkinOn = modules.some((m) => m.id === 'checkin' && m.enabled)
+    checkinReward.value = checkinOn ? (checkin?.reward_id ?? null) : null
   } catch {
     failed.value = true
   }
@@ -76,29 +100,47 @@ async function keepInView() {
   if (box) shift.value = Math.min(0, window.innerWidth - 8 - box.right)
 }
 
-/** The reward's sound (when it has one) and its video or GIF (when it has a rule); says when it has neither. */
-async function play(r: Schemas['Reward']) {
+/** Plays the reward's sound (when it has one) and its video or GIF (when it has a rule); whether anything played. */
+async function effect(r: Schemas['Reward']) {
+  const sound = slots.value[`reward.${r.id}`]
+  let played = false
+  if (sound && sound !== 'silent') {
+    await testSound(sound)
+    played = true
+  }
+  try {
+    await api(client.POST('/api/admin/screen-tools/media-rules/{reward_id}/test', { params: { path: { reward_id: r.id } } }))
+    played = true
+  } catch (e) {
+    if (!(e instanceof ApiError && e.code === 'media.not_found')) throw e
+  }
+  return played
+}
+
+async function act(r: Schemas['Reward'], run: () => Promise<string | null>) {
   busy.value = true
   try {
-    const sound = slots.value[`reward.${r.id}`]
-    let played = false
-    if (sound && sound !== 'silent') {
-      await testSound(sound)
-      played = true
-    }
-    try {
-      await api(client.POST('/api/admin/screen-tools/media-rules/{reward_id}/test', { params: { path: { reward_id: r.id } } }))
-      played = true
-    } catch (e) {
-      if (!(e instanceof ApiError && e.code === 'media.not_found')) throw e
-    }
-    toast.add(played ? successToast(t('dock.rewards.played', { title: r.title })) : { severity: 'info', summary: t('dock.rewards.none', { title: r.title }), life: 3000 })
+    const done = await run()
+    toast.add(done ? successToast(done) : { severity: 'info', summary: t('dock.rewards.none', { title: r.title }), life: 3000 })
   } catch (e) {
     toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
   } finally {
     busy.value = false
   }
 }
+
+const play = (r: Schemas['Reward']) => act(r, async () => ((await effect(r)) ? t('dock.rewards.played', { title: r.title }) : null))
+
+/** The supported simulated parts of a redemption: its effect, and the stamp card for the check-in reward. */
+const simulate = (r: Schemas['Reward']) =>
+  act(r, async () => {
+    let done = await effect(r)
+    if (r.id === checkinReward.value) {
+      await simulateCheckin({ stamps: 1, userName: viewer.value.trim() || undefined })
+      done = true
+    }
+    return done ? t('dock.rewards.simulated', { title: r.title }) : null
+  })
 </script>
 
 <style scoped>
@@ -123,6 +165,18 @@ async function play(r: Schemas['Reward']) {
 
 .panel p {
   margin: 0;
+}
+
+.viewer-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
+}
+
+.viewer {
+  width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 .list {
