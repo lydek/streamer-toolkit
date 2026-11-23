@@ -163,13 +163,21 @@
                     </button>
                   </nav>
                   <div v-if="shownTab(item) === 'layout'" class="editor-grid">
+                    <!-- Locked in OBS: where it sits and how large it is stay as they are; its order still changes. -->
+                    <template v-if="item.locked">
+                      <span></span>
+                      <span class="locked-note">
+                        <i class="pi pi-lock" aria-hidden="true"></i>{{ t('scene.lockedNote') }}
+                        <Button :label="t('scene.unlock')" size="small" text :disabled="busy.has(item.id)" @click="change(item, { locked: false })" />
+                      </span>
+                    </template>
                     <template v-if="placements.get(item.id)">
                       <span>{{ t('scene.position') }}</span>
                       <span class="fields">
                         <InputNumber
                           :model-value="placements.get(item.id)!.x"
                           :max-fraction-digits="1"
-                          :disabled="busy.has(item.id)"
+                          :disabled="busy.has(item.id) || item.locked"
                           :aria-label="t('scene.x', { item: item.source })"
                           class="coord"
                           @update:model-value="(x: number | null) => x !== null && place(item, { x })"
@@ -177,7 +185,7 @@
                         <InputNumber
                           :model-value="placements.get(item.id)!.y"
                           :max-fraction-digits="1"
-                          :disabled="busy.has(item.id)"
+                          :disabled="busy.has(item.id) || item.locked"
                           :aria-label="t('scene.y', { item: item.source })"
                           class="coord"
                           @update:model-value="(y: number | null) => y !== null && place(item, { y })"
@@ -190,7 +198,7 @@
                           :model-value="Math.round(placements.get(item.id)!.width)"
                           :min="1"
                           :use-grouping="false"
-                          :disabled="busy.has(item.id) || !placements.get(item.id)!.width"
+                          :disabled="busy.has(item.id) || item.locked || !placements.get(item.id)!.width"
                           :aria-label="t('scene.width', { item: item.source })"
                           class="coord"
                           @update:model-value="(v: number | null) => v !== null && resize(item, 'width', v)"
@@ -201,14 +209,14 @@
                           :aria-pressed="!unlocked.has(item.id)"
                           size="small"
                           outlined
-                          :disabled="busy.has(item.id)"
+                          :disabled="busy.has(item.id) || item.locked"
                           @click="toggleRatio(item)"
                         />
                         <InputNumber
                           :model-value="Math.round(placements.get(item.id)!.height)"
                           :min="1"
                           :use-grouping="false"
-                          :disabled="busy.has(item.id) || !placements.get(item.id)!.height"
+                          :disabled="busy.has(item.id) || item.locked || !placements.get(item.id)!.height"
                           :aria-label="t('scene.height', { item: item.source })"
                           class="coord"
                           @update:model-value="(v: number | null) => v !== null && resize(item, 'height', v)"
@@ -220,7 +228,7 @@
                           :model-value="placements.get(item.id)!.align"
                           :options="ALIGNS"
                           :option-label="(a: Align) => t(`scene.aligns.${a}`)"
-                          :disabled="busy.has(item.id)"
+                          :disabled="busy.has(item.id) || item.locked"
                           :aria-label="t('scene.alignOf', { item: item.source })"
                           @update:model-value="(align: Align) => place(item, { align })"
                         />
@@ -661,6 +669,15 @@ tr.moved > * {
     animation: none;
     outline: 1px solid var(--p-primary-color);
   }
+}
+
+.locked-note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--p-yellow-300);
+  font-size: 0.875rem;
 }
 
 .index :deep(.p-inputnumber-input) {

@@ -226,6 +226,26 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, size: { width: 250, height: 300 } } })
   })
 
+  it('keeps a locked item where it is: its fields are off, its order still changes, and 解鎖 unlocks it', async () => {
+    vi.spyOn(client, 'GET').mockImplementation((() =>
+      Promise.resolve({
+        data: { canvas: { width: 1920, height: 1080 }, items: [{ item: 2, x: 40, y: 30, align: 'top_left', width: 400, height: 600 }] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected('Game', [item(2, 'Chat overlay', 'browser_source', true, true), item(1, 'Capture', 'spout_capture')]))
+    await flushPromises()
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    const editor = wrapper.get('tr.editor')
+    expect(editor.text()).toContain(t('scene.lockedNote'))
+    for (const label of [t('scene.x', { item: 'Chat overlay' }), t('scene.width', { item: 'Chat overlay' })])
+      expect(editor.get(`input[aria-label="${label}"]`).attributes('disabled')).toBeDefined()
+    expect(editor.get('input#index-2').attributes('disabled')).toBeUndefined()
+    await editor.findAll('button').find((b) => b.text() === t('scene.unlock'))!.trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, locked: false } })
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())
