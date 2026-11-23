@@ -33,6 +33,20 @@ describe('useDock', () => {
     expect(dock.open).toBe(false)
     expect(dock.width).toBe(300)
   })
+
+  it('docks on the saved side, and on the right when none was saved', async () => {
+    expect((await dockAfterLoad({ open: true, width: 300, side: 'left' })).dock.side).toBe('left')
+    expect((await dockAfterLoad({ open: true, width: 300 })).dock.side).toBe('right')
+  })
+
+  it('saves the side with the rest of the docked state', async () => {
+    const { dock } = await dockAfterLoad({ open: true, width: 300 })
+    const { client } = await import('./api')
+    const { saveDock } = await import('./dock')
+    dock.side = 'left'
+    await saveDock()
+    expect(client.PUT).toHaveBeenCalledWith('/api/admin/chat-dock', { body: { open: true, width: 300, side: 'left' } })
+  })
 })
 
 describe('shownWidth', () => {

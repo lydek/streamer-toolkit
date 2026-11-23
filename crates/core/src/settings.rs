@@ -78,11 +78,23 @@ pub struct Settings {
     pub dismissed_version: Option<String>,
 }
 
-/// Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range).
+/// Whether the admin UI docks the chat on wide windows, how wide (CSS pixels; the Host checks the range) and on
+/// which side of the pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatDock {
     pub open: bool,
     pub width: u16,
+    /// Missing in settings saved before the choice existed: the right side.
+    #[serde(default)]
+    pub side: DockSide,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DockSide {
+    Left,
+    #[default]
+    Right,
 }
 
 /// How the admin UI shows chat (the chat log page and the docked panel); OBS overlays follow their template.

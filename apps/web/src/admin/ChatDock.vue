@@ -5,7 +5,7 @@
     id="chat-dock"
     ref="panel"
     class="dock"
-    :class="{ sheet: !wide }"
+    :class="{ sheet: !wide, left: wide && dock.side === 'left' }"
     :style="wide ? { width: `${shownPx}px` } : undefined"
     :aria-label="t('dock.title')"
     tabindex="-1"
@@ -25,7 +25,7 @@
     ></div>
     <div class="head">
       <h2>{{ t('dock.title') }}</h2>
-      <Button icon="pi pi-angle-double-right" text rounded :aria-label="t('dock.close')" @click="close" />
+      <Button :icon="`pi ${wide && dock.side === 'left' ? 'pi-angle-double-left' : 'pi-angle-double-right'}`" text rounded :aria-label="t('dock.close')" @click="close" />
     </div>
     <p v-if="twitchOverview?.chat_missed_writes" role="alert">{{ t('chat.missedWrites', { n: twitchOverview.chat_missed_writes }) }}</p>
     <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
@@ -57,6 +57,7 @@
         :log="shownLog"
         :broadcaster-id="broadcaster?.id"
         :disconnected="live.status === 'failed'"
+        dock-side
         @update:log="(next) => (log = next.paused ? pause(log) : resume(log))"
       />
     </div>
@@ -155,11 +156,13 @@ function close() {
   document.querySelector<HTMLElement>('[aria-controls="chat-dock"]')?.focus()
 }
 
-// Resizing: drag the left edge, or focus it and use ←/→ (Shift for bigger steps). Saved when it ends.
+// Resizing: drag the edge facing the pages, or focus it and use ←/→ (Shift for bigger steps); the arrows move the
+// edge the way they point, so they swap with the side. Saved when it ends.
 function startResize(e: PointerEvent) {
   const edge = e.currentTarget as HTMLElement
   edge.setPointerCapture(e.pointerId)
-  const move = (ev: PointerEvent) => (dock.width = clampWidth(window.innerWidth - ev.clientX))
+  const move = (ev: PointerEvent) =>
+    (dock.width = clampWidth(dock.side === 'left' ? ev.clientX : window.innerWidth - ev.clientX))
   const up = () => {
     edge.removeEventListener('pointermove', move)
     void save()
@@ -169,7 +172,7 @@ function startResize(e: PointerEvent) {
 }
 function resizeByKey(e: KeyboardEvent) {
   const step = e.shiftKey ? 64 : 16
-  const delta = { ArrowLeft: step, ArrowRight: -step }[e.key]
+  const delta = (dock.side === 'left' ? { ArrowLeft: -step, ArrowRight: step } : { ArrowLeft: step, ArrowRight: -step })[e.key]
   if (!delta) return
   e.preventDefault()
   dock.width = clampWidth(shownPx.value + delta)
@@ -234,6 +237,18 @@ onBeforeUnmount(() => {
   width: 9px;
   cursor: col-resize;
   touch-action: none;
+}
+
+/* Docked on the left: the border and the resize edge face the pages on the right. */
+.dock.left {
+  order: -1;
+  border-left: none;
+  border-right: 1px solid var(--p-surface-700);
+}
+
+.dock.left .resize {
+  left: auto;
+  right: -5px;
 }
 
 .resize:hover,

@@ -631,7 +631,12 @@
       "avatars": "頭像",
       "badges": "徽章",
       "time": "時間",
-      "textSize": "字級"
+      "textSize": "字級",
+      "side": "聊天室位置",
+      "sides": {
+        "left": "左側",
+        "right": "右側"
+      }
     },
     "copyObsUrl": "複製 OBS 網址",
     "copied": "已複製 OBS 網址。",

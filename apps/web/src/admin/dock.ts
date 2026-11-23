@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { api, client } from './api'
+import { type Schemas, api, client } from './api'
 
 /** The docked chat panel's width range in CSS pixels (the Host checks the same range). */
 export const DOCK_MIN = 280
@@ -13,18 +13,18 @@ export const DOCK_WIDE_QUERY = `(min-width: ${DOCK_MIN + PAGE_MIN}px)`
 export const shownWidth = (saved: number, viewport: number) => Math.min(saved, Math.max(DOCK_MIN, viewport - PAGE_MIN))
 
 /**
- * The docked chat panel, shared by the app bar's chat button and the panel. `open` and `width` are the docked
+ * The docked chat panel, shared by the app bar's chat button and the panel. `open`, `width` and `side` are the docked
  * state on wide windows, kept in settings.json; `sheet` is the slide-in panel on narrow windows, never saved.
  * Never saved: open (docs/decisions.md). Closed until the saved state has loaded, so a saved "closed" never flashes
  * open. `docked`: the panel is beside the pages right now (ChatDock.vue sets it), so home hides its chat tile.
  */
-const state = reactive({ open: false, width: DOCK_DEFAULT, sheet: false, docked: false })
+const state = reactive({ open: false, width: DOCK_DEFAULT, side: 'right' as Schemas['DockSide'], sheet: false, docked: false })
 let loading: Promise<void> | undefined
 
 export function useDock() {
   loading ??= api(client.GET('/api/admin/chat-dock'))
     .then((saved) => {
-      Object.assign(state, saved ? { open: saved.open, width: clampWidth(saved.width) } : { open: true })
+      Object.assign(state, saved ? { open: saved.open, width: clampWidth(saved.width), side: saved.side ?? 'right' } : { open: true })
     })
     .catch(() => {
       loading = undefined
@@ -36,4 +36,4 @@ export const clampWidth = (w: number) => Math.round(Math.min(DOCK_MAX, Math.max(
 
 /** Saves the docked state; the caller reports a failure. */
 export const saveDock = () =>
-  api(client.PUT('/api/admin/chat-dock', { body: { open: state.open, width: state.width } }))
+  api(client.PUT('/api/admin/chat-dock', { body: { open: state.open, width: state.width, side: state.side } }))

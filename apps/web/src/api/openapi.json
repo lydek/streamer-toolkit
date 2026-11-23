@@ -7591,7 +7591,7 @@
       },
       "ChatDock": {
         "type": "object",
-        "description": "Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range).",
+        "description": "Whether the admin UI docks the chat on wide windows, how wide (CSS pixels; the Host checks the range) and on\nwhich side of the pages.",
         "required": [
           "open",
           "width"
@@ -7599,6 +7599,10 @@
         "properties": {
           "open": {
             "type": "boolean"
+          },
+          "side": {
+            "$ref": "#/components/schemas/DockSide",
+            "description": "Missing in settings saved before the choice existed: the right side."
           },
           "width": {
             "type": "integer",
@@ -9035,6 +9039,13 @@
             "description": "The version in the notice, `major.minor.patch`."
           }
         }
+      },
+      "DockSide": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right"
+        ]
       },
       "ErrorBody": {
         "type": "object",

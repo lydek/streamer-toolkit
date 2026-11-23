@@ -1,4 +1,4 @@
-//! The admin UI's docked chat panel (open, width), kept in `settings.json`. Admin routes; the caller adds the
+//! The admin UI's docked chat panel (open, width, side), kept in `settings.json`. Admin routes; the caller adds the
 //! token check.
 
 use std::path::PathBuf;

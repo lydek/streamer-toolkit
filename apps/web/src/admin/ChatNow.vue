@@ -16,7 +16,7 @@
         outlined
         @click="log.paused ? jump() : emit('update:log', pause(log))"
       />
-      <ChatDisplayMenu class="display" />
+      <ChatDisplayMenu class="display" :dock-side="dockSide" />
     </div>
     <!-- aria-live off: a busy chat would talk over everything else. Focusable so the keyboard can scroll it. -->
     <div
@@ -46,7 +46,8 @@ import ChatDisplayMenu from './ChatDisplayMenu.vue'
 import ChatLine from './ChatLine.vue'
 import { type ChatLog, type Rgb, backgroundOf, nameColor, pause, resume } from './chatLog'
 
-const props = defineProps<{ log: ChatLog; broadcasterId?: string; disconnected?: boolean }>()
+/** `dockSide`: shown in the docked panel, whose display menu also picks the panel's side. */
+const props = defineProps<{ log: ChatLog; broadcasterId?: string; disconnected?: boolean; dockSide?: boolean }>()
 const emit = defineEmits<{ 'update:log': [ChatLog] }>()
 const { t } = useI18n()
 
