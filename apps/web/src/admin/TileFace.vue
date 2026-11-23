@@ -1,7 +1,7 @@
 <template>
   <span class="badge" :class="`tint-${tint}`" aria-hidden="true"><i :class="icon"></i></span>
   <span class="name">{{ name }}</span>
-  <span v-if="num" class="num" :class="{ word: !/^[\d,+]+$/.test(num), fixed: rows }">{{ num }}<small v-if="unit">{{ unit }}</small></span>
+  <span v-if="num" class="num" :class="{ word: !COUNT.test(num), fixed: rows }">{{ num }}<small v-if="unit">{{ unit }}</small></span>
   <!-- Small tiles keep all three rows, so every one is the same height: a dash for no number, an empty line kept. -->
   <span v-else-if="rows" class="num fixed none" aria-hidden="true">—</span>
   <span v-if="text || rows" class="line" :class="{ fixed: rows }">{{ text }}</span>
@@ -16,6 +16,8 @@ import type { Line, Tile } from './home'
 // grid (`auto minmax(0, 1fr)`).
 // `rows`: a small tile, which always shows the name, number and line rows at fixed heights.
 const props = defineProps<{ name: string; icon: string; tint: Tile['tint']; line: Line; rows?: boolean }>()
+// A count (12, 1,234, +3) or a time (1:23, 2.5); anything else is a word (a scene, a state) and reads smaller.
+const COUNT = /^[\d,+:.]+$/
 const { t } = useI18n()
 
 const text = computed(() =>
@@ -45,7 +47,7 @@ const unit = computed(() => (props.line.state === 'ready' ? props.line.unit : un
 .num {
   grid-column: 2;
   overflow: hidden;
-  font-size: 1.75rem;
+  font-size: 1.625rem;
   font-weight: 700;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -70,7 +72,8 @@ const unit = computed(() => (props.line.state === 'ready' ? props.line.unit : un
 
 /* A word (a song or scene name) instead of a count. */
 .num.word {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 600;
 }
 
 .num small {
