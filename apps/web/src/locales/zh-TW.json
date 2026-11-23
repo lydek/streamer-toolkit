@@ -1207,7 +1207,8 @@
       "shownShort": "顯示中",
       "hiddenShort": "收起",
       "hidden": "休息卡片沒有顯示",
-      "forMinutes": "{n} 分鐘"
+      "forMinutes": "{n} 分鐘",
+      "cover": "蓋上休息卡片"
     },
     "warnings": {
       "heading": "警語覆蓋層",
