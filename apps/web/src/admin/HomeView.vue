@@ -68,7 +68,7 @@
             </section>
             <StageCard v-else-if="tile.id === 'checklist'" part="checklist" :stage="stage" />
             <StageCard v-else-if="tile.id === 'summary'" part="session" :stage="stage" />
-            <!-- 本場直播, 事件流 and 呈現佇列: a small tile that opens in place into its block, and back. -->
+            <!-- 本場直播 and 事件流: a small tile that opens in place into its block, and back. -->
             <HomeTile
               v-else-if="tile.id in EXPANDS && !opened.has(tile.id)"
               :id="tile.id"
@@ -84,9 +84,6 @@
             <StageCard v-else-if="tile.id === 'stats'" id="block-stats" part="session" :stage="stage">
               <template #actions><BlockClose :name="moduleName('stats')" expand-id="stats" @close="closeBlock('stats')" /></template>
             </StageCard>
-            <QueueArea v-else-if="tile.id === 'queue'" id="block-queue" :status="live.queue">
-              <template #actions><BlockClose :name="moduleName('queue')" expand-id="queue" @close="closeBlock('queue')" /></template>
-            </QueueArea>
             <section v-else-if="tile.id === 'feed'" id="block-feed" class="block" aria-labelledby="feed-heading">
               <div class="block-head">
                 <h2 id="feed-heading">{{ moduleName('feed') }}</h2>
@@ -257,6 +254,13 @@
             </li>
           </ul>
         </template>
+      </template>
+    </AppDrawer>
+
+    <!-- 呈現佇列 opens a drawer like the other tiles; the queue's own heading gives way to the drawer's title. -->
+    <AppDrawer id="queue" :title="moduleName('queue')">
+      <template #now>
+        <QueueArea :status="live.queue" in-drawer />
       </template>
     </AppDrawer>
 
@@ -1044,7 +1048,7 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
 }
 
-/* QueueArea's root takes this page's scoped styles, so the queue block gets the same card. */
+/* QueueArea's root takes this page's scoped styles, so a queue block on the grid would get the same card. */
 .block,
 .tiles .queue {
   padding: 1rem 1.125rem;
