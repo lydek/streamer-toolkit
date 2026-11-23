@@ -17,6 +17,7 @@ import MarathonPage from './MarathonPage.vue'
 import MusicPage from './MusicPage.vue'
 import NotFoundView from './NotFoundView.vue'
 import OverlayLookPage from './OverlayLookPage.vue'
+import MixerPage from './MixerPage.vue'
 import ObsSourcesPage from './ObsSourcesPage.vue'
 import RedemptionsPage from './RedemptionsPage.vue'
 import RehearsalPage from './RehearsalPage.vue'
@@ -49,6 +50,7 @@ export const router = createRouter({
     { path: '/checkin-rules', component: CheckinRulesPage },
     { path: '/sounds', component: SoundsPage },
     { path: '/scenes', component: ScenesPage },
+    { path: '/mixer', component: MixerPage },
     { path: '/obs-sources', component: ObsSourcesPage },
     { path: '/music', component: MusicPage, props: { part: 'player' } },
     { path: '/music-playlists', component: MusicPage, props: { part: 'playlists' } },
