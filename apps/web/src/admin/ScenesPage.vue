@@ -7,8 +7,10 @@
       {{ t('scene.notConnected') }}
       <RouterLink to="/settings/connections#obs">{{ t('scene.connect') }}</RouterLink>
     </p>
-    <template v-else>
-      <section class="stack" aria-labelledby="scene-list">
+    <!-- Two panes that scroll on their own (wide and tall enough): scenes on the left, the edited scene's items on the
+         right, so a long list on either side never pushes the other out of reach. -->
+    <div v-else class="scene-panes">
+      <section class="stack pane" aria-labelledby="scene-list">
         <h2 id="scene-list">{{ t('scene.scenes') }}</h2>
         <div class="studio">
           <span class="switch">
@@ -39,8 +41,27 @@
         <SceneList :state="state" @error="report" />
       </section>
 
-      <section v-if="current" class="stack" aria-labelledby="scene-items">
-        <h2 id="scene-items">{{ t('scene.items', { scene: current.name }) }}</h2>
+      <!-- In studio mode everything here edits the preview scene; otherwise the scene on air. -->
+      <section v-if="current" class="stack pane" aria-labelledby="scene-items">
+        <div class="items-head">
+          <h2 id="scene-items">{{ t('scene.items', { scene: current.name }) }}</h2>
+          <span class="stag" :class="editingPreview ? 'preview' : 'live'">{{ t(editingPreview ? 'scene.preview' : 'scene.onAir') }}</span>
+          <div class="add">
+            <Button
+              :label="t('scene.addOverlay')"
+              icon="pi pi-plus"
+              size="small"
+              text
+              :disabled="!obsSources?.local || !addable.length || adding"
+              aria-haspopup="true"
+              aria-controls="add-overlay"
+              @click="addMenu?.toggle($event)"
+            />
+            <Menu id="add-overlay" ref="addMenu" :model="addable" popup />
+            <span v-if="obsSources && !obsSources.local" class="muted">{{ t('obsSources.notLocal') }}</span>
+          </div>
+        </div>
+        <div class="items-scroll">
         <p v-if="!current.items.length">{{ t('scene.noItems') }}</p>
         <table v-else class="table">
           <caption>{{ t('scene.order') }}</caption>
@@ -134,21 +155,9 @@
             </tr>
           </tbody>
         </table>
-        <div class="add">
-          <Button
-            :label="t('scene.addOverlay')"
-            icon="pi pi-plus"
-            outlined
-            :disabled="!obsSources?.local || !addable.length || adding"
-            aria-haspopup="true"
-            aria-controls="add-overlay"
-            @click="addMenu?.toggle($event)"
-          />
-          <Menu id="add-overlay" ref="addMenu" :model="addable" popup />
-          <span v-if="obsSources && !obsSources.local" class="muted">{{ t('obsSources.notLocal') }}</span>
         </div>
       </section>
-    </template>
+    </div>
   </FullPage>
 </template>
 
@@ -174,7 +183,10 @@ const { t } = useI18n()
 const toast = useToast()
 const live = useLiveEvents()
 const state = computed(() => live.value.obsState)
-const current = computed(() => state.value?.scenes.find((s) => s.name === state.value?.scene))
+// The scene this page edits: the preview in studio mode, else the one on air.
+const editingPreview = computed(() => !!state.value?.studioMode && !!state.value.preview)
+const target = computed(() => (editingPreview.value ? state.value?.preview : state.value?.scene) ?? undefined)
+const current = computed(() => state.value?.scenes.find((s) => s.name === target.value))
 // Items with a command in flight; their switches wait for it.
 const busy = ref(new Set<number>())
 // A switch shows the change it asked for until OBS reports it; a refused one is rebuilt from OBS's state.
@@ -221,7 +233,7 @@ async function studio(command: () => Promise<unknown>) {
 const addMenu = ref<InstanceType<typeof Menu>>()
 const adding = ref(false)
 const addable = computed<MenuItem[]>(() => {
-  const scene = state.value?.scene
+  const scene = target.value
   if (!scene) return []
   return overlayRows(obsSources.value?.sources ?? [])
     .filter((r) => r.url && !r.scenes.includes(scene))
@@ -243,18 +255,18 @@ const addable = computed<MenuItem[]>(() => {
 
 type Align = Schemas['Align']
 const ALIGNS: Align[] = ['top_left', 'top', 'top_right', 'left', 'center', 'right', 'bottom_left', 'bottom', 'bottom_right']
-// The canvas and each item's position in the scene on air, read again as OBS's scenes and items change.
+// The canvas and each item's position in the edited scene, read again as OBS's scenes and items change.
 const canvas = ref<Schemas['Canvas']>()
 const placements = ref(new Map<number, Schemas['Placement']>())
-// Each read's number; only the latest one's answer shows, so an older scene's never replaces the one on air.
+// Each read's number; only the latest one's answer shows, so an older scene's never replaces the edited one.
 let placementRead = 0
 watch(
-  state,
-  async (s) => {
-    if (!s?.scene) return
+  [state, target],
+  async ([, scene]) => {
+    if (!scene) return
     const mine = ++placementRead
     try {
-      const got = await api(client.GET('/api/admin/obs/placements', { params: { query: { scene: s.scene } } }))
+      const got = await api(client.GET('/api/admin/obs/placements', { params: { query: { scene } } }))
       if (mine !== placementRead) return
       canvas.value = got.canvas
       placements.value = new Map(got.items.map(({ item, ...p }) => [item, p]))
@@ -279,7 +291,7 @@ async function change(
   item: SceneItem,
   what: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement'] },
 ) {
-  const scene = state.value?.scene
+  const scene = target.value
   if (!scene) return false
   busy.value = new Set(busy.value).add(item.id)
   try {
@@ -298,6 +310,73 @@ async function change(
 </script>
 
 <style scoped>
+/* Wide and tall enough: the page fits the window and each pane scrolls; the table head stays. */
+@media (min-height: 560px) {
+  @container view (min-width: 64.0625rem) {
+    .scene-panes {
+      display: grid;
+      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+      gap: 1rem;
+      height: calc(100vh - var(--appbar-h, 0px) - var(--page-top-h, 0px) - 3rem);
+      min-height: 24rem;
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .items-scroll {
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .items-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--p-surface-950);
+    }
+  }
+}
+
+/* One column: the scene list keeps to about three rows, so the items are near. */
+@container view (max-width: 64rem) {
+  .pane:first-child :deep(.scenes) {
+    max-height: 11.5rem;
+    overflow-y: auto;
+  }
+}
+
+.items-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.items-head h2 {
+  margin: 0;
+}
+
+.stag {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.stag.live {
+  background: color-mix(in srgb, var(--p-red-400) 20%, transparent);
+  color: var(--p-red-300);
+}
+
+.stag.preview {
+  background: color-mix(in srgb, var(--p-green-400) 20%, transparent);
+  color: var(--p-green-300);
+}
+
 .table {
   max-width: 40rem;
 }
@@ -342,7 +421,7 @@ tbody th {
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
   align-items: center;
-  margin-top: 0.75rem;
+  margin-left: auto;
 }
 
 .muted {

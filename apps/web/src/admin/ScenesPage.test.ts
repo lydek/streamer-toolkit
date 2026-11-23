@@ -102,6 +102,27 @@ describe('ScenesPage', () => {
     expect(post).toHaveBeenCalledWith('/api/admin/obs/transition', { body: { transition: 'Fade' } })
   })
 
+  it('in studio mode edits the preview scene: its items, placements and changes, not the scene on air', async () => {
+    const get = vi.fn((_path: string, init?: { params?: { query?: { scene?: string } } }) =>
+      Promise.resolve({
+        data: { canvas: { width: 1920, height: 1080 }, items: init?.params?.query?.scene === 'Opening' ? [{ item: 9, x: 0, y: 0, align: 'top_left' }] : [] },
+        response: new Response(null, { status: 200 }),
+      }),
+    )
+    vi.spyOn(client, 'GET').mockImplementation(get as never)
+    const wrapper = await page()
+    const live = connected()
+    live.scenes[0].items = [item(9, 'Logo', 'image_source')] as never[]
+    snapshot({ ...live, studioMode: true, preview: 'Opening', transitions: [], transition: null })
+    await flushPromises()
+    expect(wrapper.get('#scene-items').text()).toBe(t('scene.items', { scene: 'Opening' }))
+    expect(wrapper.get('.items-head .stag').text()).toBe(t('scene.preview'))
+    expect(get).toHaveBeenLastCalledWith('/api/admin/obs/placements', { params: { query: { scene: 'Opening' } } })
+    await wrapper.get('tbody tr input[role="switch"]').trigger('change')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', expect.objectContaining({ body: expect.objectContaining({ scene: 'Opening', item: 9 }) }))
+  })
+
   it('shows and changes where an item sits, and says when it is off the canvas', async () => {
     vi.spyOn(client, 'GET').mockImplementation((() =>
       Promise.resolve({
