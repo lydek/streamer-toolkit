@@ -648,7 +648,8 @@ const tiles = computed(() =>
 // OBS problems: read again whenever OBS's scenes or items change, so a fixed one goes away.
 const obsSources = useObsSources()
 watch(
-  () => live.value.obsState,
+  // Scenes, items and the scene on air: not a fader or mute moving.
+  () => JSON.stringify([live.value.obsState?.scene, live.value.obsState?.scenes]),
   () => void useObsSources(true),
 )
 const sceneRules = shallowRef<Schemas['SceneRuleBody'][]>([])

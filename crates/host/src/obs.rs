@@ -244,7 +244,8 @@ impl ObsLink {
 
 impl ObsLink {
     /// `NotFound` for a scene (or an item of it) the latest state does not list; OBS answers the same, but this
-    /// gives the same answer without a round trip and before a client exists.
+    /// gives the same answer without a round trip and before a client exists. An item may be in a group, whose name
+    /// is then the scene.
     fn check(&self, scene: &str, item: Option<i64>) -> Result<(), StreamingError> {
         let state = self.state.borrow();
         if state.scene.is_none() {
@@ -254,9 +255,39 @@ impl ObsLink {
         match (found, item) {
             (Some(s), Some(id)) if s.items.iter().any(|i| i.id == id) => Ok(()),
             (Some(_), None) => Ok(()),
+            (None, Some(id))
+                if group(&state, scene).is_some_and(|g| g.children.iter().any(|i| i.id == id)) =>
+            {
+                Ok(())
+            }
             _ => Err(StreamingError::NotFound),
         }
     }
+
+    /// Like `check` for a scene, or a group (its items' positions are read like a scene's).
+    fn check_items(&self, scene: &str) -> Result<(), StreamingError> {
+        let state = self.state.borrow();
+        if state.scene.is_none() {
+            return Err(StreamingError::NotConnected);
+        }
+        if state.scenes.iter().any(|s| s.name == scene) || group(&state, scene).is_some() {
+            Ok(())
+        } else {
+            Err(StreamingError::NotFound)
+        }
+    }
+}
+
+/// The group named `name` in any scene.
+fn group<'a>(
+    state: &'a StreamingState,
+    name: &str,
+) -> Option<&'a toolkit_core::streaming::SceneItem> {
+    state
+        .scenes
+        .iter()
+        .flat_map(|s| &s.items)
+        .find(|i| i.kind == "group" && i.source == name)
 }
 
 impl StreamingSoftware for ObsLink {
@@ -325,13 +356,13 @@ impl StreamingSoftware for ObsLink {
         position: u32,
     ) -> Result<(), StreamingError> {
         self.check(scene, Some(item))?;
-        let count = self
-            .state
-            .borrow()
-            .scenes
-            .iter()
-            .find(|s| s.name == scene)
-            .map_or(0, |s| s.items.len());
+        let count = {
+            let state = self.state.borrow();
+            match state.scenes.iter().find(|s| s.name == scene) {
+                Some(s) => s.items.len(),
+                None => group(&state, scene).map_or(0, |g| g.children.len()),
+            }
+        };
         if position as usize >= count {
             return Err(StreamingError::NotFound);
         }
@@ -342,7 +373,7 @@ impl StreamingSoftware for ObsLink {
         &self,
         scene: &str,
     ) -> Result<(Canvas, Vec<(i64, Placement, ItemSize)>), StreamingError> {
-        self.check(scene, None)?;
+        self.check_items(scene)?;
         self.control.placements(scene).await
     }
 
@@ -446,10 +477,9 @@ impl StreamingSoftware for ObsLink {
             if state.scene.is_none() {
                 return Err(StreamingError::NotConnected);
             }
-            if transition.is_some_and(|t| !state.transitions.iter().any(|known| known == t)) {
-                return Err(StreamingError::NotFound);
-            }
         }
+        // Not checked against the listed transitions: one added in OBS since is not listed yet (OBS sends no event),
+        // and OBS itself refuses a name it does not have.
         self.control.transition(transition).await
     }
 
@@ -662,6 +692,10 @@ pub(crate) async fn update_item(
         return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
     }
     let valid = |side: f32| side.is_finite() && (1.0..=100_000.0).contains(&side);
+    let near = |n: f32| n.is_finite() && (-100_000.0..=100_000.0).contains(&n);
+    if body.placement.is_some_and(|p| !(near(p.x) && near(p.y))) {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_placement");
+    }
     if let Some(size) = body.size
         && !(valid(size.width) && valid(size.height))
     {
@@ -1297,7 +1331,7 @@ mod tests {
                 scene: Some(format!("S{n}")),
                 ..StreamingState::default()
             });
-            tokio::time::sleep(Duration::from_millis(2)).await;
+            tokio::task::yield_now().await;
         }
         tokio::time::sleep(Duration::from_millis(400)).await;
         let mut states = Vec::new();
@@ -1312,8 +1346,61 @@ mod tests {
                 );
             }
         }
-        assert!(states.len() <= 4, "{states:?}");
+        assert!(states.len() <= 3, "{states:?}");
         assert_eq!(states.last().map(String::as_str), Some("S49"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn items_in_a_group_take_the_group_as_their_scene() {
+        use toolkit_core::streaming::{Scene, SceneItem};
+        let dir = std::env::temp_dir().join(format!("st-obs-group-{}", std::process::id()));
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = closed.local_addr().unwrap().port();
+        drop(closed);
+        settings::update(&dir, |s| s.obs.port = port).unwrap();
+        let link = ObsLink::start(
+            dir.clone(),
+            0,
+            Arc::new(NoPassword),
+            Arc::new(EventBus::default()),
+        );
+        let item = |id, source: &str, kind: &str, children| SceneItem {
+            id,
+            source: source.into(),
+            enabled: true,
+            locked: false,
+            kind: kind.into(),
+            children,
+        };
+        link.state.send_replace(StreamingState {
+            scene: Some("Live".into()),
+            scenes: vec![Scene {
+                name: "Live".into(),
+                items: vec![item(
+                    3,
+                    "Cam set",
+                    "group",
+                    vec![item(7, "Webcam", "dshow_input", vec![])],
+                )],
+            }],
+            ..StreamingState::default()
+        });
+        assert_eq!(link.check("Cam set", Some(7)), Ok(()));
+        assert_eq!(link.check("Live", Some(3)), Ok(()));
+        assert_eq!(
+            link.check("Live", Some(7)),
+            Err(StreamingError::NotFound),
+            "not an item of the scene itself"
+        );
+        assert_eq!(
+            link.check("Cam set", Some(8)),
+            Err(StreamingError::NotFound)
+        );
+        // A group is no scene to switch to or add to, but its items' positions are read like a scene's.
+        assert_eq!(link.check("Cam set", None), Err(StreamingError::NotFound));
+        assert_eq!(link.check_items("Cam set"), Ok(()));
+        assert_eq!(link.check_items("Nowhere"), Err(StreamingError::NotFound));
         let _ = std::fs::remove_dir_all(dir);
     }
 

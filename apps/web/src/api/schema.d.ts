@@ -4205,6 +4205,11 @@ export interface components {
             scene: string;
         };
         SceneItem: {
+            /**
+             * @description A group's items, front to back; empty for anything else. Commands on them take the group's name (`source`)
+             *     as the scene, and their `id`s are unique within the group.
+             */
+            children?: components["schemas"]["SceneItem"][];
             /** @description Whether the item is shown. */
             enabled: boolean;
             /**

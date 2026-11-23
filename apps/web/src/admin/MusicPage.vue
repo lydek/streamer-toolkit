@@ -119,7 +119,8 @@ const live = useLiveEvents()
 // OBS's scenes and items change, so the warning follows the scene on air.
 const obsSources = useObsSources()
 watch(
-  () => live.value.obsState,
+  // Scenes, items and the scene on air: not a fader or mute moving.
+  () => JSON.stringify([live.value.obsState?.scene, live.value.obsState?.scenes]),
   () => void useObsSources(true),
 )
 const notInScene = computed(() =>

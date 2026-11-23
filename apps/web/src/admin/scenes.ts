@@ -8,6 +8,41 @@ import { type Schemas, api, client } from './api'
 export type StreamingState = Schemas['StreamingState']
 export type SceneItem = Schemas['SceneItem']
 
+/**
+ * A row of the item list: a scene's item, or an item inside one of its groups (shown under the group unless it is
+ * folded). `id` is unique on the page (a group's items get negative ones, as their OBS IDs repeat the scene's);
+ * commands take `scene` (the group's name for its items) and `obsId`. `num` counts from the front: `9`, `9.1`.
+ */
+export interface ItemRow extends SceneItem {
+  obsId: number
+  scene: string
+  /** The group it is in. */
+  group?: string
+  num: string
+  /** Its group is hidden, so it does not show either. */
+  groupHidden: boolean
+}
+
+/** A group item's page-unique row ID. */
+export const childId = (group: number, item: number) => -(group * 1_000_000 + item)
+
+export function itemRows(scene: string, items: SceneItem[], folded: Set<string>): ItemRow[] {
+  return items.flatMap((item, i) => {
+    const row: ItemRow = { ...item, obsId: item.id, scene, num: String(i + 1), groupHidden: false }
+    if (item.kind !== 'group' || folded.has(item.source)) return [row]
+    const children = (item.children ?? []).map((c, j) => ({
+      ...c,
+      id: childId(item.id, c.id),
+      obsId: c.id,
+      scene: item.source,
+      group: item.source,
+      num: `${i + 1}.${j + 1}`,
+      groupHidden: !item.enabled,
+    }))
+    return [row, ...children]
+  })
+}
+
 /** Whether OBS is connected and its state read (the scene is unknown otherwise). */
 export const obsReady = (state: StreamingState | undefined): state is StreamingState & { scene: string } =>
   !!state?.scene
