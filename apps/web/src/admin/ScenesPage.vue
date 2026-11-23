@@ -183,6 +183,37 @@
                           @update:model-value="(y: number | null) => y !== null && place(item, { y })"
                         />
                       </span>
+                      <!-- Size on the canvas; 等比例 keeps its width ÷ height (on unless turned off). -->
+                      <span>{{ t('scene.size') }}</span>
+                      <span class="fields">
+                        <InputNumber
+                          :model-value="Math.round(placements.get(item.id)!.width)"
+                          :min="1"
+                          :use-grouping="false"
+                          :disabled="busy.has(item.id) || !placements.get(item.id)!.width"
+                          :aria-label="t('scene.width', { item: item.source })"
+                          class="coord"
+                          @update:model-value="(v: number | null) => v !== null && resize(item, 'width', v)"
+                        />
+                        <Button
+                          :label="t('scene.ratio')"
+                          :icon="unlocked.has(item.id) ? 'pi pi-lock-open' : 'pi pi-lock'"
+                          :aria-pressed="!unlocked.has(item.id)"
+                          size="small"
+                          outlined
+                          :disabled="busy.has(item.id)"
+                          @click="toggleRatio(item)"
+                        />
+                        <InputNumber
+                          :model-value="Math.round(placements.get(item.id)!.height)"
+                          :min="1"
+                          :use-grouping="false"
+                          :disabled="busy.has(item.id) || !placements.get(item.id)!.height"
+                          :aria-label="t('scene.height', { item: item.source })"
+                          class="coord"
+                          @update:model-value="(v: number | null) => v !== null && resize(item, 'height', v)"
+                        />
+                      </span>
                       <span>{{ t('scene.align') }}</span>
                       <span class="fields">
                         <Select
@@ -412,14 +443,36 @@ function onDrop(e: DragEvent, target: SceneItem) {
 
 const geoText = (item: SceneItem) => {
   const p = placements.value.get(item.id)
-  return p ? `${Math.round(p.x)}, ${Math.round(p.y)}` : '—'
+  if (!p) return '—'
+  const at = `${Math.round(p.x)}, ${Math.round(p.y)}`
+  return p.width ? `${at} · ${Math.round(p.width)} × ${Math.round(p.height)}` : at
+}
+
+// Size: with 等比例 (the default) the other side follows, at least 1; OBS gets the new scale.
+const unlocked = ref(new Set<number>())
+function toggleRatio(item: SceneItem) {
+  const next = new Set(unlocked.value)
+  if (!next.delete(item.id)) next.add(item.id)
+  unlocked.value = next
+}
+async function resize(item: SceneItem, side: 'width' | 'height', value: number) {
+  const now = placements.value.get(item.id)
+  if (!now?.width || !now.height) return
+  const v = Math.max(1, value)
+  const ratio = now.width / now.height
+  const size = unlocked.value.has(item.id)
+    ? { width: side === 'width' ? v : now.width, height: side === 'height' ? v : now.height }
+    : side === 'width'
+      ? { width: v, height: Math.max(1, Math.round(v / ratio)) }
+      : { width: Math.max(1, Math.round(v * ratio)), height: v }
+  if (await change(item, { size })) placements.value = new Map(placements.value).set(item.id, { ...now, ...size })
 }
 
 type Align = Schemas['Align']
 const ALIGNS: Align[] = ['top_left', 'top', 'top_right', 'left', 'center', 'right', 'bottom_left', 'bottom', 'bottom_right']
 // The canvas and each item's position in the edited scene, read again as OBS's scenes and items change.
 const canvas = ref<Schemas['Canvas']>()
-const placements = ref(new Map<number, Schemas['Placement']>())
+const placements = ref(new Map<number, Schemas['Placement'] & Schemas['ItemSize']>())
 // Each read's number; only the latest one's answer shows, so an older scene's never replaces the edited one.
 let placementRead = 0
 watch(
@@ -444,14 +497,14 @@ const outside = (p: Schemas['Placement']) =>
 async function place(item: SceneItem, what: Partial<Schemas['Placement']>) {
   const now = placements.value.get(item.id)
   if (!now) return
-  const next = { ...now, ...what }
+  const next = { x: now.x, y: now.y, align: now.align, ...what }
   // OBS sends no event when an item moves, so the next change starts from this one, not the last read.
-  if (await change(item, { placement: next })) placements.value = new Map(placements.value).set(item.id, next)
+  if (await change(item, { placement: next })) placements.value = new Map(placements.value).set(item.id, { ...now, ...next })
 }
 
 async function change(
   item: SceneItem,
-  what: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement'] },
+  what: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement']; size?: Schemas['ItemSize'] },
 ) {
   const scene = target.value
   if (!scene) return false

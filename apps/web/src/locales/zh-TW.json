@@ -1406,6 +1406,10 @@
     "position": "位置",
     "editItem": "編輯「{item}」",
     "noPlacement": "讀不到這個物件的位置。",
+    "size": "大小",
+    "width": "「{item}」的寬",
+    "height": "「{item}」的高",
+    "ratio": "等比例",
     "moreMoves": "更多排序：{item}",
     "toFront": "移到最上",
     "toBack": "移到最下",
@@ -1803,6 +1807,7 @@
       "not_found": "OBS 裡找不到這個場景或物件，可能剛被改名或刪除。",
       "request_failed": "OBS 沒有完成這個動作。",
       "nothing_to_change": "沒有要變更的項目。",
+      "invalid_size": "大小要在 1 到 100000 之間。",
       "not_local": "OBS 在另一台電腦，本工具的 Overlay 網址在那台電腦打不開，所以不能從這裡加進場景。",
       "invalid_source": "這個 Overlay 的資料不正確。"
     },

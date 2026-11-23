@@ -1680,7 +1680,10 @@ export interface paths {
         };
         /** The saved choice; `null` when never changed (both services in use). */
         get: operations["services"];
-        /** Saves the choice; at most 50 parked modules with IDs of 1-32 characters `[a-z0-9-]`, each service listed once. */
+        /**
+         * Saves the choice and starts or stops the Twitch and OBS connections for it; at most 50 parked modules with IDs of
+         *     1-32 characters `[a-z0-9-]`, each service listed once.
+         */
         put: operations["set_services"];
         post?: never;
         delete?: never;
@@ -3216,13 +3219,21 @@ export interface components {
              */
             position?: number | null;
             scene: string;
+            size?: components["schemas"]["ItemSize"] | null;
         };
-        ItemPlacement: components["schemas"]["Placement"] & {
+        ItemPlacement: components["schemas"]["Placement"] & components["schemas"]["ItemSize"] & {
             /**
              * Format: int64
              * @description The item's `id` in `obs.state`.
              */
             item: number;
+        };
+        /** @description An item's size on the canvas: its source (less what is cropped) times its scale, in canvas pixels. */
+        ItemSize: {
+            /** Format: float */
+            height: number;
+            /** Format: float */
+            width: number;
         };
         /**
          * @description A `leaderboard.update` event exactly as `/ws/overlay` sends it when the boards change (checked every 30 s); the

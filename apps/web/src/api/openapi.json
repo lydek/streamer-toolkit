@@ -5395,7 +5395,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Saves the choice; at most 50 parked modules with IDs of 1-32 characters `[a-z0-9-]`, each service listed once.",
+        "summary": "Saves the choice and starts or stops the Twitch and OBS connections for it; at most 50 parked modules with IDs of\n1-32 characters `[a-z0-9-]`, each service listed once.",
         "operationId": "set_services",
         "requestBody": {
           "content": {
@@ -9573,6 +9573,17 @@
           },
           "scene": {
             "type": "string"
+          },
+          "size": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ItemSize",
+                "description": "Scales the item to this size in canvas pixels, each side 1-100000; absent leaves it. Position stays."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -9580,6 +9591,9 @@
         "allOf": [
           {
             "$ref": "#/components/schemas/Placement"
+          },
+          {
+            "$ref": "#/components/schemas/ItemSize"
           },
           {
             "type": "object",
@@ -9595,6 +9609,24 @@
             }
           }
         ]
+      },
+      "ItemSize": {
+        "type": "object",
+        "description": "An item's size on the canvas: its source (less what is cropped) times its scale, in canvas pixels.",
+        "required": [
+          "width",
+          "height"
+        ],
+        "properties": {
+          "height": {
+            "type": "number",
+            "format": "float"
+          },
+          "width": {
+            "type": "number",
+            "format": "float"
+          }
+        }
       },
       "LeaderboardEvent": {
         "type": "object",

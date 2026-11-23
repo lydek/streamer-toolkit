@@ -88,6 +88,13 @@ pub struct Placement {
     pub align: Align,
 }
 
+/// An item's size on the canvas: its source (less what is cropped) times its scale, in canvas pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct ItemSize {
+    pub width: f32,
+    pub height: f32,
+}
+
 /// The canvas size in pixels (OBS: the base resolution).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Canvas {
@@ -179,11 +186,20 @@ pub trait StreamingSoftware: Send + Sync {
         item: i64,
         position: u32,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
-    /// The canvas size and where each of `scene`'s items sits, by item ID.
+    /// The canvas size, and where each of `scene`'s items sits and how large it is, by item ID.
+    #[allow(clippy::type_complexity)]
     fn placements(
         &self,
         scene: &str,
-    ) -> impl Future<Output = Result<(Canvas, Vec<(i64, Placement)>), StreamingError>> + Send;
+    ) -> impl Future<Output = Result<(Canvas, Vec<(i64, Placement, ItemSize)>), StreamingError>> + Send;
+    /// Scales item `item` of `scene` to `size`; position, rotation and crop stay. `NotFound` for an item with
+    /// nothing to scale (sound only).
+    fn set_item_size(
+        &self,
+        scene: &str,
+        item: i64,
+        size: ItemSize,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Moves item `item` of `scene` to `placement`.
     fn set_placement(
         &self,
