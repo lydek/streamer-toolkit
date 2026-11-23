@@ -1,16 +1,26 @@
 <template>
   <FullPage :title="t('pages.obsSources.name')">
-    <p v-for="d in duplicates" :key="d.key" role="alert" class="note-bar">
-      <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
-      {{ t('obsSources.duplicate', { name: rowName(d), n: d.sources.length, effect: t(`obsSources.twice.${d.entry.id}`) }) }}
-    </p>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="data && !data.connected && !servicesDown.obs">{{ t('obsSources.notConnected') }}</p>
     <p v-else-if="data && !data.local">{{ t('obsSources.notLocal') }}</p>
-    <div v-if="data?.connected && data.scenes.length" class="field">
-      <label for="obs-scene">{{ t('obsSources.scene') }}</label>
-      <Select v-model="scene" input-id="obs-scene" :options="data.scenes" />
+    <!-- The scene picker and the duplicate warnings stay on one line above the table; only the rows scroll. -->
+    <div class="bar">
+      <div v-if="data?.connected && data.scenes.length" class="field">
+        <label for="obs-scene">{{ t('obsSources.scene') }}</label>
+        <Select v-model="scene" input-id="obs-scene" :options="data.scenes" />
+      </div>
+      <span
+        v-for="d in duplicates"
+        :key="d.key"
+        role="alert"
+        class="dup-tag"
+        :title="t('obsSources.duplicateWhy')"
+      >
+        <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
+        {{ t('obsSources.duplicate', { name: rowName(d), n: d.sources.length, effect: t(`obsSources.twice.${d.entry.id}`) }) }}
+      </span>
     </div>
+    <div class="table-scroll">
     <table class="table">
       <thead>
         <tr>
@@ -67,11 +77,7 @@
         </tr>
       </tbody>
     </table>
-    <!-- The built-in overlays' look, chosen apart from the admin UI's; it covers the chat overlay's text size too. -->
-    <section class="stack appearance" aria-labelledby="appearance-heading">
-      <h2 id="appearance-heading">{{ t('screenTools.appearance.heading') }}</h2>
-      <AppearanceSettings :appearance="live.appearance" />
-    </section>
+    </div>
   </FullPage>
 </template>
 
@@ -84,7 +90,6 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
-import AppearanceSettings from './AppearanceSettings.vue'
 import { useModules } from './features'
 import FullPage from './FullPage.vue'
 import { errorToast, servicesDown, successToast, useLiveEvents } from './home'
@@ -239,7 +244,37 @@ tbody th[scope='row'] {
   text-align: end;
 }
 
-.appearance {
-  margin-top: 1.5rem;
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.dup-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--p-yellow-400) 14%, transparent);
+  color: var(--p-yellow-200);
+  font-size: 0.8125rem;
+}
+
+/* Wide and tall enough: the page fits the window; the table's rows scroll under its fixed head. */
+@media (min-width: 601px) and (min-height: 560px) {
+  .table-scroll {
+    max-height: calc(100vh - var(--appbar-h, 0px) - var(--page-top-h, 0px) - 7rem);
+    overflow: auto;
+  }
+
+  .table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--p-surface-950);
+  }
 }
 </style>

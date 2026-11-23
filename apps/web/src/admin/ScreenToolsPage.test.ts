@@ -6,7 +6,7 @@ import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
 import ScreenToolsPage from './ScreenToolsPage.vue'
 import WarningsPage from './WarningsPage.vue'
-import ObsSourcesPage from './ObsSourcesPage.vue'
+import OverlayLookPage from './OverlayLookPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -83,7 +83,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function page(payload = card, w = warnings, component: typeof ScreenToolsPage | typeof WarningsPage | typeof ObsSourcesPage = ScreenToolsPage) {
+async function page(payload = card, w = warnings, component: typeof ScreenToolsPage | typeof WarningsPage | typeof OverlayLookPage = ScreenToolsPage) {
   const wrapper = mount(component, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   socket.onmessage!({ data: JSON.stringify(snapshot(payload, w)) })
   await flushPromises()
@@ -139,7 +139,8 @@ it('saves a warning switch with the other warning settings, and asks for a new m
 
 // The overlays' look is at the bottom of the OBS sources page.
 it('saves the overlay theme with the text size', async () => {
-  const wrapper = await page(card, warnings, ObsSourcesPage)
+  // The overlays' look has its own page (畫面小工具 › Overlay 外觀).
+  const wrapper = await page(card, warnings, OverlayLookPage)
   socket.onmessage!({
     data: JSON.stringify({ id: 'a', type: 'screen.appearance', version: 1, seq: 2, occurredAt: '', source: 'system', payload: { theme: 'dark', textSize: 120 } }),
   })

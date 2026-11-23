@@ -301,6 +301,10 @@
       "name": "揪團",
       "desc": "發起揪團，出發前播放名單"
     },
+    "overlayLook": {
+      "name": "Overlay 外觀",
+      "desc": "所有內建 Overlay 共用的主題與文字大小"
+    },
     "obsSources": {
       "name": "OBS 來源",
       "desc": "集中看所有內建 Overlay 在 OBS 的狀態"
@@ -455,6 +459,10 @@
     "alertLog": {
       "name": "最近事件",
       "desc": "這次開啟後的特效與結果。"
+    },
+    "overlayLook": {
+      "name": "Overlay 外觀",
+      "desc": "所有內建 Overlay 共用的主題與文字大小。"
     },
     "obsSources": {
       "name": "OBS 來源",
@@ -1575,7 +1583,8 @@
     "copy": "複製網址",
     "copyFor": "複製「{name}」的網址",
     "sources": "{n} 個來源",
-    "duplicate": "「{name}」在 OBS 有 {n} 個來源，{effect}。同一個來源放在多個場景不算。",
+    "duplicate": "「{name}」在 OBS 有 {n} 個來源，{effect}。",
+    "duplicateWhy": "同一個來源放在多個場景沒關係，同一個場景放兩次才會疊。",
     "leaderboardRow": "排行榜：{board}・{period}",
     "problems": {
       "duplicate": "「{name}」在 OBS 有 {n} 個來源",
