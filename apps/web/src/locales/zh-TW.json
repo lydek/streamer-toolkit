@@ -554,6 +554,11 @@
     "stop": "緊急停止：停掉正在播的並取消排隊中的呈現",
     "stopped": "已停止正在播的 {stopped} 個、取消排隊中的 {cancelled} 個；已記錄的資料不受影響。"
   },
+  "services": {
+    "down": "{service} 沒連上",
+    "banner": "{service} 沒連上，這一頁的功能暫時不能用。",
+    "connect": "去連線"
+  },
   "home": {
     "numbers": {
       "label": "下播後的數字",

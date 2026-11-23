@@ -45,6 +45,9 @@
             </span>
             <span class="tags">
               <span v-if="f.needs" class="tag">{{ t(`features.needs.${f.needs}`) }}</span>
+              <span v-for="s in servicesOf(f.id).filter((s) => servicesDown[s])" :key="s" class="tag down">
+                {{ t('services.down', { service: s === 'obs' ? 'OBS' : 'Twitch' }) }}
+              </span>
               <span v-if="f.scopes && !on(f)" class="tag scope" :title="f.scopes.join(' ')">{{ t('features.needs.scopes') }}</span>
               <span v-if="!f.module && !f.fixed" class="tag">{{ t('home.unbuilt') }}</span>
             </span>
@@ -94,7 +97,8 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
-import { FEATURES, type Feature, hiddenPages, isOn, turnOffPlan, turnOnPlan } from './features'
+import { FEATURES, type Feature, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan } from './features'
+import { servicesDown } from './home'
 import { GROUPS, SOON_PAGES } from './tabs'
 
 const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string; withSettings?: string[] }>()
@@ -335,6 +339,11 @@ function toggle(f: Feature) {
 }
 
 /* yellow-400 on surface-800: well above 4.5:1. */
+.tag.down {
+  border-color: var(--p-red-400);
+  color: var(--p-red-300);
+}
+
 .tag.scope {
   color: var(--p-yellow-400);
 }

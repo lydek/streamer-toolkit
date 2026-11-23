@@ -159,14 +159,14 @@
 import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { errorMessage } from '../i18n'
 import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
-import { clockText, errorToast, obsLight, twitchLight, twitchOverview, useLiveEvents } from './home'
+import { clockText, errorToast, isDown, obsLight, servicesDown, twitchLight, twitchOverview, useLiveEvents } from './home'
 import StatusLight from './StatusLight.vue'
 import { DOCK_WIDE_QUERY, saveDock, useDock } from './dock'
 import { useModules } from './features'
@@ -203,6 +203,11 @@ const liveMeta = computed(() => {
 })
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
+// Pages and the feature list warn from these (servicesDown, home.ts).
+watchEffect(() => {
+  servicesDown.twitch = isDown(twitch.value)
+  servicesDown.obs = isDown(obs.value)
+})
 const problems = computed(() =>
   [
     { name: 'Twitch', section: 'twitch' as const, light: twitch.value },

@@ -125,3 +125,13 @@ export function useModules() {
   })
   return { modules, hidden: computed(() => hiddenPages(modules.value ?? [])) }
 }
+
+export type Service = 'twitch' | 'obs'
+/** The features that cannot work without each service (built or not); the pages and the feature list warn by it. */
+export const SERVICE_NEEDS: Record<Service, string[]> = {
+  twitch: ['streamInfo', 'songs', 'chat', 'chatFilter', 'bot', 'alerts', 'polls', 'rewards', 'redemption', 'checkin', 'viewers', 'roles', 'leaderboard', 'credits', 'shoutouts', 'raids', 'marathon', 'goals'],
+  obs: ['scenes', 'music', 'obsSources'],
+}
+export const servicesOf = (featureId: string) => (Object.keys(SERVICE_NEEDS) as Service[]).filter((s) => SERVICE_NEEDS[s].includes(featureId))
+/** The feature a page belongs to. */
+export const featureOfPage = (path: string) => FEATURES.find((f) => f.pages.includes(path))

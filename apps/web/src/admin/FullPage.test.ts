@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
 import { i18n } from '../i18n'
 import FullPage from './FullPage.vue'
+import { servicesDown } from './home'
 import { navOpened } from './page'
 import { testRouter } from './testRouter'
 
@@ -98,5 +99,34 @@ describe('FullPage page tabs', () => {
     expect(document.activeElement).toBe(category)
     viaCategory.unmount()
     category.remove()
+  })
+})
+
+describe('FullPage service notice', () => {
+  afterEach(() => Object.assign(servicesDown, { twitch: false, obs: false }))
+  const at = async (path: string) => {
+    const router = testRouter()
+    await router.push(path)
+    const wrapper = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it("warns on a page whose feature needs a service that is down, linking to that service's settings", async () => {
+    servicesDown.obs = true
+    const wrapper = await at('/scenes')
+    const notice = wrapper.get('.service-warn')
+    expect(notice.text()).toContain(t('services.banner', { service: 'OBS' }))
+    expect(notice.get('a').attributes('href')).toBe('/settings/connections#obs')
+    // Twitch down does not concern the scene page; one notice per service, never repeated.
+    servicesDown.twitch = true
+    await flushPromises()
+    expect(wrapper.findAll('.service-warn')).toHaveLength(1)
+  })
+
+  it('stays quiet while the service is up, and on pages that do not need it', async () => {
+    expect((await at('/scenes')).find('.service-warn').exists()).toBe(false)
+    servicesDown.obs = true
+    expect((await at('/counters')).find('.service-warn').exists()).toBe(false)
   })
 })
