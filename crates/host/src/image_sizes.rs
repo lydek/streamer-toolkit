@@ -15,7 +15,7 @@ use axum::{
 };
 use base64::Engine;
 use image::{
-    DynamicImage, ImageFormat, ImageReader, Limits, RgbaImage,
+    DynamicImage, ImageFormat, ImageReader, Limits, Rgba, RgbaImage,
     imageops::{self, FilterType},
 };
 use serde::{Deserialize, Serialize};
@@ -82,6 +82,8 @@ pub(crate) struct SizeQuery {
     crop_y: Option<u32>,
     crop_w: Option<u32>,
     crop_h: Option<u32>,
+    /// The padding's color as six hex digits (`1f2937`); transparent when missing.
+    bg: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
@@ -127,11 +129,20 @@ fn decode(bytes: &[u8]) -> Result<DynamicImage, &'static str> {
     })
 }
 
-/// The picture in the middle of a square with transparent edges.
-fn padded(rgba: &RgbaImage) -> RgbaImage {
+/// `rrggbb` as an opaque color.
+fn parse_bg(hex: &str) -> Option<Rgba<u8>> {
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    Some(Rgba([byte(0)?, byte(2)?, byte(4)?, 255]))
+}
+
+/// The picture in the middle of a square whose edges are `bg`, or transparent.
+fn padded(rgba: &RgbaImage, bg: Option<Rgba<u8>>) -> RgbaImage {
     let (w, h) = rgba.dimensions();
     let side = w.max(h);
-    let mut canvas = RgbaImage::new(side, side);
+    let mut canvas = RgbaImage::from_pixel(side, side, bg.unwrap_or(Rgba([0, 0, 0, 0])));
     imageops::overlay(
         &mut canvas,
         rgba,
@@ -142,11 +153,16 @@ fn padded(rgba: &RgbaImage) -> RgbaImage {
 }
 
 /// Square, by transparent edges, by the middle, or by the rectangle picked (which must lie inside the picture), padded.
-fn square(img: &DynamicImage, fit: Fit, crop: Option<Crop>) -> Result<RgbaImage, &'static str> {
+fn square(
+    img: &DynamicImage,
+    fit: Fit,
+    crop: Option<Crop>,
+    bg: Option<Rgba<u8>>,
+) -> Result<RgbaImage, &'static str> {
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
     Ok(match fit {
-        Fit::Pad => padded(&rgba),
+        Fit::Pad => padded(&rgba, bg),
         Fit::Crop => {
             let side = w.min(h);
             imageops::crop_imm(&rgba, (w - side) / 2, (h - side) / 2, side, side).to_image()
@@ -160,7 +176,10 @@ fn square(img: &DynamicImage, fit: Fit, crop: Option<Crop>) -> Result<RgbaImage,
             if !inside {
                 return Err("image_sizes.invalid_crop");
             }
-            padded(&imageops::crop_imm(&rgba, c.x, c.y, c.w, c.h).to_image())
+            padded(
+                &imageops::crop_imm(&rgba, c.x, c.y, c.w, c.h).to_image(),
+                bg,
+            )
         }
     })
 }
@@ -189,25 +208,38 @@ fn reduced(img: &RgbaImage) -> RgbaImage {
 /// One size: its pixels a side, the PNG file and whether a badge is still above its limit.
 type Sized = (u32, Vec<u8>, bool);
 
-/// Every size as PNG bytes, with whether a badge is still above its limit.
-pub(crate) fn sized(
+/// Every size as PNG bytes, with whether a badge is still above its limit; padding is transparent.
+#[cfg(test)]
+fn sized(
     bytes: &[u8],
     kind: ImageKind,
     fit: Fit,
     crop: Option<Crop>,
 ) -> Result<Vec<Sized>, &'static str> {
-    sized_within(bytes, kind, fit, crop, BADGE_MAX_BYTES)
+    sized_on(bytes, kind, fit, crop, None)
 }
 
-/// [`sized`] with the badge limit given (a 72 px badge rarely reaches 25 KB, so tests use a smaller one).
+/// [`sized`] with the padding in `bg`.
+fn sized_on(
+    bytes: &[u8],
+    kind: ImageKind,
+    fit: Fit,
+    crop: Option<Crop>,
+    bg: Option<Rgba<u8>>,
+) -> Result<Vec<Sized>, &'static str> {
+    sized_within(bytes, kind, fit, crop, bg, BADGE_MAX_BYTES)
+}
+
+/// [`sized_on`] with the badge limit given (a 72 px badge rarely reaches 25 KB, so tests use a smaller one).
 fn sized_within(
     bytes: &[u8],
     kind: ImageKind,
     fit: Fit,
     crop: Option<Crop>,
+    bg: Option<Rgba<u8>>,
     limit: usize,
 ) -> Result<Vec<Sized>, &'static str> {
-    let source = square(&decode(bytes)?, fit, crop)?;
+    let source = square(&decode(bytes)?, fit, crop, bg)?;
     Ok(kind
         .sizes()
         .into_iter()
@@ -255,7 +287,7 @@ fn zip_of(kind: ImageKind, files: &[Sized]) -> Vec<u8> {
     request_body(content = String, content_type = "application/octet-stream", description = "The picture"),
     responses(
         (status = 200, body = SizedImages, description = "Or, with `zip=true`, an `application/zip` file"),
-        (status = 400, description = "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture", body = ErrorBody),
+        (status = 400, description = "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture, or `image_sizes.invalid_bg`: a padding color that is not six hex digits", body = ErrorBody),
         (status = 413, description = "`image_sizes.too_large`: more than 10 MB or 4096 px a side", body = ErrorBody),
     )
 )]
@@ -274,7 +306,15 @@ pub(crate) async fn make_sizes(
         (Some(x), Some(y), Some(w), Some(h)) => Some(Crop { x, y, w, h }),
         _ => None,
     };
-    let result = tokio::task::spawn_blocking(move || sized(&bytes, q.kind, q.fit, crop)).await;
+    let bg = match q.bg.as_deref() {
+        None => None,
+        Some(hex) => match parse_bg(hex) {
+            Some(color) => Some(color),
+            None => return error(StatusCode::BAD_REQUEST, "image_sizes.invalid_bg"),
+        },
+    };
+    let result =
+        tokio::task::spawn_blocking(move || sized_on(&bytes, q.kind, q.fit, crop, bg)).await;
     let files = match result {
         Ok(Ok(files)) => files,
         Ok(Err(code @ "image_sizes.too_large")) => {
@@ -391,6 +431,22 @@ mod tests {
     }
 
     #[test]
+    fn padding_takes_a_chosen_color_and_refuses_a_bad_one() {
+        let pic = picture(300, 100, false);
+        let red = parse_bg("ff0000");
+        let out = sized_on(&pic, ImageKind::Points, Fit::Pad, None, red).unwrap();
+        let img = image::load_from_memory(&out[0].1).unwrap().to_rgba8();
+        assert_eq!(
+            img.get_pixel(56, 0).0,
+            [255, 0, 0, 255],
+            "the top edge is red"
+        );
+        for bad in ["f00", "ff00zz", "#ff0000", ""] {
+            assert_eq!(parse_bg(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
     fn padding_keeps_the_edges_transparent() {
         let out = sized(&picture(300, 100, false), ImageKind::Points, Fit::Pad, None).unwrap();
         let img = image::load_from_memory(&out[0].1).unwrap().to_rgba8();
@@ -401,9 +457,10 @@ mod tests {
     #[test]
     fn a_heavy_badge_is_reduced_to_256_colors_and_flagged_only_when_still_over() {
         let noisy = picture(72, 72, true);
-        let plain = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, usize::MAX).unwrap();
+        let plain =
+            sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, None, usize::MAX).unwrap();
         let limit = plain[0].1.len() - 1;
-        let out = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, limit).unwrap();
+        let out = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, None, limit).unwrap();
         assert!(
             out[0].1.len() < plain[0].1.len(),
             "reducing the colors made it smaller"
@@ -416,9 +473,9 @@ mod tests {
             .collect();
         assert!(colors.len() <= 256);
         assert!(!out[0].2, "under the limit after reducing");
-        let still = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, 10).unwrap();
+        let still = sized_within(&noisy, ImageKind::Badge, Fit::Crop, None, None, 10).unwrap();
         assert!(still[0].2, "flagged when even that is too big");
-        let icon = sized_within(&noisy, ImageKind::Points, Fit::Crop, None, 10).unwrap();
+        let icon = sized_within(&noisy, ImageKind::Points, Fit::Crop, None, None, 10).unwrap();
         assert!(!icon[0].2, "only badges have the limit");
     }
 

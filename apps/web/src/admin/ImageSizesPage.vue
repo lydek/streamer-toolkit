@@ -21,6 +21,19 @@
           aria-labelledby="is-fit"
         />
       </div>
+      <!-- Padding: transparent, or a color the broadcaster picks (pad and a picked rectangle use it). -->
+      <div class="field">
+        <span id="is-bg">{{ t('imageSizes.bg') }}</span>
+        <SelectButton
+          v-model="bgMode"
+          :options="BG_MODES"
+          :option-label="(m: 'none' | 'color') => t(`imageSizes.bgs.${m}`)"
+          :allow-empty="false"
+          aria-labelledby="is-bg"
+          @update:model-value="run"
+        />
+        <input v-if="bgMode === 'color'" v-model="bgColor" type="color" class="bg-color" :aria-label="t('imageSizes.bgColor')" @change="run" />
+      </div>
       <Button :label="t('imageSizes.download')" icon="pi pi-download" :disabled="!sized || busy" @click="download" />
     </div>
 
@@ -58,9 +71,10 @@
       </fieldset>
     </template>
 
+    <!-- The last results stay while new ones are made, so the page keeps its height and scroll position. -->
     <p v-if="failed" role="alert">{{ failed }}</p>
-    <p v-else-if="busy">{{ t('app.loading') }}</p>
-    <div v-else-if="sized" class="results">
+    <p v-else-if="busy && !sized">{{ t('app.loading') }}</p>
+    <div v-if="sized && !failed" class="results" :class="{ updating: busy }" :aria-busy="busy">
       <div v-for="bg in BACKGROUNDS" :key="bg" class="sheet" :class="bg">
         <!-- A points icon as Twitch shows it under the chat: the icon, then the balance. -->
         <p v-if="kind === 'points'" class="balance">
@@ -117,6 +131,10 @@ const failed = ref('')
 // The picture as shown under the frame, with its own size; the frame starts centered and as large as it fits.
 const source = shallowRef<{ url: string; width: number; height: number }>()
 const crop = ref<Crop>({ x: 0, y: 0, w: 1, h: 1 })
+const BG_MODES: ('none' | 'color')[] = ['none', 'color']
+const bgMode = ref<'none' | 'color'>('none')
+const bgColor = ref('#1f2937')
+const background = () => (bgMode.value === 'color' ? bgColor.value : null)
 // Width ÷ height while 等比例 is on.
 const ratio = ref<number>()
 const FIELDS = ['x', 'y', 'w', 'h'] as const
@@ -151,7 +169,7 @@ async function run() {
   busy.value = true
   failed.value = ''
   try {
-    const result = await makeSizes(picked, kind.value, fit.value, crop.value)
+    const result = await makeSizes(picked, kind.value, fit.value, crop.value, background())
     if (mine === request) sized.value = result
   } catch (e) {
     if (mine !== request) return
@@ -216,7 +234,7 @@ async function download() {
   if (!picked) return
   try {
     await saveFile(zipName(picked.name, kind.value), { description: 'ZIP', mime: 'application/zip', extension: '.zip' }, () =>
-      sizesZip(picked, kind.value, fit.value, crop.value),
+      sizesZip(picked, kind.value, fit.value, crop.value, background()),
     )
   } catch (e) {
     failed.value = message(e)
@@ -225,6 +243,19 @@ async function download() {
 </script>
 
 <style scoped>
+.bg-color {
+  width: 2.5rem;
+  height: 2rem;
+  padding: 0.125rem;
+  border: 1px solid var(--p-surface-600);
+  border-radius: 6px;
+  background: none;
+}
+
+.results.updating {
+  opacity: 0.6;
+}
+
 .crop-fields {
   display: flex;
   flex-wrap: wrap;

@@ -7011,6 +7011,8 @@ export interface operations {
                 crop_y?: number;
                 crop_w?: number;
                 crop_h?: number;
+                /** @description The padding's color as six hex digits (`1f2937`); transparent when missing. */
+                bg?: string;
             };
             header?: never;
             path?: never;
@@ -7032,7 +7034,7 @@ export interface operations {
                     "application/json": components["schemas"]["SizedImages"];
                 };
             };
-            /** @description `image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture */
+            /** @description `image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture, or `image_sizes.invalid_bg`: a padding color that is not six hex digits */
             400: {
                 headers: {
                     [name: string]: unknown;
