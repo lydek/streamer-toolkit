@@ -1316,6 +1316,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/source/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The choices OBS offers for one listed field of a capture or audio source. */
+        get: operations["source_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/source/refresh": {
         parameters: {
             query?: never;
@@ -4357,6 +4374,12 @@ export interface components {
          * @enum {string}
          */
         SourceFamily: "browser" | "text" | "image" | "video_capture" | "app_audio" | "game" | "other";
+        SourceOption: {
+            /** @description As OBS shows it. */
+            name: string;
+            /** @description What the field is set to for this choice. */
+            value: Record<string, never>;
+        };
         SourceSettings: {
             family: components["schemas"]["SourceFamily"];
             /** @description Only the fields of this kind's form; a browser source's `url` only when it opens this Host's overlay. */
@@ -8169,6 +8192,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    source_options: {
+        parameters: {
+            query: {
+                input: string;
+                /** @description One of the form's listed fields: `video_device_id`, `resolution`, `window`, `capture_mode`. */
+                property: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOption"][];
+                };
             };
             400: {
                 headers: {

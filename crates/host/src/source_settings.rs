@@ -71,6 +71,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
             "/api/admin/obs/source/refresh",
             axum::routing::post(refresh_source),
         )
+        .route("/api/admin/obs/source/options", get(source_options))
         .with_state(link)
 }
 
@@ -209,6 +210,70 @@ pub(crate) async fn refresh_source(
     command_response(link.press_input_button(&body.input, "refreshnocache").await)
 }
 
+/// The form fields whose choices come from OBS (devices, resolutions, windows, capture modes).
+fn listed(family: SourceFamily) -> &'static [&'static str] {
+    match family {
+        SourceFamily::VideoCapture => &["video_device_id", "resolution"],
+        SourceFamily::AppAudio => &["window"],
+        SourceFamily::Game => &["capture_mode", "window"],
+        _ => &[],
+    }
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct OptionsQuery {
+    input: String,
+    /// One of the form's listed fields: `video_device_id`, `resolution`, `window`, `capture_mode`.
+    property: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct SourceOption {
+    /// As OBS shows it.
+    name: String,
+    /// What the field is set to for this choice.
+    #[schema(value_type = Object)]
+    value: Value,
+}
+
+/// The choices OBS offers for one listed field of a capture or audio source.
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs/source/options",
+    tag = "admin",
+    params(OptionsQuery),
+    responses(
+        (status = 200, body = [SourceOption]),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn source_options(
+    State(link): State<Arc<ObsLink>>,
+    Query(q): Query<OptionsQuery>,
+) -> Response {
+    let kind = match link.input_settings(&q.input).await {
+        Ok((kind, _)) => kind,
+        Err(e) => return command_response(Err(e)),
+    };
+    if !listed(family(&kind)).contains(&q.property.as_str()) {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_source");
+    }
+    match link.input_list_items(&q.input, &q.property).await {
+        Ok(items) => Json(
+            items
+                .into_iter()
+                .map(|(name, value)| SourceOption { name, value })
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => command_response(Err(e)),
+    }
+}
+
 /// Whether `fields` may be written to a source of `family`.
 fn check(
     family: SourceFamily,
@@ -293,6 +358,16 @@ mod tests {
         );
         assert_eq!(family("text_gdiplus_v3"), SourceFamily::Text);
         assert_eq!(family("text_ft2_source_v2"), SourceFamily::Text);
+    }
+
+    #[test]
+    fn choices_are_offered_only_for_listed_fields() {
+        assert_eq!(
+            listed(SourceFamily::VideoCapture),
+            ["video_device_id", "resolution"]
+        );
+        assert_eq!(listed(SourceFamily::Game), ["capture_mode", "window"]);
+        assert!(listed(SourceFamily::Browser).is_empty());
     }
 
     #[test]

@@ -513,6 +513,25 @@ impl ObsControl {
             .map_err(command_error)
     }
 
+    /// `GetInputPropertiesListPropertyItems`, the enabled items only.
+    pub async fn input_list_items(
+        &self,
+        input: &str,
+        property: &str,
+    ) -> Result<Vec<(String, serde_json::Value)>, StreamingError> {
+        let client = self.client()?;
+        let items = client
+            .inputs()
+            .properties_list_property_items(InputId::Name(input), property)
+            .await
+            .map_err(command_error)?;
+        Ok(items
+            .into_iter()
+            .filter(|i| i.enabled)
+            .map(|i| (i.name, i.value))
+            .collect())
+    }
+
     /// `SetStudioModeEnabled`.
     pub async fn set_studio_mode(&self, enabled: bool) -> Result<(), StreamingError> {
         let client = self.client()?;
@@ -1028,6 +1047,9 @@ mod tests {
                 "GetInputList" if data["inputKind"] == "browser_source" => json!({"inputs": [{
                     "inputName": "Chat", "inputUuid": CHAT, "inputKind": "browser_source",
                     "unversionedInputKind": "browser_source"}]}),
+                "GetInputPropertiesListPropertyItems" => json!({"propertyItems": [
+                    {"itemName": "Cam", "itemEnabled": true, "itemValue": "cam1"},
+                    {"itemName": "Busy", "itemEnabled": false, "itemValue": "cam2"}]}),
                 "GetInputDefaultSettings" => {
                     json!({"defaultInputSettings": {"width": 800, "height": 600}})
                 }
@@ -1452,6 +1474,14 @@ mod tests {
             )
             .await
             .unwrap();
+        // Only the choices OBS offers as enabled.
+        assert_eq!(
+            control
+                .input_list_items("Cam", "video_device_id")
+                .await
+                .unwrap(),
+            vec![("Cam".to_owned(), json!("cam1"))]
+        );
         let (kind, settings) = control.input_settings("Chat").await.unwrap();
         assert_eq!(
             (kind.as_str(), &settings["width"]),

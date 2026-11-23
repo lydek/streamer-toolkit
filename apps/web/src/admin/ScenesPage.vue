@@ -493,6 +493,23 @@
                           />
                         </span>
                       </template>
+                      <!-- Capture and audio: choices come from OBS; the window shows only for a specific window. -->
+                      <template v-else-if="['video_capture', 'app_audio', 'game'].includes(sources.get(item.source)!.family)">
+                        <template v-for="key in listedFields(item)" :key="key">
+                          <span>{{ t(`scene.src.${key}`) }}</span>
+                          <Select
+                            :model-value="field(item, key)"
+                            :options="options.get(`${item.source}/${key}`) ?? []"
+                            option-label="name"
+                            option-value="value"
+                            :placeholder="t('scene.src.pick')"
+                            :aria-label="t(`scene.src.${key}`)"
+                            class="wide"
+                            @show="loadOptions(item, key)"
+                            @update:model-value="(v: unknown) => setField(item, key, v, key === 'resolution' ? { res_type: 1 } : {})"
+                          />
+                        </template>
+                      </template>
                       <!-- Image: its file, typed in when OBS runs on this computer; elsewhere OBS changes it. -->
                       <template v-else-if="sources.get(item.source)!.family === 'image'">
                         <span>{{ t('scene.src.file') }}</span>
@@ -736,18 +753,19 @@ const fontOf = (item: SceneItem) => (field(item, 'font') ?? {}) as { face?: stri
 // Shown at once, so the next change (the font size after its face) starts from it; a source's writes go one after
 // another, so OBS ends with the last; a refused one goes back unless changed again meanwhile.
 const writes = new Map<string, Promise<unknown>>()
-async function setField(item: SceneItem, key: string, value: unknown) {
+// `also`: fields that must change along with it (a capture resolution applies only in its custom mode).
+async function setField(item: SceneItem, key: string, value: unknown, also: Record<string, unknown> = {}) {
   const now = sources.value.get(item.source)
   if (!now) return
   const before = now.fields[key]
   const show = (v: unknown) => {
     const latest = sources.value.get(item.source)
-    if (latest) sources.value = new Map(sources.value).set(item.source, { ...latest, fields: { ...latest.fields, [key]: v } as never })
+    if (latest) sources.value = new Map(sources.value).set(item.source, { ...latest, fields: { ...latest.fields, ...also, [key]: v } as never })
   }
   show(value)
   // `fields` is a free-form object in the API description; its keys are checked by the Host.
   const write = (writes.get(item.source) ?? Promise.resolve()).then(() =>
-    api(client.PUT('/api/admin/obs/source', { body: { input: item.source, fields: { [key]: value } as never } })),
+    api(client.PUT('/api/admin/obs/source', { body: { input: item.source, fields: { ...also, [key]: value } as never } })),
   )
   writes.set(item.source, write.catch(() => {}))
   try {
@@ -761,6 +779,28 @@ async function setField(item: SceneItem, key: string, value: unknown) {
 const colorKey = (item: SceneItem) => (field(item, 'color1') !== undefined && field(item, 'color') === undefined ? 'color1' : 'color')
 const textColor = (item: SceneItem) => hexOf(Number(field(item, colorKey(item)) ?? 0xffffff))
 const setTextColor = (item: SceneItem, hex: string) => setField(item, colorKey(item), colorOf(hex, colorKey(item) === 'color1'))
+// Capture and audio choices, asked when a list opens (devices and windows change while OBS runs).
+const LISTED: Record<string, string[]> = {
+  video_capture: ['video_device_id', 'resolution'],
+  app_audio: ['window'],
+  game: ['capture_mode', 'window'],
+}
+const options = ref(new Map<string, Schemas['SourceOption'][]>())
+const listedFields = (item: SceneItem) => {
+  const s = sources.value.get(item.source)
+  const keys = LISTED[s?.family ?? ''] ?? []
+  // Game capture's window applies only to capturing a specific window.
+  return s?.family === 'game' && field(item, 'capture_mode') !== 'window' ? keys.filter((k) => k !== 'window') : keys
+}
+async function loadOptions(item: SceneItem, key: string) {
+  try {
+    const got = await api(client.GET('/api/admin/obs/source/options', { params: { query: { input: item.source, property: key } } }))
+    options.value = new Map(options.value).set(`${item.source}/${key}`, got)
+  } catch (e) {
+    report(e)
+  }
+}
+
 async function refreshSource(item: SceneItem) {
   try {
     await api(client.POST('/api/admin/obs/source/refresh', { body: { input: item.source } }))
