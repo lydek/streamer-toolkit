@@ -88,6 +88,7 @@ use crate::{
         obs::update_item,
         obs::scene_placements,
         obs::item_transform,
+        obs::update_input,
         source_settings::source,
         source_settings::set_source,
         source_settings::refresh_source,

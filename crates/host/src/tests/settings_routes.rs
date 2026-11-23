@@ -154,6 +154,22 @@ async fn obs_commands_need_a_connection_and_something_to_change() {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
         assert_eq!(code(res).await, "obs.invalid_transform");
     }
+    let res = app
+        .clone()
+        .oneshot(put(
+            "/api/admin/obs/input",
+            r#"{"input":"Mic","volume_db":30}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(code(res).await, "obs.invalid_volume");
+    let res = app
+        .clone()
+        .oneshot(put("/api/admin/obs/input", r#"{"input":"Mic"}"#))
+        .await
+        .unwrap();
+    assert_eq!(code(res).await, "obs.nothing_to_change");
     let _ = std::fs::remove_dir_all(dir);
 }
 

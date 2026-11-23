@@ -48,7 +48,7 @@ impl WarningSettings {
 }
 
 /// What the host saw just now.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Conditions {
     /// A chat overlay is open in OBS.
     pub chat_overlay_open: bool,
@@ -106,6 +106,7 @@ mod tests {
             inputs: Some(vec![Input {
                 name: "Mic".into(),
                 muted,
+                ..Default::default()
             }]),
         }
     }

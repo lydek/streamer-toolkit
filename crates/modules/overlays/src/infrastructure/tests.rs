@@ -207,6 +207,7 @@ fn seen(chat: bool, twitch: bool, mic: Option<bool>) -> crate::Conditions {
             mic.map(|muted| toolkit_core::streaming::Input {
                 name: "Mic".into(),
                 muted,
+                ..Default::default()
             })
             .into_iter()
             .collect(),

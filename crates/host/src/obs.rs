@@ -31,7 +31,7 @@ use toolkit_core::{
     events::Source,
     settings::{self, ExternalService},
     streaming::{
-        BrowserSource, Canvas, ItemSize, ItemTransform, Placement, StreamingError,
+        BrowserSource, Canvas, ItemSize, ItemTransform, Monitor, Placement, StreamingError,
         StreamingSoftware, StreamingState, StreamingStats, TransformChange,
     },
 };
@@ -42,6 +42,8 @@ use crate::admin::{ErrorBody, error};
 pub(crate) const STATUS_EVENT: &str = "obs.status";
 const STATUS_VERSION: u32 = 1;
 pub(crate) const STATE_EVENT: &str = "obs.state";
+/// The shortest time between two `obs.state` events.
+const STATE_GAP: std::time::Duration = std::time::Duration::from_millis(150);
 const STATE_VERSION: u32 = 1;
 
 /// The `payload` of an `obs.status` event, and the `status` of `GET /api/admin/obs`.
@@ -173,6 +175,9 @@ impl ObsLink {
             loop {
                 let current = state_changes.borrow_and_update().clone();
                 publish_state(&bus, &current);
+                // A fader dragged in OBS changes the state many times a second: the latest goes out at most every
+                // STATE_GAP, the first after a quiet spell at once.
+                tokio::time::sleep(STATE_GAP).await;
                 if state_changes.changed().await.is_err() {
                     return;
                 }
@@ -387,6 +392,18 @@ impl StreamingSoftware for ObsLink {
         self.control.input_list_items(input, property).await
     }
 
+    async fn set_input_volume(&self, input: &str, db: f32) -> Result<(), StreamingError> {
+        self.control.set_input_volume(input, db).await
+    }
+
+    async fn set_input_mute(&self, input: &str, muted: bool) -> Result<(), StreamingError> {
+        self.control.set_input_mute(input, muted).await
+    }
+
+    async fn set_input_monitor(&self, input: &str, monitor: Monitor) -> Result<(), StreamingError> {
+        self.control.set_input_monitor(input, monitor).await
+    }
+
     async fn set_item_size(
         &self,
         scene: &str,
@@ -470,6 +487,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         .route("/api/admin/obs/item", put(update_item))
         .route("/api/admin/obs/placements", get(scene_placements))
         .route("/api/admin/obs/transform", get(item_transform))
+        .route("/api/admin/obs/input", put(update_input))
         .route(
             "/api/admin/obs/sources",
             get(overlay_sources)
@@ -697,6 +715,63 @@ pub(crate) async fn update_item(
 #[into_params(parameter_in = Query)]
 pub(crate) struct PlacementsQuery {
     scene: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct InputBody {
+    /// An input of `obs.state`'s `inputs`.
+    input: String,
+    /// The fader in dB, -100 to 26; absent leaves it.
+    #[serde(default)]
+    volume_db: Option<f32>,
+    #[serde(default)]
+    muted: Option<bool>,
+    #[serde(default)]
+    monitor: Option<Monitor>,
+}
+
+/// Changes an input's fader, mute or monitoring (they belong to the input, in every scene); `obs.state` shows the
+/// change once OBS has made it.
+#[utoipa::path(
+    put,
+    path = "/api/admin/obs/input",
+    tag = "admin",
+    request_body = InputBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn update_input(
+    State(link): State<Arc<ObsLink>>,
+    Json(body): Json<InputBody>,
+) -> Response {
+    if body.volume_db.is_none() && body.muted.is_none() && body.monitor.is_none() {
+        return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
+    }
+    if body
+        .volume_db
+        .is_some_and(|db| !db.is_finite() || !(-100.0..=26.0).contains(&db))
+    {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_volume");
+    }
+    if let Some(db) = body.volume_db
+        && let Err(e) = link.set_input_volume(&body.input, db).await
+    {
+        return command_response(Err(e));
+    }
+    if let Some(muted) = body.muted
+        && let Err(e) = link.set_input_mute(&body.input, muted).await
+    {
+        return command_response(Err(e));
+    }
+    if let Some(monitor) = body.monitor {
+        return command_response(link.set_input_monitor(&body.input, monitor).await);
+    }
+    command_response(Ok(()))
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -1186,6 +1261,42 @@ mod tests {
             assert!(tokio::time::Instant::now() < deadline, "{snapshot}");
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_burst_of_state_changes_goes_out_as_few_events_ending_with_the_latest() {
+        let dir = std::env::temp_dir().join(format!("st-obs-burst-{}", std::process::id()));
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = closed.local_addr().unwrap().port();
+        drop(closed);
+        settings::update(&dir, |s| s.obs.port = port).unwrap();
+        let bus = Arc::new(EventBus::default());
+        let link = ObsLink::start(dir.clone(), 0, Arc::new(NoPassword), bus.clone());
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let (_, mut events) = bus.subscribe();
+        for n in 0..50 {
+            link.state.send_replace(StreamingState {
+                scene: Some(format!("S{n}")),
+                ..StreamingState::default()
+            });
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let mut states = Vec::new();
+        while let Ok(e) = events.try_recv() {
+            let e: serde_json::Value = serde_json::from_str(&e).unwrap();
+            if e["type"] == STATE_EVENT {
+                states.push(
+                    e["payload"]["scene"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                );
+            }
+        }
+        assert!(states.len() <= 4, "{states:?}");
+        assert_eq!(states.last().map(String::as_str), Some("S49"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

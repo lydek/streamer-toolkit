@@ -12,7 +12,7 @@ use std::{
 };
 
 use futures_util::StreamExt;
-use obws::common::{Alignment, BoundsType};
+use obws::common::{Alignment, BoundsType, MonitorType};
 use obws::{
     Client,
     client::{ConnectConfig, HandshakeError},
@@ -22,7 +22,7 @@ use obws::{
         EventSubscription,
         inputs::Create,
         inputs::InputId,
-        inputs::SetSettings,
+        inputs::{SetSettings, Volume},
         scene_items::{
             Bounds as ObsBounds, CreateSceneItem, Crop as ObsCrop, Position, Scale,
             SceneItemTransform, SetEnabled, SetIndex, SetLocked, SetTransform,
@@ -36,8 +36,8 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    Align, Bounds, BrowserSource, Canvas, Input, ItemCrop, ItemSize, ItemTransform, Placement,
-    Scene, SceneItem, StreamingError, StreamingState, StreamingStats, TransformChange,
+    Align, Bounds, BrowserSource, Canvas, Input, ItemCrop, ItemSize, ItemTransform, Monitor,
+    Placement, Scene, SceneItem, StreamingError, StreamingState, StreamingStats, TransformChange,
 };
 
 use crate::secrets::SecretStore;
@@ -532,6 +532,45 @@ impl ObsControl {
             .collect())
     }
 
+    /// `SetInputVolume` in dB.
+    pub async fn set_input_volume(&self, input: &str, db: f32) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .inputs()
+            .set_volume(InputId::Name(input), Volume::Db(db))
+            .await
+            .map_err(command_error)
+    }
+
+    /// `SetInputMute`.
+    pub async fn set_input_mute(&self, input: &str, muted: bool) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .inputs()
+            .set_muted(InputId::Name(input), muted)
+            .await
+            .map_err(command_error)
+    }
+
+    /// `SetInputAudioMonitorType`.
+    pub async fn set_input_monitor(
+        &self,
+        input: &str,
+        monitor: Monitor,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        let kind = match monitor {
+            Monitor::Off => MonitorType::None,
+            Monitor::MonitorOnly => MonitorType::MonitorOnly,
+            Monitor::MonitorAndOutput => MonitorType::MonitorAndOutput,
+        };
+        client
+            .inputs()
+            .set_audio_monitor_type(InputId::Name(input), kind)
+            .await
+            .map_err(command_error)
+    }
+
     /// `SetStudioModeEnabled`.
     pub async fn set_studio_mode(&self, enabled: bool) -> Result<(), StreamingError> {
         let client = self.client()?;
@@ -573,6 +612,14 @@ impl ObsControl {
             .remove(SceneId::Name(scene), item)
             .await
             .map_err(command_error)
+    }
+}
+
+fn monitor_of(m: MonitorType) -> Monitor {
+    match m {
+        MonitorType::MonitorOnly => Monitor::MonitorOnly,
+        MonitorType::MonitorAndOutput => Monitor::MonitorAndOutput,
+        _ => Monitor::Off,
     }
 }
 
@@ -855,9 +902,22 @@ async fn read_state(client: &Client) -> Result<StreamingState, ObwsError> {
             }) => continue,
             Err(e) => return Err(e),
         };
+        let volume_db = client
+            .inputs()
+            .volume(InputId::Uuid(input.id.uuid))
+            .await?
+            .db;
+        let monitor = monitor_of(
+            client
+                .inputs()
+                .audio_monitor_type(InputId::Uuid(input.id.uuid))
+                .await?,
+        );
         inputs.push(Input {
             muted,
             name: input.id.name,
+            volume_db,
+            monitor,
         });
     }
     let studio_mode = client.ui().studio_mode_enabled().await?;
@@ -925,6 +985,24 @@ fn apply(state: &mut StreamingState, event: &Event) -> Change {
             match state.inputs.iter_mut().find(|i| i.name == id.name) {
                 Some(input) => {
                     input.muted = *muted;
+                    Change::Updated
+                }
+                None => Change::Reread,
+            }
+        }
+        Event::InputVolumeChanged { id, db, .. } => {
+            match state.inputs.iter_mut().find(|i| i.name == id.name) {
+                Some(input) => {
+                    input.volume_db = *db as f32;
+                    Change::Updated
+                }
+                None => Change::Reread,
+            }
+        }
+        Event::InputAudioMonitorTypeChanged { id, monitor_type } => {
+            match state.inputs.iter_mut().find(|i| i.name == id.name) {
+                Some(input) => {
+                    input.monitor = monitor_of(*monitor_type);
                     Change::Updated
                 }
                 None => Change::Reread,
@@ -1047,6 +1125,10 @@ mod tests {
                 "GetInputList" if data["inputKind"] == "browser_source" => json!({"inputs": [{
                     "inputName": "Chat", "inputUuid": CHAT, "inputKind": "browser_source",
                     "unversionedInputKind": "browser_source"}]}),
+                "GetInputVolume" => json!({"inputVolumeMul": 0.5, "inputVolumeDb": -6.0}),
+                "GetInputAudioMonitorType" => {
+                    json!({"monitorType": "OBS_MONITORING_TYPE_MONITOR_ONLY"})
+                }
                 "GetInputPropertiesListPropertyItems" => json!({"propertyItems": [
                     {"itemName": "Cam", "itemEnabled": true, "itemValue": "cam1"},
                     {"itemName": "Busy", "itemEnabled": false, "itemValue": "cam2"}]}),
@@ -1322,6 +1404,8 @@ mod tests {
                 inputs: vec![Input {
                     name: "Mic".into(),
                     muted: false,
+                    volume_db: -6.0,
+                    monitor: Monitor::MonitorOnly,
                 }],
                 streaming: false,
                 recording: true,
@@ -1362,6 +1446,22 @@ mod tests {
             json!({"inputName": "Mic", "inputUuid": MIC, "inputMuted": true}),
         );
         state_reaches(&mut state, "input muted", |s| s.inputs[0].muted).await;
+        fake.event(
+            "InputVolumeChanged",
+            json!({"inputName": "Mic", "inputUuid": MIC, "inputVolumeMul": 0.25, "inputVolumeDb": -12.0}),
+        );
+        state_reaches(&mut state, "input volume", |s| {
+            s.inputs[0].volume_db == -12.0
+        })
+        .await;
+        fake.event(
+            "InputAudioMonitorTypeChanged",
+            json!({"inputName": "Mic", "inputUuid": MIC, "monitorType": "OBS_MONITORING_TYPE_NONE"}),
+        );
+        state_reaches(&mut state, "input monitor", |s| {
+            s.inputs[0].monitor == Monitor::Off
+        })
+        .await;
         fake.event(
             "StreamStateChanged",
             json!({"outputActive": true, "outputState": "OBS_WEBSOCKET_OUTPUT_STARTED"}),
@@ -1492,6 +1592,12 @@ mod tests {
         let mut change = serde_json::Map::new();
         change.insert("css".to_owned(), json!("body { color: red; }"));
         control.set_input_settings("Chat", change).await.unwrap();
+        control.set_input_volume("Mic", -12.0).await.unwrap();
+        control.set_input_mute("Mic", true).await.unwrap();
+        control
+            .set_input_monitor("Mic", Monitor::MonitorAndOutput)
+            .await
+            .unwrap();
         control.set_studio_mode(true).await.unwrap();
         control.set_preview("BRB").await.unwrap();
         control.transition(Some("Cut")).await.unwrap();
@@ -1547,6 +1653,18 @@ mod tests {
                 (
                     "SetInputSettings".to_owned(),
                     json!({"inputName": "Chat", "inputSettings": {"css": "body { color: red; }"}, "overlay": true})
+                ),
+                (
+                    "SetInputVolume".to_owned(),
+                    json!({"inputName": "Mic", "inputVolumeDb": -12.0})
+                ),
+                (
+                    "SetInputMute".to_owned(),
+                    json!({"inputName": "Mic", "inputMuted": true})
+                ),
+                (
+                    "SetInputAudioMonitorType".to_owned(),
+                    json!({"inputName": "Mic", "monitorType": "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"})
                 ),
                 (
                     "SetStudioModeEnabled".to_owned(),

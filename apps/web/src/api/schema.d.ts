@@ -1227,6 +1227,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Changes an input's fader, mute or monitoring (they belong to the input, in every scene); `obs.state` shows the
+         *     change once OBS has made it.
+         */
+        put: operations["update_input"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/item": {
         parameters: {
             query?: never;
@@ -3274,9 +3294,30 @@ export interface components {
             /** Format: int64 */
             updated: number;
         };
+        /**
+         * @description An input that has sound (the ones OBS can mute), with its fader and monitoring. Volume and monitoring belong to
+         *     the input, not to a scene.
+         */
         Input: {
+            monitor?: components["schemas"]["Monitor"];
             muted: boolean;
             name: string;
+            /**
+             * Format: float
+             * @description The fader in dB (0 is full; very low values mean silent).
+             */
+            volumeDb?: number;
+        };
+        InputBody: {
+            /** @description An input of `obs.state`'s `inputs`. */
+            input: string;
+            monitor?: components["schemas"]["Monitor"] | null;
+            muted?: boolean | null;
+            /**
+             * Format: float
+             * @description The fader in dB, -100 to 26; absent leaves it.
+             */
+            volume_db?: number | null;
         };
         ItemBody: {
             /** @description Shows or hides the item; absent leaves it. */
@@ -3587,6 +3628,11 @@ export interface components {
             enabled: boolean;
             id: string;
         };
+        /**
+         * @description Whether OBS plays the input on the monitoring device, and whether it still goes to the stream.
+         * @enum {string}
+         */
+        Monitor: "off" | "monitor_only" | "monitor_and_output";
         MusicLibrary: {
             playlists: components["schemas"]["MusicPlaylist"][];
             scene_rules: components["schemas"]["SceneRuleBody"][];
@@ -7931,6 +7977,59 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_input: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InputBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
