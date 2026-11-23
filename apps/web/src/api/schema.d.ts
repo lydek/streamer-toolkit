@@ -1316,6 +1316,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/source/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reloads a browser source's page (OBS's 「重新整理快取」); other kinds are refused. */
+        post: operations["refresh_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/sources": {
         parameters: {
             query?: never;
@@ -4015,6 +4032,9 @@ export interface components {
         };
         /** @enum {string} */
         RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
+        RefreshBody: {
+            input: string;
+        };
         /** @description A log line in the report: no message text, so no names, IDs or secrets. */
         ReportLine: {
             at: string;
@@ -8141,6 +8161,59 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SourceBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    refresh_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshBody"];
             };
         };
         responses: {

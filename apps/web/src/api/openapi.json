@@ -4217,6 +4217,64 @@
         }
       }
     },
+    "/api/admin/obs/source/refresh": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reloads a browser source's page (OBS's 「重新整理快取」); other kinds are refused.",
+        "operationId": "refresh_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/sources": {
       "get": {
         "tags": [
@@ -11935,6 +11993,17 @@
           "canceled",
           "unknown"
         ]
+      },
+      "RefreshBody": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        }
       },
       "ReportLine": {
         "type": "object",

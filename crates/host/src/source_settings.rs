@@ -67,6 +67,10 @@ fn fields(family: SourceFamily) -> &'static [&'static str] {
 pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
     Router::new()
         .route("/api/admin/obs/source", get(source).put(set_source))
+        .route(
+            "/api/admin/obs/source/refresh",
+            axum::routing::post(refresh_source),
+        )
         .with_state(link)
 }
 
@@ -169,6 +173,40 @@ pub(crate) async fn set_source(
         return error(StatusCode::BAD_REQUEST, code);
     }
     command_response(link.set_input_settings(&body.input, body.fields).await)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct RefreshBody {
+    input: String,
+}
+
+/// Reloads a browser source's page (OBS's 「重新整理快取」); other kinds are refused.
+#[utoipa::path(
+    post,
+    path = "/api/admin/obs/source/refresh",
+    tag = "admin",
+    request_body = RefreshBody,
+    responses(
+        (status = 204),
+        (status = 400, body = ErrorBody),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn refresh_source(
+    State(link): State<Arc<ObsLink>>,
+    body: Result<Json<RefreshBody>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_source");
+    };
+    match link.input_settings(&body.input).await {
+        Ok((kind, _)) if family(&kind) == SourceFamily::Browser => {}
+        Ok(_) => return error(StatusCode::BAD_REQUEST, "obs.source_not_editable"),
+        Err(e) => return command_response(Err(e)),
+    }
+    command_response(link.press_input_button(&body.input, "refreshnocache").await)
 }
 
 /// Whether `fields` may be written to a source of `family`.

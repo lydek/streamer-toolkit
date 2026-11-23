@@ -375,6 +375,10 @@ impl StreamingSoftware for ObsLink {
         self.control.set_input_settings(input, settings).await
     }
 
+    async fn press_input_button(&self, input: &str, property: &str) -> Result<(), StreamingError> {
+        self.control.press_input_button(input, property).await
+    }
+
     async fn set_item_size(
         &self,
         scene: &str,

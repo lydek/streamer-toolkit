@@ -281,6 +281,12 @@ pub trait StreamingSoftware: Send + Sync {
         input: &str,
         settings: serde_json::Map<String, serde_json::Value>,
     ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Presses button `property` in input `input`'s properties (a browser source's `refreshnocache`).
+    fn press_input_button(
+        &self,
+        input: &str,
+        property: &str,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Turns studio mode on or off.
     fn set_studio_mode(
         &self,

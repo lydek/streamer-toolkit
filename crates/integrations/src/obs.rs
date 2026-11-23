@@ -499,6 +499,20 @@ impl ObsControl {
             .map_err(command_error)
     }
 
+    /// `PressInputPropertiesButton`.
+    pub async fn press_input_button(
+        &self,
+        input: &str,
+        property: &str,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        client
+            .inputs()
+            .press_properties_button(InputId::Name(input), property)
+            .await
+            .map_err(command_error)
+    }
+
     /// `SetStudioModeEnabled`.
     pub async fn set_studio_mode(&self, enabled: bool) -> Result<(), StreamingError> {
         let client = self.client()?;
