@@ -146,6 +146,16 @@
       "offAffected": "關閉後：",
       "offOk": "關閉"
     },
+    "bulk": {
+      "on": "全部開啟",
+      "off": "全部關閉",
+      "onLabel": "全部開啟：{group}",
+      "offLabel": "全部關閉：{group}",
+      "onTitle": "開啟「{group}」的全部功能？",
+      "onText": "這些功能會一起開啟，包含其他群組裡需要的功能：",
+      "offTitle": "關閉「{group}」的全部功能？",
+      "offText": "這些功能會一起關閉，包含其他群組裡需要它們的功能；分頁和功能磚會收起來："
+    },
     "home": {
       "name": "首頁",
       "desc": "功能磚與待處理"

@@ -9,10 +9,31 @@
   <template v-else>
     <p v-if="!shownGroups.length">{{ t('features.empty') }}</p>
     <section v-for="g in shownGroups" :key="g.id" class="feat-group" :aria-labelledby="`fg-${g.id}`">
-      <h3 :id="`fg-${g.id}`">
-        <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
-        <span class="group-count">{{ t('features.groupCount', count(g.all)) }}</span>
-      </h3>
+      <div class="group-head">
+        <h3 :id="`fg-${g.id}`" tabindex="-1">
+          <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
+          <span class="group-count">{{ t('features.groupCount', count(g.all)) }}</span>
+        </h3>
+        <!-- The whole group (not only what a search shows), built and switchable features only. -->
+        <span v-if="bulkable(g.all).length > 1" class="bulk">
+          <Button
+            :label="t('features.bulk.on')"
+            :aria-label="t('features.bulk.onLabel', { group: t(`nav.groups.${g.id}`) })"
+            size="small"
+            text
+            :disabled="busy || bulkable(g.all).every(on)"
+            @click="bulkOn(g)"
+          />
+          <Button
+            :label="t('features.bulk.off')"
+            :aria-label="t('features.bulk.offLabel', { group: t(`nav.groups.${g.id}`) })"
+            size="small"
+            text
+            :disabled="busy || !bulkable(g.all).some(on)"
+            @click="bulkOff(g)"
+          />
+        </span>
+      </div>
       <template v-for="s in g.sections" :key="s.id ?? ''">
         <h4 v-if="s.id" class="feat-cat">{{ t(`nav.categories.${s.id}`) }}</h4>
         <ul class="feat-list">
@@ -77,7 +98,8 @@ import { FEATURES, type Feature, hiddenPages, isOn, turnOffPlan, turnOnPlan } fr
 import { GROUPS, SOON_PAGES } from './tabs'
 
 const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string; withSettings?: string[] }>()
-const emit = defineEmits<{ toggle: [module: Schemas['ModuleState']] }>()
+/** `bulk`: a whole group's changes, confirmed once; the page applies them (and asks check-in's pause or close). */
+const emit = defineEmits<{ toggle: [module: Schemas['ModuleState']]; bulk: [changes: { id: string; enabled: boolean }[]] }>()
 const { t } = useI18n()
 
 const query = ref('')
@@ -142,6 +164,39 @@ watch(
 )
 const flip = (fs: Feature[]) => fs.forEach((f) => moduleOf(f) && emit('toggle', moduleOf(f)!))
 
+// A group's built features that have a switch.
+const bulkable = (fs: Feature[]) => fs.filter((f) => f.module && !f.fixed)
+const unique = (fs: Feature[]) => [...new Map(fs.map((f) => [f.id, f])).values()]
+const changes = (fs: Feature[], enabled: boolean) => fs.map((f) => ({ id: f.module!, enabled }))
+
+/** Everything off in the group, and what it needs elsewhere, after one confirmation listing it all. */
+function bulkOn(g: { id: string; all: Feature[] }) {
+  const targets = bulkable(g.all).filter((f) => !on(f))
+  const outside = unique(targets.flatMap((f) => turnOnPlan(f, on, new Set()).requires)).filter((d) => !targets.includes(d))
+  const group = t(`nav.groups.${g.id}`)
+  ask({
+    title: t('features.bulk.onTitle', { group }),
+    text: t('features.bulk.onText'),
+    lines: [...outside, ...targets].map(name),
+    ok: t('features.bulk.on'),
+    then: () => emit('bulk', changes([...outside, ...targets], true)),
+  })
+}
+
+/** Everything on in the group, and what needs it elsewhere, after one confirmation listing it all. */
+function bulkOff(g: { id: string; all: Feature[] }) {
+  const targets = bulkable(g.all).filter(on)
+  const outside = unique(targets.flatMap((f) => turnOffPlan(f, on).dependents)).filter((d) => !targets.includes(d) && d.module)
+  const group = t(`nav.groups.${g.id}`)
+  ask({
+    title: t('features.bulk.offTitle', { group }),
+    text: t('features.bulk.offText'),
+    lines: [...targets, ...outside].map(name),
+    ok: t('features.bulk.off'),
+    then: () => emit('bulk', changes([...outside, ...targets], false)),
+  })
+}
+
 function toggle(f: Feature) {
   if (!f.module) return
   lastSwitched.value = f.module
@@ -179,11 +234,26 @@ function toggle(f: Feature) {
   margin-bottom: 0.75rem;
 }
 
+.group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 1rem 0 0.25rem;
+  scroll-margin-top: calc(var(--appbar-h, 0px) + var(--page-top-h, 0px) + 0.5rem);
+}
+
+.bulk {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
 .feat-group h3 {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 0.5rem;
-  margin: 1rem 0 0.25rem;
+  margin: 0;
   font-size: 1rem;
 }
 

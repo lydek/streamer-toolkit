@@ -27,7 +27,7 @@ import { useI18n } from 'vue-i18n'
 
 // Disabling check-ins: "pause" keeps redemptions for later, "close" skips them (docs/architecture.md §4).
 const { t } = useI18n()
-const emit = defineEmits<{ choose: ['pause' | 'close'] }>()
+const emit = defineEmits<{ choose: ['pause' | 'close']; cancel: [] }>()
 const dialog = ref<HTMLDialogElement>()
 const pending = ref(0)
 
@@ -46,6 +46,7 @@ function choose(mode: 'pause' | 'close') {
 function onClose() {
   const mode = dialog.value!.returnValue
   if (mode === 'pause' || mode === 'close') emit('choose', mode)
+  else emit('cancel')
 }
 
 defineExpose({ open })
