@@ -1012,13 +1012,27 @@ onBeforeUnmount(() => {
   grid-column: 1 / -1;
 }
 
+/* Three small tiles a row, then two: by the home's own width, so an open drawer or chat panel reflows them too. */
 @container view (max-width: 60rem) {
+  .tiles > li {
+    grid-column: span 4;
+  }
+
+  .tiles > li.size-m {
+    grid-column: span 6;
+  }
+
+  .tiles > li.size-l {
+    grid-column: 1 / -1;
+  }
+}
+
+@container view (max-width: 40rem) {
   .tiles > li {
     grid-column: span 6;
   }
 
-  .tiles > li.size-m,
-  .tiles > li.size-l {
+  .tiles > li.size-m {
     grid-column: 1 / -1;
   }
 }
