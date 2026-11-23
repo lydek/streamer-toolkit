@@ -131,12 +131,14 @@
     </Teleport>
     <TabBarEditor ref="editor" :groups="groups.map((g) => g.id)" />
     <SimulateDialog ref="simulate" :bgm="live.bgm" @closed="simulateButton?.$el.focus()" />
-    <!-- Second row: the group's categories, or its pages when it has none. -->
+    <!-- Second row: the group's categories, or its pages when it has none. With the tabs at the bottom it goes
+         there too, right above them. -->
+    <Teleport to="#bottom-tabs" defer :disabled="tabBar.position !== 'bottom'">
     <nav
       v-if="subItems.length > 1"
       ref="subTabsEl"
       class="sub-tabs"
-      :class="{ 'at-end': subAtEnd }"
+      :class="{ 'at-end': subAtEnd, bottom: tabBar.position === 'bottom' }"
       :aria-label="t('nav.sub')"
       @scroll.passive="checkSubEnd"
     >
@@ -149,6 +151,7 @@
         </RouterLink>
       </template>
     </nav>
+    </Teleport>
   </header>
 </template>
 
@@ -634,6 +637,14 @@ onBeforeUnmount(() => {
 
 .sub-tabs.at-end {
   mask-image: none;
+}
+
+/* At the bottom: above the group tabs (teleported after them, so moved up by order). */
+.sub-tabs.bottom {
+  order: -1;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--p-surface-800);
+  background: var(--p-surface-950);
 }
 
 .sub-tabs a,
