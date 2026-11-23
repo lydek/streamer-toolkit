@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
@@ -66,6 +66,57 @@ describe('FeatureList', () => {
     await wrapper.setProps({ busy: false })
     await nextTick()
     expect(document.activeElement?.id).toBe('module-sound')
+    wrapper.unmount()
+  })
+})
+
+describe('FeatureList group switches', () => {
+  beforeAll(() => {
+    // jsdom has no modal dialogs; the real behavior is checked by hand (docs/dev.md).
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement, value?: string) {
+      if (value !== undefined) this.returnValue = value
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  })
+  const interact = ['alerts', 'checkin', 'redemption', 'counter', 'marathon']
+  const mounted = (on: string[]) =>
+    mount(FeatureList, {
+      props: { modules: interact.map((id) => ({ id, enabled: on.includes(id), closed: false })), busy: false, loadText: '' },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+  const bulk = (wrapper: ReturnType<typeof mounted>, group: string, which: 'on' | 'off') =>
+    wrapper.findAll('button').find((b) => b.attributes('aria-label') === t(`features.bulk.${which}Label`, { group: t(`nav.groups.${group}`) }))
+
+  it('turns a whole group off after one confirmation listing it, and on again', async () => {
+    const wrapper = mounted(['alerts', 'checkin', 'redemption'])
+    // Only one built feature in 聊天: no group switches there.
+    expect(bulk(wrapper, 'chat', 'off')).toBeUndefined()
+    await bulk(wrapper, 'interact', 'off')!.trigger('click')
+    expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual(
+      ['alerts', 'checkin', 'redemption'].map(name),
+    )
+    ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.bulk.off')))!.click()
+    await nextTick()
+    expect(wrapper.emitted('bulk')![0][0]).toEqual(['alerts', 'checkin', 'redemption'].map((id) => ({ id, enabled: false })))
+    await bulk(wrapper, 'interact', 'on')!.trigger('click')
+    ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.bulk.on')))!.click()
+    await nextTick()
+    expect(wrapper.emitted('bulk')![1][0]).toEqual(['counters', 'marathon'].map((f) => ({ id: f === 'counters' ? 'counter' : f, enabled: true })))
+    wrapper.unmount()
+  })
+
+  it('sends nothing when the confirmation is cancelled, and disables a switch with nothing to do', async () => {
+    const wrapper = mounted(interact)
+    expect(bulk(wrapper, 'interact', 'on')!.attributes('disabled')).toBeDefined()
+    await bulk(wrapper, 'interact', 'off')!.trigger('click')
+    ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.cancel')))!.click()
+    await nextTick()
+    expect(wrapper.emitted('bulk')).toBeUndefined()
     wrapper.unmount()
   })
 })

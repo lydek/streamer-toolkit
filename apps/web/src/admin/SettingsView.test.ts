@@ -226,6 +226,35 @@ describe('SettingsView', () => {
       wrapper.unmount()
     })
 
+    it('asks pause or close before a whole group goes off with check-ins, and sends nothing when cancelled', async () => {
+      GETS['/api/admin/modules'] = ['alerts', 'checkin', 'redemption'].map((id) => ({ id, enabled: true, closed: false }))
+      client.PUT.mockResolvedValue(ok())
+      const wrapper = await mountSettings()
+      await vi.waitFor(() => expect(wrapper.find('#module-checkin').exists()).toBe(true))
+      const dialog = wrapper.get('dialog[aria-labelledby="checkin-disable-title"]').element as HTMLDialogElement
+      const groupOff = () =>
+        wrapper.findAll('button').find((b) => b.attributes('aria-label') === i18n.global.t('features.bulk.offLabel', { group: i18n.global.t('nav.groups.interact') }))!
+      const confirmOk = () =>
+        [...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(i18n.global.t('features.bulk.off')))!
+
+      await groupOff().trigger('click')
+      confirmOk().click()
+      await flushPromises()
+      expect(dialog.open).toBe(true)
+      dialog.close() // Esc or Cancel
+      await flushPromises()
+      expect(client.PUT).not.toHaveBeenCalled()
+
+      await groupOff().trigger('click')
+      confirmOk().click()
+      await flushPromises()
+      await wrapper.get('dialog[aria-labelledby="checkin-disable-title"]').findAll('button')[1].trigger('click')
+      await vi.waitFor(() => expect(client.PUT).toHaveBeenCalledTimes(3))
+      expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'checkin' } }, body: { enabled: false, close: true } })
+      expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', { params: { path: { id: 'alerts' } }, body: { enabled: false, close: false } })
+      wrapper.unmount()
+    })
+
     it('shows the backlog while paused and offers to close, warning about what gets skipped', async () => {
       GETS['/api/admin/modules'] = [{ id: 'checkin', enabled: false, closed: false }]
       GETS['/api/admin/checkin/outbox'] = { pending: 3, oldest_pending_at: '2026-11-16T15:00:00.000Z', dead_letters: [] }

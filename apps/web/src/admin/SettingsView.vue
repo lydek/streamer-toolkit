@@ -4,9 +4,17 @@
       <!-- One section at a time (route /settings/:section); every section stays mounted, so loading and saving
            work as on one page and switching is a route change (which submits a field still being edited). -->
       <nav class="settings-menu" :aria-label="t('settings.sections')">
-        <RouterLink v-for="s in SECTIONS" :key="s" :to="`/settings/${s}`" replace :aria-current="s === section ? 'page' : undefined">
-          {{ t(`settings.menu.${s}`) }}
-        </RouterLink>
+        <template v-for="s in SECTIONS" :key="s">
+          <RouterLink :to="`/settings/${s}`" replace :aria-current="s === section ? 'page' : undefined">
+            {{ t(`settings.menu.${s}`) }}
+          </RouterLink>
+          <!-- Under 功能: each group, to jump straight to it, with how many of its features are on. -->
+          <template v-if="s === 'features' && modules">
+            <a v-for="g in featureGroups" :key="g.id" :href="`#fg-${g.id}`" class="sub" @click.prevent="jumpToGroup(g.id)">
+              {{ t(`nav.groups.${g.id}`) }}<span class="sub-count">{{ g.on }}/{{ g.all }}</span>
+            </a>
+          </template>
+        </template>
       </nav>
       <div class="settings-body">
         <section v-show="section === 'general'" aria-labelledby="general">
@@ -95,7 +103,14 @@
 
         <section v-show="section === 'features'" aria-labelledby="features">
           <h2 id="features" tabindex="-1">{{ t('settings.features') }}</h2>
-          <FeatureList :modules="modules" :busy="busy" :load-text="loadText" :with-settings="['checkin']" @toggle="toggleModule">
+          <FeatureList
+            :modules="modules"
+            :busy="busy"
+            :load-text="loadText"
+            :with-settings="['checkin']"
+            @toggle="toggleModule"
+            @bulk="bulkModules"
+          >
             <!-- Check-in's held redemptions belong to its switch; its rules have their own page (打卡規則). -->
             <template #settings>
               <CheckinOutbox ref="checkinOutbox" :state="checkinState" @close="(n) => disableDialog?.open(n)" @error="report" />
@@ -133,7 +148,7 @@
         </section>
       </div>
     </div>
-    <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" />
+    <CheckinDisableDialog ref="disableDialog" @choose="disableCheckin" @cancel="pendingBulk = undefined" />
   </FullPage>
 </template>
 
@@ -144,7 +159,7 @@ import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { version } from '../../../desktop/tauri.conf.json'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -157,7 +172,8 @@ import CheckinOutbox from './CheckinOutbox.vue'
 import { useDrawerSetting } from './drawer'
 import FullPage from './FullPage.vue'
 import FeatureList from './FeatureList.vue'
-import { shareModules } from './features'
+import { FEATURES, isOn, shareModules } from './features'
+import { GROUPS } from './tabs'
 import { errorToast } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
 import { TEXT_SIZE, saveTextSize, useTextSize } from './textsize'
@@ -171,6 +187,7 @@ const SECTIONS = ['general', 'connections', 'features', 'profiles', 'hotkeys', '
 /** Sections of later phases: they say so and call nothing. */
 const SOON = ['profiles', 'hotkeys'] as const
 const section = computed(() => (route.params.section as string | undefined) ?? 'general')
+const router = useRouter()
 // Switching sections moves focus to the new section's heading, like entering a page; a hash naming a heading in the
 // shown section (a status light's #obs) wins, also when only the hash changes.
 const HEADINGS: Record<string, string> = { general: 'general', connections: 'twitch', features: 'features', backup: 'backup', about: 'about' }
@@ -346,7 +363,53 @@ const putModule = (id: string, enabled: boolean, close = false) =>
 // Check-ins take redemptions through the outbox, so turning them off asks whether to keep (pause) or skip them.
 const toggleModule = (m: Schemas['ModuleState']) =>
   m.id === 'checkin' && m.enabled ? disableDialog.value?.open() : putModule(m.id, !m.enabled)
-const disableCheckin = (mode: 'pause' | 'close') => putModule('checkin', false, mode === 'close')
+const disableCheckin = (mode: 'pause' | 'close') => {
+  const bulk = pendingBulk.value
+  pendingBulk.value = undefined
+  return bulk ? applyBulk(bulk, mode === 'close') : putModule('checkin', false, mode === 'close')
+}
+
+// A whole group at once (FeatureList, already confirmed): check-in going off asks pause or close first, and nothing
+// is sent if that is cancelled. Applied one by one; a failure shows its reason and the real state is read again.
+const pendingBulk = ref<{ id: string; enabled: boolean }[]>()
+function bulkModules(changes: { id: string; enabled: boolean }[]) {
+  const offCheckin = changes.some((c) => c.id === 'checkin' && !c.enabled) && checkinState.value?.enabled
+  if (!offCheckin) return applyBulk(changes, false)
+  pendingBulk.value = changes
+  disableDialog.value?.open()
+}
+const applyBulk = (changes: { id: string; enabled: boolean }[], closeCheckin: boolean) =>
+  run(async () => {
+    try {
+      for (const c of changes)
+        await api(
+          client.PUT('/api/admin/modules/{id}', {
+            params: { path: { id: c.id } },
+            body: { enabled: c.enabled, close: c.id === 'checkin' && !c.enabled && closeCheckin },
+          }),
+        )
+    } catch (e) {
+      await refresh().catch(() => {})
+      throw e
+    } finally {
+      await checkinOutbox.value?.load()
+    }
+  })
+
+// The settings menu's group links: jump to the group's heading in 功能 (and focus it, so the keyboard is there too).
+const featureGroups = computed(() =>
+  GROUPS.map((g) => {
+    const fs = FEATURES.filter((f) => f.group === g.id && !f.openWith && !f.fixed)
+    return { id: g.id, all: fs.length, on: fs.filter((f) => isOn(f, modules.value ?? [])).length }
+  }).filter((g) => g.all),
+)
+async function jumpToGroup(id: string) {
+  if (section.value !== 'features') await router.replace('/settings/features')
+  await nextTick()
+  const heading = document.getElementById(`fg-${id}`)
+  heading?.scrollIntoView({ block: 'start' })
+  heading?.focus({ preventScroll: true })
+}
 const removePassword = () =>
   run(async () => {
     await putObs({ password: '' })
@@ -383,7 +446,7 @@ onBeforeUnmount(() => {
 
 .settings-menu {
   position: sticky;
-  top: calc(var(--appbar-h, 0px) + 1rem);
+  top: calc(var(--appbar-h, 0px) + var(--page-top-h, 0px) + 1rem);
   display: grid;
   gap: 0.125rem;
 }
@@ -393,6 +456,18 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   color: var(--p-text-muted-color);
   text-decoration: none;
+}
+
+.settings-menu a.sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem 0.25rem 1.5rem;
+  font-size: 0.875rem;
+}
+
+.sub-count {
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-menu a:hover {
