@@ -123,11 +123,25 @@ async fn obs_commands_need_a_connection_and_something_to_change() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::CONFLICT);
     let res = app
+        .clone()
         .oneshot(put("/api/admin/obs/item", r#"{"scene":"Live","item":1}"#))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     assert_eq!(code(res).await, "obs.nothing_to_change");
+    // A size is checked before OBS is asked: each side 1-100000.
+    for bad in [
+        r#"{"scene":"Live","item":1,"size":{"width":0,"height":10}}"#,
+        r#"{"scene":"Live","item":1,"size":{"width":10,"height":100001}}"#,
+    ] {
+        let res = app
+            .clone()
+            .oneshot(put("/api/admin/obs/item", bad))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(code(res).await, "obs.invalid_size");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 

@@ -31,8 +31,8 @@ use toolkit_core::{
     events::Source,
     settings::{self, ExternalService},
     streaming::{
-        BrowserSource, Canvas, Placement, StreamingError, StreamingSoftware, StreamingState,
-        StreamingStats,
+        BrowserSource, Canvas, ItemSize, Placement, StreamingError, StreamingSoftware,
+        StreamingState, StreamingStats,
     },
 };
 use utoipa::ToSchema;
@@ -330,9 +330,19 @@ impl StreamingSoftware for ObsLink {
     async fn placements(
         &self,
         scene: &str,
-    ) -> Result<(Canvas, Vec<(i64, Placement)>), StreamingError> {
+    ) -> Result<(Canvas, Vec<(i64, Placement, ItemSize)>), StreamingError> {
         self.check(scene, None)?;
         self.control.placements(scene).await
+    }
+
+    async fn set_item_size(
+        &self,
+        scene: &str,
+        item: i64,
+        size: ItemSize,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.set_item_size(scene, item, size).await
     }
 
     async fn set_placement(
@@ -539,6 +549,9 @@ pub(crate) struct ItemBody {
     /// Puts the item at this canvas position and alignment; absent leaves it. Scale, rotation and crop stay.
     #[serde(default)]
     placement: Option<Placement>,
+    /// Scales the item to this size in canvas pixels, each side 1-100000; absent leaves it. Position stays.
+    #[serde(default)]
+    size: Option<ItemSize>,
 }
 
 /// Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it.
@@ -563,8 +576,15 @@ pub(crate) async fn update_item(
         && body.locked.is_none()
         && body.position.is_none()
         && body.placement.is_none()
+        && body.size.is_none()
     {
         return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
+    }
+    let valid = |side: f32| side.is_finite() && (1.0..=100_000.0).contains(&side);
+    if let Some(size) = body.size
+        && !(valid(size.width) && valid(size.height))
+    {
+        return error(StatusCode::BAD_REQUEST, "obs.invalid_size");
     }
     if let Some(enabled) = body.enabled
         && let Err(e) = link.set_item_enabled(&body.scene, body.item, enabled).await
@@ -578,6 +598,11 @@ pub(crate) async fn update_item(
     }
     if let Some(placement) = body.placement
         && let Err(e) = link.set_placement(&body.scene, body.item, placement).await
+    {
+        return command_response(Err(e));
+    }
+    if let Some(size) = body.size
+        && let Err(e) = link.set_item_size(&body.scene, body.item, size).await
     {
         return command_response(Err(e));
     }
@@ -608,6 +633,8 @@ pub(crate) struct ItemPlacement {
     item: i64,
     #[serde(flatten)]
     placement: Placement,
+    #[serde(flatten)]
+    size: ItemSize,
 }
 
 /// The canvas size and where each item of a scene sits (asked when the scene page shows the scene).
@@ -632,7 +659,11 @@ pub(crate) async fn scene_placements(
             canvas,
             items: items
                 .into_iter()
-                .map(|(item, placement)| ItemPlacement { item, placement })
+                .map(|(item, placement, size)| ItemPlacement {
+                    item,
+                    placement,
+                    size,
+                })
                 .collect(),
         })
         .into_response(),

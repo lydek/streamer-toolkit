@@ -202,6 +202,30 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 13, position: 1 } })
   })
 
+  it('resizes an item keeping its ratio unless 等比例 is turned off, and shows the size in its row', async () => {
+    vi.spyOn(client, 'GET').mockImplementation((() =>
+      Promise.resolve({
+        data: { canvas: { width: 1920, height: 1080 }, items: [{ item: 2, x: 40, y: 30, align: 'top_left', width: 400, height: 600 }] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toBe('40, 30 · 400 × 600')
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'Chat overlay')!.trigger('click')
+    const width = () => wrapper.get(`input[aria-label="${t('scene.width', { item: 'Chat overlay' })}"]`)
+    await width().setValue('200')
+    await width().trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, size: { width: 200, height: 300 } } })
+    expect(wrapper.findAll('tbody tr')[0].get('.geo').text()).toBe('40, 30 · 200 × 300')
+    await wrapper.findAll('button').find((b) => b.text() === t('scene.ratio'))!.trigger('click')
+    await width().setValue('250')
+    await width().trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, size: { width: 250, height: 300 } } })
+  })
+
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {
     const wrapper = await page()
     snapshot(connected())

@@ -34,7 +34,7 @@ export function transitionNow(transition?: string) {
 export function updateItem(
   scene: string,
   item: number,
-  change: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement'] },
+  change: { enabled?: boolean; locked?: boolean; position?: number; placement?: Schemas['Placement']; size?: Schemas['ItemSize'] },
 ) {
   return api(client.PUT('/api/admin/obs/item', { body: { scene, item, ...change } }))
 }

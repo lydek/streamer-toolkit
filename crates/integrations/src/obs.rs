@@ -23,7 +23,7 @@ use obws::{
         inputs::Create,
         inputs::InputId,
         scene_items::{
-            CreateSceneItem, Position, SceneItemTransform, SetEnabled, SetIndex, SetLocked,
+            CreateSceneItem, Position, Scale, SceneItemTransform, SetEnabled, SetIndex, SetLocked,
             SetTransform,
         },
         scenes::SceneId,
@@ -35,7 +35,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    Align, BrowserSource, Canvas, Input, Placement, Scene, SceneItem, StreamingError,
+    Align, BrowserSource, Canvas, Input, ItemSize, Placement, Scene, SceneItem, StreamingError,
     StreamingState, StreamingStats,
 };
 
@@ -268,7 +268,7 @@ impl ObsControl {
     pub async fn placements(
         &self,
         scene: &str,
-    ) -> Result<(Canvas, Vec<(i64, Placement)>), StreamingError> {
+    ) -> Result<(Canvas, Vec<(i64, Placement, ItemSize)>), StreamingError> {
         let client = self.client()?;
         let video = client
             .config()
@@ -293,6 +293,10 @@ impl ObsControl {
                     x: t.position_x,
                     y: t.position_y,
                     align: align_of(t.alignment),
+                },
+                ItemSize {
+                    width: t.width,
+                    height: t.height,
                 },
             ));
         }
@@ -322,6 +326,42 @@ impl ObsControl {
                         y: Some(placement.y),
                     }),
                     alignment: Some(alignment_of(placement.align)),
+                    ..Default::default()
+                },
+            })
+            .await
+            .map_err(command_error)
+    }
+
+    /// `GetSceneItemTransform` for the source's size (less the crop), then `SetSceneItemTransform` with the scale
+    /// that gives `size`; position, rotation and crop stay.
+    pub async fn set_item_size(
+        &self,
+        scene: &str,
+        item: i64,
+        size: ItemSize,
+    ) -> Result<(), StreamingError> {
+        let client = self.client()?;
+        let t = client
+            .scene_items()
+            .transform(SceneId::Name(scene), item)
+            .await
+            .map_err(command_error)?;
+        let shown_w = t.source_width - (t.crop_left + t.crop_right) as f32;
+        let shown_h = t.source_height - (t.crop_top + t.crop_bottom) as f32;
+        if shown_w <= 0.0 || shown_h <= 0.0 {
+            return Err(StreamingError::NotFound);
+        }
+        client
+            .scene_items()
+            .set_transform(SetTransform {
+                scene: SceneId::Name(scene),
+                item_id: item,
+                transform: SceneItemTransform {
+                    scale: Some(Scale {
+                        x: Some(size.width / shown_w),
+                        y: Some(size.height / shown_h),
+                    }),
                     ..Default::default()
                 },
             })
@@ -1177,6 +1217,10 @@ mod tests {
                     x: 40.0,
                     y: 30.0,
                     align: Align::TopLeft
+                },
+                ItemSize {
+                    width: 400.0,
+                    height: 600.0
                 }
             )
         );
@@ -1188,6 +1232,18 @@ mod tests {
                     x: 960.0,
                     y: 540.0,
                     align: Align::Center,
+                },
+            )
+            .await
+            .unwrap();
+        // The source is 400 × 600: half of it is a scale of 0.5.
+        control
+            .set_item_size(
+                "Live",
+                2,
+                ItemSize {
+                    width: 200.0,
+                    height: 300.0,
                 },
             )
             .await
@@ -1232,6 +1288,11 @@ mod tests {
                     "SetSceneItemTransform".to_owned(),
                     json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
                         "positionX": 960.0, "positionY": 540.0, "alignment": 0}})
+                ),
+                (
+                    "SetSceneItemTransform".to_owned(),
+                    json!({"sceneName": "Live", "sceneItemId": 2, "sceneItemTransform": {
+                        "scaleX": 0.5, "scaleY": 0.5}})
                 ),
                 (
                     "SetStudioModeEnabled".to_owned(),
