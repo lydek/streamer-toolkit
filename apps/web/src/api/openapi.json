@@ -3890,6 +3890,64 @@
         }
       }
     },
+    "/api/admin/obs/input": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Changes an input's fader, mute or monitoring (they belong to the input, in every scene); `obs.state` shows the\nchange once OBS has made it.",
+        "operationId": "update_input",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/item": {
       "put": {
         "tags": [
@@ -9841,16 +9899,61 @@
       },
       "Input": {
         "type": "object",
+        "description": "An input that has sound (the ones OBS can mute), with its fader and monitoring. Volume and monitoring belong to\nthe input, not to a scene.",
         "required": [
           "name",
           "muted"
         ],
         "properties": {
+          "monitor": {
+            "$ref": "#/components/schemas/Monitor"
+          },
           "muted": {
             "type": "boolean"
           },
           "name": {
             "type": "string"
+          },
+          "volumeDb": {
+            "type": "number",
+            "format": "float",
+            "description": "The fader in dB (0 is full; very low values mean silent)."
+          }
+        }
+      },
+      "InputBody": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "An input of `obs.state`'s `inputs`."
+          },
+          "monitor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Monitor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "volume_db": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "The fader in dB, -100 to 26; absent leaves it."
           }
         }
       },
@@ -10676,6 +10779,15 @@
             "type": "string"
           }
         }
+      },
+      "Monitor": {
+        "type": "string",
+        "description": "Whether OBS plays the input on the monitoring device, and whether it still goes to the stream.",
+        "enum": [
+          "off",
+          "monitor_only",
+          "monitor_and_output"
+        ]
       },
       "MusicLibrary": {
         "type": "object",

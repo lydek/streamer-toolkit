@@ -550,6 +550,7 @@ mod tests {
                 inputs: vec![toolkit_core::streaming::Input {
                     name: "Mic".into(),
                     muted: false,
+                    ..Default::default()
                 }],
                 streaming: true,
                 recording: false,

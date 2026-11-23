@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// What the streaming software shows right now; [`StreamingState::default`] while it is not connected.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamingState {
     /// The scene on air; `null` while not connected (unknown).
@@ -58,11 +58,30 @@ pub struct SceneItem {
     pub kind: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// An input that has sound (the ones OBS can mute), with its fader and monitoring. Volume and monitoring belong to
+/// the input, not to a scene.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Input {
     pub name: String,
     pub muted: bool,
+    /// The fader in dB (0 is full; very low values mean silent).
+    #[serde(default)]
+    pub volume_db: f32,
+    #[serde(default)]
+    pub monitor: Monitor,
+}
+
+/// Whether OBS plays the input on the monitoring device, and whether it still goes to the stream.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Monitor {
+    #[default]
+    Off,
+    /// Heard on the monitoring device only, not in the stream.
+    MonitorOnly,
+    /// Heard on the monitoring device and in the stream.
+    MonitorAndOutput,
 }
 
 /// Which point of an item its position is: a corner, the middle of an edge, or the center.
@@ -293,6 +312,24 @@ pub trait StreamingSoftware: Send + Sync {
         input: &str,
         property: &str,
     ) -> impl Future<Output = Result<Vec<(String, serde_json::Value)>, StreamingError>> + Send;
+    /// Sets input `input`'s fader to `db` (-100 to 26 dB).
+    fn set_input_volume(
+        &self,
+        input: &str,
+        db: f32,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Mutes or unmutes input `input`.
+    fn set_input_mute(
+        &self,
+        input: &str,
+        muted: bool,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
+    /// Sets how input `input` is monitored.
+    fn set_input_monitor(
+        &self,
+        input: &str,
+        monitor: Monitor,
+    ) -> impl Future<Output = Result<(), StreamingError>> + Send;
     /// Turns studio mode on or off.
     fn set_studio_mode(
         &self,
