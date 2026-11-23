@@ -86,6 +86,7 @@ use crate::{
         obs::transition_now,
         obs::update_item,
         obs::scene_placements,
+        obs::item_transform,
         obs::overlay_sources,
         obs::add_overlay,
         obs::remove_overlay,

@@ -31,8 +31,8 @@ use toolkit_core::{
     events::Source,
     settings::{self, ExternalService},
     streaming::{
-        BrowserSource, Canvas, ItemSize, Placement, StreamingError, StreamingSoftware,
-        StreamingState, StreamingStats,
+        BrowserSource, Canvas, ItemSize, ItemTransform, Placement, StreamingError,
+        StreamingSoftware, StreamingState, StreamingStats, TransformChange,
     },
 };
 use utoipa::ToSchema;
@@ -335,6 +335,25 @@ impl StreamingSoftware for ObsLink {
         self.control.placements(scene).await
     }
 
+    async fn item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+    ) -> Result<ItemTransform, StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.item_transform(scene, item).await
+    }
+
+    async fn set_item_transform(
+        &self,
+        scene: &str,
+        item: i64,
+        change: TransformChange,
+    ) -> Result<(), StreamingError> {
+        self.check(scene, Some(item))?;
+        self.control.set_item_transform(scene, item, change).await
+    }
+
     async fn set_item_size(
         &self,
         scene: &str,
@@ -417,6 +436,7 @@ pub(crate) fn routes(link: Arc<ObsLink>) -> Router {
         )
         .route("/api/admin/obs/item", put(update_item))
         .route("/api/admin/obs/placements", get(scene_placements))
+        .route("/api/admin/obs/transform", get(item_transform))
         .route(
             "/api/admin/obs/sources",
             get(overlay_sources)
@@ -552,6 +572,10 @@ pub(crate) struct ItemBody {
     /// Scales the item to this size in canvas pixels, each side 1-100000; absent leaves it. Position stays.
     #[serde(default)]
     size: Option<ItemSize>,
+    /// Turns, flips, crops or fits the item (only the parts given; rotation -360-360°, crop 0-100000 px a side);
+    /// absent leaves it. Position and size stay.
+    #[serde(default)]
+    transform: Option<TransformChange>,
 }
 
 /// Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it.
@@ -577,6 +601,7 @@ pub(crate) async fn update_item(
         && body.position.is_none()
         && body.placement.is_none()
         && body.size.is_none()
+        && body.transform.is_none()
     {
         return error(StatusCode::BAD_REQUEST, "obs.nothing_to_change");
     }
@@ -585,6 +610,19 @@ pub(crate) async fn update_item(
         && !(valid(size.width) && valid(size.height))
     {
         return error(StatusCode::BAD_REQUEST, "obs.invalid_size");
+    }
+    if let Some(change) = body.transform {
+        let turn_ok = change
+            .rotation
+            .is_none_or(|r| r.is_finite() && (-360.0..=360.0).contains(&r));
+        let crop_ok = change.crop.is_none_or(|c| {
+            [c.top, c.right, c.bottom, c.left]
+                .iter()
+                .all(|&n| n <= 100_000)
+        });
+        if !turn_ok || !crop_ok {
+            return error(StatusCode::BAD_REQUEST, "obs.invalid_transform");
+        }
     }
     if let Some(enabled) = body.enabled
         && let Err(e) = link.set_item_enabled(&body.scene, body.item, enabled).await
@@ -606,6 +644,13 @@ pub(crate) async fn update_item(
     {
         return command_response(Err(e));
     }
+    if let Some(change) = body.transform
+        && let Err(e) = link
+            .set_item_transform(&body.scene, body.item, change)
+            .await
+    {
+        return command_response(Err(e));
+    }
     if let Some(position) = body.position {
         return command_response(
             link.set_item_position(&body.scene, body.item, position)
@@ -619,6 +664,36 @@ pub(crate) async fn update_item(
 #[into_params(parameter_in = Query)]
 pub(crate) struct PlacementsQuery {
     scene: String,
+}
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct ItemQuery {
+    scene: String,
+    item: i64,
+}
+
+/// How an item is turned, flipped, cropped and fitted (asked when its 變形 tab opens).
+#[utoipa::path(
+    get,
+    path = "/api/admin/obs/transform",
+    tag = "admin",
+    params(ItemQuery),
+    responses(
+        (status = 200, body = ItemTransform),
+        (status = 404, body = ErrorBody),
+        (status = 409, body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+pub(crate) async fn item_transform(
+    State(link): State<Arc<ObsLink>>,
+    Query(query): Query<ItemQuery>,
+) -> Response {
+    match link.item_transform(&query.scene, query.item).await {
+        Ok(t) => Json(t).into_response(),
+        Err(e) => command_response(Err(e)),
+    }
 }
 
 #[derive(Serialize, ToSchema)]

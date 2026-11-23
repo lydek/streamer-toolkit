@@ -1337,6 +1337,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/obs/transform": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How an item is turned, flipped, cropped and fitted (asked when its 變形 tab opens). */
+        get: operations["item_transform"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/obs/transition": {
         parameters: {
             query?: never;
@@ -2442,6 +2459,11 @@ export interface components {
         /** @enum {string} */
         BoardKind: "bits" | "gifts" | "chat" | "checkins";
         /**
+         * @description How an item fills its bounding box: `none` scales its content by its size; the rest make its size the box.
+         * @enum {string}
+         */
+        Bounds: "none" | "stretch" | "scale_inner" | "scale_outer" | "scale_to_width" | "scale_to_height" | "max_only";
+        /**
          * @description A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only
          *     the latest one.
          */
@@ -3220,6 +3242,17 @@ export interface components {
             position?: number | null;
             scene: string;
             size?: components["schemas"]["ItemSize"] | null;
+            transform?: components["schemas"]["TransformChange"] | null;
+        };
+        ItemCrop: {
+            /** Format: int32 */
+            bottom: number;
+            /** Format: int32 */
+            left: number;
+            /** Format: int32 */
+            right: number;
+            /** Format: int32 */
+            top: number;
         };
         ItemPlacement: components["schemas"]["Placement"] & components["schemas"]["ItemSize"] & {
             /**
@@ -3234,6 +3267,19 @@ export interface components {
             height: number;
             /** Format: float */
             width: number;
+        };
+        /** @description How an item is turned, flipped, cropped and fitted, besides where it sits and how large it is. */
+        ItemTransform: {
+            bounds: components["schemas"]["Bounds"];
+            /** @description Source pixels cut off each side before scaling. */
+            crop: components["schemas"]["ItemCrop"];
+            flip_h: boolean;
+            flip_v: boolean;
+            /**
+             * Format: float
+             * @description Degrees clockwise around its align point, 0-360.
+             */
+            rotation: number;
         };
         /**
          * @description A `leaderboard.update` event exactly as `/ws/overlay` sends it when the boards change (checked every 30 s); the
@@ -4476,6 +4522,15 @@ export interface components {
         TrackUpdate: {
             /** @description 1–100 characters after trimming. */
             title: string;
+        };
+        /** @description A transform change: only the parts given change; the rest of the item's transform stays. */
+        TransformChange: {
+            bounds?: components["schemas"]["Bounds"] | null;
+            crop?: components["schemas"]["ItemCrop"] | null;
+            flip_h?: boolean | null;
+            flip_v?: boolean | null;
+            /** Format: float */
+            rotation?: number | null;
         };
         TransitionBody: {
             /** @description One of `obs.state`'s `transitions`; absent keeps the one in use. */
@@ -8143,6 +8198,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    item_transform: {
+        parameters: {
+            query: {
+                scene: string;
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemTransform"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             409: {
                 headers: {

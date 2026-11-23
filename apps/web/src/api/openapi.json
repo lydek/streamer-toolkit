@@ -4293,6 +4293,72 @@
         }
       }
     },
+    "/api/admin/obs/transform": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "How an item is turned, flipped, cropped and fitted (asked when its 變形 tab opens).",
+        "operationId": "item_transform",
+        "parameters": [
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTransform"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/obs/transition": {
       "post": {
         "tags": [
@@ -7422,6 +7488,19 @@
           "checkins"
         ]
       },
+      "Bounds": {
+        "type": "string",
+        "description": "How an item fills its bounding box: `none` scales its content by its size; the rest make its size the box.",
+        "enum": [
+          "none",
+          "stretch",
+          "scale_inner",
+          "scale_outer",
+          "scale_to_width",
+          "scale_to_height",
+          "max_only"
+        ]
+      },
       "BreakEvent": {
         "type": "object",
         "description": "A `screen.break` event exactly as `/ws/overlay` sends it after any change and at start; the snapshot keeps only\nthe latest one.",
@@ -9584,6 +9663,48 @@
                 "type": "null"
               }
             ]
+          },
+          "transform": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TransformChange",
+                "description": "Turns, flips, crops or fits the item (only the parts given; rotation -360-360°, crop 0-100000 px a side);\nabsent leaves it. Position and size stay."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ItemCrop": {
+        "type": "object",
+        "required": [
+          "top",
+          "right",
+          "bottom",
+          "left"
+        ],
+        "properties": {
+          "bottom": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "left": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "right": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "top": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
@@ -9625,6 +9746,37 @@
           "width": {
             "type": "number",
             "format": "float"
+          }
+        }
+      },
+      "ItemTransform": {
+        "type": "object",
+        "description": "How an item is turned, flipped, cropped and fitted, besides where it sits and how large it is.",
+        "required": [
+          "rotation",
+          "flip_h",
+          "flip_v",
+          "crop",
+          "bounds"
+        ],
+        "properties": {
+          "bounds": {
+            "$ref": "#/components/schemas/Bounds"
+          },
+          "crop": {
+            "$ref": "#/components/schemas/ItemCrop",
+            "description": "Source pixels cut off each side before scaling."
+          },
+          "flip_h": {
+            "type": "boolean"
+          },
+          "flip_v": {
+            "type": "boolean"
+          },
+          "rotation": {
+            "type": "number",
+            "format": "float",
+            "description": "Degrees clockwise around its align point, 0-360."
           }
         }
       },
@@ -13184,6 +13336,51 @@
           "title": {
             "type": "string",
             "description": "1–100 characters after trimming."
+          }
+        }
+      },
+      "TransformChange": {
+        "type": "object",
+        "description": "A transform change: only the parts given change; the rest of the item's transform stays.",
+        "properties": {
+          "bounds": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Bounds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "crop": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ItemCrop"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flip_h": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "flip_v": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rotation": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
           }
         }
       },

@@ -142,6 +142,18 @@ async fn obs_commands_need_a_connection_and_something_to_change() {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
         assert_eq!(code(res).await, "obs.invalid_size");
     }
+    for bad in [
+        r#"{"scene":"Live","item":1,"transform":{"rotation":720}}"#,
+        r#"{"scene":"Live","item":1,"transform":{"crop":{"top":100001,"right":0,"bottom":0,"left":0}}}"#,
+    ] {
+        let res = app
+            .clone()
+            .oneshot(put("/api/admin/obs/item", bad))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(code(res).await, "obs.invalid_transform");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 
