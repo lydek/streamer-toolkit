@@ -108,3 +108,20 @@ it('names the zip after the picture and the size', () => {
   expect(zipName('my.logo.png', 'badge')).toBe('my.logo-badge.zip')
   expect(zipName('.png', 'points')).toBe('image-points.zip')
 })
+
+it('pads with a chosen color, and keeps the last results showing while new ones are made', async () => {
+  const wrapper = await page()
+  await pick(wrapper, new File(['png'], 'logo.png', { type: 'image/png' }))
+  expect(wrapper.findAll('.sheet')).toHaveLength(2)
+  let answer: (a: unknown) => void = () => {}
+  vi.mocked(client.POST).mockImplementationOnce(() => new Promise((r) => (answer = r)) as never)
+  await wrapper.findAll('[aria-labelledby="is-bg"] button').find((b) => b.text() === t('imageSizes.bgs.color'))!.trigger('click')
+  await flushPromises()
+  expect(vi.mocked(client.POST).mock.lastCall![1]).toMatchObject({ params: { query: { bg: '1f2937' } } })
+  // Still the last results, marked busy, not a loading line in their place.
+  expect(wrapper.findAll('.sheet')).toHaveLength(2)
+  expect(wrapper.get('.results').attributes('aria-busy')).toBe('true')
+  answer({ data: { images: [image(36)] }, response: new Response(null, { status: 200 }) })
+  await flushPromises()
+  expect(wrapper.get('.results').attributes('aria-busy')).toBe('false')
+})

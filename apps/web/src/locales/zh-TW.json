@@ -1108,6 +1108,12 @@
     "cropH": "高",
     "cropLock": "等比例",
     "cropReset": "回到置中",
+    "bg": "補邊",
+    "bgs": {
+      "none": "透明",
+      "color": "底色"
+    },
+    "bgColor": "底色顏色",
     "cropKeys": "方向鍵移動，Shift 加方向鍵縮放。",
     "tile": "轉成徽章與點數圖示的尺寸",
     "kind": "規格",
@@ -1625,7 +1631,9 @@
     "image_sizes": {
       "unsupported": "只能用 PNG、JPEG、GIF 或 WebP 圖片。",
       "too_large": "圖片超過 10 MB 或每邊 4096 px。",
-      "failed": "無法轉換這張圖片。"
+      "failed": "無法轉換這張圖片。",
+      "invalid_crop": "選的範圍超出圖片。",
+      "invalid_bg": "底色的格式不正確。"
     },
     "rehearsal": {
       "invalid": "劇本格式不正確。",

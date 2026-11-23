@@ -3003,6 +3003,15 @@
               "format": "int32",
               "minimum": 0
             }
+          },
+          {
+            "name": "bg",
+            "in": "query",
+            "description": "The padding's color as six hex digits (`1f2937`); transparent when missing.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -3028,7 +3037,7 @@
             }
           },
           "400": {
-            "description": "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture",
+            "description": "`image_sizes.unsupported`, or `image_sizes.invalid_crop`: a manual rectangle missing or outside the picture, or `image_sizes.invalid_bg`: a padding color that is not six hex digits",
             "content": {
               "application/json": {
                 "schema": {

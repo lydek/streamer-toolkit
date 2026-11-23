@@ -81,11 +81,14 @@ export function setCropField(c: Crop, field: keyof Crop, value: number, width: n
   return { ...c, ...size }
 }
 
-function post(file: File, kind: ImageKind, fit: Fit, zip: boolean, crop?: Crop) {
+/** The padding: transparent (`null`) or a `#rrggbb` color. */
+export type Background = string | null
+
+function post(file: File, kind: ImageKind, fit: Fit, zip: boolean, crop?: Crop, bg: Background = null) {
   if (file.size > IMAGE_SIZES_MAX_BYTES) return Promise.reject(new ApiError('image_sizes.too_large'))
   const square = fit === 'manual' && crop ? { crop_x: crop.x, crop_y: crop.y, crop_w: crop.w, crop_h: crop.h } : {}
   return client.POST('/api/admin/image-sizes', {
-    params: { query: { kind, fit, zip, ...square } },
+    params: { query: { kind, fit, zip, ...square, ...(bg ? { bg: bg.replace('#', '') } : {}) } },
     // The body is the file itself, not JSON.
     body: file as unknown as string,
     bodySerializer: (b: unknown) => b as BodyInit,
@@ -95,12 +98,12 @@ function post(file: File, kind: ImageKind, fit: Fit, zip: boolean, crop?: Crop) 
 }
 
 /** Every size of `kind` with a preview, worked out on this computer by the Host. */
-export const makeSizes = (file: File, kind: ImageKind, fit: Fit, crop?: Crop) =>
-  api(post(file, kind, fit, false, crop)) as Promise<Schemas['SizedImages']>
+export const makeSizes = (file: File, kind: ImageKind, fit: Fit, crop?: Crop, bg: Background = null) =>
+  api(post(file, kind, fit, false, crop, bg)) as Promise<Schemas['SizedImages']>
 
 /** Every size of `kind` as one zip of PNG files. */
-export const sizesZip = async (file: File, kind: ImageKind, fit: Fit, crop?: Crop) =>
-  (await api(post(file, kind, fit, true, crop))) as unknown as Blob
+export const sizesZip = async (file: File, kind: ImageKind, fit: Fit, crop?: Crop, bg: Background = null) =>
+  (await api(post(file, kind, fit, true, crop, bg))) as unknown as Blob
 
 /** `name.png` → `name-badge.zip`. */
 export const zipName = (file: string, kind: ImageKind) => `${file.replace(/\.[^.]*$/, '') || 'image'}-${kind}.zip`
