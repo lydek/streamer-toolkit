@@ -63,6 +63,7 @@
     </div>
     <!-- Sending needs the chat send channel (a later phase); the box shows where it will be. -->
     <div class="send">
+      <RewardPicker />
       <InputText disabled :placeholder="t('dock.sendLater')" :aria-label="t('dock.send')" />
       <Button icon="pi pi-send" disabled :aria-label="t('dock.send')" />
     </div>
@@ -79,6 +80,7 @@ import { useRoute } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
 import { ApiError } from './api'
+import RewardPicker from './RewardPicker.vue'
 import ChatNow from './ChatNow.vue'
 import { pause, resume, useChatHistory } from './chatLog'
 import { DOCK_MAX, DOCK_MIN, DOCK_WIDE_QUERY, clampWidth, saveDock, shownWidth, useDock } from './dock'
