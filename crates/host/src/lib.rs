@@ -508,7 +508,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     let home_tiles = home_tiles::routes(config.data_dir.clone());
     let chat_dock = chat_dock::routes(config.data_dir.clone());
     let after_numbers = after_numbers::routes(config.data_dir.clone());
-    let services = services::routes(config.data_dir.clone());
+    let services_dir = config.data_dir.clone();
     let tab_bar = tab_bar::routes(config.data_dir.clone());
     let text_size = text_size::routes(config.data_dir.clone());
     let card_packs = card_packs::routes(config.data_dir.clone());
@@ -562,6 +562,11 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         modules.clone(),
     ));
     watch_warnings(&screen_tools, &overlays, &admin, obs.states(), &modules);
+    let services = services::routes(services::ServicesState {
+        data_dir: services_dir,
+        admin: admin.clone(),
+        obs: obs.clone(),
+    });
     let eventsub_admin = admin.clone();
     let diagnostics_routes = diagnostics::routes(diagnostics::DiagnosticsState {
         eventsub_up: Arc::new(move || eventsub_admin.eventsub_up()),

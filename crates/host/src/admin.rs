@@ -36,10 +36,10 @@ use sound::SoundService;
 use stream::StreamService;
 use tokio::{sync::RwLock, task::AbortHandle};
 use toolkit_core::{
-    events::{Alert, AlertKind, ChatMessage, Fragment, Source},
+    events::{Alert, AlertKind, ChatMessage, Fragment, Source, StreamChange},
     modules::{self, ModuleError, ModuleState, Modules},
     outbox::Outbox,
-    settings,
+    settings::{self, ExternalService},
 };
 use viewers::ViewerService;
 
@@ -141,6 +141,12 @@ impl AdminState {
         state
     }
 
+    /// Starts or stops the Twitch connections for the saved choice of services, with the current sign-in.
+    pub(crate) async fn apply_services(&self) {
+        let auth = self.twitch.read().await.clone();
+        self.start_eventsub(auth);
+    }
+
     /// Whether the Twitch event connection is up right now.
     pub(crate) fn eventsub_up(&self) -> bool {
         self.eventsub_connected.lock().unwrap().1
@@ -149,7 +155,20 @@ impl AdminState {
     /// Connects chat (and its check-in and counter commands), alerts, redemptions (and their reward sounds) and the stream's
     /// start and end for `auth`, and checks once a minute whether the stream is live (both wait until signed in);
     /// stops the tasks of the previous auth.
-    fn start_eventsub(&self, auth: TwitchAuth) {
+    pub(crate) fn start_eventsub(&self, auth: TwitchAuth) {
+        // Not using Twitch: the old connections stop and none start (no events, no stream checks).
+        if settings::load(&self.data_dir).unused(ExternalService::Twitch) {
+            if let Some(old) = self.eventsub.lock().unwrap().take() {
+                old.abort();
+            }
+            for state in [&self.eventsub_connected, &self.irc_connected] {
+                let mut c = state.lock().unwrap();
+                *c = (c.0 + 1, false);
+            }
+            // Nothing tells whether the stream is live any more: not "still live" from before.
+            self.stream.receive(StreamChange::SignedOut);
+            return;
+        }
         let chat = self.chat.clone();
         let removals = self.chat.clone();
         let alerts = self.alerts.clone();

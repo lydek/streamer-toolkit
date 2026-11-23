@@ -66,6 +66,8 @@ pub struct ObsStatus {
 
 impl ObsStatus {
     pub const CONNECTING: Self = Self::reconnecting(None);
+    /// The broadcaster does not use OBS: no connection, and none tried.
+    pub const UNUSED: Self = Self::reconnecting(Some("obs.unused"));
     const CONNECTED: Self = Self {
         state: ObsState::Connected,
         reason: None,

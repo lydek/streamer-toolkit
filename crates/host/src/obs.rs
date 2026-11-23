@@ -29,7 +29,7 @@ use tokio::{sync::watch, task::AbortHandle};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
-    settings,
+    settings::{self, ExternalService},
     streaming::{
         BrowserSource, Canvas, Placement, StreamingError, StreamingSoftware, StreamingState,
         StreamingStats,
@@ -196,11 +196,12 @@ impl ObsLink {
         self.state.subscribe()
     }
 
-    /// Starts a connection with the saved settings and stops the previous one.
-    fn restart(&self) {
+    /// Starts a connection with the saved settings and stops the previous one; none while OBS is not used.
+    pub(crate) fn restart(&self) {
         // Held while reading settings too, so concurrent restarts end with the task for the latest settings.
         let mut current = self.task.lock().unwrap();
-        let saved = settings::load(&self.data_dir).obs;
+        let all = settings::load(&self.data_dir);
+        let saved = all.obs.clone();
         // The old connection stops writing first, then its scenes and outputs go: they belong to the old settings.
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         if let Some(old) = current.take() {
@@ -208,6 +209,11 @@ impl ObsLink {
         }
         self.control.clear();
         self.state.send_replace(StreamingState::default());
+        if all.unused(ExternalService::Obs) {
+            // Not "connected" from before: no connection, and none tried.
+            self.status.send_replace(ObsStatus::UNUSED);
+            return;
+        }
         let task = tokio::spawn(
             Obs {
                 host: saved.host,
@@ -1041,6 +1047,36 @@ mod tests {
             assert!(tokio::time::Instant::now() < deadline, "{snapshot}");
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn an_unused_obs_gets_no_connection_until_used_again() {
+        let dir = std::env::temp_dir().join(format!("st-obs-unused-{}", std::process::id()));
+        settings::update(&dir, |s| {
+            s.services = Some(toolkit_core::settings::ServiceUse {
+                unused: vec![ExternalService::Obs],
+                parked: vec![],
+            })
+        })
+        .unwrap();
+        let bus = Arc::new(EventBus::default());
+        let link = ObsLink::start(dir.clone(), 0, Arc::new(NoPassword), bus);
+        assert!(
+            link.task.lock().unwrap().is_none(),
+            "no connection while unused"
+        );
+        assert_eq!(
+            *link.status.borrow(),
+            ObsStatus::UNUSED,
+            "not a stale connected light"
+        );
+        settings::update(&dir, |s| s.services = None).unwrap();
+        link.restart();
+        assert!(
+            link.task.lock().unwrap().is_some(),
+            "connects once used again"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

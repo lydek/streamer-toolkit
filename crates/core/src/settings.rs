@@ -137,6 +137,15 @@ pub enum ExternalService {
     Obs,
 }
 
+impl Settings {
+    /// Whether the broadcaster chose not to use `service`: the Host does not connect to it then.
+    pub fn unused(&self, service: ExternalService) -> bool {
+        self.services
+            .as_ref()
+            .is_some_and(|s| s.unused.contains(&service))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ParkedModule {
     /// The service whose switch turned it off.
