@@ -231,8 +231,11 @@ export function useLiveEvents(retryMs = 2000, onMessage?: (msg: Incoming) => voi
   return state
 }
 
+/** A count (12, 1,234, +3) or a time (1:23, 2.5); anything else is a word (a scene, a state) and reads smaller. */
+export const COUNT = /^[\d,+:.]+$/
+
 /** Follows `source` at most once per `ms`, always ending with its latest value (trailing update). */
-export function useThrottled<T>(source: () => T, ms = 3000) {
+export function useThrottled<T>(source: () => T, ms: number | (() => number) = 3000) {
   const shown = shallowRef(source())
   let last = 0
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -241,9 +244,12 @@ export function useThrottled<T>(source: () => T, ms = 3000) {
     last = Date.now()
     shown.value = source()
   }
+  const gap = () => (typeof ms === 'function' ? ms() : ms)
   watch(source, () => {
-    if (timer) return
-    const wait = last + ms - Date.now()
+    // Waiting already: a gap that dropped to none (masked numbers) flushes now, not when the wait ends.
+    if (timer && gap() > 0) return
+    clearTimeout(timer)
+    const wait = last + gap() - Date.now()
     if (wait <= 0) flush()
     else timer = setTimeout(flush, wait)
   })
@@ -282,6 +288,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'checkin', icon: 'pi pi-check-square', tint: 'green' },
   { id: 'sound', icon: 'pi pi-volume-up', tint: 'primary' },
   { id: 'scene', icon: 'pi pi-images', tint: 'blue' },
+  { id: 'mixer', icon: 'pi pi-sliders-v', tint: 'blue' },
   { id: 'bgm', icon: 'pi pi-headphones', tint: 'yellow' },
   { id: 'counter', icon: 'pi pi-hashtag', tint: 'red' },
   { id: 'screen-tools', icon: 'pi pi-desktop', tint: 'yellow' },
@@ -312,8 +319,8 @@ export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
 /** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). A saved arrangement always
  * wins, so changing these never rewrites a home the user arranged. */
 export const STAGE_DEFAULTS: Record<Stage, string[]> = {
-  before: ['checklist', 'scene', 'screen-tools', 'bgm', 'sound', 'alerts', 'chat'],
-  live: ['pending', 'chat', 'alerts', 'scene', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
+  before: ['checklist', 'scene', 'mixer', 'screen-tools', 'bgm', 'sound', 'alerts', 'chat'],
+  live: ['pending', 'chat', 'alerts', 'scene', 'mixer', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
   after: ['summary', 'counter', 'redemption', 'checkin', 'chat'],
 }
 export const stageDefaults = (stage: Stage, tiles = TILES) =>

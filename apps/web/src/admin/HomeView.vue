@@ -95,6 +95,7 @@
               :expanded="false"
               :controls="`block-${tile.id}`"
               :data-expand="tile.id"
+              :immediate="tile.id === 'stats' && shownStage === 'after'"
               @click="openBlock(tile.id)"
             />
             <StageCard v-else-if="tile.id === 'stats'" id="block-stats" part="session" :stage="stage" :masked="maskedNumber" @reveal="revealNumber">
@@ -132,6 +133,7 @@
               :unbuilt="!!tile.unbuilt"
               :expanded="drawer.current.value === tile.id"
               :masked="maskedNumber(tile.id)"
+              :immediate="tile.id === 'mixer'"
               @click="!tile.unbuilt && toggle(tile.id, $event.currentTarget)"
             >
               <!-- A masked number has a button that shows just that one. -->
@@ -158,6 +160,20 @@
               </template>
               <template v-else-if="tile.id === 'sound' && sounds.state === 'ready' && sounds.items.length" #actions>
                 <Button v-for="s in sounds.items.slice(0, 3)" :key="s.id" :label="s.label" size="small" outlined @click="tileAction(testSound(s.id))" />
+              </template>
+              <!-- The chosen mic's mute; disabled, with the reason beside it, while it cannot be used. -->
+              <template v-else-if="tile.id === 'mixer'" #actions>
+                <Button
+                  :label="t(micState.input?.muted ? 'mixer.tile.unmute' : 'mixer.tile.mute')"
+                  :icon="micState.input?.muted ? 'pi pi-microphone' : 'pi pi-volume-off'"
+                  :aria-pressed="!!micState.input?.muted"
+                  :disabled="!micState.input || micBusy"
+                  :aria-describedby="micState.reason ? 'mic-reason' : undefined"
+                  size="small"
+                  outlined
+                  @click="toggleMic"
+                />
+                <small v-if="micState.reason" id="mic-reason" class="tile-reason">{{ micState.reason }}</small>
               </template>
               <template v-else-if="tile.id === 'screen-tools' && live.breakCard" #actions>
                 <ToggleSwitch
@@ -318,6 +334,22 @@
       </template>
     </AppDrawer>
 
+    <!-- 音訊混音, compact: the live scene's inputs with level, fader and mute (monitoring is on its page). -->
+    <AppDrawer id="mixer" :title="moduleName('mixer')" full-page="/mixer">
+      <template #now>
+        <template v-if="obsReady(live.obsState)">
+          <p>
+            <span class="tag">{{ t('scene.onAir') }}</span> <b>{{ live.obsState.scene }}</b>
+          </p>
+          <p v-if="!mixLive.length">{{ t('mixer.none') }}</p>
+          <ul class="plain mix-list">
+            <MixerRow v-for="i in mixLive" :key="i.name" :input="i" :level="meters.get(i.name)" :mic="i.name === mic" compact />
+          </ul>
+        </template>
+        <p v-else>{{ t('scene.notConnected') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="counter" :title="moduleName('counter')" full-page="/counters">
       <template #actions>
         <ObsStatusLink overlay="/overlay/counter/" />
@@ -436,6 +468,7 @@ import { useDock } from './dock'
 import { useDrawer } from './drawer'
 import {
   type Line,
+  COUNT,
   arrangedTiles,
   errorToast,
   obsLight,
@@ -456,6 +489,8 @@ import { obsProblems, useObsSources } from './obsSources'
 import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
 import RedemptionList from './RedemptionList.vue'
+import { mixSections, useMeters, useMic } from './mixer'
+import MixerRow from './MixerRow.vue'
 import SceneList from './SceneList.vue'
 import { obsReady } from './scenes'
 import { counterTile, stepCounter } from './counters'
@@ -665,6 +700,7 @@ const lines = computed<Record<string, Line>>(() => {
           : { state: 'ready', text: t('sound.empty') }
         : { state: sounds.value.state },
     scene: status === 'open' ? sceneLine(live.value.obsState) : { state: status },
+    mixer: status === 'open' ? mixerLine() : { state: status },
     bgm: status !== 'open' ? { state: status } : live.value.bgm ? bgmLine(live.value.bgm.payload) : { state: 'loading' },
     feed: feed.value.state === 'ready' ? feedTile(feed.value.items) : { state: feed.value.state },
     counter:
@@ -726,7 +762,8 @@ const folded = computed(() => shownStage.value === 'after' && numbers.mode === '
 const maskedNumber = (id: string) => {
   if (shownStage.value !== 'after' || !isMasked(id)) return false
   const line = lines.value[id]
-  return id.startsWith('stats.') || (line?.state === 'ready' && !!line.num)
+  // Only a count is a number to mask: a scene, a song or a state (開著, 顯示中) stays, and so does its tile's button.
+  return id.startsWith('stats.') || (line?.state === 'ready' && !!line.num && COUNT.test(line.num))
 }
 const saveNumbers = (change: Partial<Schemas['AfterNumbers']>) => tileAction(saveAfterNumbers(change))
 const revealNumber = (id: string) => tileAction(reveal(id))
@@ -738,9 +775,42 @@ const tileAction = (p: Promise<unknown>) =>
 const breakAgain = (card: Schemas['BreakPayload']) =>
   card.mode === 'until' ? { until: card.untilTime } : { minutes: card.minutes }
 
+// 音訊混音: the chosen mic only (never guessed); the tile shows OBS's state, so a mute shows once OBS has made it.
+const mic = useMic()
+const micState = computed(() => {
+  const obs = live.value.obsState
+  if (!obsReady(obs)) return { reason: t('scene.notConnected') }
+  if (mic.value === undefined) return {}
+  if (!mic.value) return { reason: t('mixer.tile.noMic') }
+  const input = obs.inputs.find((i) => i.name === mic.value)
+  return input ? { input } : { reason: t('mixer.micMissing', { input: mic.value }) }
+})
+const micBusy = ref(false)
+async function toggleMic() {
+  const input = micState.value.input
+  if (!input) return
+  micBusy.value = true
+  await tileAction(api(client.PUT('/api/admin/obs/input', { body: { input: input.name, muted: !input.muted } })))
+  micBusy.value = false
+}
+const mixLive = computed(() => (obsReady(live.value.obsState) ? mixSections(live.value.obsState, live.value.obsState.scene).on : []))
+const meters = useMeters(computed(() => drawer.current.value === 'mixer' && obsReady(live.value.obsState)))
+function mixerLine(): Line {
+  const { input, reason } = micState.value
+  if (!input) return reason ? { state: 'ready', text: reason } : { state: 'loading' }
+  return {
+    state: 'ready',
+    num: t(input.muted ? 'mixer.tile.muted' : 'mixer.tile.on'),
+    text: `${input.name} · ${t('mixer.tile.inputs', { n: mixLive.value.length })}`,
+  }
+}
+
 const drawerFailed = (e: unknown) =>
   (notice.value = { text: e instanceof ApiError ? errorMessage(e.code) : String(e), error: true })
-const attention = computed<Record<string, boolean>>(() => ({ chat: templateError.value !== null }))
+const attention = computed<Record<string, boolean>>(() => ({
+  chat: templateError.value !== null,
+  mixer: !!micState.value.input?.muted,
+}))
 
 /** The small 本場直播 tile: how long it has run, with redemptions and subs. */
 function statsLine(): Line {
@@ -1038,6 +1108,21 @@ onBeforeUnmount(() => {
 .plain {
   list-style: none;
   padding: 0;
+}
+
+.mix-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.tile-reason {
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
+}
+
+.tag {
+  font-size: 0.8125rem;
+  color: var(--p-primary-color);
 }
 
 .grid {

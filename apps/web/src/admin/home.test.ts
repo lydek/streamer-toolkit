@@ -271,6 +271,24 @@ describe('useThrottled', () => {
     expect(shown.value).toBe(4)
     scope.stop()
   })
+
+  it('shows a change at once when the gap drops to none while waiting', async () => {
+    vi.useFakeTimers()
+    const source = ref(0)
+    const gap = ref(3000)
+    const scope = effectScope()
+    const shown = scope.run(() => useThrottled(() => source.value, () => gap.value))!
+    source.value = 1
+    await nextTick()
+    source.value = 2
+    await nextTick()
+    expect(shown.value).toBe(1)
+    gap.value = 0
+    source.value = 3
+    await nextTick()
+    expect(shown.value).toBe(3)
+    scope.stop()
+  })
 })
 
 describe('unbuilt tiles', () => {

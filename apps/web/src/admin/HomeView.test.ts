@@ -63,6 +63,60 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
+describe('HomeView mixer tile', () => {
+  it('mutes only the chosen mic, shows OBS state once confirmed, and says why it cannot', async () => {
+    let socket!: { onmessage?: (e: { data: string }) => void }
+    vi.stubGlobal('WebSocket', class {
+      onmessage?: (e: { data: string }) => void
+      constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        socket = this
+      }
+      close() {}
+    })
+    let seq = 0
+    const obsState = (inputs: object[]) =>
+      socket.onmessage!({ data: JSON.stringify({ seq: ++seq, type: 'obs.state', payload: { scene: 'Game', scenes: [{ name: 'Game', items: [] }], inputs, streaming: false, recording: false } }) })
+    const mic = (muted: boolean) => ({ name: 'Mic', muted, global: true })
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(
+        path === '/api/admin/modules'
+          ? [{ id: 'mixer', enabled: true, closed: false }]
+          : path === '/api/admin/mixer/mic'
+            ? { input: 'Mic' }
+            : path === '/api/admin/checkin/today'
+              ? { count: 0, recent: [] }
+              : responses[path],
+      )) as never)
+    await home()
+    const topics = ['obs.status', 'obs.state', 'presentation.queue', 'stream.status', 'bgm.player', 'counter.values', 'counter.marathon', 'screen.break', 'screen.warnings', 'screen.appearance', 'leaderboard.update', 'chat.text_size', 'chat.message']
+    socket.onmessage!({ data: JSON.stringify({ seq: ++seq, type: 'snapshot', payload: Object.fromEntries(topics.map((k) => [k, []])) }) })
+    obsState([mic(false), { name: 'Desktop', muted: false, global: true }])
+    await flushPromises()
+    const tile = () => document.querySelector('[data-drawer-tile="mixer"]')!.closest('.tile-wrap')!
+    const button = () => tile().querySelector<HTMLButtonElement>('.tile-actions button')!
+    expect(tile().textContent).toContain(t('mixer.tile.on'))
+    expect(button().textContent).toContain(t('mixer.tile.mute'))
+    button().click()
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/obs/input', { body: { input: 'Mic', muted: true } })
+    // Not muted until OBS says so.
+    expect(tile().textContent).toContain(t('mixer.tile.on'))
+    obsState([mic(true), { name: 'Desktop', muted: false, global: true }])
+    await flushPromises()
+    expect(tile().textContent).toContain(t('mixer.tile.muted'))
+    expect(button().textContent).toContain(t('mixer.tile.unmute'))
+    expect(tile().querySelector('.dot')).not.toBeNull()
+
+    // The chosen mic is gone: no other input is touched.
+    obsState([{ name: 'Desktop', muted: false, global: true }])
+    await flushPromises()
+    expect(button().disabled).toBe(true)
+    expect(tile().textContent).toContain(t('mixer.micMissing', { input: 'Mic' }))
+    expect(put).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('HomeView chat tile', () => {
   it('steps aside while the chat panel is docked beside the page', async () => {
     const dock = useDock()
@@ -112,7 +166,7 @@ describe('HomeView stage homes', () => {
     expect(put).toHaveBeenCalledTimes(1)
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
       params: { query: { stage: 'live' } },
-      body: ['pending', 'alerts', 'scene', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
+      body: ['pending', 'alerts', 'scene', 'mixer', 'bgm', 'counter', 'sound', 'screen-tools', 'queue', 'redemption', 'checkin'],
     })
     // The other stages keep their own orders: 開播前 still has its chat tile, 下播後 stays empty.
     await pickStage('before')
@@ -200,6 +254,44 @@ describe('HomeView numbers after the stream', () => {
   })
 })
 
+describe('HomeView masked numbers and word values', () => {
+  afterEach(() => Object.assign(useAfterNumbers(), { mode: 'show', revealed: [] }))
+
+  it('leaves a state like 開著 on the mic tile, and its button, alone', async () => {
+    let socket!: { onmessage?: (e: { data: string }) => void }
+    vi.stubGlobal('WebSocket', class {
+      onmessage?: (e: { data: string }) => void
+      constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        socket = this
+      }
+      close() {}
+    })
+    vi.mocked(client.GET).mockImplementation(((path: string) =>
+      ok(
+        path === '/api/admin/modules'
+          ? [{ id: 'mixer', enabled: true, closed: false }]
+          : path === '/api/admin/mixer/mic'
+            ? { input: 'Mic' }
+            : path === '/api/admin/home-tiles'
+              ? ['mixer']
+              : path === '/api/admin/checkin/today'
+                ? { count: 0, recent: [] }
+                : responses[path],
+      )) as never)
+    Object.assign(useAfterNumbers(), { mode: 'mask', revealed: [] })
+    await home()
+    const topics = ['obs.status', 'obs.state', 'presentation.queue', 'stream.status', 'bgm.player', 'counter.values', 'counter.marathon', 'screen.break', 'screen.warnings', 'screen.appearance', 'leaderboard.update', 'chat.text_size', 'chat.message']
+    socket.onmessage!({ data: JSON.stringify({ seq: 1, type: 'snapshot', payload: Object.fromEntries(topics.map((k) => [k, []])) }) })
+    socket.onmessage!({ data: JSON.stringify({ seq: 2, type: 'obs.state', payload: { scene: 'Game', scenes: [{ name: 'Game', items: [] }], inputs: [{ name: 'Mic', muted: false, global: true }], streaming: false, recording: false } }) })
+    await pickStage('after')
+    await flushPromises()
+    const tile = document.querySelector('[data-drawer-tile="mixer"]')!.closest('.tile-wrap')!
+    expect(tile.textContent).toContain(t('mixer.tile.on'))
+    expect(tile.textContent).toContain(t('mixer.tile.mute'))
+  })
+})
+
 describe('HomeView stats tile after the stream', () => {
   afterEach(() => Object.assign(useAfterNumbers(), { mode: 'show', revealed: [] }))
 
@@ -214,13 +306,9 @@ describe('HomeView stats tile after the stream', () => {
     }
     vi.mocked(client.GET).mockImplementation(((path: string) => ok(data[path])) as never)
     Object.assign(useAfterNumbers(), { mode: 'mask', revealed: [] })
-    vi.useFakeTimers({ shouldAdvanceTime: true })
     await home()
+    // At once, not after the few seconds a tile's line usually waits.
     await pickStage('after')
-    // A tile's line follows a change after its few seconds.
-    vi.advanceTimersByTime(3100)
-    await flushPromises()
-    vi.useRealTimers()
     const tile = () => document.querySelector('[data-expand="stats"]')!
     expect(tile().textContent).not.toMatch(/58|47/)
     ;(tile() as HTMLButtonElement).click()
@@ -445,7 +533,7 @@ describe('HomeView arrange mode', () => {
     // 開播前's home, without the chat tile; the other stages are not sent.
     expect(put).toHaveBeenCalledWith('/api/admin/home-tiles', {
       params: { query: { stage: 'before' } },
-      body: ['checklist', 'scene', 'screen-tools', 'bgm', 'sound', 'alerts'],
+      body: ['checklist', 'scene', 'mixer', 'screen-tools', 'bgm', 'sound', 'alerts'],
     })
     ;(done() as HTMLButtonElement).click()
     await flushPromises()
