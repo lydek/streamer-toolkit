@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
+import InputNumber from 'primevue/inputnumber'
 import Menu from 'primevue/menu'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
@@ -329,6 +330,59 @@ describe('ScenesPage', () => {
     expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceUrlHidden'))
     await openSource('Capture')
     expect(wrapper.get('tr.editor').text()).toContain(t('scene.sourceInObs'))
+  })
+
+  it("changes a browser source's CSS and refreshes it, and a text source's color, one field at a time", async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string, init?: { params?: { query?: { input?: string } } }) =>
+      Promise.resolve({
+        data:
+          path === '/api/admin/obs/source'
+            ? init?.params?.query?.input === 'Capture'
+              ? { family: 'text', fields: { text: 'hi', color: 0xffffff }, url_hidden: false }
+              : { family: 'browser', fields: { url: 'http://127.0.0.1:47810/overlay/chat/', width: 400, height: 600, css: '' }, url_hidden: false }
+            : { canvas: { width: 1920, height: 1080 }, items: [] },
+        response: new Response(null, { status: 200 }),
+      })) as never)
+    const post = vi.fn(ok)
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const openSource = async (name: string) => {
+      await wrapper.findAll('.item-name').find((b) => b.text() === name)!.trigger('click')
+      await wrapper.findAll('.editor-tabs button').find((b) => b.text() === t('scene.tabs.source'))!.trigger('click')
+      await flushPromises()
+    }
+    await openSource('Chat overlay')
+    const css = wrapper.get(`textarea[aria-label="${t('scene.src.css')}"]`)
+    await css.setValue('body { color: red; }')
+    await css.trigger('change')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/source', { body: { input: 'Chat overlay', fields: { css: 'body { color: red; }' } } })
+    await wrapper.findAll('tr.editor button').find((b) => b.text() === t('scene.src.refresh'))!.trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/obs/source/refresh', { body: { input: 'Chat overlay' } })
+    await openSource('Capture')
+    const color = wrapper.get(`input[type="color"]`)
+    await color.setValue('#ff0000')
+    await color.trigger('change')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/source', { body: { input: 'Capture', fields: { color: 0x0000ff } } })
+
+    // The font's size changed before its face is saved: the size goes out after, with the new face.
+    let release!: () => void
+    put.mockImplementationOnce(() => new Promise((r) => (release = () => r({ data: undefined, response: new Response(null, { status: 204 }) }))))
+    const face = wrapper.get(`input[aria-label="${t('scene.src.fontFace')}"]`)
+    // setValue fires the field's change too.
+    await face.setValue('Noto Sans TC')
+    const size = wrapper.findAllComponents(InputNumber).find((c) => c.props('ariaLabel') === t('scene.src.fontSize'))!
+    size.vm.$emit('update:modelValue', 48)
+    await flushPromises()
+    const fonts = () => put.mock.calls.filter((c) => c[1].body.fields.font).map((c) => c[1].body.fields.font)
+    expect(fonts()).toEqual([{ face: 'Noto Sans TC' }])
+    release()
+    await flushPromises()
+    expect(fonts()).toEqual([{ face: 'Noto Sans TC' }, { face: 'Noto Sans TC', size: 48 }])
   })
 
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {

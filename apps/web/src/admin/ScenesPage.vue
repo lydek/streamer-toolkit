@@ -411,6 +411,102 @@
                         <span></span>
                         <span class="muted">{{ t('scene.sourceUrlHidden') }}</span>
                       </template>
+                      <!-- Browser: this Host's overlay address, the page's own size, custom CSS, shut down when hidden. -->
+                      <template v-if="sources.get(item.source)!.family === 'browser'">
+                        <template v-if="!sources.get(item.source)!.url_hidden">
+                          <span>{{ t('scene.src.url') }}</span>
+                          <InputText
+                            :model-value="String(field(item, 'url') ?? '')"
+                            :aria-label="t('scene.src.url')"
+                            class="wide"
+                            @change="(e: Event) => setField(item, 'url', (e.target as HTMLInputElement).value)"
+                          />
+                        </template>
+                        <span>{{ t('scene.src.pageSize') }}</span>
+                        <span class="fields">
+                          <InputNumber
+                            v-for="k in (['width', 'height'] as const)"
+                            :key="k"
+                            :model-value="Number(field(item, k) ?? 0)"
+                            :min="1"
+                            :max="16384"
+                            :use-grouping="false"
+                            :aria-label="t(`scene.src.${k}`)"
+                            class="coord"
+                            @update:model-value="(v: number | null) => v !== null && setField(item, k, v)"
+                          />
+                          <span class="hint">{{ t('scene.src.pageSizeHint') }}</span>
+                        </span>
+                        <span>{{ t('scene.src.css') }}</span>
+                        <Textarea
+                          :model-value="String(field(item, 'css') ?? '')"
+                          :aria-label="t('scene.src.css')"
+                          rows="2"
+                          spellcheck="false"
+                          class="wide code"
+                          @change="(e: Event) => setField(item, 'css', (e.target as HTMLTextAreaElement).value)"
+                        />
+                        <span></span>
+                        <span class="fields">
+                          <Checkbox
+                            :model-value="Boolean(field(item, 'shutdown'))"
+                            :input-id="`shutdown-${item.id}`"
+                            binary
+                            @update:model-value="(v: boolean) => setField(item, 'shutdown', v)"
+                          />
+                          <label :for="`shutdown-${item.id}`">{{ t('scene.src.shutdown') }}</label>
+                          <Button :label="t('scene.src.refresh')" icon="pi pi-refresh" size="small" outlined @click="refreshSource(item)" />
+                        </span>
+                      </template>
+                      <!-- Text: what it says, its font and size, its color. -->
+                      <template v-else-if="sources.get(item.source)!.family === 'text'">
+                        <span>{{ t('scene.src.text') }}</span>
+                        <Textarea
+                          :model-value="String(field(item, 'text') ?? '')"
+                          :aria-label="t('scene.src.text')"
+                          rows="2"
+                          class="wide"
+                          @change="(e: Event) => setField(item, 'text', (e.target as HTMLTextAreaElement).value)"
+                        />
+                        <span>{{ t('scene.src.font') }}</span>
+                        <span class="fields">
+                          <InputText
+                            :model-value="String(fontOf(item).face ?? '')"
+                            :aria-label="t('scene.src.fontFace')"
+                            @change="(e: Event) => setField(item, 'font', { ...fontOf(item), face: (e.target as HTMLInputElement).value })"
+                          />
+                          <InputNumber
+                            :model-value="Number(fontOf(item).size ?? 36)"
+                            :min="1"
+                            :max="1000"
+                            :use-grouping="false"
+                            :aria-label="t('scene.src.fontSize')"
+                            class="index"
+                            @update:model-value="(v: number | null) => v !== null && setField(item, 'font', { ...fontOf(item), size: v })"
+                          />
+                          <input
+                            type="color"
+                            class="color"
+                            :value="textColor(item)"
+                            :aria-label="t('scene.src.color')"
+                            @change="(e: Event) => setTextColor(item, (e.target as HTMLInputElement).value)"
+                          />
+                        </span>
+                      </template>
+                      <!-- Image: its file, typed in when OBS runs on this computer; elsewhere OBS changes it. -->
+                      <template v-else-if="sources.get(item.source)!.family === 'image'">
+                        <span>{{ t('scene.src.file') }}</span>
+                        <span class="fields">
+                          <InputText
+                            :model-value="String(field(item, 'file') ?? '')"
+                            :aria-label="t('scene.src.file')"
+                            :readonly="!obsSources?.local"
+                            class="wide"
+                            @change="(e: Event) => setField(item, 'file', (e.target as HTMLInputElement).value)"
+                          />
+                          <span v-if="!obsSources?.local" class="hint">{{ t('scene.src.fileRemote') }}</span>
+                        </span>
+                      </template>
                     </template>
                     <p v-else class="muted">{{ t('app.loading') }}</p>
                   </div>
@@ -433,6 +529,9 @@ import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
+import Checkbox from 'primevue/checkbox'
+import InputText from 'primevue/inputtext'
+import Textarea from 'primevue/textarea'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -440,10 +539,11 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
-import { errorToast, servicesDown, useLiveEvents } from './home'
+import { errorToast, servicesDown, successToast, useLiveEvents } from './home'
 import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSources'
 import { type Cross, type Side, alignedCorner, boxOf, pointOf } from './relativeAlign'
 import SceneList from './SceneList.vue'
+import { colorOf, hexOf } from './sourceColor'
 import { type SceneItem, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
 
 const { t } = useI18n()
@@ -630,6 +730,46 @@ watch([open, editorTab, target], async ([id]) => {
     report(e)
   }
 })
+// The source's form: a field changed is sent alone (the Host merges it) and kept here once OBS has it.
+const field = (item: SceneItem, key: string) => sources.value.get(item.source)?.fields[key] as unknown
+const fontOf = (item: SceneItem) => (field(item, 'font') ?? {}) as { face?: string; size?: number }
+// Shown at once, so the next change (the font size after its face) starts from it; a source's writes go one after
+// another, so OBS ends with the last; a refused one goes back unless changed again meanwhile.
+const writes = new Map<string, Promise<unknown>>()
+async function setField(item: SceneItem, key: string, value: unknown) {
+  const now = sources.value.get(item.source)
+  if (!now) return
+  const before = now.fields[key]
+  const show = (v: unknown) => {
+    const latest = sources.value.get(item.source)
+    if (latest) sources.value = new Map(sources.value).set(item.source, { ...latest, fields: { ...latest.fields, [key]: v } as never })
+  }
+  show(value)
+  // `fields` is a free-form object in the API description; its keys are checked by the Host.
+  const write = (writes.get(item.source) ?? Promise.resolve()).then(() =>
+    api(client.PUT('/api/admin/obs/source', { body: { input: item.source, fields: { [key]: value } as never } })),
+  )
+  writes.set(item.source, write.catch(() => {}))
+  try {
+    await write
+  } catch (e) {
+    if (sources.value.get(item.source)?.fields[key] === value) show(before)
+    report(e)
+  }
+}
+// The Windows text source keeps `color`, the FreeType one `color1`.
+const colorKey = (item: SceneItem) => (field(item, 'color1') !== undefined && field(item, 'color') === undefined ? 'color1' : 'color')
+const textColor = (item: SceneItem) => hexOf(Number(field(item, colorKey(item)) ?? 0xffffff))
+const setTextColor = (item: SceneItem, hex: string) => setField(item, colorKey(item), colorOf(hex, colorKey(item) === 'color1'))
+async function refreshSource(item: SceneItem) {
+  try {
+    await api(client.POST('/api/admin/obs/source/refresh', { body: { input: item.source } }))
+    toast.add(successToast(t('scene.src.refreshed', { source: item.source })))
+  } catch (e) {
+    report(e)
+  }
+}
+
 // 來源設定: read when its tab opens; only the fields of the source's form come back.
 const sources = ref(new Map<string, Schemas['SourceSettings']>())
 watch([open, editorTab], async ([id]) => {
@@ -895,6 +1035,24 @@ tr.moved > * {
     animation: none;
     outline: 1px solid var(--p-primary-color);
   }
+}
+
+.wide {
+  width: min(100%, 28rem);
+}
+
+.code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.color {
+  width: 2.5rem;
+  height: 2rem;
+  padding: 0.125rem;
+  border: 1px solid var(--p-surface-600);
+  border-radius: 6px;
+  background: none;
 }
 
 .hint {

@@ -90,6 +90,7 @@ use crate::{
         obs::item_transform,
         source_settings::source,
         source_settings::set_source,
+        source_settings::refresh_source,
         obs::overlay_sources,
         obs::add_overlay,
         obs::remove_overlay,
