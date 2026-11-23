@@ -114,14 +114,22 @@ export function preStreamChecks(
   live: LiveState,
   modules: Schemas['ModuleState'][] | undefined,
   overlays: Schemas['OverlayCounts'] | undefined,
+  unused: Schemas['ExternalService'][] = [],
 ): Check[] {
   const twitch = '/settings/connections#twitch'
   const enabled = new Set((modules ?? []).filter((m) => m.enabled).map((m) => m.id))
+  // A service not used is not checked, nor are overlays in OBS while OBS is not used.
+  const usesTwitch = !unused.includes('twitch')
+  const usesObs = !unused.includes('obs')
   return [
-    { id: 'twitch', ok: overview?.status.state === 'signed_in', fix: twitch },
-    { id: 'eventsub', ok: overview?.eventsub_connected === true, fix: twitch },
-    { id: 'obs', ok: live.obs?.state === 'connected', fix: '/settings/connections#obs' },
-    ...OVERLAYS.filter((o) => enabled.has(o.module)).map(
+    ...(usesTwitch
+      ? [
+          { id: 'twitch', ok: overview?.status.state === 'signed_in', fix: twitch },
+          { id: 'eventsub', ok: overview?.eventsub_connected === true, fix: twitch },
+        ] satisfies Check[]
+      : []),
+    ...(usesObs ? [{ id: 'obs', ok: live.obs?.state === 'connected', fix: '/settings/connections#obs' } satisfies Check] : []),
+    ...OVERLAYS.filter((o) => usesObs && enabled.has(o.module)).map(
       (o): Check => ({ id: `overlay.${o.kind}`, ok: (overlays?.[o.kind] ?? 0) > 0, fix: o.page }),
     ),
   ]

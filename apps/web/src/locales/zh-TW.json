@@ -1760,6 +1760,7 @@
     "obs": {
       "unreachable": "連不到 OBS，請確認 OBS 已開啟，並在「工具 → WebSocket 伺服器設定」啟用伺服器。",
       "disconnected": "與 OBS 的連線中斷了。",
+      "unused": "設定成不使用 OBS，不會連線。",
       "auth_failed": "OBS WebSocket 密碼錯誤。",
       "password_required": "OBS WebSocket 需要密碼，請先設定密碼。",
       "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",

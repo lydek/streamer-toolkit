@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { errorMessage, i18n } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { type LiveState, type Stage, clockText, preStreamChecks, sessionRange, streamStage, twitchOverview } from './home'
+import { useServices } from './services'
 import { exportRecord } from './streamRecord'
 
 export const STAGES: Stage[] = ['before', 'live', 'after']
@@ -52,7 +53,8 @@ export function useStage(source: { live: () => LiveState; modules: () => Schemas
   }
   watch(shown, () => void loadOverlays(), { immediate: true })
   const overlayTimer = window.setInterval(() => void loadOverlays(), OVERLAYS_MS)
-  const checks = computed(() => preStreamChecks(twitchOverview.value, source.live(), source.modules(), overlays.value))
+  const services = useServices()
+  const checks = computed(() => preStreamChecks(twitchOverview.value, source.live(), source.modules(), overlays.value, services.unused))
 
   onScopeDispose(() => {
     window.clearInterval(clock)

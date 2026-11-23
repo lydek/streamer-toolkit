@@ -501,3 +501,14 @@ describe('isDown', () => {
     expect(isDown({ state: 'connected', key: 'home.status.connected' })).toBe(false)
   })
 })
+
+describe('preStreamChecks for services not used', () => {
+  it('skips Twitch checks, the OBS check and overlays in OBS for a service the broadcaster does not use', async () => {
+    const { preStreamChecks } = await import('./home')
+    const modules = [{ id: 'chat', enabled: true, closed: false }]
+    const ids = (unused: ('twitch' | 'obs')[]) => preStreamChecks(undefined, { status: 'open', lastSeq: 0 }, modules, undefined, unused).map((c) => c.id)
+    expect(ids([])).toEqual(['twitch', 'eventsub', 'obs', 'overlay.chat'])
+    expect(ids(['twitch'])).toEqual(['obs', 'overlay.chat'])
+    expect(ids(['obs'])).toEqual(['twitch', 'eventsub'])
+  })
+})
