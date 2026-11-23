@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
+import Menu from 'primevue/menu'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
@@ -164,6 +165,41 @@ describe('ScenesPage', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
       body: { scene: 'Game', item: 2, placement: { x: 100, y: 80, align: 'top_left' } },
     })
+  })
+
+  it('moves an item to the front, the back, a typed place or below another, and by dragging', async () => {
+    const wrapper = await page()
+    const four = ['A', 'B', 'C', 'D'].map((n, i) => item(10 + i, n, 'browser_source'))
+    snapshot(connected('Game', four))
+    await flushPromises()
+    // The row menu's entries, as PrimeVue's popup Menu gets them.
+    const pick = async (name: string, label: string) => {
+      await wrapper.get(`button[aria-label="${t('scene.moreMoves', { item: name })}"]`).trigger('click')
+      const menu = wrapper.findAllComponents(Menu).find((m) => m.props('model')?.some((i) => i.label === label))!
+      menu.props('model')!.find((i) => i.label === label)!.command!({} as never)
+      await flushPromises()
+    }
+    // C to the front, B to the back (front to back from 0: B is 1, C is 2).
+    await pick('C', t('scene.toFront'))
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 12, position: 0 } })
+    await pick('B', t('scene.toBack'))
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 11, position: 3 } })
+    // A typed place is counted from 1.
+    await wrapper.findAll('.item-name').find((b) => b.text() === 'A')!.trigger('click')
+    const index = wrapper.get('input#index-10')
+    await index.setValue('3')
+    await index.trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 10, position: 2 } })
+    // Dragging D onto the top half of B lands it right above B.
+    const rows = () => wrapper.findAll('tbody tr[data-item]')
+    const b = rows().find((r) => r.attributes('data-item') === '11')!
+    vi.spyOn(b.element, 'getBoundingClientRect').mockReturnValue({ top: 0, height: 20 } as DOMRect)
+    await rows().find((r) => r.attributes('data-item') === '13')!.trigger('dragstart')
+    await b.trigger('dragover', { clientY: 5 })
+    await b.trigger('drop')
+    await flushPromises()
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 13, position: 1 } })
   })
 
   it('moves an item forward or back, counted front to back, and keeps the ends from going further', async () => {

@@ -79,7 +79,16 @@
           </thead>
           <tbody>
             <template v-for="(item, i) in current.items" :key="`${item.id}:${resets}`">
-              <tr :class="{ open: open === item.id }">
+              <tr
+                :class="{ open: open === item.id, moved: moved === item.id, dragging: dragged === item.id, [`drop-${dropSide}`]: over === item.id }"
+                :data-item="item.id"
+                draggable="true"
+                @dragstart="onDragstart($event, item)"
+                @dragover="onDragover($event, item)"
+                @dragleave="over = null"
+                @drop="onDrop($event, item)"
+                @dragend="dragged = over = null"
+              >
                 <th scope="row">
                   <button
                     type="button"
@@ -117,7 +126,7 @@
                     rounded
                     :disabled="i === 0 || busy.has(item.id)"
                     :aria-label="t('scene.forward', { item: item.source })"
-                    @click="change(item, { position: i - 1 })"
+                    @click="move(item, i - 1)"
                   />
                   <Button
                     icon="pi pi-arrow-down"
@@ -125,7 +134,17 @@
                     rounded
                     :disabled="i === current.items.length - 1 || busy.has(item.id)"
                     :aria-label="t('scene.backward', { item: item.source })"
-                    @click="change(item, { position: i + 1 })"
+                    @click="move(item, i + 1)"
+                  />
+                  <Button
+                    icon="pi pi-ellipsis-v"
+                    text
+                    rounded
+                    :disabled="busy.has(item.id)"
+                    :aria-label="t('scene.moreMoves', { item: item.source })"
+                    aria-haspopup="true"
+                    aria-controls="move-menu"
+                    @click="openMoveMenu($event, item, i)"
                   />
                 </td>
               </tr>
@@ -178,12 +197,40 @@
                       </span>
                     </template>
                     <p v-else class="muted">{{ t('scene.noPlacement') }}</p>
+                    <!-- Order: a number counted from the front (1), or right below another item. -->
+                    <span>{{ t('scene.order') }}</span>
+                    <span class="fields">
+                      <label :for="`index-${item.id}`">{{ t('scene.indexBefore') }}</label>
+                      <InputNumber
+                        :input-id="`index-${item.id}`"
+                        :model-value="i + 1"
+                        :min="1"
+                        :max="current.items.length"
+                        :use-grouping="false"
+                        :disabled="busy.has(item.id)"
+                        class="index"
+                        @update:model-value="(n: number | null) => n !== null && move(item, n - 1)"
+                      />
+                      <span>{{ t('scene.indexAfter') }}</span>
+                      <Select
+                        :model-value="null"
+                        :options="current.items.filter((o) => o.id !== item.id)"
+                        :option-label="(o: SceneItem) => o.source"
+                        :placeholder="t('scene.belowPick')"
+                        :input-id="`below-${item.id}`"
+                        :aria-label="t('scene.belowLabel', { item: item.source })"
+                        :disabled="busy.has(item.id)"
+                        @update:model-value="(o: SceneItem) => moveBelow(item, o)"
+                      />
+                      <span>{{ t('scene.belowAfter') }}</span>
+                    </span>
                   </div>
                 </td>
               </tr>
             </template>
           </tbody>
         </table>
+        <Menu id="move-menu" ref="moveMenu" :model="moveItems" popup />
         </div>
       </section>
     </div>
@@ -198,7 +245,7 @@ import type { MenuItem } from 'primevue/menuitem'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -289,6 +336,80 @@ const editorTab = ref<EditorTab>('layout')
 // What each item can edit; later tabs join as they are built.
 const tabsOf = (item: SceneItem): EditorTab[] => (item ? ['layout'] : [])
 const shownTab = (item: SceneItem) => (tabsOf(item).includes(editorTab.value) ? editorTab.value : 'layout')
+// Order: OBS counts from the bottom, the admin API front to back from 0 (P2-12); `move` takes that index. The moved
+// row flashes and keeps the keyboard once OBS reports the new order.
+const moved = ref<number | null>(null)
+let movedTimer: ReturnType<typeof setTimeout> | undefined
+async function move(item: SceneItem, to: number) {
+  const items = current.value?.items ?? []
+  const target = Math.max(0, Math.min(items.length - 1, to))
+  if (items.findIndex((o) => o.id === item.id) === target) return
+  if (!(await change(item, { position: target }))) return
+  moved.value = item.id
+  clearTimeout(movedTimer)
+  movedTimer = setTimeout(() => (moved.value = null), 1600)
+}
+watch(current, () => {
+  if (moved.value === null) return
+  const id = moved.value
+  void nextTick(() => document.querySelector<HTMLElement>(`tr[data-item="${id}"] .item-name`)?.focus())
+})
+const moveBelow = (item: SceneItem, other: SceneItem) => {
+  const items = current.value?.items ?? []
+  const from = items.findIndex((o) => o.id === item.id)
+  const at = items.findIndex((o) => o.id === other.id)
+  return move(item, from < at ? at : at + 1)
+}
+
+// The row menu: to the front or the back, or right below another item (opens the editor at that field).
+const moveMenu = ref<InstanceType<typeof Menu>>()
+const moveItems = ref<MenuItem[]>([])
+function openMoveMenu(e: Event, item: SceneItem, i: number) {
+  const last = (current.value?.items.length ?? 1) - 1
+  moveItems.value = [
+    { label: t('scene.toFront'), icon: 'pi pi-angle-double-up', disabled: i === 0, command: () => move(item, 0) },
+    { label: t('scene.toBack'), icon: 'pi pi-angle-double-down', disabled: i === last, command: () => move(item, last) },
+    {
+      label: t('scene.belowMenu'),
+      icon: 'pi pi-arrow-down-right',
+      command: () => {
+        open.value = item.id
+        editorTab.value = 'layout'
+        void nextTick(() => document.getElementById(`below-${item.id}`)?.focus())
+      },
+    },
+  ]
+  moveMenu.value?.toggle(e)
+}
+
+// Drag a row by anywhere on it; a line shows where it lands.
+const dragged = ref<number | null>(null)
+const over = ref<number | null>(null)
+const dropSide = ref<'before' | 'after'>('before')
+function onDragstart(e: DragEvent, item: SceneItem) {
+  dragged.value = item.id
+  e.dataTransfer?.setData('text/plain', String(item.id))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+function onDragover(e: DragEvent, item: SceneItem) {
+  if (dragged.value === null || dragged.value === item.id) return
+  e.preventDefault()
+  const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropSide.value = e.clientY < box.top + box.height / 2 ? 'before' : 'after'
+  over.value = item.id
+}
+function onDrop(e: DragEvent, target: SceneItem) {
+  const from = current.value?.items.find((o) => o.id === dragged.value)
+  dragged.value = over.value = null
+  if (!from || from.id === target.id) return
+  e.preventDefault()
+  const items = current.value!.items
+  const fromAt = items.indexOf(from)
+  let at = items.indexOf(target) + (dropSide.value === 'after' ? 1 : 0)
+  if (fromAt < at) at--
+  void move(from, at)
+}
+
 const geoText = (item: SceneItem) => {
   const p = placements.value.get(item.id)
   return p ? `${Math.round(p.x)}, ${Math.round(p.y)}` : '—'
@@ -454,6 +575,43 @@ async function change(
 tr.open > *,
 tr.editor > td {
   background: var(--p-surface-900);
+}
+
+tbody tr[draggable='true'] {
+  cursor: grab;
+}
+
+tr.dragging {
+  opacity: 0.4;
+}
+
+tr.drop-before > * {
+  box-shadow: inset 0 2px 0 var(--p-primary-color);
+}
+
+tr.drop-after > * {
+  box-shadow: inset 0 -2px 0 var(--p-primary-color);
+}
+
+tr.moved > * {
+  animation: moved 1.6s ease-out;
+}
+
+@keyframes moved {
+  from {
+    background: color-mix(in srgb, var(--p-primary-color) 25%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tr.moved > * {
+    animation: none;
+    outline: 1px solid var(--p-primary-color);
+  }
+}
+
+.index :deep(.p-inputnumber-input) {
+  width: 4rem;
 }
 
 .geo {
