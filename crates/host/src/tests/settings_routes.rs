@@ -670,16 +670,27 @@ async fn chat_dock_persists_and_rejects_bad_bodies() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
-    // A new router on the same data folder stands in for a restart.
+    // A new router on the same data folder stands in for a restart; a body without a side docks on the right.
     assert_eq!(
         get(app_for(&dir)).await,
-        serde_json::json!({ "open": true, "width": 360 })
+        serde_json::json!({ "open": true, "width": 360, "side": "right" })
+    );
+    let res = app
+        .clone()
+        .oneshot(put(r#"{"open":true,"width":360,"side":"left"}"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        get(app_for(&dir)).await,
+        serde_json::json!({ "open": true, "width": 360, "side": "left" })
     );
 
     for bad in [
         r#"{"open":true,"width":279}"#,
         r#"{"open":true,"width":561}"#,
         r#"{"open":true}"#,
+        r#"{"open":true,"width":360,"side":"middle"}"#,
         "not json",
     ] {
         let res = app.clone().oneshot(put(bad)).await.unwrap();
@@ -687,7 +698,7 @@ async fn chat_dock_persists_and_rejects_bad_bodies() {
     }
     assert_eq!(
         get(app.clone()).await,
-        serde_json::json!({ "open": true, "width": 360 }),
+        serde_json::json!({ "open": true, "width": 360, "side": "left" }),
         "bad bodies change nothing"
     );
     let unauthorized = get_req("/api/admin/chat-dock", "127.0.0.1:47810")

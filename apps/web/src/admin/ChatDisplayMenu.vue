@@ -33,6 +33,18 @@
         option-value="value"
         @update:model-value="(textSize: number) => save({ textSize })"
       />
+      <!-- Only in the docked panel: which side of the pages it sits on (wide windows). -->
+      <template v-if="dockSide">
+        <span :id="`${id}-side`">{{ t('chat.display.side') }}</span>
+        <SelectButton
+          :model-value="dock.side"
+          :options="SIDES"
+          :option-label="(s: Side) => t(`chat.display.sides.${s}`)"
+          :allow-empty="false"
+          :aria-labelledby="`${id}-side`"
+          @update:model-value="setSide"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -46,11 +58,15 @@ import { useToast } from 'primevue/usetoast'
 import { ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
-import { ApiError } from './api'
+import { ApiError, type Schemas } from './api'
 import { type ChatDisplay, TEXT_SIZES, chatDisplay, saveChatDisplay } from './chatDisplay'
+import { saveDock, useDock } from './dock'
 import { errorToast } from './home'
 
 type Style = ChatDisplay['style']
+type Side = Schemas['DockSide']
+const SIDES: Side[] = ['left', 'right']
+defineProps<{ dockSide?: boolean }>()
 const STYLES: Style[] = ['compact', 'standard', 'comfortable']
 const TOGGLES = ['avatars', 'badges', 'time'] as const
 
@@ -58,6 +74,18 @@ const { t } = useI18n()
 const toast = useToast()
 const id = useId()
 const open = ref(false)
+
+const dock = useDock()
+async function setSide(side: Side) {
+  const before = dock.side
+  dock.side = side
+  try {
+    await saveDock()
+  } catch (e) {
+    dock.side = before
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  }
+}
 
 async function save(change: Partial<ChatDisplay>) {
   try {

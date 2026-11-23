@@ -2520,9 +2520,14 @@ export interface components {
             textSize: number;
             time: boolean;
         };
-        /** @description Whether the admin UI docks the chat on wide windows, and how wide (CSS pixels; the Host checks the range). */
+        /**
+         * @description Whether the admin UI docks the chat on wide windows, how wide (CSS pixels; the Host checks the range) and on
+         *     which side of the pages.
+         */
         ChatDock: {
             open: boolean;
+            /** @description Missing in settings saved before the choice existed: the right side. */
+            side?: components["schemas"]["DockSide"];
             /** Format: int32 */
             width: number;
         };
@@ -3049,6 +3054,8 @@ export interface components {
             /** @description The version in the notice, `major.minor.patch`. */
             version: string;
         };
+        /** @enum {string} */
+        DockSide: "left" | "right";
         /**
          * @description Body of the errors admin handlers return: a stable `<area>.<reason>` code the admin UI translates.
          *     The missing-token 401 has an empty body, and malformed JSON gets axum's plain-text rejection.
