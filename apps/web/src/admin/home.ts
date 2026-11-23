@@ -1,10 +1,17 @@
-import { onScopeDispose, shallowRef, watch } from 'vue'
+import { onScopeDispose, reactive, shallowRef, watch } from 'vue'
 import { removes, type Incoming } from '../overlay/chat/chat'
 import type { Schemas } from './api'
 import { SOON_PAGES } from './tabs'
 
 /** The Twitch status the app bar polls every 2 s (undefined until its first answer); read it instead of polling again. */
 export const twitchOverview = shallowRef<Schemas['Overview']>()
+
+/**
+ * Whether Twitch or OBS is down right now, set by the app bar from its lights. Unknown (still loading) is not down,
+ * and losing the Host's own connection is not a service going down.
+ */
+export const servicesDown = reactive({ twitch: false, obs: false })
+export const isDown = (l: Light) => (l.state === 'error' || l.state === 'reconnecting') && l.key !== 'home.status.failed'
 
 /** A status light in the status bar. `key` is the i18n key of its state text. */
 export interface Light {

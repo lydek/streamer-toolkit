@@ -490,3 +490,14 @@ describe('pre-stream checks', () => {
     ])
   })
 })
+
+describe('isDown', () => {
+  it('counts an error or a reconnect as down, but not loading or a lost Host connection', async () => {
+    const { isDown } = await import('./home')
+    expect(isDown({ state: 'error', key: 'home.status.obs.error' })).toBe(true)
+    expect(isDown({ state: 'reconnecting', key: 'home.status.obs.reconnecting' })).toBe(true)
+    expect(isDown({ state: 'loading', key: 'app.loading' })).toBe(false)
+    expect(isDown({ state: 'error', key: 'home.status.failed' })).toBe(false)
+    expect(isDown({ state: 'connected', key: 'home.status.connected' })).toBe(false)
+  })
+})

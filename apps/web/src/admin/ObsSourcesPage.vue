@@ -5,7 +5,7 @@
       {{ t('obsSources.duplicate', { name: rowName(d), n: d.sources.length, effect: t(`obsSources.twice.${d.entry.id}`) }) }}
     </p>
     <p v-if="failed" role="alert">{{ failed }}</p>
-    <p v-else-if="data && !data.connected">{{ t('obsSources.notConnected') }}</p>
+    <p v-else-if="data && !data.connected && !servicesDown.obs">{{ t('obsSources.notConnected') }}</p>
     <p v-else-if="data && !data.local">{{ t('obsSources.notLocal') }}</p>
     <div v-if="data?.connected && data.scenes.length" class="field">
       <label for="obs-scene">{{ t('obsSources.scene') }}</label>
@@ -87,7 +87,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import AppearanceSettings from './AppearanceSettings.vue'
 import { useModules } from './features'
 import FullPage from './FullPage.vue'
-import { errorToast, successToast, useLiveEvents } from './home'
+import { errorToast, servicesDown, successToast, useLiveEvents } from './home'
 import { type OverlayRow, addOverlay, overlayName, overlayRows } from './obsSources'
 import { GROUPS } from './tabs'
 

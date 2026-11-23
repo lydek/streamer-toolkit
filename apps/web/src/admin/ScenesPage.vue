@@ -1,6 +1,8 @@
 <template>
   <FullPage :title="t('modules.names.scene')" tile="scene" :status="state?.scene ? t('scene.current', { scene: state.scene }) : undefined">
     <p v-if="live.status === 'loading'">{{ t('app.loading') }}</p>
+    <!-- OBS down: the page's notice (FullPage) says so; nothing more here. -->
+    <template v-else-if="!obsReady(state) && servicesDown.obs" />
     <p v-else-if="!obsReady(state)" role="status">
       {{ t('scene.notConnected') }}
       <RouterLink to="/settings/connections#obs">{{ t('scene.connect') }}</RouterLink>
@@ -163,7 +165,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
-import { errorToast, useLiveEvents } from './home'
+import { errorToast, servicesDown, useLiveEvents } from './home'
 import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSources'
 import SceneList from './SceneList.vue'
 import { type SceneItem, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'

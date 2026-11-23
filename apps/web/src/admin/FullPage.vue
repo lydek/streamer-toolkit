@@ -23,6 +23,12 @@
       </template>
     </nav>
     </div>
+    <!-- The page's feature needs Twitch or OBS and it is down: one notice per service, with a way to fix it. -->
+    <p v-for="s in down" :key="s" role="status" class="service-warn">
+      <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
+      <span>{{ t('services.banner', { service: SERVICE_NAMES[s] }) }}</span>
+      <RouterLink :to="{ path: '/settings/connections', hash: `#${s}` }">{{ t('services.connect') }}</RouterLink>
+    </p>
     <!-- Sticky, so a failed setting further down the page still shows its error. -->
     <p v-if="error" role="alert" class="page-error">{{ error }}</p>
     <slot />
@@ -35,8 +41,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useDrawer } from './drawer'
-import { useModules } from './features'
-import { TILES } from './home'
+import { featureOfPage, servicesOf, useModules } from './features'
+import { TILES, servicesDown } from './home'
 import ObsStatusLink from './ObsStatusLink.vue'
 import { goHome, navOpened } from './page'
 import { categoryOf } from './tabs'
@@ -61,6 +67,11 @@ const look = computed(() => TILES.find((tile) => tile.id === props.tile))
 const { hidden } = useModules()
 const category = computed(() => categoryOf(route.path))
 const pageTabs = computed(() => category.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
+const SERVICE_NAMES = { twitch: 'Twitch', obs: 'OBS' }
+const down = computed(() => {
+  const f = featureOfPage(route.path)
+  return f ? servicesOf(f.id).filter((s) => servicesDown[s]) : []
+})
 
 // The pinned block's height (0 when the window is too small to pin it) is --page-top-h, so the error bar, focused
 // elements and anchor targets land below it instead of under it.
@@ -175,6 +186,21 @@ onMounted(() => {
 
 .status {
   color: var(--p-text-muted-color);
+}
+
+.service-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--p-red-400) 14%, var(--p-surface-900));
+}
+
+.service-warn a {
+  margin-left: auto;
 }
 
 .page-error {
