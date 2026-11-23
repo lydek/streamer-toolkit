@@ -4,6 +4,7 @@
 //! status says so and only changes are logged.
 
 use std::{
+    collections::VecDeque,
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -36,8 +37,9 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use toolkit_core::streaming::{
-    Align, Bounds, BrowserSource, Canvas, Input, ItemCrop, ItemSize, ItemTransform, Monitor,
-    Placement, Scene, SceneItem, StreamingError, StreamingState, StreamingStats, TransformChange,
+    Align, Bounds, BrowserSource, Canvas, Input, InputMeter, ItemCrop, ItemSize, ItemTransform,
+    Monitor, Placement, Scene, SceneItem, StreamingError, StreamingState, StreamingStats,
+    TransformChange,
 };
 
 use crate::secrets::SecretStore;
@@ -89,14 +91,21 @@ impl ObsStatus {
     }
 }
 
-/// The connected client, shared so commands go through the connection the state follows; empty while not connected.
+/// The connected client, shared so commands go through the connection the state follows (empty while not
+/// connected), and the inputs' latest audio levels (OBS sends them about 20 times a second; readers take the latest).
 #[derive(Default)]
-pub struct ObsControl(Mutex<Option<Arc<Client>>>);
+pub struct ObsControl(Mutex<Option<Arc<Client>>>, Mutex<Vec<InputMeter>>);
 
 impl ObsControl {
     /// Forgets the client, e.g. when new settings replace the connection.
     pub fn clear(&self) {
         *self.0.lock().unwrap() = None;
+        self.1.lock().unwrap().clear();
+    }
+
+    /// The inputs' latest audio levels; empty while not connected.
+    pub fn meters(&self) -> Vec<InputMeter> {
+        self.1.lock().unwrap().clone()
     }
 
     fn client(&self) -> Result<Arc<Client>, StreamingError> {
@@ -615,6 +624,19 @@ impl ObsControl {
     }
 }
 
+/// The loudest channel's peak, in dB (OBS sends multipliers); -100 for silence.
+fn meter_of(m: &obws::events::InputVolumeMeter) -> InputMeter {
+    let peak = m.levels.iter().map(|c| c[1]).fold(0.0_f32, f32::max);
+    InputMeter {
+        name: m.name.clone(),
+        peak_db: if peak > 0.0 {
+            (20.0 * peak.log10()).max(-100.0)
+        } else {
+            -100.0
+        },
+    }
+}
+
 fn monitor_of(m: MonitorType) -> Monitor {
     match m {
         MonitorType::MonitorOnly => Monitor::MonitorOnly,
@@ -770,9 +792,11 @@ impl Obs {
                     | EventSubscription::INPUTS
                     | EventSubscription::OUTPUTS
                     | EventSubscription::TRANSITIONS
-                    | EventSubscription::UI,
+                    | EventSubscription::UI
+                    // High volume (about 20 a second): kept as the latest levels only, never published.
+                    | EventSubscription::INPUT_VOLUME_METERS,
             ),
-            broadcast_capacity: 64,
+            broadcast_capacity: 256,
             // Half the budget, so a silent host ends as `Timeout` (unreachable) before the outer limit fires.
             connect_timeout: CONNECT_TIMEOUT / 2,
         };
@@ -796,6 +820,14 @@ impl Obs {
         let mut slot = self.control.0.lock().unwrap();
         if slot.as_ref().is_some_and(|c| Arc::ptr_eq(c, client)) {
             *slot = None;
+            self.control.1.lock().unwrap().clear();
+        }
+    }
+
+    /// Keeps OBS's latest volume meters, unless new settings replaced this connection.
+    fn set_meters(&self, inputs: &[obws::events::InputVolumeMeter]) {
+        if self.live() {
+            *self.control.1.lock().unwrap() = inputs.iter().map(meter_of).collect();
         }
     }
 
@@ -831,21 +863,57 @@ impl Obs {
         let Ok(mut events) = client.events() else {
             return;
         };
-        let Ok(mut state) = read_state(client).await else {
+        // Events that arrive during a read, applied after it.
+        let mut pending = VecDeque::new();
+        let Some(mut state) = self.read(client, &mut events, &mut pending).await else {
             return;
         };
         self.set_state(&state);
-        while let Some(event) = events.next().await {
+        loop {
+            let event = match pending.pop_front() {
+                Some(event) => event,
+                None => match events.next().await {
+                    Some(event) => event,
+                    None => return,
+                },
+            };
+            if let Event::InputVolumeMeters { inputs } = &event {
+                self.set_meters(inputs);
+                continue;
+            }
             match apply(&mut state, &event) {
                 Change::Closed => return,
                 Change::None => continue,
                 Change::Updated => {}
-                Change::Reread => match read_state(client).await {
-                    Ok(fresh) => state = fresh,
-                    Err(_) => return,
+                Change::Reread => match self.read(client, &mut events, &mut pending).await {
+                    Some(fresh) => state = fresh,
+                    None => return,
                 },
             }
             self.set_state(&state);
+        }
+    }
+
+    /// Reads the whole state while still taking events, so the meters (about 20 a second) never fill obws's buffer
+    /// during a long read, which would end the connection: meters are kept at once, the rest wait in `pending`.
+    /// `None` when the read fails or the connection ends.
+    async fn read(
+        &self,
+        client: &Client,
+        events: &mut obws::events::EventStream,
+        pending: &mut VecDeque<Event>,
+    ) -> Option<StreamingState> {
+        let read = read_state(client);
+        tokio::pin!(read);
+        loop {
+            tokio::select! {
+                state = &mut read => return state.ok(),
+                event = events.next() => match event {
+                    Some(Event::InputVolumeMeters { inputs }) => self.set_meters(&inputs),
+                    Some(event) => pending.push_back(event),
+                    None => return None,
+                },
+            }
         }
     }
 
@@ -1154,6 +1222,8 @@ mod tests {
         pending: Arc<Mutex<Vec<(&'static str, Value)>>>,
         push: Arc<Notify>,
         scene_lists: Arc<Mutex<u32>>,
+        /// Sends a flood of volume meters right after answering the first scene list, in the middle of the read.
+        flood: bool,
         /// `Set…` requests as `(requestType, requestData)`.
         commands: Arc<Mutex<Vec<(String, Value)>>>,
     }
@@ -1189,6 +1259,14 @@ mod tests {
                     "inputSettings": {"url": "http://127.0.0.1:47810/overlay/chat/", "width": 800}}),
                 "GetSceneList" => {
                     *self.scene_lists.lock().unwrap() += 1;
+                    if self.flood && *self.scene_lists.lock().unwrap() == 1 {
+                        for _ in 0..600 {
+                            self.event(
+                                "InputVolumeMeters",
+                                json!({"inputs": [{"inputName": "Mic", "inputLevelsMul": [[0.5, 1.0, 1.0]]}]}),
+                            );
+                        }
+                    }
                     json!({"currentProgramSceneName": "Live", "currentProgramSceneUuid": LIVE,
                            "currentPreviewSceneName": null, "currentPreviewSceneUuid": null,
                            "scenes": [{"sceneName": "Live", "sceneUuid": LIVE, "sceneIndex": 0}]})
@@ -1423,9 +1501,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_flood_of_meters_during_the_read_keeps_the_connection() {
+        // Sent while the state is being read: more than obws's buffer holds.
+        let fake = FakeObs {
+            flood: true,
+            ..FakeObs::default()
+        };
+        let (mut status, mut state, control) = run_with_state(start(fake.clone()).await, None);
+        reaches(&mut status, ObsStatus::CONNECTED).await;
+        state_reaches(&mut state, "read on connect", |s| s.scene.is_some()).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(state.borrow().scene.is_some(), "the state stays");
+        assert_eq!(fake.identify.lock().unwrap().len(), 1, "no reconnect");
+        assert_eq!(control.meters().len(), 1);
+    }
+
+    #[tokio::test]
     async fn state_is_read_on_connect_follows_events_and_resets_on_disconnect() {
         let fake = FakeObs::default();
-        let (mut status, mut state, _) = run_with_state(start(fake.clone()).await, None);
+        let (mut status, mut state, control) = run_with_state(start(fake.clone()).await, None);
         reaches(&mut status, ObsStatus::CONNECTED).await;
         state_reaches(&mut state, "read on connect", |s| s.scene.is_some()).await;
         assert_eq!(
@@ -1500,6 +1594,11 @@ mod tests {
             json!({"inputName": "Mic", "inputUuid": MIC, "inputMuted": true}),
         );
         state_reaches(&mut state, "input muted", |s| s.inputs[0].muted).await;
+        // Meters are kept apart from the state; the volume change after them shows they were handled.
+        fake.event(
+            "InputVolumeMeters",
+            json!({"inputs": [{"inputName": "Mic", "inputLevelsMul": [[0.5, 1.0, 1.0]]}]}),
+        );
         fake.event(
             "InputVolumeChanged",
             json!({"inputName": "Mic", "inputUuid": MIC, "inputVolumeMul": 0.25, "inputVolumeDb": -12.0}),
@@ -1508,6 +1607,13 @@ mod tests {
             s.inputs[0].volume_db == -12.0
         })
         .await;
+        assert_eq!(
+            control.meters(),
+            [InputMeter {
+                name: "Mic".into(),
+                peak_db: 0.0
+            }]
+        );
         fake.event(
             "InputAudioMonitorTypeChanged",
             json!({"inputName": "Mic", "inputUuid": MIC, "monitorType": "OBS_MONITORING_TYPE_NONE"}),
@@ -1539,6 +1645,10 @@ mod tests {
             *s == StreamingState::default()
         })
         .await;
+        assert!(
+            control.meters().is_empty(),
+            "meters end with the connection"
+        );
         // Connecting again reads the state again.
         state_reaches(&mut state, "read on reconnect", |s| s.scene.is_some()).await;
     }
@@ -1901,6 +2011,20 @@ mod tests {
         assert_eq!(scenes_with(&c, "Game audio"), ["Game", "Duo", "Loop"]);
         assert_eq!(scenes_with(&c, "Discord"), ["Duo", "Loop"]);
         assert!(scenes_with(&c, "Mic").is_empty());
+    }
+
+    #[test]
+    fn a_meter_is_the_loudest_peak_in_db() {
+        let m = |levels: Vec<[f32; 3]>| {
+            meter_of(
+                &serde_json::from_value(json!({"inputName": "Mic", "inputLevelsMul": levels}))
+                    .unwrap(),
+            )
+        };
+        // Channels as [magnitude, peak, input peak]: the louder peak (0.5, about -6 dB) wins.
+        assert!((m(vec![[0.1, 0.25, 0.3], [0.2, 0.5, 0.6]]).peak_db + 6.02).abs() < 0.01);
+        assert_eq!(m(vec![[0.0, 0.0, 0.0]]).peak_db, -100.0);
+        assert_eq!(m(vec![]).peak_db, -100.0);
     }
 
     #[test]

@@ -5,9 +5,9 @@ use utoipa::OpenApi;
 
 use crate::{
     admin, after_numbers, backup, card_packs, chat_display, chat_dock, chat_log, diagnostics,
-    event_feed, home_tiles, image_sizes, leaderboard, obs, overlay, overlay_test, performance,
-    queue, rehearsal, services, source_settings, stream_summary, tab_bar, templates, text_size,
-    update,
+    event_feed, home_tiles, image_sizes, leaderboard, mixer, obs, overlay, overlay_test,
+    performance, queue, rehearsal, services, source_settings, stream_summary, tab_bar, templates,
+    text_size, update,
 };
 
 #[derive(OpenApi)]
@@ -48,6 +48,8 @@ use crate::{
         chat_dock::set_chat_dock,
         after_numbers::after_numbers,
         after_numbers::set_after_numbers,
+        mixer::mic,
+        mixer::set_mic,
         services::services,
         services::set_services,
         tab_bar::tab_bar,
@@ -89,6 +91,7 @@ use crate::{
         obs::scene_placements,
         obs::item_transform,
         obs::update_input,
+        obs::input_meters,
         source_settings::source,
         source_settings::set_source,
         source_settings::refresh_source,

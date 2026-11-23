@@ -3,13 +3,17 @@
   <li class="mix-row" :class="{ muted: input.muted }">
     <div class="mix-grid">
     <span class="mix-name">
-      <b>{{ input.name }}</b>
+      <b><i v-if="mic" class="pi pi-microphone" :title="t('mixer.mic')"></i>{{ input.name }}</b>
       <small class="muted" :title="input.global ? undefined : input.scenes?.join('、')">{{ where }}</small>
     </span>
+    <span class="mix-fader">
+    <!-- OBS's level, apart from the fader; empty while muted. -->
+    <span class="mix-meter" aria-hidden="true"><i :style="{ width: `${100 - meterFill(level, input.muted)}%` }"></i></span>
+    <!-- Up to 0 dB like OBS's own fader, or higher while OBS has it above (up to +26 dB), so dragging never cuts it. -->
     <input
       type="range"
       :min="FADER_MIN"
-      max="0"
+      :max="Math.max(0, Math.ceil(input.volumeDb ?? 0))"
       step="0.5"
       :value="draft ?? Math.max(FADER_MIN, input.volumeDb ?? 0)"
       :aria-label="t('mixer.volume', { input: input.name })"
@@ -17,6 +21,7 @@
       @input="draft = Number(($event.target as HTMLInputElement).value)"
       @change="setVolume"
     />
+    </span>
     <output class="mix-db">{{ dbText }}</output>
     <Button
       :icon="input.muted ? 'pi pi-volume-off' : 'pi pi-volume-up'"
@@ -48,7 +53,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { errorToast } from './home'
-import { FADER_MIN } from './mixer'
+import { FADER_MIN, meterFill } from './mixer'
 
 type Monitor = Schemas['Monitor']
 const MONITORS: Monitor[] = ['off', 'monitor_only', 'monitor_and_output']
@@ -57,6 +62,10 @@ const props = defineProps<{
   input: Schemas['Input']
   /** The drawer's row: no monitoring select. */
   compact?: boolean
+  /** OBS's latest peak level (dB); absent while unknown. */
+  level?: number
+  /** The input chosen as the mic. */
+  mic?: boolean
 }>()
 
 const { t } = useI18n()
@@ -144,6 +153,31 @@ async function setVolume() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mix-fader {
+  display: grid;
+  gap: 0.125rem;
+}
+
+/* The scale shows through where the level reaches; the cover hides the rest. */
+.mix-meter {
+  position: relative;
+  height: 0.375rem;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--p-green-500) 0 70%, var(--p-yellow-500) 70% 90%, var(--p-red-500) 90%);
+  overflow: hidden;
+}
+
+.mix-meter i {
+  position: absolute;
+  inset: 0 0 0 auto;
+  background: var(--p-surface-700);
+}
+
+.mix-name .pi {
+  margin-right: 0.375rem;
+  font-size: 0.875rem;
 }
 
 .mix-db {

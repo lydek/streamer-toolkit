@@ -68,6 +68,9 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   put = vi.fn(ok)
   vi.spyOn(client, 'PUT').mockImplementation(put as never)
+  const data = (d: unknown) => Promise.resolve({ data: d, response: new Response(null, { status: 200 }) })
+  vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+    data(path === '/api/admin/mixer/mic' ? { input: 'Mic' } : [{ name: 'Game audio', peakDb: -30 }, { name: 'Discord', peakDb: -6 }])) as never)
   toastAdd.mockReset()
 })
 
@@ -78,6 +81,27 @@ afterEach(() => {
 })
 
 describe('MixerPage', () => {
+  it('shows OBS levels apart from the faders, empty while muted, and saves the mic choice', async () => {
+    const wrapper = await page()
+    snapshot(state('Game'))
+    await flushPromises()
+    const cover = (input: string) =>
+      (wrapper.findAll('.mix-row').find((r) => r.get('.mix-name b').text() === input)!.get('.mix-meter i').element as HTMLElement).style.width
+    expect(cover('Game audio')).toBe('50%')
+    // Discord is muted: its level does not show.
+    expect(cover('Discord')).toBe('100%')
+    expect(cover('Mic')).toBe('100%')
+    expect(wrapper.get('.mix-name .pi-microphone').element.closest('b')!.textContent).toBe('Mic')
+
+    const micPicker = wrapper.findAllComponents(Select).find((s) => s.props('inputId') === 'mix-mic')!
+    micPicker.vm.$emit('update:modelValue', 'Game audio')
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/admin/mixer/mic', { body: { input: 'Game audio' } })
+    expect(wrapper.get('.mix-name .pi-microphone').element.closest('b')!.textContent).toBe('Game audio')
+    micPicker.vm.$emit('update:modelValue', 'Mic')
+    await flushPromises()
+  })
+
   it('lists the live scene inputs first, follows the live scene, and keeps a picked one', async () => {
     const wrapper = await page()
     snapshot(state('Game'))
@@ -102,6 +126,17 @@ describe('MixerPage', () => {
     expect(names(list())).toEqual(['Mic', 'Discord'])
   })
 
+  it('lets the fader reach a level OBS has above 0 dB', async () => {
+    const wrapper = await page()
+    const loud = state('Game')
+    loud.inputs[1] = input('Game audio', ['Game'], { volumeDb: 6 })
+    snapshot(loud)
+    await flushPromises()
+    const fader = wrapper.get(`[aria-label="${t('mixer.volume', { input: 'Game audio' })}"]`).element as HTMLInputElement
+    expect(fader.max).toBe('6')
+    expect(fader.value).toBe('6')
+  })
+
   it('sends mute, fader and monitoring changes for the input', async () => {
     const wrapper = await page()
     snapshot(state('Game'))
@@ -116,7 +151,7 @@ describe('MixerPage', () => {
     const monitor = wrapper.findAllComponents(Select).find((s) => s.props('ariaLabel') === t('mixer.monitorOf', { input: 'Mic' }))
     monitor!.vm.$emit('update:modelValue', 'monitor_only')
     await flushPromises()
-    expect(put.mock.calls.map((c) => c[1].body)).toEqual([
+    expect(put.mock.calls.filter((c) => c[0] === '/api/admin/obs/input').map((c) => c[1].body)).toEqual([
       { input: 'Mic', muted: true },
       { input: 'Game audio', volume_db: -12 },
       { input: 'Game audio', volume_db: -100 },

@@ -997,6 +997,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/mixer/mic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The input chosen as the mic; `null` when none is. */
+        get: operations["mic"];
+        /**
+         * Chooses the mic (an input name of 1-256 characters without control characters), or clears it with `null`. The
+         *     input is not checked against OBS, which may be closed; the mixer says so when it is missing.
+         */
+        put: operations["set_mic"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/modules": {
         parameters: {
             query?: never;
@@ -1257,6 +1278,26 @@ export interface paths {
         get?: never;
         /** Shows, hides, locks, unlocks or moves a scene item; `obs.state` shows the change once OBS has made it. */
         put: operations["update_item"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/obs/meters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The inputs' latest audio levels (OBS's volume meters), for the mixer to poll while it shows; empty while OBS is
+         *     not connected.
+         */
+        get: operations["input_meters"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -3326,6 +3367,15 @@ export interface components {
              */
             volume_db?: number | null;
         };
+        /** @description An input's latest audio level, from OBS's volume meters. */
+        InputMeter: {
+            name: string;
+            /**
+             * Format: float
+             * @description The loudest channel's peak in dB, after the fader; -100 means silent.
+             */
+            peakDb: number;
+        };
         ItemBody: {
             /** @description Shows or hides the item; absent leaves it. */
             enabled?: boolean | null;
@@ -3617,6 +3667,10 @@ export interface components {
             duration_ms?: number | null;
             /** @description 1–100 characters after trimming. */
             title: string;
+        };
+        MixerMic: {
+            /** @description An OBS input's name; `null`: not chosen. */
+            input?: string | null;
         };
         ModuleBody: {
             /**
@@ -7316,6 +7370,62 @@ export interface operations {
             };
         };
     };
+    mic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MixerMic"];
+                };
+            };
+        };
+    };
+    set_mic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MixerMic"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_modules: {
         parameters: {
             query?: never;
@@ -8095,6 +8205,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    input_meters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputMeter"][];
                 };
             };
         };

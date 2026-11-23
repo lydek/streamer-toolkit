@@ -49,6 +49,9 @@ pub struct Settings {
     /// How the 下播後 home shows its numbers. `None`: never changed, they show.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after_numbers: Option<AfterNumbers>,
+    /// The OBS input the mixer treats as the mic (its tile mutes it). `None`: not chosen; it is never guessed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mixer_mic: Option<String>,
     /// Services the broadcaster chose not to use, and the modules turned off for that. `None`: both in use.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub services: Option<ServiceUse>,
@@ -421,6 +424,7 @@ impl Default for Settings {
             chat_dock: None,
             chat_display: None,
             after_numbers: None,
+            mixer_mic: None,
             services: None,
             tab_bar: None,
             text_size: None,

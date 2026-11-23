@@ -15,16 +15,29 @@
         <span v-if="scene === state.scene" class="tag">{{ t('scene.onAir') }}</span>
         <span v-else-if="state.studioMode && scene === state.preview" class="tag preview">{{ t('scene.preview') }}</span>
       </div>
+      <div class="mix-head">
+        <label for="mix-mic">{{ t('mixer.mic') }}</label>
+        <Select
+          :model-value="mic ?? null"
+          input-id="mix-mic"
+          :options="state.inputs.map((i) => i.name)"
+          :placeholder="t('mixer.micNone')"
+          :loading="mic === undefined"
+          show-clear
+          @update:model-value="pickMic"
+        />
+        <span v-if="mic && !state.inputs.some((i) => i.name === mic)" class="muted">{{ t('mixer.micMissing', { input: mic }) }}</span>
+      </div>
       <p class="muted">{{ t('mixer.shared') }}</p>
       <h2>{{ t('mixer.inScene', { scene }) }}</h2>
       <p v-if="!sections.on.length" class="muted">{{ t('mixer.none') }}</p>
       <ul class="mix-list">
-        <MixerRow v-for="i in sections.on" :key="i.name" :input="i" />
+        <MixerRow v-for="i in sections.on" :key="i.name" :input="i" :level="meters.get(i.name)" :mic="i.name === mic" />
       </ul>
       <details v-if="sections.off.length" class="mix-off">
         <summary>{{ t('mixer.notInScene', { n: sections.off.length }) }}</summary>
         <ul class="mix-list">
-          <MixerRow v-for="i in sections.off" :key="i.name" :input="i" />
+          <MixerRow v-for="i in sections.off" :key="i.name" :input="i" :level="meters.get(i.name)" :mic="i.name === mic" />
         </ul>
       </details>
     </section>
@@ -33,17 +46,30 @@
 
 <script setup lang="ts">
 import Select from 'primevue/select'
+import { useToast } from 'primevue/usetoast'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { errorMessage } from '../i18n'
+import { ApiError } from './api'
 import FullPage from './FullPage.vue'
-import { servicesDown, useLiveEvents } from './home'
-import { FOLLOW_PREVIEW, mixPick, mixScene, mixSections } from './mixer'
+import { errorToast, servicesDown, useLiveEvents } from './home'
+import { FOLLOW_PREVIEW, mixPick, mixScene, mixSections, setMic, useMeters, useMic } from './mixer'
 import MixerRow from './MixerRow.vue'
 import { obsReady } from './scenes'
 
 const { t } = useI18n()
+const toast = useToast()
 const live = useLiveEvents()
 const state = computed(() => live.value.obsState)
+const meters = useMeters(computed(() => obsReady(state.value)))
+const mic = useMic()
+async function pickMic(input: string | null) {
+  try {
+    await setMic(input)
+  } catch (e) {
+    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+  }
+}
 const scene = computed(() => (state.value ? mixScene(state.value, mixPick.value) : undefined))
 const sections = computed(() => (state.value ? mixSections(state.value, scene.value) : { on: [], off: [] }))
 const pickOptions = computed(() => {

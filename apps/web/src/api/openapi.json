@@ -3088,6 +3088,64 @@
         }
       }
     },
+    "/api/admin/mixer/mic": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The input chosen as the mic; `null` when none is.",
+        "operationId": "mic",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixerMic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Chooses the mic (an input name of 1-256 characters without control characters), or clears it with `null`. The\ninput is not checked against OBS, which may be closed; the mixer says so when it is missing.",
+        "operationId": "set_mic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MixerMic"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/modules": {
       "get": {
         "tags": [
@@ -3999,6 +4057,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/obs/meters": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The inputs' latest audio levels (OBS's volume meters), for the mixer to poll while it shows; empty while OBS is\nnot connected.",
+        "operationId": "input_meters",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InputMeter"
+                  }
                 }
               }
             }
@@ -9968,6 +10049,24 @@
           }
         }
       },
+      "InputMeter": {
+        "type": "object",
+        "description": "An input's latest audio level, from OBS's volume meters.",
+        "required": [
+          "name",
+          "peakDb"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "peakDb": {
+            "type": "number",
+            "format": "float",
+            "description": "The loudest channel's peak in dB, after the fader; -100 means silent."
+          }
+        }
+      },
       "ItemBody": {
         "type": "object",
         "required": [
@@ -10753,6 +10852,18 @@
           "title": {
             "type": "string",
             "description": "1–100 characters after trimming."
+          }
+        }
+      },
+      "MixerMic": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An OBS input's name; `null`: not chosen."
           }
         }
       },
