@@ -1,6 +1,6 @@
 <template>
   <!-- The background music pages, one part each: 播放 (player and scene rules), 音樂歌單, 音樂庫. -->
-  <FullPage :title="t('modules.names.bgm')" tile="bgm" overlay="bgm" :status="live.bgm ? playerLine(live.bgm.payload) : undefined">
+  <FullPage tile="bgm" overlay="bgm" :status="live.bgm ? playerLine(live.bgm.payload) : undefined">
     <p v-if="part === 'player' && notInScene" role="alert" class="note-bar">
       <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
       {{ t('obsSources.problems.bgmNotInScene', { scene: obsSources?.live_scene }) }}

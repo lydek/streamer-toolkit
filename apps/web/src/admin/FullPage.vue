@@ -3,13 +3,17 @@
   <main ref="root">
     <!-- Title and page tabs stay under the app bar while the page scrolls (wide and tall enough windows). -->
     <div ref="top" class="page-top">
+    <!-- The page tab's name and icon; home is the 首頁 tab or Alt+←, so there is no back button. -->
     <header class="page-header">
-      <Button :label="t('app.home')" icon="pi pi-arrow-left" text @click="goHome(router)" />
-      <span v-if="look" class="badge" :class="`tint-${look.tint}`" aria-hidden="true"><i :class="look.icon"></i></span>
-      <h1>{{ title }}</h1>
-      <!-- This page's state (e.g. the scene on air) and where its overlay is in OBS, at the right end. -->
-      <div v-if="status || overlay" class="page-end">
+      <span v-if="icon" class="badge" :class="`tint-${tint}`" aria-hidden="true"><i :class="icon"></i></span>
+      <div class="heading">
+        <h1 ref="titleEl" tabindex="-1">{{ heading }}</h1>
+        <!-- One line on what the page holds now (e.g. the scene on air); no line on pages without one. -->
         <span v-if="status" class="status">{{ status }}</span>
+      </div>
+      <!-- The page's main buttons, then where its overlay is in OBS, at the right end. -->
+      <div v-if="$slots.actions || overlay" class="page-end">
+        <div v-if="$slots.actions" class="actions"><slot name="actions" /></div>
         <ObsStatusLink v-if="overlay" :overlay="`/overlay/${overlay}/`" />
       </div>
     </header>
@@ -36,22 +40,22 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useDrawer } from './drawer'
 import { featureOfPage, servicesOf, useModules } from './features'
 import { TILES, servicesDown } from './home'
 import ObsStatusLink from './ObsStatusLink.vue'
-import { goHome, navOpened } from './page'
-import { categoryOf } from './tabs'
+import { navOpened } from './page'
+import { categoryOf, tabPage } from './tabs'
 
 const props = defineProps<{
-  title: string
+  /** For a page that is not a page tab (settings); a page tab is titled with its own name. */
+  title?: string
   /** The home tile this page belongs to, for its colored icon. */
   tile?: string
-  /** What this page shows right now, e.g. 目前場景：聊天; nothing on pages without one. */
+  /** The line under the title: what this page holds now, e.g. 目前場景：聊天; nothing on pages without one. */
   status?: string
   /** The page's one overlay (`/overlay/<overlay>/`), whose place in OBS the header shows; a page with several
    * puts each status by its own overlay instead. */
@@ -59,11 +63,15 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const router = useRouter()
 const route = useRoute()
 const { error } = useDrawer()
 const root = ref<HTMLElement>()
 const look = computed(() => TILES.find((tile) => tile.id === props.tile))
+const page = computed(() => tabPage(route.path))
+const heading = computed(() => (page.value ? t(page.value.label) : props.title))
+const icon = computed(() => page.value?.icon ?? look.value?.icon)
+const tint = computed(() => look.value?.tint ?? page.value?.tint ?? 'muted')
+const titleEl = ref<HTMLElement>()
 const { hidden } = useModules()
 const category = computed(() => categoryOf(route.path))
 const pageTabs = computed(() => category.value?.pages.filter((p) => !hidden.value.has(p.path)) ?? [])
@@ -94,7 +102,7 @@ onBeforeUnmount(() => {
 })
 
 // A hash names a section to land on (it needs tabindex="-1"); a page opened from a category or page tab keeps the
-// keyboard there (navOpened); otherwise "← Home" takes focus.
+// keyboard there (navOpened); otherwise the first button in the header takes focus, else the title.
 onMounted(() => {
   const target = route.hash ? document.getElementById(decodeURIComponent(route.hash.slice(1))) : null
   const fromNav = navOpened.path === route.path
@@ -102,7 +110,8 @@ onMounted(() => {
   const kept = fromNav && document.activeElement !== document.body && document.activeElement?.isConnected
   if (kept && !target) return
   const tab = fromNav ? root.value?.querySelector<HTMLElement>('.page-tabs [aria-current="page"]') : null
-  ;(target ?? tab ?? root.value?.querySelector('button'))?.focus()
+  const action = root.value?.querySelector<HTMLElement>('.page-header .actions button')
+  ;(target ?? tab ?? action ?? titleEl.value)?.focus()
 })
 </script>
 
@@ -129,6 +138,22 @@ onMounted(() => {
 .page-header h1 {
   margin: 0;
   font-size: 1.3125rem;
+}
+
+.page-header h1:focus {
+  outline: none;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 /* Positioned, so the sr-only text of a grey tab scrolls with the row instead of widening the page. */
@@ -187,6 +212,7 @@ onMounted(() => {
 
 .status {
   color: var(--p-text-muted-color);
+  font-size: 0.875rem;
 }
 
 .service-warn {
@@ -214,6 +240,11 @@ onMounted(() => {
     width: 2rem;
     height: 2rem;
     font-size: 1rem;
+  }
+
+  /* Room for the page: the summary line goes. */
+  .status {
+    display: none;
   }
 
   .page-tabs {

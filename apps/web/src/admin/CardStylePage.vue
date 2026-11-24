@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.cardStyle.name')" tile="checkin" overlay="checkin">
+  <FullPage tile="checkin" overlay="checkin">
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="!form">{{ t('app.loading') }}</p>
     <div v-else class="split">

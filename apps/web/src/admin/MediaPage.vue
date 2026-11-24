@@ -1,7 +1,7 @@
 <template>
   <!-- 影片與 GIF: the media files and the rewards each is used by (set on 兌換時播放). No OBS status: media plays on
        the alerts overlay. -->
-  <FullPage :title="t('nav.categories.pictures')" tile="screen-tools">
+  <FullPage tile="screen-tools">
     <MediaLibrary
       :used-by="usedBy"
       @error="report"

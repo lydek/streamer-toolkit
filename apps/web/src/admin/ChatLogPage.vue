@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.chatLog.name')" tile="chat">
+  <FullPage tile="chat">
     <p v-if="twitchOverview?.chat_missed_writes" role="alert">{{ t('chat.missedWrites', { n: twitchOverview.chat_missed_writes }) }}</p>
     <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
     <p v-if="periodKey === LIVE && historyFailed" role="alert">{{ t('chat.historyRetry') }}</p>

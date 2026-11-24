@@ -1,6 +1,6 @@
 <template>
   <!-- OBS's audio inputs of one scene (the live one by default): fader, mute and monitoring, applied to OBS at once. -->
-  <FullPage :title="t('pages.mixer.name')" tile="mixer">
+  <FullPage tile="mixer">
     <p v-if="live.status === 'loading'">{{ t('app.loading') }}</p>
     <!-- OBS down: the page's notice (FullPage) says so; nothing more here. -->
     <template v-else-if="!obsReady(state) && servicesDown.obs" />

@@ -11,8 +11,12 @@
 
 export interface TabPage {
   path: string
-  /** i18n key of the page name. */
+  /** i18n key of the page name, also its full page's title. */
   label: string
+  /** A built page's icon, beside its full page's title. */
+  icon?: string
+  /** The icon's color on a page without a home tile (a page with one takes the tile's). */
+  tint?: string
   /** Not built yet: the route shows the coming-soon page. */
   soon?: { id: string; icon: string; tile?: boolean }
   /** i18n key of a shorter name in the page row, where the full name would repeat the category's. */
@@ -53,7 +57,7 @@ export const GROUPS: TabGroup[] = [
     pages: [
       { path: '/', label: 'nav.groups.home' },
       soon('/stream-info', 'streamInfo', 'pi pi-pencil', true),
-      { path: '/rehearsal', label: 'pages.rehearsal.name' },
+      { path: '/rehearsal', label: 'pages.rehearsal.name', icon: 'pi pi-play-circle' },
     ],
   },
   {
@@ -69,8 +73,8 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'chatroom',
       pages: [
-        { path: '/chat-log', label: 'pages.chatLog.name' },
-        { path: '/chat', label: 'pages.chatTemplates.name' },
+        { path: '/chat-log', label: 'pages.chatLog.name', icon: 'pi pi-list' },
+        { path: '/chat', label: 'pages.chatTemplates.name', icon: 'pi pi-palette' },
         soon('/chat-window', 'chatWindow', 'pi pi-window-maximize'),
         soon('/chat-filter', 'chatFilter', 'pi pi-filter', true),
       ],
@@ -88,32 +92,32 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'alerts',
       pages: [
-        { path: '/alerts', label: 'modules.names.alerts', tabLabel: 'nav.pageTabs.alertTemplates' },
-        { path: '/alert-events', label: 'pages.alertEvents.name' },
-        { path: '/alert-log', label: 'pages.alertLog.name' },
+        { path: '/alerts', label: 'modules.names.alerts', icon: 'pi pi-bell', tabLabel: 'nav.pageTabs.alertTemplates' },
+        { path: '/alert-events', label: 'pages.alertEvents.name', icon: 'pi pi-list' },
+        { path: '/alert-log', label: 'pages.alertLog.name', icon: 'pi pi-history' },
       ],
     },
     {
       id: 'checkin',
       pages: [
-        { path: '/checkin', label: 'modules.names.checkin', tabLabel: 'nav.pageTabs.checkin' },
-        { path: '/card-style', label: 'pages.cardStyle.name' },
-        { path: '/checkin-rules', label: 'pages.checkinRules.name' },
+        { path: '/checkin', label: 'modules.names.checkin', icon: 'pi pi-check-square', tabLabel: 'nav.pageTabs.checkin' },
+        { path: '/card-style', label: 'pages.cardStyle.name', icon: 'pi pi-palette' },
+        { path: '/checkin-rules', label: 'pages.checkinRules.name', icon: 'pi pi-sliders-h' },
       ],
     },
     {
       id: 'points',
       pages: [
         { ...soon('/rewards', 'rewards', 'pi pi-star', true), tabLabel: 'nav.pageTabs.rewards' },
-        { path: '/redemptions', label: 'modules.names.redemption' },
-        { path: '/reward-playback', label: 'pages.rewardPlayback.name' },
+        { path: '/redemptions', label: 'modules.names.redemption', icon: 'pi pi-gift' },
+        { path: '/reward-playback', label: 'pages.rewardPlayback.name', icon: 'pi pi-play', tint: 'yellow' },
       ],
     },
     {
       id: 'counters',
       pages: [
-        { path: '/counters', label: 'modules.names.counter' },
-        { path: '/marathon', label: 'pages.marathon.name' },
+        { path: '/counters', label: 'modules.names.counter', icon: 'pi pi-hashtag' },
+        { path: '/marathon', label: 'pages.marathon.name', icon: 'pi pi-stopwatch' },
       ],
     },
     { id: 'polls', pages: [soon('/polls', 'polls', 'pi pi-chart-bar', true)] },
@@ -122,28 +126,28 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'obs',
       pages: [
-        { path: '/scenes', label: 'modules.names.scene' },
+        { path: '/scenes', label: 'modules.names.scene', icon: 'pi pi-images' },
         soon('/modes', 'modes', 'pi pi-sliders-h'),
-        { path: '/mixer', label: 'pages.mixer.name' },
-        { path: '/obs-sources', label: 'pages.obsSources.name' },
+        { path: '/mixer', label: 'pages.mixer.name', icon: 'pi pi-sliders-v' },
+        { path: '/obs-sources', label: 'pages.obsSources.name', icon: 'pi pi-clone', tint: 'blue' },
       ],
     },
     {
       id: 'music',
       pages: [
-        { path: '/music', label: 'modules.names.bgm', tabLabel: 'nav.pageTabs.musicPlayer' },
-        { path: '/music-playlists', label: 'pages.musicPlaylists.name' },
-        { path: '/music-library', label: 'pages.musicLibrary.name' },
+        { path: '/music', label: 'modules.names.bgm', icon: 'pi pi-headphones', tabLabel: 'nav.pageTabs.musicPlayer' },
+        { path: '/music-playlists', label: 'pages.musicPlaylists.name', icon: 'pi pi-list' },
+        { path: '/music-library', label: 'pages.musicLibrary.name', icon: 'pi pi-folder' },
         soon('/music-requests', 'musicRequests', 'pi pi-youtube'),
       ],
     },
-    { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound' }] },
+    { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound', icon: 'pi pi-volume-up' }] },
     {
       id: 'widgets',
       pages: [
-        { path: '/screen-tools', label: 'modules.names.screen-tools', tabLabel: 'nav.pageTabs.breakCard' },
-        { path: '/warnings', label: 'pages.warnings.name' },
-        { path: '/overlay-look', label: 'pages.overlayLook.name' },
+        { path: '/screen-tools', label: 'modules.names.screen-tools', icon: 'pi pi-moon', tabLabel: 'nav.pageTabs.breakCard' },
+        { path: '/warnings', label: 'pages.warnings.name', icon: 'pi pi-exclamation-triangle' },
+        { path: '/overlay-look', label: 'pages.overlayLook.name', icon: 'pi pi-palette', tint: 'primary' },
         soon('/goals', 'goals', 'pi pi-flag'),
         soon('/captions', 'captions', 'pi pi-align-left'),
       ],
@@ -151,8 +155,8 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'pictures',
       pages: [
-        { path: '/media', label: 'pages.media.name' },
-        { path: '/image-sizes', label: 'pages.imageSizes.name' },
+        { path: '/media', label: 'pages.media.name', icon: 'pi pi-images' },
+        { path: '/image-sizes', label: 'pages.imageSizes.name', icon: 'pi pi-image' },
       ],
     },
     { id: 'avatar', pages: [soon('/avatar', 'avatar', 'pi pi-face-smile', true)] },
@@ -162,7 +166,7 @@ export const GROUPS: TabGroup[] = [
       id: 'viewers',
       pages: [soon('/viewers', 'viewers', 'pi pi-users', true), soon('/roles', 'roles', 'pi pi-tags')],
     },
-    { id: 'leaderboard', pages: [{ path: '/leaderboard', label: 'pages.leaderboard.name' }] },
+    { id: 'leaderboard', pages: [{ path: '/leaderboard', label: 'pages.leaderboard.name', icon: 'pi pi-trophy', tint: 'yellow' }] },
     {
       id: 'raids',
       pages: [
@@ -176,6 +180,9 @@ export const GROUPS: TabGroup[] = [
 
 /** Every page not built yet: grey in the tabs, its URL leads home, and `tile` ones are grey home tiles. */
 export const SOON_PAGES = GROUPS.flatMap((g) => g.pages).filter((p) => p.soon)
+
+/** The page tab at a route path, or undefined (settings, not found). */
+export const tabPage = (path: string): TabPage | undefined => groupOf(path)?.pages.find((p) => p.path === path)
 
 /** The group a route path belongs to, or undefined (settings, not found). */
 export function groupOf(path: string): TabGroup | undefined {

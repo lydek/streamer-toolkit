@@ -1,5 +1,9 @@
 <template>
-  <FullPage :title="t('modules.names.checkin')" tile="checkin" overlay="checkin">
+  <FullPage tile="checkin" overlay="checkin">
+    <template #actions>
+      <Button :label="t('checkin.push.hide')" icon="pi pi-eye-slash" outlined @click="hideCard" />
+      <Button :label="t('checkin.import.heading')" icon="pi pi-upload" outlined @click="openImport" />
+    </template>
     <form class="filters" :aria-label="t('checkin.page.filters')" @submit.prevent="apply">
       <div class="field">
         <label for="cf-search">{{ t('checkin.page.search') }}</label>
@@ -12,8 +16,6 @@
         <label for="cf-date">{{ t('checkin.page.date') }}</label>
         <InputText id="cf-date" v-model="date" type="date" :max="today" />
       </div>
-      <Button :label="t('checkin.push.hide')" icon="pi pi-eye-slash" outlined class="hide" @click="hideCard" />
-      <Button :label="t('checkin.import.heading')" icon="pi pi-upload" outlined @click="openImport" />
     </form>
 
     <!-- Always in the DOM, so screen readers announce changes to the count. -->
@@ -315,10 +317,6 @@ useLiveEvents(2000, (msg) => {
 .login {
   font-weight: 400;
   color: var(--p-text-muted-color);
-}
-
-.hide {
-  margin-left: auto;
 }
 
 .deduct :deep(.p-inputnumber-input) {

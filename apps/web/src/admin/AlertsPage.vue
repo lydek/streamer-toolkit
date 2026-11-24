@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.alerts')" tile="alerts" overlay="alerts">
+  <FullPage tile="alerts" overlay="alerts">
     <!-- 樣板: the first of the alerts pages (每種事件 and 最近事件 are their own pages). -->
     <TemplatePicker overlay="alerts" :ids="BUILT_IN" :label="(id) => t(`alerts.templates.${id}`)" :start="start" />
   </FullPage>

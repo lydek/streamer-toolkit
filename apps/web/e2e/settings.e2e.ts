@@ -3,29 +3,32 @@ import { type Page, expect, test } from '@playwright/test'
 import { openAdmin, scrollsSideways, zh } from './fixtures'
 
 const gear = (page: Page) => page.getByRole('button', { name: zh.settings.title, exact: true })
-const homeButton = (page: Page) => page.getByRole('button', { name: zh.app.home })
+const homeTab = (page: Page) =>
+  page.getByRole('navigation', { name: zh.nav.label }).getByRole('link', { name: zh.nav.groups.home })
+const title = (page: Page) => page.getByRole('heading', { level: 1, name: zh.settings.title })
 const host = (page: Page) => page.getByLabel(zh.settings.obs.host, { exact: true })
 const section = (page: Page, name: string) => page.getByRole('navigation', { name: zh.settings.sections }).getByRole('link', { name })
 /** vue-router's previous entry: null when home is the first entry, so Back (Alt+←) on home goes nowhere. */
 const previousEntry = (page: Page) => page.evaluate(() => (history.state as { back: string | null }).back)
 
-/** Leaves the settings page with "← Home" or the browser's Back (what Alt+← does in the admin window). */
-const leave = (page: Page, how: string) => (how === 'home' ? homeButton(page).click() : page.goBack())
+/** Leaves the settings page with the 首頁 tab or the browser's Back (what Alt+← does in the admin window). */
+const leave = (page: Page, how: string) => (how === 'tab' ? homeTab(page).click() : page.goBack())
 
-for (const how of ['home', 'back']) {
+for (const how of ['tab', 'back']) {
   test(`⚙ beside an open drawer opens settings; ${how} returns there with focus on ⚙`, async ({ page }) => {
     await openAdmin(page)
     await page.locator('[data-drawer-tile="chat"]').click()
     await expect(page.locator('#drawer-chat')).toBeVisible()
     await gear(page).click()
     await expect(page).toHaveURL(/\/admin\/settings\/general$/)
-    await expect(homeButton(page)).toBeFocused()
+    await expect(title(page)).toBeFocused()
 
     await leave(page, how)
     await expect(page).toHaveURL(/\/admin\/$/)
     await expect(gear(page)).toBeFocused()
     await expect(page.locator('#drawer-chat')).toHaveCount(0)
-    expect(await previousEntry(page)).toBeNull()
+    // Back returns to the entry before, so history does not grow.
+    if (how === 'back') expect(await previousEntry(page)).toBeNull()
   })
 
   test(`a field typed into without Enter is saved when leaving with ${how}`, async ({ page }) => {
@@ -57,7 +60,7 @@ test('a save that fails on leaving keeps the settings page with its error', asyn
   await page.goBack()
   await expect(page).toHaveURL(/\/admin\/settings\/connections$/)
   await expect(page.getByRole('alert')).toHaveText(zh.errors.obs.invalid_address)
-  await expect(homeButton(page)).toBeVisible()
+  await expect(title(page)).toBeVisible()
 })
 
 test('the settings page reads "Ask before closing" again when the window gets focus back', async ({ page }) => {
