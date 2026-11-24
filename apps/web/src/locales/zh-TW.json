@@ -1332,6 +1332,7 @@
     },
     "warnings": {
       "heading": "警語覆蓋層",
+      "summary": "出問題時在直播畫面上提醒你（觀眾也看得到，用小字）",
       "chatOverlay": "聊天室 Overlay 沒連上",
       "mic": "麥克風靜音超過",
       "seconds": "秒數",
@@ -1344,13 +1345,17 @@
     },
     "appearance": {
       "heading": "Overlay 外觀",
+      "summary": "所有內建 Overlay 共用，跟控制台的主題分開選",
       "theme": "主題",
+      "sampleTag": "正在演唱",
+      "sampleTitle": "歌曲名稱",
       "themes": {
         "dark": "深色",
         "cream": "奶油",
         "contrast": "高對比"
       },
-      "textSize": "文字大小"
+      "textSize": "文字大小",
+      "textSizeHint": "套用到所有內建 Overlay（含聊天室）；只改字的大小，OBS 來源的尺寸不變"
     },
     "media": {
       "heading": "兌換時播影片或 GIF",

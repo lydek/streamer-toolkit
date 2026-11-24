@@ -1,8 +1,7 @@
 <template>
-  <div class="split">
-    <div class="stack">
-      <div class="field">
-        <label for="break-text">{{ t('screenTools.break.text') }}</label>
+  <div class="break-layout">
+    <FormPanel class="break-panel">
+      <FormRow :label="t('screenTools.break.text')" input-id="break-text">
         <InputText
           id="break-text"
           v-model="text.value.value"
@@ -11,9 +10,8 @@
           @keydown.enter="text.commit()"
           @blur="text.commit()"
         />
-      </div>
-      <div class="field">
-        <span id="break-mode-label">{{ t('screenTools.break.countdown') }}</span>
+      </FormRow>
+      <FormRow :label="t('screenTools.break.countdown')" label-id="break-mode-label">
         <SelectButton
           v-model="mode.value.value"
           :options="MODES"
@@ -23,9 +21,8 @@
           :disabled="!card"
           @change="mode.commit()"
         />
-      </div>
-      <div v-if="mode.value.value === 'minutes'" class="field">
-        <label for="break-minutes">{{ t('screenTools.break.minutes') }}</label>
+      </FormRow>
+      <FormRow v-if="mode.value.value === 'minutes'" :label="t('screenTools.break.minutes')" input-id="break-minutes">
         <InputNumber
           v-model="minutes.value.value"
           input-id="break-minutes"
@@ -37,9 +34,8 @@
           @keydown.enter="minutes.commit()"
           @blur="minutes.commit()"
         />
-      </div>
-      <div v-else class="field">
-        <label for="break-until">{{ t('screenTools.break.until') }}</label>
+      </FormRow>
+      <FormRow v-else :label="t('screenTools.break.until')" input-id="break-until">
         <!-- 24-hour text: a native time input shows 上午/下午 on a Chinese Windows. -->
         <InputMask
           id="break-until"
@@ -51,9 +47,8 @@
           @keydown.enter="until.commit()"
           @blur="until.commit()"
         />
-      </div>
-      <div class="field">
-        <label for="break-end-text">{{ t('screenTools.break.endText') }}</label>
+      </FormRow>
+      <FormRow :label="t('screenTools.break.endText')" input-id="break-end-text">
         <InputText
           id="break-end-text"
           v-model="endText.value.value"
@@ -62,12 +57,15 @@
           @keydown.enter="endText.commit()"
           @blur="endText.commit()"
         />
-      </div>
-      <div class="actions">
-        <Button :label="t('screenTools.break.hide')" text :disabled="!card?.shown" @click="hide" />
-        <Button :label="t('screenTools.break.show')" :disabled="!card" @click="show" />
-      </div>
-    </div>
+      </FormRow>
+      <template #foot>
+        <div class="actions">
+          <Button :label="t('screenTools.break.hide')" text :disabled="!card?.shown" @click="hide" />
+          <Button :label="t('screenTools.break.show')" :disabled="!card" @click="show" />
+        </div>
+      </template>
+    </FormPanel>
+
     <section :aria-label="t('screenTools.break.preview')" class="preview">
       <div class="card">
         <b v-if="(card?.shown ? card.text : text.value.value)">{{ card?.shown ? card.text : text.value.value }}</b>
@@ -88,6 +86,8 @@ import { useI18n } from 'vue-i18n'
 import { type BreakCard, breakLeftMs, countdownText } from '../overlay/break/breakCard'
 import { type Schemas, api, client } from './api'
 import { settingQueue, useDrawerSetting } from './drawer'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import { countdownOf, hideBreak, showBreak } from './screenTools'
 
 type Mode = BreakCard['mode']
@@ -172,29 +172,22 @@ async function hide() {
 </script>
 
 <style scoped>
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-
-@container view (max-width: 48rem) {
-  .split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.field {
+.break-layout {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 1.25rem;
+}
+
+.break-panel {
+  width: 100%;
 }
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
+  width: 100%;
 }
 
 /* The OBS canvas scaled to the frame: the overlay's sizes at 1920px wide, in container units (1px = 100cqw / 1920),
@@ -203,6 +196,7 @@ async function hide() {
   container-type: inline-size;
   display: grid;
   place-items: center;
+  width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 6px;
   background: var(--p-surface-800);
