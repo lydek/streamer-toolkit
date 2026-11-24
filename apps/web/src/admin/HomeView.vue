@@ -802,7 +802,8 @@ function mixerLine(): Line {
   return {
     state: 'ready',
     num: t(input.muted ? 'mixer.tile.muted' : 'mixer.tile.on'),
-    text: `${input.name} · ${t('mixer.tile.inputs', { n: mixLive.value.length })}`,
+    unit: input.name,
+    text: t('mixer.tile.inputs', { n: mixLive.value.length }),
   }
 }
 
@@ -1117,6 +1118,7 @@ onBeforeUnmount(() => {
 }
 
 .tile-reason {
+  flex-basis: 100%;
   font-size: 0.8125rem;
   color: var(--p-text-muted-color);
 }

@@ -57,30 +57,44 @@ const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
 <style scoped>
 .tile-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-block-size: 7.25rem;
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
 }
 
-/* Where the line was: right of the badge (padding + 2.75rem badge + gap), on the last row. */
+.tile-wrap:has(> .tile[aria-expanded='true']) {
+  border-color: var(--p-primary-color);
+}
+
+/* Normal flow below the number row, lined up with the text column, so wrapped buttons never cover the number. */
 .tile-actions {
-  position: absolute;
-  left: calc(1.125rem + 2.75rem + 0.875rem);
-  right: 1.125rem;
-  bottom: 0.75rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
+  padding: 0 1.125rem 0.75rem calc(1.125rem + 2.75rem + 0.875rem);
+}
+
+.tile-actions :deep(.p-button) {
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.tile.acts {
+  padding-bottom: 0.375rem;
 }
 
 .tile.acts :deep(.line) {
-  visibility: hidden;
+  display: none;
 }
 
 .tile {
   position: relative;
-  height: 100%;
-  /* Every small tile the same height (rem, so it grows with the text size); a wrapped name may make one taller. */
-  min-block-size: 7.25rem;
+  flex: 1;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-content: start;
@@ -88,9 +102,9 @@ const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
   width: 100%;
   min-width: 0;
   padding: 1rem 1.125rem;
-  border: 1px solid var(--p-surface-500);
-  border-radius: 6px;
-  background: var(--p-surface-900);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: start;
@@ -99,13 +113,13 @@ const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
 
 /* Grey, with the muted text color (dev.md contrast), not lowered opacity. */
 .tile.off {
-  border-style: dashed;
+  height: 100%;
+  min-block-size: 7.25rem;
+  border: 1px dashed var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
   color: var(--p-text-muted-color);
   cursor: default;
-}
-
-.tile[aria-expanded='true'] {
-  border-color: var(--p-primary-color);
 }
 
 .dot {
