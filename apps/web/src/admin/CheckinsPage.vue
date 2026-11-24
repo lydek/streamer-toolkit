@@ -5,13 +5,14 @@
       <Button :label="t('checkin.import.heading')" icon="pi pi-upload" outlined @click="openImport" />
     </template>
     <form class="filters" :aria-label="t('checkin.page.filters')" @submit.prevent="apply">
-      <div class="field">
+      <div class="field grow">
         <label for="cf-search">{{ t('checkin.page.search') }}</label>
         <InputText id="cf-search" v-model="search" autocomplete="off" />
       </div>
       <div class="buttons">
         <Button type="submit" :label="t('redemption.apply')" icon="pi pi-search" />
       </div>
+      <span class="sep" aria-hidden="true"></span>
       <div class="field">
         <label for="cf-date">{{ t('checkin.page.date') }}</label>
         <InputText id="cf-date" v-model="date" type="date" :max="today" />
@@ -267,29 +268,15 @@ useLiveEvents(2000, (msg) => {
 </script>
 
 <style scoped>
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 .field :deep(.p-inputtext) {
   min-width: 10rem;
   max-width: 100%;
 }
 
-.buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+@container view (max-width: 40rem) {
+  .sep {
+    display: none;
+  }
 }
 
 .viewers {

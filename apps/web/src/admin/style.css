@@ -134,6 +134,52 @@ form,
   gap: 0.5rem;
 }
 
+/* Filter bars on list pages (RedemptionsPage, CheckinsPage): a full-width tinted row that wraps. */
+form.filters {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  max-width: none;
+  margin-top: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+form.filters .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+form.filters .field label {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+form.filters .grow {
+  flex: 1 1 12rem;
+  max-width: 24rem;
+}
+
+form.filters .grow :is(.p-inputtext, .p-select) {
+  width: 100%;
+}
+
+form.filters .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+form.filters .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--p-surface-800);
+}
+
 /* Fields stacked in a form (or a .stack) share one width per kind, so same-purpose fields line up: text and choices
    20rem, numbers 8rem. Wide fields (`.wide`) and multi-line text keep their own. */
 main :is(form, .stack) > :is(.p-select, input.p-inputtext):not(.wide) {
