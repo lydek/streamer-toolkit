@@ -1,10 +1,11 @@
 <template>
-  <ul class="rows">
-    <li>
+  <FormPanel>
+    <div class="warn-row">
       <span id="warn-chat">{{ t('screenTools.warnings.chatOverlay') }}</span>
       <ToggleSwitch v-model="chat.value.value" aria-labelledby="warn-chat" :disabled="!warnings" @update:model-value="chat.commit()" />
-    </li>
-    <li>
+    </div>
+
+    <div class="warn-row">
       <span class="mic">
         <span id="warn-mic">{{ t('screenTools.warnings.mic') }}</span>
         <InputNumber
@@ -19,26 +20,31 @@
           @blur="seconds.commit()"
         />
         <span>{{ t('screenTools.warnings.secondsUnit') }}</span>
-        <Select
-          v-model="input.value.value"
-          :options="inputChoices"
-          :placeholder="t('screenTools.warnings.pickInput')"
-          :aria-label="t('screenTools.warnings.input')"
-          :disabled="!warnings"
-          show-clear
-          append-to="self"
-          @update:model-value="input.commit()"
-        />
       </span>
       <ToggleSwitch v-model="mic.value.value" aria-labelledby="warn-mic" :disabled="!warnings" @update:model-value="mic.commit()" />
-    </li>
-    <li v-if="warnings?.micMissing" class="hint" role="alert">{{ t('screenTools.warnings.inputMissing', { name: warnings.micInput }) }}</li>
-    <li v-else-if="warnings && !warnings.micInput" class="hint">{{ t('screenTools.warnings.noInput') }}</li>
-    <li>
+    </div>
+
+    <FormRow :label="t('screenTools.warnings.input')" input-id="warn-mic-input">
+      <Select
+        v-model="input.value.value"
+        input-id="warn-mic-input"
+        :options="inputChoices"
+        :placeholder="t('screenTools.warnings.pickInput')"
+        :aria-label="t('screenTools.warnings.input')"
+        :disabled="!warnings"
+        show-clear
+        append-to="self"
+        @update:model-value="input.commit()"
+      />
+      <p v-if="warnings?.micMissing" class="hint alert" role="alert">{{ t('screenTools.warnings.inputMissing', { name: warnings.micInput }) }}</p>
+      <p v-else-if="warnings && !warnings.micInput" class="hint">{{ t('screenTools.warnings.noInput') }}</p>
+    </FormRow>
+
+    <div class="warn-row">
       <span id="warn-twitch">{{ t('screenTools.warnings.twitch') }}</span>
       <ToggleSwitch v-model="twitch.value.value" aria-labelledby="warn-twitch" :disabled="!warnings" @update:model-value="twitch.commit()" />
-    </li>
-  </ul>
+    </div>
+  </FormPanel>
 </template>
 
 <script setup lang="ts">
@@ -49,6 +55,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
 import { settingQueue, useDrawerSetting } from './drawer'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 
 const props = defineProps<{
   /** The latest `screen.warnings`; `undefined` until the live connection has it. */
@@ -107,21 +115,18 @@ const inputChoices = computed(() => {
 </script>
 
 <style scoped>
-.rows {
+.warn-row {
   display: grid;
-  gap: 0.75rem;
-  max-width: 52rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0;
 }
 
-.rows li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
+.warn-row + .warn-row,
+.warn-row + :deep(.form-row),
+:deep(.form-row) + .warn-row {
+  border-top: 1px solid var(--p-surface-800);
 }
 
 .mic {
@@ -136,6 +141,12 @@ const inputChoices = computed(() => {
 }
 
 .hint {
+  margin: 0.375rem 0 0;
   color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+.alert {
+  color: var(--p-red-400);
 }
 </style>
