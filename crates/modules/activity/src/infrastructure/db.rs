@@ -114,7 +114,8 @@ pub enum Ranking {
 }
 
 /// The top `limit` viewers from `from` until `until` (open ends when `None`), most first: name and amount. Logins in
-/// `exclude` (lowercase) and anonymous gifts or cheers are left out; simulated events are never stored.
+/// `exclude` (lowercase) and anonymous gifts or cheers are left out; simulated events are never stored. A viewer goes
+/// by the login and name of their latest entry counted, so a rename shows.
 pub async fn ranking(
     pool: &SqlitePool,
     by: Ranking,
@@ -126,10 +127,22 @@ pub async fn ranking(
     // Static queries: one per ranking.
     let sql = match by {
         Ranking::Bits => {
-            "SELECT LOWER(COALESCE(user_login, '')), COALESCE(MAX(user_name), ''), SUM(COALESCE(bits, 0)) AS total              FROM activity_events WHERE kind = 'cheer' AND user_id IS NOT NULL              AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)              GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
+            "WITH ranked AS (SELECT user_id, user_login, user_name, bits AS amount, occurred_at, \
+             ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY occurred_at DESC, id DESC) AS latest \
+             FROM activity_events WHERE kind = 'cheer' AND user_id IS NOT NULL \
+             AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)) \
+             SELECT LOWER(COALESCE(MAX(CASE WHEN latest = 1 THEN user_login END), '')), \
+             COALESCE(MAX(CASE WHEN latest = 1 THEN user_name END), ''), SUM(COALESCE(amount, 0)) AS total \
+             FROM ranked GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
         }
         Ranking::Gifts => {
-            "SELECT LOWER(COALESCE(user_login, '')), COALESCE(MAX(user_name), ''), SUM(COALESCE(count, 0)) AS total              FROM activity_events WHERE kind = 'gift' AND user_id IS NOT NULL              AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)              GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
+            "WITH ranked AS (SELECT user_id, user_login, user_name, count AS amount, occurred_at, \
+             ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY occurred_at DESC, id DESC) AS latest \
+             FROM activity_events WHERE kind = 'gift' AND user_id IS NOT NULL \
+             AND (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2)) \
+             SELECT LOWER(COALESCE(MAX(CASE WHEN latest = 1 THEN user_login END), '')), \
+             COALESCE(MAX(CASE WHEN latest = 1 THEN user_name END), ''), SUM(COALESCE(amount, 0)) AS total \
+             FROM ranked GROUP BY user_id ORDER BY total DESC, MIN(occurred_at)"
         }
     };
     let rows: Vec<(String, String, i64)> = sqlx::query_as(sql)
@@ -414,5 +427,57 @@ pub(crate) mod tests {
             Some(1)
         );
         assert_eq!(repo.count_before(cutoff).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn rankings_go_by_the_latest_login_and_name_in_the_time_asked() {
+        let pool = pool().await;
+        // u1: an older name that sorts last, then two in the same instant (the later stored wins), then one after the
+        // time asked; u2 gave more.
+        let rows = [
+            ("01", "u1", "zoe", "Zoe", 100, "2026-11-19T10:00:00.000000Z"),
+            ("02", "u1", "amy", "Amy", 50, "2026-11-19T10:05:00.000000Z"),
+            ("03", "u1", "ann", "Ann", 10, "2026-11-19T10:05:00.000000Z"),
+            ("04", "u1", "bea", "Bea", 999, "2026-11-19T11:00:00.000000Z"),
+            ("05", "u2", "kai", "Kai", 500, "2026-11-19T10:01:00.000000Z"),
+        ];
+        for (id, user, login, name, amount, at) in rows {
+            for (kind, bits, count) in [("cheer", Some(amount), None), ("gift", None, Some(amount))]
+            {
+                sqlx::query(
+                    "INSERT INTO activity_events (id, twitch_message_id, kind, user_id, user_login, user_name, bits, \
+                     count, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(format!("{id}{kind}"))
+                .bind(format!("m{id}{kind}"))
+                .bind(kind)
+                .bind(user)
+                .bind(login)
+                .bind(name)
+                .bind(bits)
+                .bind(count)
+                .bind(at)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+        }
+        let at = |t: &str| DateTime::parse_from_rfc3339(t).unwrap().to_utc();
+        let (from, until) = (
+            Some(at("2026-11-19T09:00:00Z")),
+            Some(at("2026-11-19T10:30:00Z")),
+        );
+        for by in [Ranking::Bits, Ranking::Gifts] {
+            assert_eq!(
+                ranking(&pool, by, from, until, &[], 10).await.unwrap(),
+                [("Kai".to_owned(), 500), ("Ann".to_owned(), 160)],
+                "{by:?}"
+            );
+            assert_eq!(
+                ranking(&pool, by, from, until, &["ann"], 10).await.unwrap(),
+                [("Kai".to_owned(), 500)],
+                "{by:?}"
+            );
+        }
     }
 }
