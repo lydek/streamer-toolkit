@@ -70,6 +70,28 @@ fn rates(readings: &VecDeque<Reading>) -> (Option<f64>, Option<u64>) {
     (dropped, bitrate)
 }
 
+/// Adds `reading` and drops what fell out of the window. A new window begins when OBS restarted (its counters
+/// start again) and when a stream starts, stops or started again (the stream counters start again), so the rates
+/// never mix a stream with what came before it.
+fn push(readings: &mut VecDeque<Reading>, reading: Reading) {
+    let (now, s) = (reading.at, reading.stats);
+    if readings.back().is_some_and(|r| {
+        s.render_total < r.stats.render_total
+            || s.streaming != r.stats.streaming
+            || s.stream_total < r.stats.stream_total
+            || s.stream_bytes < r.stats.stream_bytes
+    }) {
+        readings.clear();
+    }
+    readings.push_back(reading);
+    while readings
+        .front()
+        .is_some_and(|r| now.duration_since(r.at) > WINDOW)
+    {
+        readings.pop_front();
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct PerformanceState {
     latest: Arc<Mutex<Option<Performance>>>,
@@ -103,21 +125,13 @@ pub(crate) fn start(obs: Arc<ObsLink>) -> PerformanceState {
             );
             let obs_now = match obs.stats().await {
                 Ok(stats) => {
-                    let now = Instant::now();
-                    // A restarted OBS starts its counters again: begin a new window.
-                    if readings
-                        .back()
-                        .is_some_and(|r| stats.render_total < r.stats.render_total)
-                    {
-                        readings.clear();
-                    }
-                    readings.push_back(Reading { at: now, stats });
-                    while readings
-                        .front()
-                        .is_some_and(|r| now.duration_since(r.at) > WINDOW)
-                    {
-                        readings.pop_front();
-                    }
+                    push(
+                        &mut readings,
+                        Reading {
+                            at: Instant::now(),
+                            stats,
+                        },
+                    );
                     let (dropped, bitrate) = rates(&readings);
                     Some(ObsPerformance {
                         cpu_percent: stats.cpu_percent,
@@ -223,5 +237,46 @@ mod tests {
         let (dropped, bitrate) = rates(&idle);
         assert!((dropped.unwrap() - 1.0).abs() < 1e-9);
         assert_eq!(bitrate, None, "not streaming");
+    }
+
+    #[test]
+    fn a_stream_starting_or_starting_again_begins_a_new_window() {
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let mut window = VecDeque::new();
+        push(&mut window, reading(at(0), (0, 1000), (0, 0), 0, false));
+        push(&mut window, reading(at(2), (0, 1120), (0, 0), 0, false));
+        // The stream starts: a bitrate from the second reading on, not a minute later.
+        push(
+            &mut window,
+            reading(at(4), (0, 1240), (0, 120), 500_000, true),
+        );
+        assert_eq!(rates(&window).1, None, "one streaming reading");
+        push(
+            &mut window,
+            reading(at(6), (0, 1360), (0, 240), 1_250_000, true),
+        );
+        assert_eq!(rates(&window).1, Some(3000));
+
+        // Stopped and started again between two readings, both streaming: the stream counters start again.
+        push(
+            &mut window,
+            reading(at(8), (0, 1480), (0, 60), 250_000, true),
+        );
+        push(
+            &mut window,
+            reading(at(10), (0, 1600), (12, 180), 1_000_000, true),
+        );
+        let (dropped, bitrate) = rates(&window);
+        assert_eq!(bitrate, Some(3000));
+        // 12 of 240 frames (120 rendered, 120 streamed).
+        assert!((dropped.unwrap() - 5.0).abs() < 1e-9, "{dropped:?}");
+
+        // Readings older than the window leave it.
+        push(
+            &mut window,
+            reading(at(80), (0, 9000), (12, 4000), 30_000_000, true),
+        );
+        assert_eq!(window.len(), 1);
     }
 }
