@@ -213,7 +213,8 @@ fn push_time_range(
 
 /// How many messages were sent from `from` until `until` (open ends when `None`), and when the first was.
 /// The top `limit` chatters from `from` until `until` (open ends when `None`), most messages first: name and count.
-/// Logins in `exclude` (lowercase) are left out; simulated messages are never stored.
+/// Logins in `exclude` (lowercase) are left out; simulated messages are never stored. A viewer goes by the login and
+/// name of their latest message in that time, so a rename shows.
 pub async fn top_chatters(
     pool: &SqlitePool,
     from: Option<DateTime<Utc>>,
@@ -222,10 +223,12 @@ pub async fn top_chatters(
     limit: u32,
 ) -> Result<Vec<(String, u64)>, sqlx::Error> {
     let rows: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT LOWER(COALESCE(json_extract(MAX(payload), '$.userLogin'), '')), \
-         COALESCE(json_extract(MAX(payload), '$.userName'), ''), COUNT(*) AS n \
-         FROM chat_messages WHERE (?1 IS NULL OR sent_at >= ?1) AND (?2 IS NULL OR sent_at < ?2) \
-         GROUP BY user_id ORDER BY n DESC, MIN(sent_at)",
+        "WITH ranked AS (SELECT user_id, payload, sent_at, \
+         ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY sent_at DESC, id DESC) AS latest \
+         FROM chat_messages WHERE (?1 IS NULL OR sent_at >= ?1) AND (?2 IS NULL OR sent_at < ?2)) \
+         SELECT LOWER(COALESCE(json_extract(MAX(CASE WHEN latest = 1 THEN payload END), '$.userLogin'), '')), \
+         COALESCE(json_extract(MAX(CASE WHEN latest = 1 THEN payload END), '$.userName'), ''), COUNT(*) AS n \
+         FROM ranked GROUP BY user_id ORDER BY n DESC, MIN(sent_at)",
     )
     .bind(from.map(time_text))
     .bind(until.map(time_text))
@@ -589,5 +592,54 @@ pub(crate) mod tests {
             ChatRecords.count_before(&mut conn, cutoff).await.unwrap(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn chatters_go_by_their_latest_login_and_name_in_the_time_asked() {
+        let pool = pool().await;
+        // u1: an older name that sorts last, then two in the same instant (the later stored wins), then one after the
+        // time asked; u2 says more.
+        let rows = [
+            ("01", "u1", "zoe", "Zoe", "2026-11-19T10:00:00.000000Z"),
+            ("02", "u1", "amy", "Amy", "2026-11-19T10:05:00.000000Z"),
+            ("03", "u1", "ann", "Ann", "2026-11-19T10:05:00.000000Z"),
+            ("04", "u1", "bea", "Bea", "2026-11-19T11:00:00.000000Z"),
+            ("05", "u2", "kai", "Kai", "2026-11-19T10:01:00.000000Z"),
+            ("06", "u2", "kai", "Kai", "2026-11-19T10:02:00.000000Z"),
+            ("07", "u2", "kai", "Kai", "2026-11-19T10:03:00.000000Z"),
+            ("08", "u2", "kai", "Kai", "2026-11-19T10:04:00.000000Z"),
+        ];
+        for (id, user, login, name, at) in rows {
+            sqlx::query(
+                "INSERT INTO chat_messages (id, twitch_message_id, user_id, payload, sent_at) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(id)
+            .bind(user)
+            .bind(json_payload(login, name))
+            .bind(at)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let at = |t: &str| DateTime::parse_from_rfc3339(t).unwrap().to_utc();
+        let (from, until) = (
+            Some(at("2026-11-19T09:00:00Z")),
+            Some(at("2026-11-19T10:30:00Z")),
+        );
+        assert_eq!(
+            top_chatters(&pool, from, until, &[], 10).await.unwrap(),
+            [("Kai".to_owned(), 4), ("Ann".to_owned(), 3)]
+        );
+        assert_eq!(
+            top_chatters(&pool, from, until, &["ann"], 10)
+                .await
+                .unwrap(),
+            [("Kai".to_owned(), 4)]
+        );
+    }
+
+    fn json_payload(login: &str, name: &str) -> String {
+        serde_json::json!({ "userLogin": login, "userName": name, "text": "hi" }).to_string()
     }
 }
