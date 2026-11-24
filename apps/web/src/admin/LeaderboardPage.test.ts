@@ -52,7 +52,7 @@ it('takes the boards from a reconnect snapshot', async () => {
   expect(wrapper.text()).not.toContain('小魚')
 })
 
-it('shows every board side by side for the chosen period, and copies one with its board and period', async () => {
+it('shows every board side by side for the chosen period, without copy buttons and with OBS status links', async () => {
   const wrapper = mount(LeaderboardPage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
   expect(wrapper.findAll('section.board')).toHaveLength(4)
@@ -60,9 +60,8 @@ it('shows every board side by side for the chosen period, and copies one with it
   const checkins = wrapper.get('section[aria-labelledby="lb-checkins"]')
   expect(checkins.text()).toContain('小魚')
   expect(checkins.text()).toContain(t('leaderboard.allCheckins'))
-  await checkins.get('button').trigger('click')
-  await flushPromises()
-  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${location.origin}/overlay/leaderboard/?board=checkins&period=all`)
+  expect(checkins.findAll('button')).toHaveLength(0)
+  expect(checkins.get('a.in-obs').attributes('href')).toBe('/obs-sources')
 })
 
 it('says which periods of each board are in OBS', async () => {

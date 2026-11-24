@@ -1230,6 +1230,7 @@
     "download": "全部下載"
   },
   "leaderboard": {
+    "summary": "每個榜可以分別放到直播畫面",
     "inObs": "在 OBS：{periods}",
     "copyFor": "複製「{board}」的 OBS 網址",
     "period": "期間",
