@@ -1,12 +1,19 @@
 <template>
-  <div class="stack">
-    <p class="remaining">
-      <output>{{ status ? clockText(remaining) : t('app.loading') }}</output>
-      <span v-if="status" class="state">{{ t(stateKey) }}</span>
-    </p>
-    <div class="fields">
-      <div class="field">
-        <label for="marathon-sub">{{ t('counter.marathon.subMinutes') }}</label>
+  <FormPanel class="marathon-panel">
+    <template #head>
+      <div class="panel-header remaining">
+        <span class="badge tint-primary" aria-hidden="true"><i class="pi pi-stopwatch"></i></span>
+        <div class="title">
+          <h2>{{ t('counter.marathon.heading') }}</h2>
+          <span v-if="status" class="state">{{ t(stateKey) }}</span>
+        </div>
+        <output class="clock">{{ status ? clockText(remaining) : t('app.loading') }}</output>
+      </div>
+    </template>
+
+    <FormRow :label="t('counter.marathon.sub')" input-id="marathon-sub" end>
+      <span class="unit-field">
+        <span aria-hidden="true">+</span>
         <InputNumber
           v-model="sub.value.value"
           input-id="marathon-sub"
@@ -14,13 +21,17 @@
           :max="1440"
           :allow-empty="false"
           :use-grouping="false"
+          :aria-label="t('counter.marathon.subMinutes')"
           :disabled="!status"
           @keydown.enter="sub.commit()"
           @blur="sub.commit()"
         />
-      </div>
-      <div class="field">
-        <label for="marathon-bits">{{ t('counter.marathon.bitsMinutes') }}</label>
+        <span>{{ t('counter.marathon.minutesUnit') }}</span>
+      </span>
+    </FormRow>
+    <FormRow :label="t('counter.marathon.bits')" input-id="marathon-bits" end>
+      <span class="unit-field">
+        <span aria-hidden="true">+</span>
         <InputNumber
           v-model="bits.value.value"
           input-id="marathon-bits"
@@ -28,13 +39,16 @@
           :max="1440"
           :allow-empty="false"
           :use-grouping="false"
+          :aria-label="t('counter.marathon.bitsMinutes')"
           :disabled="!status"
           @keydown.enter="bits.commit()"
           @blur="bits.commit()"
         />
-      </div>
-      <div class="field">
-        <label for="marathon-hours">{{ t('counter.marathon.maxHours') }}</label>
+        <span>{{ t('counter.marathon.minutesUnit') }}</span>
+      </span>
+    </FormRow>
+    <FormRow :label="t('counter.marathon.max')" input-id="marathon-hours" end>
+      <span class="unit-field">
         <InputNumber
           v-model="hours.value.value"
           input-id="marathon-hours"
@@ -42,22 +56,26 @@
           :max="168"
           :allow-empty="false"
           :use-grouping="false"
+          :aria-label="t('counter.marathon.maxHours')"
           :disabled="!status"
           @keydown.enter="hours.commit()"
           @blur="hours.commit()"
         />
-      </div>
-    </div>
-    <div class="actions">
+        <span>{{ t('counter.marathon.hoursUnit') }}</span>
+      </span>
+    </FormRow>
+
+    <template #foot>
       <Button
         :label="t(status?.paused ? 'counter.marathon.resume' : 'counter.marathon.pause')"
         :icon="status?.paused ? 'pi pi-play' : 'pi pi-pause'"
         severity="secondary"
+        outlined
         :disabled="!status"
         @click="pause(!status?.paused)"
       />
       <form class="add" @submit.prevent="add">
-        <label for="marathon-add-minutes">{{ t('counter.marathon.addMinutes') }}</label>
+        <label for="marathon-add-minutes" class="sr-only">{{ t('counter.marathon.addMinutes') }}</label>
         <InputNumber
           v-model="addMinutes"
           input-id="marathon-add-minutes"
@@ -65,10 +83,12 @@
           :max="1440"
           :use-grouping="false"
         />
-        <Button type="submit" :label="t('counter.marathon.add')" :disabled="!status || !addMinutes" />
+        <span class="unit-text">{{ t('counter.marathon.minutesUnit') }}</span>
+        <Button type="submit" :label="t('counter.marathon.add')" icon="pi pi-plus" severity="secondary" outlined :disabled="!status || !addMinutes" />
       </form>
-    </div>
-  </div>
+      <ObsStatusLink class="obs-link" overlay="/overlay/marathon/" />
+    </template>
+  </FormPanel>
 </template>
 
 <script setup lang="ts">
@@ -79,7 +99,10 @@ import { useI18n } from 'vue-i18n'
 import { remainingMs } from '../overlay/marathon/marathon'
 import { type Schemas, api, client } from './api'
 import { settingQueue, useDrawerSetting } from './drawer'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import { clockText } from './home'
+import ObsStatusLink from './ObsStatusLink.vue'
 
 const props = defineProps<{
   /** The latest `counter.marathon` event; `undefined` until the live connection has it. */
@@ -145,53 +168,71 @@ async function add() {
 </script>
 
 <style scoped>
-.copy {
-  align-self: flex-start;
+.marathon-panel {
+  max-width: 52rem;
+  margin-top: 0.75rem;
 }
 
-.remaining {
+.panel-header {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
-  margin: 0;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--p-surface-800);
 }
 
-.remaining output {
-  font-size: 2.25rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.badge {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  font-size: 1.0625rem;
+}
+
+.title h2 {
+  margin: 0;
+  font-size: 1.0625rem;
 }
 
 .state {
   color: var(--p-text-muted-color);
+  font-size: 0.875rem;
 }
 
-.fields,
-.actions,
-.add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 1rem;
+.clock {
+  margin-left: auto;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.field,
-.add {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.unit-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.unit-field :deep(.p-inputnumber-input),
+.add :deep(.p-inputnumber-input) {
+  width: 4.5rem;
 }
 
 .add {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 0.375rem;
+  max-width: none;
 }
 
-/* A narrow page: the label above its field. */
-@container view (max-width: 36rem) {
-  .add {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.unit-text {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.obs-link {
+  margin-left: auto;
 }
 </style>
