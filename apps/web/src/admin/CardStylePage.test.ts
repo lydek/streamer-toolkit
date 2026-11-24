@@ -4,7 +4,7 @@ import PrimeVue from 'primevue/config'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { type Schemas, client } from './api'
-import Select from 'primevue/select'
+import SelectButton from 'primevue/selectbutton'
 import CardStylePage from './CardStylePage.vue'
 import { testRouter } from './testRouter'
 
@@ -61,7 +61,7 @@ afterEach(() => {
 it('switches to the journal colors, uploads a stamp image, saves and tests in OBS', async () => {
   const wrapper = mount(CardStylePage, { global: { plugins: [testRouter(), i18n, PrimeVue] }, attachTo: document.body })
   await flushPromises()
-  wrapper.findComponent(Select).vm.$emit('update:modelValue', 'journal')
+  wrapper.findComponent(SelectButton).vm.$emit('update:modelValue', 'journal')
   await flushPromises()
   const input = wrapper.get<HTMLInputElement>('#cs-stamp-image')
   Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'stamp.png')] })
@@ -86,7 +86,7 @@ it('installs an animation pack as a preset and names the file a refused one hold
   await input.trigger('change')
   await flushPromises()
   expect(wrapper.text()).toContain('星星')
-  const options = wrapper.findComponent(Select).props('options') as { value: string }[]
+  const options = wrapper.findComponent(SelectButton).props('options') as { value: string }[]
   expect(options.map((o) => o.value)).toContain('pack:0190a1b2-0000-7000-8000-000000000001')
 
   Object.defineProperty(input.element, 'files', { value: [new File(['PK'], 'bad.zip')], configurable: true })

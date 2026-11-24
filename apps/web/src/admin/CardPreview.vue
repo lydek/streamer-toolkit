@@ -1,8 +1,16 @@
 <template>
   <section class="previews" :aria-label="t('cardStyle.preview')">
-    <figure v-for="v in VARIANTS" :key="v">
-      <!-- The overlay never renders in the admin window: it runs in a sandbox without allow-same-origin (origin
-           `null`, no IPC, no token) and gets its sample card by postMessage. -->
+    <SelectButton
+      v-model="active"
+      :options="variantOptions"
+      option-label="label"
+      option-value="value"
+      :allow-empty="false"
+      :aria-label="t('cardStyle.previewMode')"
+    />
+    <!-- Both sandboxed frames stay mounted (switched via v-show) so toggling between variants does not reload
+         the iframe, and neither ever leaves sandbox="allow-scripts" (origin `null`, no IPC, no token). -->
+    <figure v-for="v in VARIANTS" v-show="active === v" :key="v">
       <iframe
         ref="frames"
         class="frame"
@@ -13,21 +21,24 @@
         :data-variant="v"
         @load="post($event.target as HTMLIFrameElement)"
       ></iframe>
-      <figcaption>{{ t(`cardStyle.previews.${v}`) }}</figcaption>
     </figure>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import SelectButton from 'primevue/selectbutton'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
 import { previewCard } from './cardStyle'
 
 const VARIANTS = ['stamped', 'repeat'] as const
+type Variant = (typeof VARIANTS)[number]
 
 const props = defineProps<{ style: Schemas['CardStyleBody']; slots: number }>()
 const { t } = useI18n()
+const active = ref<Variant>('stamped')
+const variantOptions = computed(() => VARIANTS.map((value) => ({ value, label: t(`cardStyle.previews.${value}`) })))
 const frames = ref<HTMLIFrameElement[]>([])
 // Each message needs a newer seq than the last, or the overlay takes it for a replay.
 let seq = 0
@@ -62,7 +73,7 @@ watch(
 <style scoped>
 .previews {
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
   align-content: start;
 }
 
@@ -71,16 +82,12 @@ figure {
 }
 
 .frame {
+  display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
   border: 0;
   border-radius: 6px;
   background: var(--p-surface-800);
   pointer-events: none;
-}
-
-figcaption {
-  margin-top: 0.25rem;
-  color: var(--p-text-muted-color);
 }
 </style>

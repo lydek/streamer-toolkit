@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
 import { afterEach, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import type { Schemas } from './api'
@@ -21,7 +22,7 @@ const style: Schemas['CardStyleBody'] = {
 }
 
 it('sends each sandboxed preview a sample card in the form’s style, again after a change', async () => {
-  const wrapper = mount(CardPreview, { props: { style, slots: 10 }, global: { plugins: [i18n] }, attachTo: document.body })
+  const wrapper = mount(CardPreview, { props: { style, slots: 10 }, global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
   const frames = wrapper.findAll('iframe')
   expect(frames.map((f) => f.attributes('sandbox'))).toEqual(['allow-scripts', 'allow-scripts'])
   expect(frames[0].attributes('src')).toBe('/overlay/checkin/?preview')
