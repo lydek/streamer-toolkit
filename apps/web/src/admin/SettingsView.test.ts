@@ -33,7 +33,16 @@ async function mountSettings() {
   return wrapper
 }
 
+let socket: { onmessage?: (e: { data: string }) => void } | undefined
 beforeEach(() => {
+  vi.stubGlobal('WebSocket', class {
+    onmessage?: (e: { data: string }) => void
+    constructor() {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      socket = this
+    }
+    close() {}
+  })
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   client.GET.mockImplementation(async (path: string) => ok(GETS[path]))
   client.PUT.mockReset()
@@ -54,6 +63,38 @@ describe('SettingsView', () => {
     await vi.waitFor(() => expect(wrapper.get('#general ~ [role="alert"]').text()).toBe(i18n.global.t('settings.unreadable')))
   })
 
+  it('expands OBS fields on Edit focusing host, keeps open on invalid port, and returns focus to Edit on Done', async () => {
+    const router = testRouter([{ path: '/settings/:section?', component: SettingsView }])
+    await router.push('/settings/connections')
+    const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
+    await vi.waitFor(() => expect(wrapper.find('#obs-host').exists()).toBe(true))
+    expect(wrapper.get('#obs-form').isVisible()).toBe(false)
+    await wrapper.get('#obs-edit').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('#obs-form').isVisible()).toBe(true)
+    expect(document.activeElement?.id).toBe('obs-host')
+    await wrapper.get('#obs-done').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('#obs-form').isVisible()).toBe(false)
+    expect(document.activeElement?.id).toBe('obs-edit')
+    wrapper.unmount()
+  })
+
+  it('updates the OBS card status from the live stream, not only from the first read', async () => {
+    const router = testRouter([{ path: '/settings/:section?', component: SettingsView }])
+    await router.push('/settings/connections')
+    const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
+    await vi.waitFor(() => expect(wrapper.find('#obs-host').exists()).toBe(true))
+    expect(wrapper.get('#obs-status').text()).toContain(i18n.global.t('home.status.obs.error'))
+    const empty = Object.fromEntries(
+      ['obs.state', 'presentation.queue', 'stream.status', 'bgm.player', 'counter.values', 'counter.marathon', 'screen.break', 'screen.warnings', 'screen.appearance', 'chat.message'].map((k) => [k, []]),
+    )
+    const status = { state: 'connected', reason: null }
+    socket!.onmessage!({ data: JSON.stringify({ type: 'snapshot', seq: 1, payload: { ...empty, 'obs.status': [{ payload: status }] } }) })
+    await flushPromises()
+    expect(wrapper.get('#obs-status').text()).toContain(i18n.global.t('home.status.connected'))
+    wrapper.unmount()
+  })
   it('saves OBS fields committed back to back in order, each with the other one already saved', async () => {
     let release!: () => void
     client.PUT.mockImplementationOnce(() => new Promise((r) => (release = () => r(ok())))).mockResolvedValue(ok())

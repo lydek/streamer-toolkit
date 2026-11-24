@@ -6,7 +6,8 @@
       <nav class="settings-menu" :aria-label="t('settings.sections')">
         <template v-for="s in SECTIONS" :key="s">
           <RouterLink :to="`/settings/${s}`" replace :aria-current="s === section ? 'page' : undefined">
-            {{ t(`settings.menu.${s}`) }}
+            <i :class="SECTION_ICONS[s]" aria-hidden="true"></i>
+            <span>{{ t(`settings.menu.${s}`) }}</span>
           </RouterLink>
           <!-- Under 功能: each group, to jump straight to it, with how many of its features are on. -->
           <template v-if="s === 'features' && modules">
@@ -57,50 +58,90 @@
           </FormPanel>
         </section>
 
-        <section v-show="section === 'connections'" class="card" aria-labelledby="twitch">
-          <h2 id="twitch" tabindex="-1">Twitch</h2>
-          <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
-          <!-- Not built yet: grey. -->
-          <p v-for="s in ['scopes', 'bot']" :key="s" class="off">
-            {{ t(`settings.twitch.${s}`) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
-          </p>
+        <section v-show="section === 'connections'" class="card conn-card" aria-labelledby="twitch">
+          <div class="card-head">
+            <span class="badge-icon tint-primary" aria-hidden="true"><i class="pi pi-twitch"></i></span>
+            <div class="card-title">
+              <h2 id="twitch" tabindex="-1">Twitch</h2>
+              <span v-if="overview" class="sub">
+                <span class="dot" :class="twitchDotClass" aria-hidden="true"></span>
+                {{ twitchSummary }}
+              </span>
+            </div>
+          </div>
+          <div class="card-body">
+            <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
+            <!-- Not built yet: grey. -->
+            <p v-for="s in ['scopes', 'bot']" :key="s" class="off">
+              {{ t(`settings.twitch.${s}`) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+            </p>
+          </div>
         </section>
 
-        <section v-show="section === 'connections'" class="card" aria-labelledby="streaming-software">
-          <h2 id="streaming-software">{{ t('settings.streamingSoftware') }}</h2>
-          <h3 id="obs" tabindex="-1">OBS Studio</h3>
-          <p v-if="obsHost.value.value === undefined">{{ loadText }}</p>
-          <div v-else class="stack">
-            <label for="obs-host">{{ t('settings.obs.host') }}</label>
-            <InputText
-              id="obs-host"
-              v-model="obsHost.value.value"
-              autocomplete="off"
-              @keydown.enter="obsHost.commit()"
-              @blur="obsHost.commit()"
+        <section v-show="section === 'connections'" class="card conn-card" aria-labelledby="obs">
+          <div class="card-head">
+            <span class="badge-icon tint-blue" aria-hidden="true"><i class="pi pi-desktop"></i></span>
+            <div class="card-title">
+              <h2 id="obs" tabindex="-1">OBS Studio</h2>
+              <span id="obs-status" class="sub">
+                <span class="dot" :class="obsDotClass" aria-hidden="true"></span>
+                {{ obsSummary }}
+              </span>
+            </div>
+            <Button
+              v-if="obsHost.value.value !== undefined && !obsEditing"
+              id="obs-edit"
+              ref="obsEditBtn"
+              class="push"
+              :label="t('settings.obs.edit')"
+              severity="secondary"
+              :aria-expanded="obsEditing"
+              aria-controls="obs-form"
+              @click="openObsEdit"
             />
-            <label for="obs-port">{{ t('settings.obs.port') }}</label>
-            <InputText
-              id="obs-port"
-              v-model="obsPort.value.value"
-              inputmode="numeric"
-              autocomplete="off"
-              @keydown.enter="obsPort.commit()"
-              @blur="obsPort.commit()"
-            />
-            <label for="obs-password">{{ t('settings.obs.password') }}</label>
-            <!-- Write-only: the Host never returns the password, only whether one is stored. -->
-            <InputText
-              id="obs-password"
-              v-model="obsPassword.value.value"
-              type="password"
-              autocomplete="new-password"
-              aria-describedby="obs-password-state"
-              @keydown.enter="commitPassword"
-              @blur="commitPassword"
-            />
-            <p id="obs-password-state">{{ t(passwordSet ? 'settings.obs.passwordSet' : 'settings.obs.passwordNone') }}</p>
-            <Button v-if="passwordSet" :label="t('settings.obs.removePassword')" outlined :disabled="busy" @click="removePassword" />
+          </div>
+          <p v-if="obsHost.value.value === undefined" class="card-body">{{ loadText }}</p>
+          <div v-else v-show="obsEditing" id="obs-form" class="obs-form" @keydown.escape.prevent.stop="closeObsEdit">
+            <div class="obs-rows">
+              <FormRow :label="t('settings.obs.host')" input-id="obs-host">
+                <InputText
+                  id="obs-host"
+                  v-model="obsHost.value.value"
+                  autocomplete="off"
+                  @keydown.enter="obsHost.commit()"
+                  @blur="obsHost.commit()"
+                />
+              </FormRow>
+              <FormRow :label="t('settings.obs.port')" input-id="obs-port">
+                <InputText
+                  id="obs-port"
+                  v-model="obsPort.value.value"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  @keydown.enter="obsPort.commit()"
+                  @blur="obsPort.commit()"
+                />
+              </FormRow>
+              <FormRow :label="t('settings.obs.password')" input-id="obs-password">
+                <!-- Write-only: the Host never returns the password, only whether one is stored. -->
+                <InputText
+                  id="obs-password"
+                  v-model="obsPassword.value.value"
+                  type="password"
+                  autocomplete="new-password"
+                  aria-describedby="obs-password-state"
+                  @keydown.enter="commitPassword"
+                  @blur="commitPassword"
+                />
+                <template #hint>
+                  <span id="obs-password-state">{{ t(passwordSet ? 'settings.obs.passwordSet' : 'settings.obs.passwordNone') }}</span>
+                </template>
+              </FormRow>
+            </div>
+            <div class="card-foot">
+              <Button v-if="passwordSet" :label="t('settings.obs.removePassword')" outlined :disabled="busy" @click="removePassword" />
+              <Button id="obs-done" class="push" :label="t('settings.obs.done')" @click="closeObsEdit" />
+            </div>
           </div>
         </section>
 
@@ -183,7 +224,7 @@ import FeatureList from './FeatureList.vue'
 import { FEATURES, type Service, isOn, shareModules, unusedBy } from './features'
 import { saveServices, useServices } from './services'
 import { GROUPS } from './tabs'
-import { errorToast } from './home'
+import { errorToast, useLiveEvents } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
 import { TEXT_SIZE, saveTextSize, useTextSize } from './textsize'
 
@@ -193,6 +234,16 @@ const toast = useToast()
 const route = useRoute()
 
 const SECTIONS = ['general', 'connections', 'features', 'profiles', 'hotkeys', 'debug', 'backup', 'about'] as const
+const SECTION_ICONS: Record<(typeof SECTIONS)[number], string> = {
+  general: 'pi pi-sliders-h',
+  connections: 'pi pi-link',
+  features: 'pi pi-th-large',
+  profiles: 'pi pi-clone',
+  hotkeys: 'pi pi-bolt',
+  debug: 'pi pi-wrench',
+  backup: 'pi pi-database',
+  about: 'pi pi-info-circle',
+}
 /** Sections of later phases: they say so and call nothing. */
 const SOON = ['profiles', 'hotkeys'] as const
 const section = computed(() => (route.params.section as string | undefined) ?? 'general')
@@ -214,7 +265,65 @@ const modules = ref<Schemas['ModuleState'][]>()
 const loadFailed = ref(false)
 const busy = ref(false)
 const passwordSet = ref(false)
+// The connection state follows the live stream; the first read covers the time before its snapshot.
+const loadedObsStatus = ref<Schemas['ObsStatusPayload']>()
+const live = useLiveEvents()
+const obsStatus = computed(() => live.value.obs ?? loadedObsStatus.value)
+const obsEditing = ref(false)
+const obsEditBtn = ref<{ $el: HTMLElement }>()
 let timer: number | undefined
+
+const twitchDotClass = computed(() => {
+  const s = overview.value?.status.state
+  if (s === 'signed_in') return 'dot-green'
+  if (s === 'pending') return 'dot-yellow'
+  if (s === 'failed') return 'dot-red'
+  return 'dot-muted'
+})
+
+const twitchSummary = computed(() => {
+  const o = overview.value
+  if (!o) return ''
+  if (!o.client_id) return t('home.status.twitch.setup')
+  if (o.status.state === 'signed_in') return `${t('twitch.signedIn')}${o.status.login}`
+  if (o.status.state === 'pending') return t('home.status.twitch.pending')
+  if (o.status.state === 'failed') return t('home.status.twitch.failed')
+  return t('home.status.twitch.signedOut')
+})
+
+const obsDotClass = computed(() => {
+  const s = obsStatus.value?.state
+  if (s === 'connected') return 'dot-green'
+  if (s === 'reconnecting') return 'dot-yellow'
+  if (s === 'error') return 'dot-red'
+  return 'dot-muted'
+})
+
+const obsSummary = computed(() => {
+  const host = hostSaved.value
+  const port = portSaved.value
+  const addr = host && port ? ` · ${host}:${port}` : ''
+  const s = obsStatus.value?.state
+  if (s === 'connected') return `${t('home.status.connected')}${addr}`
+  if (s === 'reconnecting') return `${t('home.status.obs.reconnecting')}${addr}`
+  if (s === 'error') return `${t('home.status.obs.error')}${addr}`
+  return `OBS Studio${addr}`
+})
+
+async function openObsEdit() {
+  obsEditing.value = true
+  await nextTick()
+  document.getElementById('obs-host')?.focus()
+}
+
+async function closeObsEdit() {
+  // Commit any still-focused field before collapsing; keep open if validation or save fails.
+  const ok = await obsHost.commit() && await obsPort.commit() && await commitPassword()
+  if (!ok) return
+  obsEditing.value = false
+  await nextTick()
+  obsEditBtn.value?.$el.focus()
+}
 
 const loadText = computed(() => t(loadFailed.value ? 'home.loadFailed' : 'app.loading'))
 
@@ -271,7 +380,9 @@ const obsPassword = useDrawerSetting(passwordSaved, async (password) => {
 })
 
 async function commitPassword() {
-  if (await obsPassword.commit()) passwordSaved.value = ''
+  const ok = await obsPassword.commit()
+  if (ok) passwordSaved.value = ''
+  return ok
 }
 
 // Generated at release build time (scripts/third-party-licenses.mjs) into the frontend's public folder, so dev
@@ -335,6 +446,7 @@ async function loadObs() {
   hostSaved.value = obs.host
   portSaved.value = String(obs.port)
   passwordSet.value = obs.password_set
+  loadedObsStatus.value = obs.status
 }
 
 // Each group loads on its own, so one failing endpoint (e.g. the Credential Manager behind OBS) does not hide
@@ -529,10 +641,19 @@ onBeforeUnmount(() => {
 }
 
 .settings-menu a {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   color: var(--p-text-muted-color);
   text-decoration: none;
+}
+
+.settings-menu a > i {
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .settings-menu a.sub {
@@ -635,6 +756,100 @@ p + .form-panel {
   padding: 1rem 1.25rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: 6px;
+}
+
+.conn-card {
+  max-width: 52rem;
+  padding: 0;
+  border: 0;
+  background: var(--p-surface-900);
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.badge-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.card-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-green {
+  background: var(--p-green-400);
+}
+
+.dot-yellow {
+  background: var(--p-yellow-400);
+}
+
+.dot-red {
+  background: var(--p-red-400);
+}
+
+.dot-muted {
+  background: var(--p-surface-500);
+}
+
+.push {
+  margin-left: auto;
+}
+
+.card-body {
+  padding: 0 1.25rem 1rem;
+}
+
+.obs-form {
+  border-top: 1px solid var(--p-surface-800);
+}
+
+.obs-rows {
+  container-type: inline-size;
+  padding: 0 1.25rem;
+}
+
+.card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--p-surface-800);
 }
 
 .card + .card {
