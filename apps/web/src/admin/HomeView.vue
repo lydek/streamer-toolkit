@@ -4,7 +4,7 @@
   </Teleport>
   <div class="layout">
     <main>
-      <header class="top">
+      <header ref="topEl" class="top">
         <!-- The app bar shows the name; the status lights and settings live there too. -->
         <h1 class="sr-only">{{ t('app.name') }}</h1>
         <div class="stage-switch">
@@ -15,7 +15,12 @@
             :option-label="(s: Stage) => t(`stage.${s}`)"
             :allow-empty="false"
             aria-labelledby="stage-heading"
-          />
+          >
+            <template #option="{ option }">
+              <i :class="STAGE_ICONS[option as Stage]" aria-hidden="true"></i>
+              <span>{{ t(`stage.${option}`) }}</span>
+            </template>
+          </SelectButton>
           <template v-if="stage.manual.value">
             <span class="manual">{{ t('stage.manual') }}</span>
             <Button :label="t('stage.backToAuto')" size="small" text @click="stage.backToAuto()" />
@@ -524,6 +529,18 @@ const simAlert = reactive({ kind: 'follow' as AlertKind, userName: '', amount: 5
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
+const topEl = ref<HTMLElement>()
+const STAGE_ICONS: Record<Stage, string> = {
+  before: 'pi pi-list-check',
+  live: 'pi pi-circle-fill stage-live',
+  after: 'pi pi-flag',
+}
+const setTopHeight = () => {
+  const el = topEl.value
+  const pinned = el && getComputedStyle(el).position === 'sticky'
+  document.documentElement.style.setProperty('--page-top-h', `${pinned ? el.offsetHeight : 0}px`)
+}
+const topObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(setTopHeight)
 // Saved tile order (`null`: never arranged). Only this page changes it, so it is read once with the modules.
 // Each stage's saved tile order (`null`: never arranged, its defaults).
 const savedTiles = ref<Record<Stage, string[] | null>>({ before: null, live: null, after: null })
@@ -979,6 +996,9 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  setTopHeight()
+  if (topEl.value) topObserver?.observe(topEl.value)
+  addEventListener('resize', setTopHeight)
   document.addEventListener('keydown', onKeydown, true)
   // Statuses and the template are polled, so a lost sign-in or a broken template edit shows up without a reload.
   // Until the first full load succeeds, retry all of it, so one startup failure does not leave the tiles empty.
@@ -992,6 +1012,9 @@ onMounted(async () => {
   await focusReturnTarget()
 })
 onBeforeUnmount(() => {
+  topObserver?.disconnect()
+  removeEventListener('resize', setTopHeight)
+  document.documentElement.style.removeProperty('--page-top-h')
   window.clearInterval(timer)
   document.removeEventListener('keydown', onKeydown, true)
 })
@@ -1082,6 +1105,29 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Same sticky rule as FullPage.vue: pinned under the app bar while the window is wide and tall enough. */
+@media (min-width: 601px) and (min-height: 560px) {
+  .top {
+    position: sticky;
+    top: var(--appbar-h, 0px);
+    z-index: 2;
+    margin-top: -0.5rem;
+    margin-bottom: 0;
+    padding: 0.5rem 0 0.75rem;
+    background: var(--p-surface-950);
+  }
+}
+
+.stage-switch :deep(.p-togglebutton-content) {
+  gap: 0.375rem;
+}
+
+.stage-switch :deep(.stage-live) {
+  color: var(--p-red-400);
+  font-size: 0.5rem;
 }
 
 .lights {
