@@ -906,16 +906,28 @@ pub(crate) async fn scene_placements(
 }
 
 /// The overlay path, with its query, that `url` opens on this Host (port `port`); `None` for any other address.
-/// Other addresses go no further than this: they may hold another service's token.
+/// Other addresses go no further than this: they may hold another service's token. An address with a user name or
+/// password is never ours.
 pub(crate) fn own_overlay(url: &str, port: u16) -> Option<String> {
     let uri: Uri = url.parse().ok()?;
     let ours = uri.scheme_str() == Some("http")
+        && uri.authority().is_some_and(|a| !a.as_str().contains('@'))
         && matches!(uri.host(), Some("127.0.0.1" | "localhost"))
         && uri.port_u16() == Some(port);
     let path = uri
         .path_and_query()
-        .filter(|p| ours && p.path().starts_with("/overlay/"))?;
+        .filter(|p| ours && overlay_path(p.path()))?;
     Some(path.as_str().to_owned())
+}
+
+/// A path under `/overlay/` that stays there wherever it is resolved: no `.` or `..` segment, no backslash, and no
+/// encoded `.`, `/` or backslash.
+fn overlay_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    path.starts_with("/overlay/")
+        && !path.contains('\\')
+        && !["%2e", "%2f", "%5c"].iter().any(|e| lower.contains(e))
+        && !path.split('/').any(|s| s == "." || s == "..")
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1030,11 +1042,12 @@ fn free_name(name: &str, taken: &[String]) -> String {
         .expect("an unused name")
 }
 
-/// An overlay path this Host serves, with its query: `/overlay/...`, no spaces or control characters.
+/// An overlay path this Host serves, with its query: exactly what [`own_overlay`] keeps of an address on this Host,
+/// so a source added with it is always recognised (and can be removed) again.
 fn valid_overlay(overlay: &str) -> bool {
-    overlay.starts_with("/overlay/")
-        && overlay.len() <= 200
+    overlay.len() <= 200
         && !overlay.chars().any(|c| c.is_whitespace() || c.is_control())
+        && own_overlay(&format!("http://127.0.0.1:1{overlay}"), 1).as_deref() == Some(overlay)
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1453,6 +1466,12 @@ mod tests {
             "https://streamlabs.com/alert-box/v3/secret-token",
             "",
             "not a url",
+            "http://user:pass@127.0.0.1:47810/overlay/chat/",
+            "http://127.0.0.1:47810/overlay/../admin/",
+            "http://127.0.0.1:47810/overlay/%2e%2e/admin/",
+            "http://127.0.0.1:47810/overlay/a%2Fb/",
+            "http://127.0.0.1:47810/overlay/a%5cb/",
+            "http://127.0.0.1:47810/overlay/./chat/",
         ] {
             assert_eq!(own(other), None, "{other}");
         }
@@ -1511,6 +1530,13 @@ mod tests {
             "/overlay/chat/ x",
             "/overlay/\nchat",
             "overlay/chat/",
+            "/overlay/../admin/",
+            "/overlay/%2e%2e/admin/",
+            "/overlay/a%2Fb/",
+            "/overlay/a\\b/",
+            "/overlay/./chat/",
+            "/overlay/chat/#top",
+            "/overlay/chat/?a=1#top",
         ] {
             assert!(!valid_overlay(bad), "{bad}");
         }
