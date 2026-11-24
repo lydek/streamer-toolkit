@@ -135,7 +135,12 @@ impl Clock {
         self.seen == Seen::Live && !self.marathon.paused && self.marathon.remaining_ms > 0
     }
 
+    /// Before the first status the anchor stays: it is the last time the stream was seen live, which the first
+    /// status still needs to count the time the toolkit was closed.
     pub(crate) fn settle(&mut self, now: DateTime<Utc>) {
+        if self.seen == Seen::Unknown {
+            return;
+        }
         let counting = self.running();
         self.marathon.settle(now, counting);
     }
@@ -166,12 +171,22 @@ impl Clock {
         self.seen = Seen::Offline;
     }
 
+    /// A pause or resume before the first status gives up the time the toolkit was closed: whether the stream
+    /// stayed live is not known yet, so none of it is counted.
     pub(crate) fn pause(&mut self, paused: bool, now: DateTime<Utc>) {
+        if self.seen == Seen::Unknown {
+            self.marathon.settle(now, false);
+        }
         self.settle(now);
         self.marathon.paused = paused;
     }
 
+    /// Before the first status, time added to a clock already at 0 starts from now: the closed time had nothing
+    /// left to take, so it never takes from what is added.
     pub(crate) fn add(&mut self, ms: i64, now: DateTime<Utc>) {
+        if self.seen == Seen::Unknown && self.marathon.remaining_ms == 0 {
+            self.marathon.settle(now, false);
+        }
         self.settle(now);
         self.marathon.add_ms(ms);
     }
@@ -303,6 +318,60 @@ mod tests {
         assert_eq!(minutes(&restarted), 50);
         restarted.settle(at(90));
         assert_eq!(minutes(&restarted), 50);
+    }
+
+    #[test]
+    fn reads_and_changes_before_the_first_status_keep_the_closed_time() {
+        // Closed during s1 at minute 10; restarted at 40, read and given 5 minutes before the first status at 45.
+        let mut c = clock(60);
+        c.live("s1", at(0), at(0));
+        c.live("s1", at(0), at(10));
+        let saved = c.marathon.clone();
+        let mut restarted = Clock::new(saved.clone());
+        restarted.settle(at(40));
+        restarted.add(5 * MINUTE_MS, at(42));
+        assert_eq!(restarted.marathon.anchor, at(10));
+        restarted.live("s1", at(0), at(45));
+        assert_eq!(
+            minutes(&restarted),
+            20,
+            "50 + 5, less the 35 minutes since the last sighting"
+        );
+
+        // A new stream counts from its start, also after a read.
+        let mut restarted = Clock::new(saved.clone());
+        restarted.settle(at(40));
+        restarted.live("s2", at(50), at(55));
+        assert_eq!(minutes(&restarted), 45);
+
+        // Offline at the first status: nothing counted.
+        let mut restarted = Clock::new(saved.clone());
+        restarted.settle(at(40));
+        restarted.offline(at(41));
+        assert_eq!(minutes(&restarted), 50);
+
+        // At 0 when closed: time added before the first status is not taken by the closed time.
+        let mut empty = Clock::new(Marathon {
+            remaining_ms: 0,
+            ..saved.clone()
+        });
+        empty.add(10 * MINUTE_MS, at(40));
+        empty.live("s1", at(0), at(41));
+        assert_eq!(minutes(&empty), 9);
+
+        // Paused before closing: a restart counts nothing.
+        let mut paused = c.clone();
+        paused.pause(true, at(10));
+        let mut restarted = Clock::new(paused.marathon);
+        restarted.live("s1", at(0), at(40));
+        assert_eq!((minutes(&restarted), restarted.running()), (50, false));
+
+        // Paused and resumed before the first status: the closed time is given up, counting resumes from there.
+        let mut restarted = Clock::new(saved);
+        restarted.pause(true, at(40));
+        restarted.pause(false, at(41));
+        restarted.live("s1", at(0), at(46));
+        assert_eq!(minutes(&restarted), 45);
     }
 
     #[test]
