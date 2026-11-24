@@ -26,11 +26,11 @@
         <label for="rf-to">{{ t('redemption.to') }}</label>
         <InputText id="rf-to" v-model="form.to" type="date" />
       </div>
-      <div class="field">
+      <div class="field grow">
         <label for="rf-viewer">{{ t('redemption.viewer') }}</label>
         <InputText id="rf-viewer" v-model="form.viewer" autocomplete="off" />
       </div>
-      <div class="field">
+      <div class="field grow">
         <label for="rf-reward">{{ t('redemption.reward') }}</label>
         <InputText id="rf-reward" v-model="form.reward" autocomplete="off" />
       </div>
@@ -47,7 +47,7 @@
       </div>
       <div class="buttons">
         <Button type="submit" :label="t('redemption.apply')" icon="pi pi-filter" />
-        <Button type="button" :label="t('redemption.clear')" severity="secondary" outlined @click="clear" />
+        <Button type="button" :label="t('redemption.clear')" severity="secondary" text @click="clear" />
       </div>
     </form>
 
@@ -148,30 +148,10 @@ useLiveEvents(2000, (msg) => {
 </script>
 
 <style scoped>
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 .field :deep(.p-inputtext),
 .field :deep(.p-select) {
-  min-width: 10rem;
+  min-width: 9rem;
   max-width: 100%;
-}
-
-.buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 .filters-toggle {
@@ -182,7 +162,7 @@ useLiveEvents(2000, (msg) => {
 @container view (max-width: 45rem) {
   .filters-toggle {
     display: inline-flex;
-    margin-bottom: 0.75rem;
+    margin-top: 0.75rem;
   }
 
   .filters:not(.open) {
@@ -192,6 +172,11 @@ useLiveEvents(2000, (msg) => {
   .filters {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .grow {
+    flex: none;
+    max-width: none;
   }
 
   .field :deep(.p-inputtext),
