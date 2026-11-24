@@ -146,7 +146,7 @@ describe('MusicPage', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(post).toHaveBeenCalledWith('/api/admin/music/playlists', { body: { name: '遊戲 BGM' } })
-    expect(wrapper.findAll('li.playlist')).toHaveLength(2)
+    expect(wrapper.findAll('tbody.playlist')).toHaveLength(2)
 
     const tracks = await page('library')
     const select = tracks.findAllComponents(MultiSelect)[1]
@@ -336,9 +336,9 @@ describe('MusicPage scene rules', () => {
     const playlists = await page('playlists')
     const deleteIn = (wrapper: typeof playlists, row: string) =>
       wrapper.get(row).findAll('button').find((b) => b.text() === t('music.delete'))!.trigger('click')
-    await deleteIn(playlists, 'li.playlist')
-    expect(playlists.get('li.playlist').text()).toContain(t('music.playlistUsedBy'))
-    expect(playlists.get('li.playlist .confirm li').text()).toBe('聊天')
+    await deleteIn(playlists, 'tbody.playlist')
+    expect(playlists.get('tbody.playlist').text()).toContain(t('music.playlistUsedBy'))
+    expect(playlists.get('tbody.playlist .confirm li').text()).toBe('聊天')
     const tracks = await page('library')
     await deleteIn(tracks, 'li.track')
     expect(tracks.get('li.track').text()).toContain(t('music.trackUsedBy'))

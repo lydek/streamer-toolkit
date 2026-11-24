@@ -32,9 +32,23 @@
       />
     </section>
 
-    <section v-if="part === 'library'" class="stack" aria-labelledby="music-library">
-      <h2 id="music-library">{{ t('music.library') }}</h2>
-      <FilePick ref="pick" input-id="music-file" :label="t('music.file')" icon="pi pi-plus" multiple accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" :disabled="busy" @pick="choose" />
+    <section v-if="part === 'library'" class="section" aria-labelledby="music-library">
+      <div class="sec-head lib-head">
+        <h2 id="music-library" class="sr-only">{{ t('music.library') }}</h2>
+        <span class="muted">{{ t('music.librarySummary', { n: library?.tracks.length ?? 0 }) }}</span>
+        <div class="push">
+          <FilePick
+            ref="pick"
+            input-id="music-file"
+            :label="t('music.file')"
+            icon="pi pi-plus"
+            multiple
+            accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg"
+            :disabled="busy"
+            @pick="choose"
+          />
+        </div>
+      </div>
       <ul v-if="importErrors.length" role="alert" class="errors">
         <li v-for="e in importErrors" :key="e">{{ e }}</li>
       </ul>
@@ -42,7 +56,7 @@
       <p v-if="failed" role="alert">{{ failed }}</p>
       <p v-else-if="!library">{{ t('app.loading') }}</p>
       <p v-else-if="library.tracks.length === 0">{{ t('music.empty') }}</p>
-      <ul v-else class="rows">
+      <ul v-else class="sound-list">
         <MusicRow
           v-for="track in library.tracks"
           :key="track.id"
@@ -55,25 +69,50 @@
       </ul>
     </section>
 
-    <section v-if="part === 'playlists'" class="stack" aria-labelledby="music-playlists">
-      <h2 id="music-playlists">{{ t('music.playlists') }}</h2>
-      <form class="create" @submit.prevent="create">
+    <section v-if="part === 'playlists'" class="section" aria-labelledby="music-playlists">
+      <h2 id="music-playlists" class="sr-only">{{ t('music.playlists') }}</h2>
+      <div class="tbl-wrap playlists-wrap">
+        <table v-if="library?.playlists.length" class="table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t('music.playlists') }}</th>
+              <th scope="col">{{ t('music.songsCol') }}</th>
+              <th scope="col">{{ t('music.usedInCol') }}</th>
+              <th scope="col"><span class="sr-only">{{ t('screenTools.media.actions') }}</span></th>
+            </tr>
+          </thead>
+          <PlaylistRow
+            v-for="p in library.playlists"
+            :key="p.id"
+            :playlist="p"
+            @changed="load"
+            @deleted="playlistDeleted"
+            @error="report"
+          />
+        </table>
+        <p v-else-if="library" class="empty-cell">{{ t('music.noPlaylists') }}</p>
+        <div class="tbl-foot">
+          <span class="muted">{{ t('music.playlistFootHint') }}</span>
+          <Button
+            ref="addPlaylistBtn"
+            :label="t('music.addPlaylist')"
+            icon="pi pi-plus"
+            text
+            :aria-expanded="addingPlaylist"
+            @click="toggleAddPlaylist"
+          />
+        </div>
+      </div>
+      <form v-show="addingPlaylist" class="add-panel" @submit.prevent="create">
         <div class="field">
           <label for="new-playlist">{{ t('music.newPlaylist') }}</label>
           <InputText id="new-playlist" v-model="newName" autocomplete="off" maxlength="100" />
         </div>
-        <Button type="submit" :label="t('music.addPlaylist')" icon="pi pi-plus" :disabled="!newName.trim() || creating" />
+        <div class="form-actions">
+          <Button type="submit" :label="t('music.addPlaylist')" icon="pi pi-plus" :disabled="!newName.trim() || creating" />
+          <Button :label="t('music.cancel')" text @click="closeAddPlaylist" />
+        </div>
       </form>
-      <ul v-if="library?.playlists.length" class="rows">
-        <PlaylistRow
-          v-for="p in library.playlists"
-          :key="p.id"
-          :playlist="p"
-          @changed="load"
-          @deleted="playlistDeleted"
-          @error="report"
-        />
-      </ul>
     </section>
   </FullPage>
 </template>
@@ -82,7 +121,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
@@ -107,6 +146,22 @@ const importErrors = ref<string[]>([])
 const busy = ref(false)
 const newName = ref('')
 const creating = ref(false)
+const addingPlaylist = ref(false)
+const addPlaylistBtn = ref<{ $el: HTMLElement }>()
+
+async function toggleAddPlaylist() {
+  addingPlaylist.value = !addingPlaylist.value
+  if (addingPlaylist.value) {
+    await nextTick()
+    document.getElementById('new-playlist')?.focus()
+  }
+}
+
+async function closeAddPlaylist() {
+  addingPlaylist.value = false
+  await nextTick()
+  addPlaylistBtn.value?.$el.focus()
+}
 
 const live = useLiveEvents()
 
@@ -178,6 +233,7 @@ async function create() {
   try {
     await api(client.POST('/api/admin/music/playlists', { body: { name: newName.value } }))
     newName.value = ''
+    void closeAddPlaylist()
     await load()
   } catch (e) {
     report(e)
@@ -196,29 +252,17 @@ async function deleted(track: Schemas['Track']) {
 async function playlistDeleted(p: Schemas['MusicPlaylist']) {
   toast.add(successToast(t('music.deleted', { title: p.name })))
   await load()
-  await keepFocus(() => document.getElementById('new-playlist') ?? undefined)
+  await keepFocus(() => addPlaylistBtn.value?.$el)
 }
 
 void refresh()
 </script>
 
 <style scoped>
-.copy {
-  align-self: flex-start;
-}
-
-.rows,
 .errors {
   list-style: none;
   padding: 0;
   margin: 0;
-}
-
-.create {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 1rem;
 }
 
 .field {
@@ -263,5 +307,50 @@ void refresh()
 .muted {
   color: var(--p-text-muted-color);
   font-size: 0.875rem;
+}
+
+.lib-head {
+  align-items: center;
+}
+
+.push {
+  margin-left: auto;
+}
+
+.sound-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.playlists-wrap {
+  max-width: 56rem;
+  margin-top: 0;
+}
+
+.empty-cell {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.add-panel {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  max-width: 56rem;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 </style>
