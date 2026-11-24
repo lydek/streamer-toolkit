@@ -15,18 +15,21 @@
             @change="choose(id)"
           />
           {{ label(id) }}
+          <span v-if="selected === id" class="applied">{{ t('preview.applied') }}</span>
         </span>
         <!-- Templates never render in the admin window. Each preview is the overlay in a sandbox without
              allow-same-origin: its origin is `null`, so it gets no IPC and no token, and data arrives by postMessage. -->
-        <iframe
-          ref="frames"
-          class="preview"
-          sandbox="allow-scripts"
-          tabindex="-1"
-          :src="`/overlay/${overlay}/?preview&template=${id}`"
-          :title="label(id)"
-          @load="post(start(), $event.target as HTMLIFrameElement)"
-        ></iframe>
+        <span class="frame" :style="{ '--scale': scale }">
+          <iframe
+            ref="frames"
+            class="preview"
+            sandbox="allow-scripts"
+            tabindex="-1"
+            :src="`/overlay/${overlay}/?preview&template=${id}`"
+            :title="label(id)"
+            @load="post(start(), $event.target as HTMLIFrameElement)"
+          ></iframe>
+        </span>
       </label>
     </div>
   </section>
@@ -54,6 +57,8 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+// Chat is a narrow overlay and fits at half size; alerts are made for the whole 1920×1080 scene.
+const scale = props.overlay === 'alerts' ? 0.35 : 0.5
 const frames = ref<HTMLIFrameElement[]>([])
 const selected = ref<string>()
 const templateError = ref<string | null>(null)
@@ -137,22 +142,45 @@ onMounted(refresh)
 
 .options {
   display: grid;
-  /* Small previews, so the templates fit in one row. */
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
   gap: 1rem;
 }
 
 .option {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: var(--p-surface-900);
   cursor: pointer;
+}
+
+.option:hover {
+  background: var(--p-surface-800);
+}
+
+.option:has(input:checked) {
+  border-color: var(--p-primary-color);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 2px;
 }
 
 .choice {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-weight: 600;
+}
+
+.applied {
+  margin-left: auto;
+  color: var(--p-primary-color);
+  font-size: 0.8125rem;
+  font-weight: 400;
 }
 
 .choice input {
@@ -162,18 +190,29 @@ onMounted(refresh)
   accent-color: var(--p-primary-color);
 }
 
-/* OBS browser sources are transparent; a plain dark box stands in for the scene. */
-.preview {
-  width: 100%;
-  height: 14rem;
-  border: 1px solid var(--p-surface-500);
-  border-radius: 6px;
-  background: var(--p-surface-950);
-  pointer-events: none;
+/* OBS browser sources are transparent: a dark checkerboard stands in for the scene, 16:9 like it. */
+.frame {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 4px;
+  background: repeating-conic-gradient(#1b1d2a 0 25%, #222433 0 50%) 0 0 / 1rem 1rem;
 }
 
-.option:has(input:checked) .preview {
-  border-color: var(--p-primary-color);
-  outline: 2px solid var(--p-primary-color);
+/* The overlay at its own sizes in a frame `1 / --scale` times bigger, scaled down to fit the card whole.
+   Its color scheme matches the overlay's, or the browser paints the frame opaque white behind it. */
+.preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% / var(--scale));
+  height: calc(100% / var(--scale));
+  border: 0;
+  background: transparent;
+  color-scheme: normal;
+  transform: scale(var(--scale));
+  transform-origin: 0 0;
+  pointer-events: none;
 }
 </style>
