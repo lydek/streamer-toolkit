@@ -80,6 +80,7 @@
     "stream": "{day} 的直播",
     "offline": "{day}（沒有直播）",
     "search": "搜尋訊息",
+    "count": "{n} 則",
     "hideBots": "隱藏機器人",
     "openTwitch": "在 Twitch 開啟",
     "filters": "篩選",
