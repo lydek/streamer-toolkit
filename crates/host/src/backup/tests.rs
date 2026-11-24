@@ -1,4 +1,6 @@
 use std::{
+    alloc::{GlobalAlloc, Layout, System},
+    cell::Cell,
     io::Cursor,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -973,6 +975,208 @@ fn room_needs_the_bytes_free_and_lets_an_unknown_amount_through() {
     assert!(room(10, Some(10)).is_ok());
     assert!(matches!(room(11, Some(10)), Err(BackupError::NoSpace(11))));
     assert!(room(u64::MAX, None).is_ok());
+}
+
+/// The names in `cache/`, where an export writes its snapshot and its file until they are dropped.
+fn cache_files(dir: &Path) -> Vec<String> {
+    let mut names: Vec<_> = fs::read_dir(dir.join("cache"))
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn an_export_above_the_caps_or_without_room_is_refused_and_leaves_nothing() {
+    let (dir, pool) = sample_folder("export-limits").await;
+    // The manifest is one more entry than the files it lists.
+    let files = manifest_of(&export(&pool, &dir, "1.2.3").await.unwrap())
+        .files
+        .len();
+    let before = cache_files(&dir);
+    let cases = [
+        (
+            "as many files as the cap",
+            Limits {
+                files,
+                ..Limits::REAL
+            },
+            "backup.too_large",
+        ),
+        (
+            "more bytes than the cap",
+            Limits {
+                bytes: 1,
+                ..Limits::REAL
+            },
+            "backup.too_large",
+        ),
+        (
+            "no room",
+            Limits {
+                free_space: |_| Some(0),
+                ..Limits::REAL
+            },
+            "backup.no_space",
+        ),
+    ];
+    for (label, limits, code) in cases {
+        let e = export_file(&pool, &dir, "1.2.3", &BOTH, limits)
+            .await
+            .unwrap_err();
+        assert!(e.to_string().starts_with(code), "{label}: {e}");
+        assert_eq!(cache_files(&dir), before, "{label}");
+    }
+    let one_more = Limits {
+        files: files + 1,
+        ..Limits::REAL
+    };
+    drop(
+        export_file(&pool, &dir, "1.2.3", &BOTH, one_more)
+            .await
+            .unwrap(),
+    );
+
+    // The admin API reads the disk the state names: 507 with the bytes needed.
+    let app = routes(backup_state(&dir, pool.clone(), Arc::default(), |_| {
+        Some(0)
+    }));
+    let (status, body) = send(&app, "GET", "/api/admin/backup", Body::empty()).await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE);
+    assert_eq!(body["code"], "backup.no_space");
+    assert!(body["needed"].as_u64().unwrap() > 0, "{body}");
+    assert_eq!(cache_files(&dir), before);
+    pool.close().await;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_restore_without_room_or_above_the_caps_for_the_current_data_changes_nothing() {
+    let (dir, pool) = sample_folder("restore-limits").await;
+    let bytes = export(&pool, &dir, "1.2.3").await.unwrap();
+    change_everything(&dir, &pool).await;
+    pool.close().await;
+    let before = state_of(&dir).await;
+    let saved = || {
+        fs::read_dir(dir.join(db::BACKUP_DIR))
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains("before-restore-"))
+            .count()
+    };
+    let cases = [
+        (
+            "no room",
+            Limits {
+                free_space: |_| Some(0),
+                ..Limits::REAL
+            },
+            "backup.no_space",
+        ),
+        (
+            "too many files",
+            Limits {
+                files: 1,
+                ..Limits::REAL
+            },
+            "backup.too_large",
+        ),
+    ];
+    for (label, limits, code) in cases {
+        stage_bytes(&dir, bytes.clone()).await.unwrap();
+        fs::write(dir.join(PENDING), b"id").unwrap();
+        let e = apply_pending_within(&dir, "1.2.4", limits)
+            .await
+            .unwrap_err();
+        assert!(e.to_string().starts_with(code), "{label}: {e}");
+        assert_eq!(state_of(&dir).await, before, "{label}");
+        assert!(leftovers(&dir).is_empty(), "{label}: {:?}", leftovers(&dir));
+        assert_eq!(saved(), 0, "{label}");
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Counts the bytes each thread holds, so a test can see how far one call on its thread makes that grow.
+struct PerThread;
+
+thread_local! {
+    static HELD: Cell<usize> = const { Cell::new(0) };
+    static PEAK: Cell<usize> = const { Cell::new(0) };
+}
+
+fn hold(change: isize) {
+    // Not reachable while the thread ends; freeing memory another thread took never goes below zero.
+    let _ = HELD.try_with(|held| {
+        let now = held.get().saturating_add_signed(change);
+        held.set(now);
+        let _ = PEAK.try_with(|peak| peak.set(peak.get().max(now)));
+    });
+}
+
+// SAFETY: every call goes to `System` unchanged; only thread-local counters (no allocation) are added.
+unsafe impl GlobalAlloc for PerThread {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let ptr = unsafe { System.alloc(layout) };
+        if !ptr.is_null() {
+            hold(layout.size() as isize);
+        }
+        ptr
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        let ptr = unsafe { System.alloc_zeroed(layout) };
+        if !ptr.is_null() {
+            hold(layout.size() as isize);
+        }
+        ptr
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) };
+        hold(-(layout.size() as isize));
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        let new = unsafe { System.realloc(ptr, layout, new_size) };
+        if !new.is_null() {
+            hold(new_size as isize - layout.size() as isize);
+        }
+        new
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: PerThread = PerThread;
+
+#[tokio::test]
+async fn unpacking_a_32_mib_file_holds_a_small_fixed_amount_of_memory() {
+    const BIG: usize = 32 << 20;
+    let (dir, pool) = sample_folder("memory").await;
+    fs::write(dir.join("media/big.webm"), vec![7u8; BIG]).unwrap();
+    let bytes = export_of(&pool, &dir, "1.2.3", &[Content::Media])
+        .await
+        .unwrap();
+    pool.close().await;
+    let file = tempfile::NamedTempFile::new().unwrap();
+    fs::write(file.path(), &bytes).unwrap();
+    drop(bytes);
+    let staging = dir.join(STAGING_DIR);
+
+    // `extract` runs on this thread: what it holds at most, over what was held before.
+    let start = HELD.with(Cell::get);
+    PEAK.with(|peak| peak.set(start));
+    extract(file.path(), &staging).unwrap();
+    let grew = PEAK.with(Cell::get) - start;
+    assert_eq!(
+        fs::metadata(staging.join("media/big.webm")).unwrap().len(),
+        BIG as u64
+    );
+    assert!(grew < 4 << 20, "{grew} bytes held while unpacking {BIG}");
+    let _ = fs::remove_dir_all(dir);
 }
 
 /// The `before-restore-*.stbackup` a restore saved.
