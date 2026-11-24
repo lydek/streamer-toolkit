@@ -109,8 +109,8 @@ export const GROUPS: TabGroup[] = [
       id: 'points',
       pages: [
         { ...soon('/rewards', 'rewards', 'pi pi-star', true), tabLabel: 'nav.pageTabs.rewards' },
-        { path: '/redemptions', label: 'modules.names.redemption', icon: 'pi pi-gift' },
         { path: '/reward-playback', label: 'pages.rewardPlayback.name', icon: 'pi pi-play', tint: 'yellow' },
+        { path: '/redemptions', label: 'modules.names.redemption', icon: 'pi pi-gift' },
       ],
     },
     {
@@ -147,9 +147,9 @@ export const GROUPS: TabGroup[] = [
       pages: [
         { path: '/screen-tools', label: 'modules.names.screen-tools', icon: 'pi pi-moon', tabLabel: 'nav.pageTabs.breakCard' },
         { path: '/warnings', label: 'pages.warnings.name', icon: 'pi pi-exclamation-triangle' },
-        { path: '/overlay-look', label: 'pages.overlayLook.name', icon: 'pi pi-palette', tint: 'primary' },
         soon('/goals', 'goals', 'pi pi-flag'),
         soon('/captions', 'captions', 'pi pi-align-left'),
+        { path: '/overlay-look', label: 'pages.overlayLook.name', icon: 'pi pi-palette', tint: 'primary' },
       ],
     },
     {

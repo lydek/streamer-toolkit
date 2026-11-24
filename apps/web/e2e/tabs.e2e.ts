@@ -38,7 +38,7 @@ test('every group, category and page is one click away, and the current one is m
   await pageTab(page, 'checkin', zh.pages.cardStyle.name).click()
   await expect(page).toHaveURL(/\/admin\/card-style$/)
   await subTab(page, zh.nav.categories.points).click()
-  await expect(page).toHaveURL(/\/admin\/redemptions$/)
+  await expect(page).toHaveURL(/\/admin\/reward-playback$/)
   await subTab(page, zh.nav.categories.checkin).click()
   await expect(page).toHaveURL(/\/admin\/card-style$/)
 
