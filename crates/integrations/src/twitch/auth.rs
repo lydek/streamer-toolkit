@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use bytes::Bytes;
@@ -16,6 +16,13 @@ use crate::{secrets::SecretStore, tls::HttpsClient};
 
 pub const OAUTH_BASE: &str = "https://id.twitch.tv/oauth2";
 const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+/// How long a device code can be used (Twitch documents 30 minutes).
+const DEVICE_CODE_LIFETIME: Duration = Duration::from_secs(30 * 60);
+/// How long to poll for a device code: what Twitch says, but never longer than a device code lives.
+fn code_lifetime(expires_in_secs: u64) -> Duration {
+    Duration::from_secs(expires_in_secs).min(DEVICE_CODE_LIFETIME)
+}
+
 /// A Twitch request with no answer by then fails as unreachable, so a dead connection (sleep, a network switch)
 /// never holds the refresh lock or EventSub forever.
 pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -251,6 +258,14 @@ impl TwitchAuth {
         if self.0.client_id.is_empty() {
             return Err(AuthError::ClientIdRequired);
         }
+        // This attempt's number, taken before asking Twitch, so a logout or a newer login meanwhile wins over its
+        // answer; the code an older attempt showed goes away at once.
+        let generation = {
+            let mut state = self.0.state.lock().unwrap();
+            state.generation += 1;
+            state.status_override = None;
+            state.generation
+        };
         let scope_list = scopes.join(" ");
         let (status, body) = self
             .form(
@@ -268,15 +283,17 @@ impl TwitchAuth {
             expires_in_secs: device.expires_in,
         };
 
-        let generation = {
+        {
             let mut state = self.0.state.lock().unwrap();
-            state.generation += 1;
+            if state.generation != generation {
+                // Superseded while Twitch answered: nothing shows this code or asks for its token.
+                return Err(AuthError::SignInExpired);
+            }
             state.status_override = Some(AuthStatus::Pending {
                 user_code: device.user_code,
                 verification_uri: device.verification_uri,
             });
-            state.generation
-        };
+        }
         let auth = self.clone();
         tokio::spawn(async move {
             let result = auth
@@ -306,11 +323,22 @@ impl TwitchAuth {
         expires_in_secs: u64,
         generation: u64,
     ) -> Result<(), AuthError> {
-        let deadline = Instant::now() + Duration::from_secs(expires_in_secs);
+        let deadline = tokio::time::Instant::now() + code_lifetime(expires_in_secs);
         // Never faster than once a second, whatever Twitch sends.
         let interval = Duration::from_secs(interval_secs.max(1));
-        while Instant::now() < deadline {
-            tokio::time::sleep(interval).await;
+        loop {
+            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            tokio::time::sleep(interval.min(left)).await;
+            // Superseded by a logout or a newer login: no more questions to Twitch.
+            if self.0.state.lock().unwrap().generation != generation {
+                return Ok(());
+            }
+            if tokio::time::Instant::now() >= deadline {
+                break;
+            }
             let fields = [
                 ("client_id", self.0.client_id.as_str()),
                 ("scopes", scopes),
@@ -911,5 +939,204 @@ mod tests {
             AuthError::Unreachable
         );
         assert!(started.elapsed() >= REQUEST_TIMEOUT);
+    }
+
+    /// Fake id.twitch.tv for sign-in attempts: each `/device` gets the next device code (`dev1`, `dev2`, …) and
+    /// can be held or refused; `/token` stays pending and counts the polls per device code.
+    #[derive(Clone, Default)]
+    struct Attempts {
+        devices: Arc<AtomicU32>,
+        polls: Arc<std::sync::Mutex<HashMap<String, u32>>>,
+        /// `/device` answers only once this is notified.
+        hold: Option<Arc<tokio::sync::Notify>>,
+        /// Notified as each `/device` request arrives.
+        arrived: Arc<tokio::sync::Notify>,
+        /// `/device` from the second request on answers 500.
+        refuse_after_first: bool,
+        expires_in: u64,
+        interval: u64,
+    }
+
+    impl Attempts {
+        fn polls(&self, device_code: &str) -> u32 {
+            self.polls
+                .lock()
+                .unwrap()
+                .get(device_code)
+                .copied()
+                .unwrap_or(0)
+        }
+    }
+
+    async fn attempts_oauth(a: Attempts) -> String {
+        let device = {
+            let a = a.clone();
+            move || {
+                let a = a.clone();
+                async move {
+                    a.arrived.notify_one();
+                    if let Some(hold) = &a.hold {
+                        hold.notified().await;
+                    }
+                    let n = a.devices.fetch_add(1, Ordering::SeqCst) + 1;
+                    if a.refuse_after_first && n > 1 {
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                    Json(
+                        json!({"device_code": format!("dev{n}"), "user_code": format!("CODE-{n}"),
+                        "verification_uri": "https://www.twitch.tv/activate",
+                        "expires_in": a.expires_in, "interval": a.interval}),
+                    )
+                    .into_response()
+                }
+            }
+        };
+        let token = move |Form(f): Form<HashMap<String, String>>| {
+            let a = a.clone();
+            async move {
+                let code = f.get("device_code").cloned().unwrap_or_default();
+                *a.polls.lock().unwrap().entry(code).or_default() += 1;
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"message":"authorization_pending"})),
+                )
+            }
+        };
+        let app = Router::new()
+            .route("/device", post(device))
+            .route("/token", post(token));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    /// Waits (up to 10 s) until `done`.
+    async fn until(what: &str, done: impl Fn() -> bool) {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !done() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for {what}"));
+    }
+
+    fn pending_code(auth: &TwitchAuth) -> Option<String> {
+        match auth.status() {
+            AuthStatus::Pending { user_code, .. } => Some(user_code),
+            _ => None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_logout_while_twitch_answers_the_device_request_wins() {
+        let hold = Arc::new(tokio::sync::Notify::new());
+        let fake = Attempts {
+            hold: Some(hold.clone()),
+            expires_in: 30,
+            ..Attempts::default()
+        };
+        let auth = auth(
+            &attempts_oauth(fake.clone()).await,
+            Arc::new(MemoryStore::default()),
+        );
+        let started = tokio::spawn({
+            let auth = auth.clone();
+            async move { auth.start_login(&[]).await }
+        });
+        fake.arrived.notified().await;
+        auth.logout().unwrap();
+        hold.notify_one();
+        assert!(matches!(
+            started.await.unwrap(),
+            Err(AuthError::SignInExpired)
+        ));
+        assert_eq!(auth.status(), AuthStatus::SignedOut);
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert_eq!(fake.polls("dev1"), 0, "never polled");
+    }
+
+    #[tokio::test]
+    async fn a_newer_sign_in_stops_the_older_one_and_a_failed_one_leaves_no_old_code() {
+        let fake = Attempts {
+            expires_in: 30,
+            ..Attempts::default()
+        };
+        let auth = auth(
+            &attempts_oauth(fake.clone()).await,
+            Arc::new(MemoryStore::default()),
+        );
+        auth.start_login(&[]).await.unwrap();
+        until("a first poll", || fake.polls("dev1") >= 1).await;
+        auth.start_login(&[]).await.unwrap();
+        assert_eq!(pending_code(&auth).as_deref(), Some("CODE-2"));
+        let first = fake.polls("dev1");
+        until("the newer sign-in polling twice", || {
+            fake.polls("dev2") >= 2
+        })
+        .await;
+        assert!(
+            fake.polls("dev1") <= first + 1,
+            "the older sign-in stopped asking (one poll may already have been on its way)"
+        );
+
+        // A newer sign-in whose device request fails: the older code is not left showing.
+        let refusing = Attempts {
+            refuse_after_first: true,
+            expires_in: 30,
+            ..Attempts::default()
+        };
+        let auth = super::tests::auth(
+            &attempts_oauth(refusing).await,
+            Arc::new(MemoryStore::default()),
+        );
+        auth.start_login(&[]).await.unwrap();
+        assert_eq!(pending_code(&auth).as_deref(), Some("CODE-1"));
+        assert!(matches!(
+            auth.start_login(&[]).await,
+            Err(AuthError::SignInRefused)
+        ));
+        assert_eq!(pending_code(&auth), None);
+    }
+
+    #[tokio::test]
+    async fn an_expired_code_is_never_polled_and_a_huge_lifetime_is_capped() {
+        // Expires before the first poll would go out.
+        let fake = Attempts {
+            expires_in: 1,
+            interval: 5,
+            ..Attempts::default()
+        };
+        let auth = auth(
+            &attempts_oauth(fake.clone()).await,
+            Arc::new(MemoryStore::default()),
+        );
+        auth.start_login(&[]).await.unwrap();
+        until("the code to expire", || {
+            matches!(auth.status(), AuthStatus::Failed { .. })
+        })
+        .await;
+        assert_eq!(fake.polls("dev1"), 0);
+        assert_eq!(
+            auth.status(),
+            AuthStatus::Failed {
+                code: "twitch.sign_in_expired".into()
+            }
+        );
+
+        let huge = Attempts {
+            expires_in: u64::MAX,
+            ..Attempts::default()
+        };
+        let auth = super::tests::auth(
+            &attempts_oauth(huge.clone()).await,
+            Arc::new(MemoryStore::default()),
+        );
+        auth.start_login(&[]).await.unwrap();
+        until("a poll", || huge.polls("dev1") >= 1).await;
+        assert_eq!(pending_code(&auth).as_deref(), Some("CODE-1"));
+        assert_eq!(code_lifetime(u64::MAX), DEVICE_CODE_LIFETIME);
+        assert_eq!(code_lifetime(5), Duration::from_secs(5));
     }
 }
