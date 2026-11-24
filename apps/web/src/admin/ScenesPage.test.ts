@@ -370,6 +370,111 @@ describe('ScenesPage', () => {
     expect(toastAdd).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('scene.relativeTurned') }))
   })
 
+  it('aligns only to the reference chosen for this item, and never to a reference that is gone', async () => {
+    // The transform reads wait until released, as a slow OBS would.
+    let held: (() => void)[] = []
+    let rotation = 0
+    const release = () => {
+      held.forEach((answer) => answer())
+      held = []
+    }
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) => {
+      const answer = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
+      if (path === '/api/admin/obs/transform')
+        return new Promise((resolve) => {
+          held.push(() => resolve(answer({ rotation, flip_h: false, flip_v: false, crop: { top: 0, right: 0, bottom: 0, left: 0 }, bounds: 'none' })))
+        })
+      return Promise.resolve(
+        answer({
+          canvas: { width: 1920, height: 1080 },
+          items: [
+            { item: 2, x: 0, y: 0, align: 'top_left', width: 100, height: 50 },
+            { item: 1, x: 100, y: 200, align: 'top_left', width: 300, height: 100 },
+          ],
+        }),
+      )
+    }) as never)
+    const wrapper = await page()
+    snapshot(connected())
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { rel: { ref: string; side: string } }
+    const openItem = async (name: string) => {
+      await wrapper.findAll('.item-name').find((b) => b.text() === name)!.trigger('click')
+      await flushPromises()
+    }
+    const apply = async () => {
+      await wrapper.findAll('tr.editor button').find((b) => b.text() === t('scene.apply'))!.trigger('click')
+      await flushPromises()
+    }
+
+    // Chosen for Chat overlay, then Capture opened: Capture starts from the whole screen.
+    await openItem('Chat overlay')
+    Object.assign(vm.rel, { ref: '1', side: 'bottom' })
+    await openItem('Capture')
+    expect(vm.rel.ref).toBe('canvas')
+
+    // A reference not in the list: said so, nothing moves.
+    await openItem('Chat overlay')
+    vm.rel.ref = '99'
+    put.mockClear()
+    await apply()
+    expect(put).not.toHaveBeenCalled()
+    expect(toastAdd).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('scene.relativeMissing') }))
+
+    // Another item opened while the reads were out, even switching back before they answer: nothing moves.
+    vm.rel.ref = '1'
+    await apply()
+    await openItem('Capture')
+    release()
+    await flushPromises()
+    expect(put).not.toHaveBeenCalled()
+    await openItem('Chat overlay')
+    vm.rel.ref = '1'
+    await apply()
+    await openItem('Capture')
+    await openItem('Chat overlay')
+    release()
+    await flushPromises()
+    expect(put).not.toHaveBeenCalled()
+
+    // A turned item's answer arriving after another item opened: nothing said, nothing moves.
+    rotation = 90
+    toastAdd.mockClear()
+    vm.rel.ref = '1'
+    await apply()
+    await openItem('Capture')
+    release()
+    await flushPromises()
+    expect(toastAdd).not.toHaveBeenCalled()
+    expect(put).not.toHaveBeenCalled()
+    rotation = 0
+    await openItem('Chat overlay')
+
+    // Applied twice before the reads answer: only the latest choice moves the item.
+    vm.rel.ref = '1'
+    await apply()
+    vm.rel.ref = 'canvas'
+    await apply()
+    release()
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(1)
+    expect(put).toHaveBeenLastCalledWith('/api/admin/obs/item', {
+      body: { scene: 'Game', item: 2, placement: { x: 910, y: 1030, align: 'top_left' } },
+    })
+    put.mockClear()
+
+    // The reference removed while the reads were out: said so, nothing moves (Chat overlay is open).
+    vm.rel.ref = '1'
+    toastAdd.mockClear()
+    await apply()
+    snapshot(connected('Game', [item(2, 'Chat overlay', 'browser_source')]))
+    await flushPromises()
+    release()
+    await flushPromises()
+    expect(put).not.toHaveBeenCalled()
+    expect(toastAdd).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('scene.relativeMissing') }))
+  })
+
   it('turns, flips and resets an item under 變形, sending only the part changed', async () => {
     vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
       Promise.resolve({

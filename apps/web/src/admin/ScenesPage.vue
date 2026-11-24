@@ -911,6 +911,14 @@ async function transform(item: ItemRow, what: Schemas['TransformChange']) {
 const SIDES: Side[] = ['top', 'bottom', 'left', 'right', 'center']
 const CROSSES: Cross[] = ['start', 'middle', 'end']
 const rel = ref<{ ref: string; side: Side; cross: Cross; ox: number; oy: number }>({ ref: 'canvas', side: 'top', cross: 'middle', ox: 0, oy: 0 })
+// Another item, or the same ID in another scene: its reference starts again from the whole screen, and an Apply
+// still reading for the one before moves nothing and says nothing (counted, so switching away and back counts too;
+// a newer Apply counts as well, so only the latest one moves the item).
+let editorTurn = 0
+watch([open, target], () => {
+  rel.value.ref = 'canvas'
+  editorTurn++
+})
 const refOptions = (item: ItemRow) => [
   { value: 'canvas', label: t('scene.canvas') },
   ...siblings(item)
@@ -919,9 +927,14 @@ const refOptions = (item: ItemRow) => [
 ]
 // The boxes are worked out unturned: an item or reference that is turned or flipped is refused, not misplaced.
 async function alignOnce(item: ItemRow) {
-  const own = placements.value.get(item.id)
-  if (!own?.width || !canvas.value) return
-  const r = rel.value
+  if (!placements.value.get(item.id)?.width || !canvas.value) return
+  // As chosen when Apply was pressed; the reads below take a while.
+  const r = { ...rel.value }
+  const turn = ++editorTurn
+  const stale = () => editorTurn !== turn
+  const missing = () =>
+    r.ref !== 'canvas' && !refOptions(item).some((o) => o.value === r.ref)
+  if (missing()) return report(t('scene.relativeMissing'))
   const refRow = r.ref === 'canvas' ? undefined : rows.value.find((o) => o.id === Number(r.ref))
   try {
     const turned = await Promise.all(
@@ -929,14 +942,19 @@ async function alignOnce(item: ItemRow) {
         api(client.GET('/api/admin/obs/transform', { params: { query: { scene: o.scene, item: o.obsId } } })),
       ),
     )
+    if (stale()) return
     if (turned.some((tr) => tr.rotation % 360 !== 0 || tr.flip_h || tr.flip_v)) {
       report(t('scene.relativeTurned'))
       return
     }
   } catch (e) {
-    report(e)
+    if (!stale()) report(e)
     return
   }
+  // A reference gone meanwhile is said so; the item's own box is read again, as it may have changed too.
+  if (missing()) return report(t('scene.relativeMissing'))
+  const own = placements.value.get(item.id)
+  if (!own?.width || !canvas.value) return
   const other = r.ref === 'canvas' ? undefined : placements.value.get(Number(r.ref))
   const refBox = other ? boxOf(other, other) : { left: 0, top: 0, width: canvas.value.width, height: canvas.value.height }
   const corner = alignedCorner(own, refBox, r.side, r.cross, { x: r.ox ?? 0, y: r.oy ?? 0 }, !other)
