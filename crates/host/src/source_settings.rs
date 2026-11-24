@@ -121,19 +121,25 @@ fn shown(kind: &str, settings: Map<String, Value>, port: u16) -> SourceSettings 
         .into_iter()
         .filter(|(k, _)| fields(family).contains(&k.as_str()))
         .collect();
-    let mut url_hidden = false;
-    if family == SourceFamily::Browser
-        && let Some(url) = fields.get("url").and_then(Value::as_str)
-        && own_overlay(url, port).is_none()
-    {
+    let url_hidden = url_hidden(family, &fields, port);
+    if url_hidden {
         fields.remove("url");
-        url_hidden = true;
     }
     SourceSettings {
         family,
         fields,
         url_hidden,
     }
+}
+
+/// Whether a browser source's address is hidden: any address that is not one of this Host's overlays, an empty one
+/// included, may hold another service's token.
+fn url_hidden(family: SourceFamily, settings: &Map<String, Value>, port: u16) -> bool {
+    family == SourceFamily::Browser
+        && settings
+            .get("url")
+            .and_then(Value::as_str)
+            .is_some_and(|url| own_overlay(url, port).is_none())
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -166,11 +172,11 @@ pub(crate) async fn set_source(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, "obs.invalid_source");
     };
-    let kind = match link.input_settings(&body.input).await {
-        Ok((kind, _)) => kind,
+    let (kind, current) = match link.input_settings(&body.input).await {
+        Ok(found) => found,
         Err(e) => return command_response(Err(e)),
     };
-    if let Err(code) = check(family(&kind), &body.fields, link.port()) {
+    if let Err(code) = check(family(&kind), &current, &body.fields, link.port()) {
         return error(StatusCode::BAD_REQUEST, code);
     }
     command_response(link.set_input_settings(&body.input, body.fields).await)
@@ -274,14 +280,19 @@ pub(crate) async fn source_options(
     }
 }
 
-/// Whether `fields` may be written to a source of `family`.
+/// Whether `fields` may be written to a source of `family` whose settings are `current`. A hidden address is
+/// changed in OBS only.
 fn check(
     family: SourceFamily,
+    current: &Map<String, Value>,
     fields_in: &Map<String, Value>,
     port: u16,
 ) -> Result<(), &'static str> {
     if family == SourceFamily::Other {
         return Err("obs.source_not_editable");
+    }
+    if fields_in.contains_key("url") && url_hidden(family, current, port) {
+        return Err("obs.invalid_source");
     }
     for (key, value) in fields_in {
         if !fields(family).contains(&key.as_str()) {
@@ -371,10 +382,66 @@ mod tests {
     }
 
     #[test]
+    fn an_address_is_hidden_unless_it_is_one_of_our_overlays() {
+        let hidden = |settings: Value| url_hidden(SourceFamily::Browser, &map(settings), PORT);
+        assert!(!hidden(
+            json!({"url": "http://127.0.0.1:47810/overlay/chat/"})
+        ));
+        assert!(!hidden(json!({"width": 400})), "no address");
+        assert!(hidden(
+            json!({"url": "https://example.test/alerts?token=secret"})
+        ));
+        assert!(hidden(json!({"url": ""})), "an empty one too");
+        assert!(hidden(
+            json!({"url": "http://user:pass@127.0.0.1:47810/overlay/chat/"})
+        ));
+        assert!(!url_hidden(
+            SourceFamily::Text,
+            &map(json!({"url": "https://example.test/"})),
+            PORT
+        ));
+    }
+
+    #[test]
+    fn a_hidden_address_is_never_written() {
+        let own = map(json!({"url": "http://127.0.0.1:47810/overlay/alerts/"}));
+        for current in [
+            json!({"url": "https://example.test/alerts?token=secret"}),
+            json!({"url": ""}),
+        ] {
+            assert_eq!(
+                check(SourceFamily::Browser, &map(current.clone()), &own, PORT),
+                Err("obs.invalid_source"),
+                "{current}"
+            );
+            assert_eq!(
+                check(
+                    SourceFamily::Browser,
+                    &map(current.clone()),
+                    &map(json!({"width": 800})),
+                    PORT
+                ),
+                Ok(()),
+                "{current}: other fields still change"
+            );
+        }
+        assert_eq!(
+            check(
+                SourceFamily::Browser,
+                &map(json!({"url": "http://127.0.0.1:47810/overlay/chat/"})),
+                &own,
+                PORT
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn writes_are_checked_field_by_field() {
         assert_eq!(
             check(
                 SourceFamily::Browser,
+                &Map::new(),
                 &map(json!({"width": 800, "css": "body{}"})),
                 PORT
             ),
@@ -383,6 +450,7 @@ mod tests {
         assert_eq!(
             check(
                 SourceFamily::Browser,
+                &Map::new(),
                 &map(json!({"url": "http://127.0.0.1:47810/overlay/alerts/"})),
                 PORT
             ),
@@ -395,18 +463,19 @@ mod tests {
             json!({"shutdown": "yes"}),
         ] {
             assert_eq!(
-                check(SourceFamily::Browser, &map(bad.clone()), PORT),
+                check(SourceFamily::Browser, &Map::new(), &map(bad.clone()), PORT),
                 Err("obs.invalid_source"),
                 "{bad}"
             );
         }
         assert_eq!(
-            check(SourceFamily::Other, &map(json!({})), PORT),
+            check(SourceFamily::Other, &Map::new(), &map(json!({})), PORT),
             Err("obs.source_not_editable")
         );
         assert_eq!(
             check(
                 SourceFamily::Text,
+                &Map::new(),
                 &map(json!({"font": {"face": "Noto Sans TC", "size": 36}})),
                 PORT
             ),
@@ -418,7 +487,7 @@ mod tests {
             json!({"font": {"face": "Arial", "script": "x"}}),
         ] {
             assert_eq!(
-                check(SourceFamily::Text, &map(bad.clone()), PORT),
+                check(SourceFamily::Text, &Map::new(), &map(bad.clone()), PORT),
                 Err("obs.invalid_source"),
                 "{bad}"
             );
