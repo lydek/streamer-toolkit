@@ -42,16 +42,28 @@ impl<R: OverlayRepository> OverlayService<R> {
         self.repo.media().await
     }
 
+    /// The path is built from our own UUID and format only, so even an edited database cannot point outside
+    /// `media/`; `None` for an ID that is not a UUID.
+    fn file_of(&self, entry: &MediaEntry) -> Option<PathBuf> {
+        self.media_path(&entry.id, entry.format)
+    }
+
+    /// Where the file for `id` in `format` is; `None` for an ID that is not a UUID.
+    pub(super) fn media_path(&self, id: &str, format: MediaFormat) -> Option<PathBuf> {
+        let id = Uuid::try_parse(id).ok()?;
+        Some(self.media_dir.join(format!("{id}.{}", format.extension())))
+    }
+
     /// Where an entry's file is, if both exist.
     pub async fn media_file(&self, id: &str) -> Option<(PathBuf, MediaFormat)> {
         let entry = self.repo.media_entry(id).await.ok()??;
-        let path = self.media_dir.join(entry.file_name());
+        let path = self.file_of(&entry)?;
         path.is_file().then_some((path, entry.format))
     }
 
     /// Whether an entry's file is still in the folder.
     pub fn media_missing(&self, entry: &MediaEntry) -> bool {
-        !self.media_dir.join(entry.file_name()).is_file()
+        !self.file_of(entry).is_some_and(|p| p.is_file())
     }
 
     /// Copies `bytes` in as a new entry; `file_name` only gives the format and the starting title. A GIF starts at
@@ -72,7 +84,7 @@ impl<R: OverlayRepository> OverlayService<R> {
             duration_ms: (format == MediaFormat::Gif).then_some(GIF_MS),
         };
         fs::create_dir_all(&self.media_dir)?;
-        let path = self.media_dir.join(entry.file_name());
+        let path = self.file_of(&entry).expect("a new UUID");
         fs::write(&path, bytes)?;
         if let Err(e) = self.repo.insert_media(&entry).await {
             let _ = fs::remove_file(&path);
@@ -115,7 +127,8 @@ impl<R: OverlayRepository> OverlayService<R> {
             .ok_or(MediaError::NotFound)?;
         self.repo.delete_media(id).await?;
         self.reload_library().await?;
-        if let Err(e) = fs::remove_file(self.media_dir.join(entry.file_name()))
+        if let Some(path) = self.file_of(&entry)
+            && let Err(e) = fs::remove_file(path)
             && e.kind() != io::ErrorKind::NotFound
         {
             tracing::warn!(error = %e, "media file not removed");

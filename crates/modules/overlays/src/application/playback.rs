@@ -173,9 +173,7 @@ impl<R: OverlayRepository> OverlayService<R> {
             self.playback.missing.clone(),
             r.id.clone(),
         );
-        let file = self
-            .media_dir
-            .join(format!("{}.{}", show.media_id, show.format.extension()));
+        let file = self.media_path(&show.media_id, show.format);
         deps.presenter.push(Item {
             stage: Stage::Alerts,
             subject,
@@ -188,7 +186,7 @@ impl<R: OverlayRepository> OverlayService<R> {
                     return Shown::No;
                 }
                 // Its file is gone: skipped at once, so it holds up nothing behind it.
-                if !file.is_file() {
+                if !file.as_ref().is_some_and(|f| f.is_file()) {
                     let mut gone = missing.lock().unwrap();
                     gone.push_front(key);
                     gone.truncate(DECLINED_KEEP);
