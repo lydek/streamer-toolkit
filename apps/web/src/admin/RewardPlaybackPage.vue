@@ -1,7 +1,7 @@
 <template>
   <!-- 兌換時播放: what each reward plays on a redemption, the sound and the video or GIF; the files themselves are
        on the sound and media pages. -->
-  <FullPage :title="t('nav.categories.points')">
+  <FullPage>
     <div class="sources">
       <span v-if="!hidden.has('/sounds')">{{ t('rewardPlayback.soundOverlay') }}<ObsStatusLink overlay="/overlay/sound/" /></span>
       <span v-if="!hidden.has('/media')">{{ t('rewardPlayback.mediaOverlay') }}<ObsStatusLink overlay="/overlay/alerts/" /></span>

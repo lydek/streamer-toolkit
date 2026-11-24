@@ -137,7 +137,7 @@ test('the page imports, renames, changes the volume and deletes sounds', async (
   await page.getByLabel(zh.sound.volume).nth(1).fill('40')
   await name.focus()
   // Leaving the page saves what was typed without Enter.
-  await page.getByRole('button', { name: zh.app.home }).click()
+  await page.getByRole('navigation', { name: zh.nav.label }).getByRole('link', { name: zh.nav.groups.home }).click()
   await expect(page).toHaveURL(/\/admin\/$/)
   expect(s.puts).toEqual([
     { label: 'Ding', volume: 100 },

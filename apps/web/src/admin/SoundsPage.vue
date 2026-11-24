@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.sound')" tile="sound" overlay="sound" :status="library ? t('sound.count', { n: library.sounds.length }) : undefined">
+  <FullPage tile="sound" overlay="sound" :status="library ? t('sound.count', { n: library.sounds.length }) : undefined">
     <div class="stack">
       <label for="sound-file">{{ t('sound.file') }}</label>
       <input

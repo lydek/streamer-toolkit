@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.obsSources.name')">
+  <FullPage>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="data && !data.connected && !servicesDown.obs">{{ t('obsSources.notConnected') }}</p>
     <p v-else-if="data && !data.local">{{ t('obsSources.notLocal') }}</p>

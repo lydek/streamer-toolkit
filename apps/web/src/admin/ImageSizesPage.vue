@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.imageSizes.name')" tile="imageSizes">
+  <FullPage tile="image-sizes">
     <div class="pickers">
       <div class="field">
         <span id="is-kind">{{ t('imageSizes.kind') }}</span>

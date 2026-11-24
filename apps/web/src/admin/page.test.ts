@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
-import { focusReturnTarget, goHome, keepFocus, openerSelector, rememberOpener } from './page'
+import type { RouteLocationNormalized } from 'vue-router'
+import { focusReturnTarget, keepFocus, openerSelector, rememberOpener } from './page'
 
 const route = (path: string) => ({ path, matched: [{}] }) as unknown as RouteLocationNormalized
 const home = route('/')
@@ -86,43 +86,6 @@ describe('returning to home', () => {
     rememberOpener(home, { path: '/', matched: [] } as unknown as RouteLocationNormalized, null) // app start
     await focusReturnTarget()
     expect(document.activeElement).toBe(document.body)
-  })
-})
-
-describe('goHome', () => {
-  const make = () =>
-    createRouter({
-      history: createWebHistory('/admin/'),
-      routes: [
-        { path: '/', component: {} },
-        { path: '/settings', component: {} },
-      ],
-    })
-  const popped = () => new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }))
-
-  it('goes back when the previous entry is home, so history does not grow', async () => {
-    const router = make()
-    await router.push('/')
-    await router.push('/settings')
-    const length = history.length
-    const back = popped()
-    goHome(router)
-    await back
-    await new Promise((r) => setTimeout(r))
-    expect(router.currentRoute.value.path).toBe('/')
-    expect(history.length).toBe(length)
-  })
-
-  it('replaces the entry when the page was opened directly', async () => {
-    history.replaceState(null, '', '/admin/settings')
-    const router = make()
-    await router.push('/settings')
-    await router.isReady()
-    const length = history.length
-    goHome(router)
-    await new Promise((r) => setTimeout(r))
-    expect(router.currentRoute.value.path).toBe('/')
-    expect(history.length).toBe(length)
   })
 })
 

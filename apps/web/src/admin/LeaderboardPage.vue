@@ -1,6 +1,6 @@
 <template>
   <!-- The four boards side by side (one column when narrow), each saying which of its periods are in OBS. -->
-  <FullPage :title="t('pages.leaderboard.name')">
+  <FullPage>
     <div class="field">
       <span id="lb-period">{{ t('leaderboard.period') }}</span>
       <SelectButton

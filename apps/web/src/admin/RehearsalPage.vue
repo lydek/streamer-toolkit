@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('pages.rehearsal.name')" tile="rehearsal" :status="running ? t('rehearsal.running') : undefined">
+  <FullPage tile="rehearsal" :status="running ? t('rehearsal.running') : undefined">
     <div class="field">
       <span id="rh-speed">{{ t('rehearsal.speed') }}</span>
       <SelectButton

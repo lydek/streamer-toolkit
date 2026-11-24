@@ -39,6 +39,23 @@ describe('FullPage header', () => {
     expect(link.text()).toBe(t('obsStatus.offline'))
   })
 
+  it("titles a page tab with the tab's own name and icon, and other pages with the title given", async () => {
+    const router = testRouter()
+    await router.push('/alert-events')
+    const tab = mount(FullPage, { props: { title: '特效', tile: 'alerts' }, global: { plugins: [router, i18n, PrimeVue] } })
+    expect(tab.get('h1').text()).toBe(t('pages.alertEvents.name'))
+    expect(tab.get('.badge i').classes()).toContain('pi-list')
+    expect(tab.get('.badge').classes()).toContain('tint-yellow')
+    expect(tab.find('button').exists()).toBe(false)
+    // A page without a home tile takes its own color.
+    await router.push('/leaderboard')
+    const board = mount(FullPage, { global: { plugins: [router, i18n, PrimeVue] } })
+    expect(board.get('.badge').classes()).toContain('tint-yellow')
+    await router.push('/settings')
+    const other = mount(FullPage, { props: { title: '設定' }, global: { plugins: [router, i18n, PrimeVue] } })
+    expect(other.get('h1').text()).toBe('設定')
+  })
+
   it('shows neither a status nor a copy button on a page without them', () => {
     const wrapper = page({})
     expect(wrapper.find('.page-end').exists()).toBe(false)
@@ -79,16 +96,27 @@ describe('FullPage page tabs', () => {
     expect((await at('/checkin')).find('nav.page-tabs').exists()).toBe(false)
   })
 
-  it('keeps the keyboard on the category or page tab that opened the page, else focuses "← Home"', async () => {
+  it('keeps the keyboard on the category or page tab that opened the page, else focuses the title', async () => {
     const router = testRouter()
     await router.push('/card-style')
     navOpened.path = '/card-style'
     const viaTab = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
     expect(document.activeElement?.textContent).toBe(t('pages.cardStyle.name'))
     viaTab.unmount()
+    await router.push('/card-style')
     const direct = mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
-    expect(document.activeElement?.textContent).toContain(t('app.home'))
+    expect(document.activeElement?.tagName).toBe('H1')
+    expect(document.activeElement?.textContent).toBe(t('pages.cardStyle.name'))
     direct.unmount()
+    // The header's first button when it has some.
+    const withActions = mount(FullPage, {
+      slots: { actions: '<button type="button">隱藏</button><button type="button">匯入</button>' },
+      global: { plugins: [router, i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    expect(document.activeElement?.textContent).toBe('隱藏')
+    expect(withActions.find('.page-end .actions').exists()).toBe(true)
+    withActions.unmount()
     // A category link stays on the app bar, so it keeps focus.
     const category = document.body.appendChild(document.createElement('a'))
     category.href = '#'

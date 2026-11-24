@@ -1,6 +1,6 @@
 <template>
   <!-- 計數器; 訂閱馬拉松 is its own page (MarathonPage.vue). -->
-  <FullPage :title="t('modules.names.counter')" tile="counter" overlay="counter">
+  <FullPage tile="counter" overlay="counter">
     <section class="stack" aria-labelledby="counters-heading">
       <h2 id="counters-heading">{{ t('counter.heading') }}</h2>
       <form class="create" @submit.prevent="create">

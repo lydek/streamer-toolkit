@@ -1,6 +1,6 @@
 <template>
   <!-- 打卡規則: how check-ins work (command, reward, slots, time zone, day change) and their sounds. -->
-  <FullPage :title="t('modules.names.checkin')" tile="checkin" overlay="checkin">
+  <FullPage tile="checkin" overlay="checkin">
     <CheckinSettings @error="report" />
     <SoundSlots
       :slots="[

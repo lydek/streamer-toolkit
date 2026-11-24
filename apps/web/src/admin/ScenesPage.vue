@@ -1,5 +1,5 @@
 <template>
-  <FullPage :title="t('modules.names.scene')" tile="scene" :status="state?.scene ? t('scene.current', { scene: state.scene }) : undefined">
+  <FullPage tile="scene" :status="state?.scene ? t('scene.current', { scene: state.scene }) : undefined">
     <p v-if="live.status === 'loading'">{{ t('app.loading') }}</p>
     <!-- OBS down: the page's notice (FullPage) says so; nothing more here. -->
     <template v-else-if="!obsReady(state) && servicesDown.obs" />

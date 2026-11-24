@@ -1,17 +1,18 @@
 import { nextTick } from 'vue'
-import type { RouteLocationNormalized, Router } from 'vue-router'
+import type { RouteLocationNormalized } from 'vue-router'
 import { focusTarget } from './drawer'
 
 /*
  * Full pages at /admin/<feature> (docs/decisions.md 管理 UI 版面). FullPage.vue is the layout; a page is a route
  * whose component wraps its content in it:
  *
- *   <FullPage :title="t('…')"> <section>…</section> </FullPage>
+ *   <FullPage tile="…"> <template #actions>…</template> <section>…</section> </FullPage>
  *
- * - Entering focuses "← Home" (or the element the URL hash names). Settings use `useDrawerSetting`; leaving the
- *   page submits them first, and a failed one keeps the page with its error shown under the title.
- * - "← Home" goes back when the previous entry is home and replaces the entry otherwise, so history never grows
- *   and Alt+← does the same thing.
+ * - The title and icon are the page tab's; a page outside the tabs (settings) passes `title`. There is no back
+ *   button: home is the 首頁 tab or Alt+←.
+ * - Entering focuses the header's first action, else the title (or the element the URL hash names). Settings use
+ *   `useDrawerSetting`; leaving the page submits them first, and a failed one keeps the page with its error shown
+ *   under the title.
  * - Back on home, focus returns to the element that opened the page: a home element with `data-drawer-tile`,
  *   `data-page-opener` or `data-drawer-arrange` (a drawer's "Open full page" counts as its tile, because
  *   closing the drawer focuses the tile first), else the first tile, then "Arrange tiles".
@@ -21,7 +22,7 @@ const OPENER_ATTRS = ['data-drawer-tile', 'data-page-opener', 'data-drawer-arran
 
 /**
  * The page a category or page tab just opened: that page leaves focus on the category (still there) or moves it to
- * its own page tab (the old one went with the old page), instead of focusing "← Home".
+ * its own page tab (the old one went with the old page), instead of focusing the header.
  */
 export const navOpened = { path: '' }
 
@@ -63,11 +64,4 @@ export async function focusReturnTarget() {
 export async function keepFocus(target: () => HTMLElement | null | undefined) {
   await nextTick()
   if (!document.activeElement || document.activeElement === document.body) target()?.focus()
-}
-
-/** "← Home": back when the previous entry is home, otherwise replace this one. */
-export function goHome(router: Router) {
-  const back = router.options.history.state.back
-  if (typeof back === 'string' && router.resolve(back).path === '/') router.back()
-  else void router.replace('/')
 }
