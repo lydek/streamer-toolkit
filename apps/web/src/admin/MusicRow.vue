@@ -1,44 +1,51 @@
 <template>
-  <li class="track">
-    <Button
-      :icon="playing ? 'pi pi-stop' : 'pi pi-play'"
-      :aria-label="t(playing ? 'music.stop' : 'music.play', { title: title.value.value })"
-      :aria-pressed="playing"
-      :disabled="track.missing"
-      text
-      rounded
-      @click="togglePreview(url)"
-    />
-    <div class="field">
-      <label :for="`music-title-${track.id}`">{{ t('music.title') }}</label>
+  <li class="track sound-card">
+    <div class="sound-row">
+      <Button
+        :icon="playing ? 'pi pi-stop' : 'pi pi-play'"
+        :aria-label="t(playing ? 'music.stop' : 'music.play', { title: title.value.value })"
+        :aria-pressed="playing"
+        :disabled="track.missing"
+        severity="secondary"
+        rounded
+        @click="togglePreview(url)"
+      />
       <InputText
         :id="`music-title-${track.id}`"
         v-model="title.value.value"
+        class="title-input"
         autocomplete="off"
         maxlength="100"
+        :aria-label="t('music.title')"
         @keydown.enter="title.commit()"
         @blur="title.commit()"
       />
-    </div>
-    <span class="length">
-      <span v-if="track.missing" class="missing">{{ t('music.missing') }}</span>
-      <template v-else>{{ track.duration_ms === null ? '' : formatLength(track.duration_ms) }}</template>
-    </span>
-    <div class="field playlists">
-      <label :id="`music-playlists-${track.id}`">{{ t('music.playlists') }}</label>
+      <span class="length">
+        <span v-if="track.missing" class="missing">{{ t('music.missing') }}</span>
+        <template v-else>{{ track.duration_ms === null ? '' : formatLength(track.duration_ms) }}</template>
+      </span>
       <MultiSelect
         :model-value="inPlaylists"
+        class="playlists"
         :options="playlists"
         option-label="name"
         option-value="id"
         display="chip"
         :placeholder="t('music.noPlaylist')"
-        :aria-labelledby="`music-playlists-${track.id}`"
+        :aria-label="t('music.playlists')"
         :disabled="playlists.length === 0"
         @update:model-value="choose"
       />
+      <Button
+        ref="deleteButton"
+        :label="t('music.delete')"
+        icon="pi pi-trash"
+        severity="danger"
+        text
+        size="small"
+        @click="ask"
+      />
     </div>
-    <Button ref="deleteButton" :label="t('music.delete')" icon="pi pi-trash" severity="danger" text @click="ask" />
     <div v-if="confirming" class="confirm" role="group" :aria-label="t('music.delete')">
       <p>{{ t('music.deleteNote') }}</p>
       <template v-if="track.used_by.length">
@@ -119,38 +126,41 @@ async function remove() {
 </script>
 
 <style scoped>
-.track {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 1rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
-.field {
+.sound-card {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
 }
 
-.field :deep(.p-inputtext) {
-  max-width: 100%;
+.sound-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.875rem;
+}
+
+.title-input {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 
 .playlists {
   flex: 1 1 12rem;
+  min-width: 0;
 }
 
 .length {
-  min-width: 4rem;
-  padding-bottom: 0.5rem;
+  min-width: 3.5rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
 .missing {
-  color: var(--p-red-500);
+  color: var(--p-red-400);
 }
 
 .buttons {
@@ -160,7 +170,8 @@ async function remove() {
 }
 
 .confirm {
-  flex-basis: 100%;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--p-surface-800);
 }
 
 .confirm p,
