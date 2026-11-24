@@ -1,7 +1,8 @@
 <template>
   <!-- 顯示: how chat lines look in the admin UI (saved, shared by every chat view). -->
-  <div class="display-menu" :class="{ compact: iconOnly }">
+  <div ref="root" class="display-menu" :class="{ compact: iconOnly, floating: popover && !iconOnly }">
     <Button
+      ref="trigger"
       :label="iconOnly ? undefined : t('chat.display.title')"
       :aria-label="iconOnly ? t('chat.display.title') : undefined"
       icon="pi pi-sliders-h"
@@ -58,7 +59,7 @@ import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
-import { ref, useId } from 'vue'
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
@@ -69,7 +70,7 @@ import { errorToast } from './home'
 type Style = ChatDisplay['style']
 type Side = Schemas['DockSide']
 const SIDES: Side[] = ['left', 'right']
-defineProps<{ dockSide?: boolean; iconOnly?: boolean }>()
+defineProps<{ dockSide?: boolean; iconOnly?: boolean; popover?: boolean }>()
 const STYLES: Style[] = ['compact', 'standard', 'comfortable']
 const TOGGLES = ['avatars', 'badges', 'time'] as const
 
@@ -77,6 +78,39 @@ const { t } = useI18n()
 const toast = useToast()
 const id = useId()
 const open = ref(false)
+const root = ref<HTMLElement>()
+const trigger = ref<{ $el: HTMLElement }>()
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !open.value) return
+  e.preventDefault()
+  e.stopPropagation()
+  open.value = false
+  void nextTick(() => trigger.value?.$el.focus())
+}
+
+function onPointerdown(e: PointerEvent) {
+  const target = e.target as Node | null
+  if (!open.value || !target || root.value?.contains(target)) return
+  // PrimeVue Select dropdowns teleport to body: clicking an option inside one stays inside the menu.
+  if (target instanceof Element && target.closest('.p-select-overlay')) return
+  open.value = false
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    document.addEventListener('keydown', onKeydown, true)
+    document.addEventListener('pointerdown', onPointerdown)
+  } else {
+    document.removeEventListener('keydown', onKeydown, true)
+    document.removeEventListener('pointerdown', onPointerdown)
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown, true)
+  document.removeEventListener('pointerdown', onPointerdown)
+})
 
 const dock = useDock()
 async function setSide(side: Side) {
@@ -109,14 +143,41 @@ async function save(change: Partial<ChatDisplay>) {
   display: inline-flex;
 }
 
-.display-menu.compact .panel {
+.display-menu.floating {
+  position: relative;
+  display: inline-flex;
+}
+
+.display-menu.compact .panel,
+.display-menu.floating .panel {
   position: absolute;
   top: calc(100% + 0.25rem);
   right: 0.5rem;
-  left: 0.5rem;
   z-index: 10;
   background: var(--p-surface-900);
   box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.5);
+}
+
+.display-menu.compact .panel {
+  left: 0.5rem;
+}
+
+.display-menu.floating .panel {
+  right: 0;
+  width: min(22rem, 90vw);
+}
+
+/* Narrow toolbar: anchor full-width to the toolbar instead of overhanging past the left edge. */
+@container view (max-width: 45rem) {
+  .display-menu.floating {
+    position: static;
+  }
+
+  .display-menu.floating .panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+  }
 }
 
 .panel {

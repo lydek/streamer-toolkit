@@ -4,52 +4,57 @@
     <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
     <p v-if="periodKey === LIVE && historyFailed" role="alert">{{ t('chat.historyRetry') }}</p>
     <p v-if="failed" role="alert">{{ failed }}</p>
-    <div class="controls">
-      <label for="chat-period" class="sr-only">{{ t('chatLog.period') }}</label>
-      <Select v-model="periodKey" input-id="chat-period" :options="periodOptions" option-label="label" option-value="value" />
-      <InputText v-model="query" type="search" :aria-label="t('chatLog.search')" :placeholder="t('chatLog.search')" />
-      <span class="check">
-        <Checkbox v-model="hideBots" input-id="hide-bots" binary />
-        <label for="hide-bots">{{ t('chatLog.hideBots') }}</label>
-      </span>
-      <Button
-        :label="t('chatLog.openTwitch')"
-        icon="pi pi-external-link"
-        text
-        :disabled="!broadcaster"
-        @click="openTwitch"
-      />
-    </div>
-    <ChatDisplayMenu class="display" />
-    <p v-if="partners.length" class="shared">
-      {{ t('chat.shared', { channels: partners.join('、') }) }}
-      <Button :label="t('chat.ownOnly')" size="small" text :aria-pressed="ownOnly" @click="ownOnly = !ownOnly" />
-    </p>
-    <div class="filters" role="group" :aria-label="t('chatLog.filters')">
-      <Button
-        v-for="f in LOG_FILTERS"
-        :key="f"
-        :label="t(`chatLog.filter.${f}`)"
-        size="small"
-        :severity="filter === f ? undefined : 'secondary'"
-        :outlined="filter !== f"
-        :aria-pressed="filter === f"
-        @click="filter = f"
-      />
-    </div>
-    <p v-if="truncated" class="muted">{{ t('chatLog.truncated') }}</p>
-    <p v-if="loading" class="muted">{{ t('app.loading') }}</p>
-    <p v-else-if="!shown.length" class="muted">{{ t('chatLog.empty') }}</p>
-    <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
-    <ol v-else class="plain lines" :aria-label="t('chatLog.lines')" :style="{ fontSize: `${chatDisplay.textSize}%` }">
-      <li v-for="(e, i) in shown" :key="e.kind === 'message' ? e.message.id : `e${i}`" :class="e.kind">
-        <ChatLine v-if="e.kind === 'message'" :message="e.message" :broadcaster-id="broadcasterId" />
-        <template v-else>
-          <time v-if="chatDisplay.time" :datetime="e.at">{{ clockText(e.at) }}</time>
-          <span class="event">{{ eventText(e.event) }}</span>
-        </template>
-      </li>
-    </ol>
+    <section class="chatpage">
+      <div class="controls">
+        <InputText v-model="query" class="search" type="search" :aria-label="t('chatLog.search')" :placeholder="t('chatLog.search')" />
+        <label for="chat-period" class="sr-only">{{ t('chatLog.period') }}</label>
+        <Select v-model="periodKey" input-id="chat-period" :options="periodOptions" option-label="label" option-value="value" />
+        <span class="check">
+          <Checkbox v-model="hideBots" input-id="hide-bots" binary />
+          <label for="hide-bots">{{ t('chatLog.hideBots') }}</label>
+        </span>
+        <span class="count">{{ t('chatLog.count', { n: shown.length }) }}</span>
+        <ChatDisplayMenu popover />
+        <Button
+          :label="t('chatLog.openTwitch')"
+          icon="pi pi-external-link"
+          severity="secondary"
+          outlined
+          size="small"
+          :disabled="!broadcaster"
+          @click="openTwitch"
+        />
+      </div>
+      <div class="filters" role="group" :aria-label="t('chatLog.filters')">
+        <Button
+          v-for="f in LOG_FILTERS"
+          :key="f"
+          :label="t(`chatLog.filter.${f}`)"
+          size="small"
+          :severity="filter === f ? undefined : 'secondary'"
+          :outlined="filter !== f"
+          :aria-pressed="filter === f"
+          @click="filter = f"
+        />
+      </div>
+      <p v-if="partners.length" class="shared">
+        {{ t('chat.shared', { channels: partners.join('、') }) }}
+        <Button :label="t('chat.ownOnly')" size="small" text :aria-pressed="ownOnly" @click="ownOnly = !ownOnly" />
+      </p>
+      <p v-if="truncated" class="muted note">{{ t('chatLog.truncated') }}</p>
+      <p v-if="loading" class="muted note">{{ t('app.loading') }}</p>
+      <p v-else-if="!shown.length" class="muted note">{{ t('chatLog.empty') }}</p>
+      <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
+      <ol v-else class="plain lines" :aria-label="t('chatLog.lines')" :style="{ fontSize: `${chatDisplay.textSize}%` }">
+        <li v-for="(e, i) in shown" :key="e.kind === 'message' ? e.message.id : `e${i}`" :class="e.kind">
+          <ChatLine v-if="e.kind === 'message'" :message="e.message" :broadcaster-id="broadcasterId" />
+          <template v-else>
+            <time v-if="chatDisplay.time" :datetime="e.at">{{ clockText(e.at) }}</time>
+            <span class="event">{{ eventText(e.event) }}</span>
+          </template>
+        </li>
+      </ol>
+    </section>
   </FullPage>
 </template>
 
@@ -267,22 +272,47 @@ async function openTwitch() {
 </script>
 
 <style scoped>
+.chatpage {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.75rem;
+  border: 1px solid var(--p-surface-800);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
 .controls,
 .filters {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--p-surface-800);
 }
 
-.filters,
-.display {
-  margin-top: 0.5rem;
+.controls .search {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+}
+
+.count {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .shared {
-  margin: 0.5rem 0 0;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--p-surface-800);
   color: var(--p-text-muted-color);
+}
+
+.note {
+  margin: 0;
+  padding: 0.75rem 1rem;
 }
 
 .check {
@@ -299,7 +329,11 @@ time {
 .lines {
   display: grid;
   gap: 0.25rem;
-  margin-top: 0.75rem;
+  max-height: 65vh;
+  margin: 0;
+  padding: 0.625rem 1rem;
+  overflow-y: auto;
+  list-style: none;
 }
 
 .lines li {
