@@ -717,7 +717,11 @@ body.tabs-bottom:has(#subtabs:not([hidden])) .scene-page { --sc-bottom: calc(var
 .expr button[aria-pressed="true"] { border-color: var(--green); }
 /* dock: compact chat-page tools */
 .dock-head { gap: 0.25rem; }
-.dock-head .icon-btn { width: 2rem; height: 2rem; font-size: 0.9375rem; }
+.dock-head .icon-btn { flex: none; width: 2rem; height: 2rem; font-size: 0.9375rem; }
+.dock-head h2 { white-space: nowrap; }
+/* five header buttons need ~310px: a narrower dock drops the title icon and the message count */
+.dock { container: dock / inline-size; }
+@container dock (max-width: 320px) { .dock-head h2 > i, .dock-head h2 > .muted { display: none; } }
 .dock-tools { display: grid; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--s800); }
 .dock-tools .input { max-width: none; padding: 0.375rem 0.625rem; font-size: 0.875rem; }
 .dock-chips { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; }
@@ -2016,7 +2020,7 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
       <label><input type="radio" name="wsphase" value="live" checked><span><i class="pi pi-circle-fill" style="color:var(--red);font-size:.5rem"></i>直播中</span></label>
       <label><input type="radio" name="wsphase" value="post"><span><i class="pi pi-flag"></i>下播後</span></label>
     </div>
-    <span class="muted ws-auto" id="ws-auto">跟著直播狀態自動切換</span>
+    <span class="muted ws-auto" id="ws-auto" hidden></span>
     <button class="btn btn-secondary" type="button" id="ws-edit-btn" style="margin-left:auto"><i class="pi pi-pencil"></i>編輯首頁</button>
   </div>
   <div class="arrange-bar" id="ws-editbar" hidden>
@@ -2314,7 +2318,7 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
             <ul class="modlist">
             <li data-feat="viewers" data-pages="viewers" data-scope="moderation:read channel:read:vips"><div class="mod"><span class="badge-icon tint-blue"><i class="pi pi-users"></i></span><span class="mname">觀眾清單<small class="muted" id="fd-viewers">觀眾的身分、紀錄與備註</small></span><span class="feat-tags"><span class="ftag scope" title="moderation:read channel:read:vips">需要 Twitch 權限</span><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="viewers">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="觀眾清單" aria-describedby="fd-viewers"><span></span></label></div></li>
             <li data-feat="roles" data-pages="roles" data-deps="viewers"><div class="mod"><span class="badge-icon tint-primary"><i class="pi pi-tags"></i></span><span class="mname">自訂身分組<small class="muted" id="fd-roles">自己定義的觀眾分組</small></span><span class="feat-tags"><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="roles">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="自訂身分組" aria-describedby="fd-roles"><span></span></label></div></li>
-            <li data-feat="leaderboard" data-pages="leaderboard" data-deps="viewers"><div class="mod"><span class="badge-icon tint-yellow"><i class="pi pi-trophy"></i></span><span class="mname">排行榜<small class="muted" id="fd-leaderboard">打卡、小奇點、兌換排行</small></span><span class="feat-tags"><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="leaderboard">頁面</button><label class="switch"><input type="checkbox" role="switch" aria-label="排行榜" aria-describedby="fd-leaderboard"><span></span></label></div></li>
+            <li data-feat="leaderboard" data-pages="leaderboard" data-deps="viewers"><div class="mod"><span class="badge-icon tint-yellow"><i class="pi pi-trophy"></i></span><span class="mname">排行榜<small class="muted" id="fd-leaderboard">打卡、小奇點、兌換排行</small></span><span class="feat-tags"><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="leaderboard">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="排行榜" aria-describedby="fd-leaderboard"><span></span></label></div></li>
             <li data-feat="credits" data-pages="credits"><div class="mod"><span class="badge-icon tint-primary"><i class="pi pi-list"></i></span><span class="mname">感謝名單<small class="muted" id="fd-credits">下播前的片尾名單</small></span><span class="feat-tags"><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="credits">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="感謝名單" aria-describedby="fd-credits"><span></span></label></div></li>
             <li data-feat="so" data-pages="so" data-scope="moderator:manage:shoutouts"><div class="mod"><span class="badge-icon tint-blue"><i class="pi pi-video"></i></span><span class="mname">SO<small class="muted" id="fd-so">SO 時播放對方的 Clip</small></span><span class="feat-tags"><span class="ftag scope" title="moderator:manage:shoutouts">需要 Twitch 權限</span><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="so">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="SO" aria-describedby="fd-so"><span></span></label></div></li>
             <li data-feat="raid" data-pages="raid" data-scope="channel:manage:raids"><div class="mod"><span class="badge-icon tint-green"><i class="pi pi-send"></i></span><span class="mname">揪團<small class="muted" id="fd-raid">發起揪團，出發前播放名單</small></span><span class="feat-tags"><span class="ftag scope" title="channel:manage:raids">需要 Twitch 權限</span><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="raid">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="揪團" aria-describedby="fd-raid"><span></span></label></div></li>
@@ -2741,7 +2745,6 @@ primevue 4 — MIT
                     <div class="row"><label for="rh">換日時間</label><select id="rh" class="select" style="max-width:8rem"><option>00:00</option><option>04:00</option></select></div>
                   </div>
                 </details>
-      <div class="card-foot"><button class="btn btn-primary" type="button" data-toast="success:已儲存打卡規則。">儲存</button></div>
     </section>
   </div>
 </section>
@@ -4194,6 +4197,7 @@ primevue 4 — MIT
   <div class="vol"><span class="muted" style="font-size:.8125rem;width:3rem">字級</span><input type="range" min="85" max="130" step="5" data-cs="size" aria-label="聊天室字級"><output data-cs-out></output></div>
 </div></details>
     <button class="icon-btn" type="button" aria-label="搜尋" id="dock-search-btn" aria-expanded="false" aria-controls="dock-search"><i class="pi pi-search"></i></button>
+    <button class="icon-btn" type="button" aria-label="暫停捲動" aria-pressed="false" id="dock-pause"><i class="pi pi-pause"></i></button>
     <button class="icon-btn" type="button" aria-label="開啟聊天室完整頁" data-go="chat"><i class="pi pi-window-maximize"></i></button>
     <button class="icon-btn" type="button" aria-label="收起聊天室" id="dock-close"><i class="pi pi-angle-double-right"></i></button>
   </div>
@@ -4459,7 +4463,7 @@ const dockEl = document.getElementById('dock'), rail = document.getElementById('
 const newBtn = document.getElementById('dock-new'), railCount = document.getElementById('rail-count'), sep = document.getElementById('dock-resize')
 const saved = JSON.parse(localStorage.getItem('proto-dock') || '{"open":false,"width":340}')
 if (!saved.side) saved.side = 'right'
-let unread = 0, missed = 0
+let unread = 0, missed = 0, dockPaused = false
 const save = () => localStorage.setItem('proto-dock', JSON.stringify(saved))
 const setWidth = (w) => { saved.width = Math.min(640, Math.max(260, Math.round(w))); dockEl.style.setProperty('--dock-w', saved.width + 'px'); sep.setAttribute('aria-valuenow', saved.width) }
 const chatEnabled = () => document.querySelector('li[data-feat="chat"] input[role="switch"]')?.checked !== false
@@ -4486,7 +4490,7 @@ let tick = 0
 function addMessage() {
   const [name, color] = people[tick % people.length]
   tick++
-  const stick = atBottom()
+  const stick = !dockPaused && atBottom()
   const li = document.createElement('li')
   const d = new Date(Date.now() - (40 - tick) * 30000)
   const time = `<time>${d.toTimeString().slice(0, 5)}</time>`
@@ -4519,13 +4523,21 @@ let dockKind = 'all', dockQuery = ''
 function dockMatch(li) {
   return (dockKind === 'all' || li.dataset.k === dockKind) && (!dockQuery || li.textContent.toLowerCase().includes(dockQuery))
 }
-function applyDock() { list.querySelectorAll('li').forEach((li) => { li.hidden = !dockMatch(li) }); list.scrollTop = list.scrollHeight }
+function applyDock() { list.querySelectorAll('li').forEach((li) => { li.hidden = !dockMatch(li) }); if (!dockPaused) list.scrollTop = list.scrollHeight }
 for (let i = 0; i < 30; i++) addMessage()
 unread = 0
 setInterval(addMessage, 2500)
-list.addEventListener('scroll', () => { if (atBottom()) { missed = 0; newBtn.hidden = true } })
-newBtn.addEventListener('click', () => { list.scrollTop = list.scrollHeight })
-rail.addEventListener('click', () => { saved.open = true; unread = 0; save(); render(); list.scrollTop = list.scrollHeight; document.getElementById('dock-close').focus() })
+list.addEventListener('scroll', () => { if (!dockPaused && atBottom()) { missed = 0; newBtn.hidden = true } })
+// WCAG 2.2.2: the header's pause stops the list moving without scrolling; scrolling up also holds it in place.
+const pauseBtn = document.getElementById('dock-pause')
+const setPaused = (on) => {
+  dockPaused = on; pauseBtn.setAttribute('aria-pressed', String(on)); pauseBtn.setAttribute('aria-label', on ? '繼續捲動' : '暫停捲動')
+  pauseBtn.querySelector('i').className = `pi ${on ? 'pi-play' : 'pi-pause'}`
+  if (!on) { list.scrollTop = list.scrollHeight; missed = 0; newBtn.hidden = true }
+}
+pauseBtn.addEventListener('click', () => setPaused(!dockPaused))
+newBtn.addEventListener('click', () => setPaused(false))
+rail.addEventListener('click', () => { saved.open = true; unread = 0; save(); render(); if (!dockPaused) list.scrollTop = list.scrollHeight; document.getElementById('dock-close').focus() })
 document.getElementById('dock-close').addEventListener('click', () => { saved.open = false; save(); render(); rail.focus() })
 sep.addEventListener('pointerdown', (e) => {
   sep.setPointerCapture(e.pointerId); document.body.classList.add('resizing')
@@ -5561,9 +5573,9 @@ function renderWs() {
   grid.classList.toggle('editing', wsEditing)
   document.querySelectorAll('.wg').forEach((el) => { el.draggable = wsEditing; el.querySelectorAll('.wg-edit [data-size]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.size === el.dataset.size))) })
   document.querySelector('.ws-head .ws-phase').hidden = ui.home === 'single'
-  document.getElementById('ws-auto').hidden = ui.home === 'single'
+  document.getElementById('ws-auto').hidden = ui.home === 'single' || wsAuto
   const phaseName = { pre: '開播前', live: '直播中', post: '下播後' }[wsPhase]
-  document.getElementById('ws-auto').innerHTML = wsAuto ? `${phaseName}的首頁 · 跟著直播狀態自動換`
+  document.getElementById('ws-auto').innerHTML = wsAuto ? ''
     : `${phaseName}的首頁 · 手動選的 <button class="btn btn-text" type="button" data-ws-auto>改回自動</button>`
   document.querySelectorAll('input[name="wsphase"]').forEach((r) => { r.checked = r.value === wsPhase })
   document.getElementById('ws-edit-phase').textContent = ui.home === 'single' ? '首頁' : { pre: '開播前', live: '直播中', post: '下播後' }[wsPhase]
@@ -5753,7 +5765,7 @@ chatBtn.addEventListener('click', () => {
   const open = !document.body.classList.contains('chat-sheet')
   document.body.classList.toggle('chat-sheet', open)
   chatBtn.setAttribute('aria-expanded', String(open))
-  if (open) { dockEl.hidden = false; list.scrollTop = list.scrollHeight } else render()
+  if (open) { dockEl.hidden = false; if (!dockPaused) list.scrollTop = list.scrollHeight } else render()
 })
 document.getElementById('dock-close').addEventListener('click', () => { if (document.body.classList.contains('chat-sheet')) { document.body.classList.remove('chat-sheet'); render() } }, true)
 renderTabs()
