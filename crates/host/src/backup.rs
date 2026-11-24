@@ -297,6 +297,23 @@ pub(crate) fn free_space(_dir: &Path) -> Option<u64> {
     None
 }
 
+/// What a backup this app writes may hold (an export, or the backup of the current data a restore saves first; the
+/// same caps a restore accepts), and how free disk space is read. Tests pass smaller caps and their own disk.
+#[derive(Clone, Copy)]
+struct Limits {
+    files: usize,
+    bytes: u64,
+    free_space: fn(&Path) -> Option<u64>,
+}
+
+impl Limits {
+    const REAL: Self = Self {
+        files: MAX_ENTRIES,
+        bytes: MAX_EXPANDED_BYTES,
+        free_space,
+    };
+}
+
 /// Refuses before anything is written when the disk has less than `needed` free. An unknown amount is not refused:
 /// a write that then runs out still fails cleanly.
 fn room(needed: u64, free: Option<u64>) -> Result<(), BackupError> {
@@ -326,7 +343,11 @@ pub(crate) async fn export_backup(
     Query(q): Query<ExportQuery>,
 ) -> Response {
     let contents = q.contents.map_or_else(both, |c| vec![c]);
-    match export_file(&s.db, &s.data_dir, &s.app_version, &contents).await {
+    let limits = Limits {
+        free_space: s.free_space,
+        ..Limits::REAL
+    };
+    match export_file(&s.db, &s.data_dir, &s.app_version, &contents, limits).await {
         // The file's name goes now; the open handle streams it and the file is gone once closed.
         Ok(file) => (
             [
@@ -413,11 +434,12 @@ async fn export_file(
     data_dir: &Path,
     app_version: &str,
     contents: &[Content],
+    limits: Limits,
 ) -> Result<tempfile::NamedTempFile, BackupError> {
     let cache = data_dir.join("cache");
     std::fs::create_dir_all(&cache).map_err(export_failed)?;
     let snapshot = cache.join(format!("backup-{}.db", uuid::Uuid::now_v7()));
-    let result = export_snapshot(pool, data_dir, app_version, contents, &snapshot).await;
+    let result = export_snapshot(pool, data_dir, app_version, contents, &snapshot, limits).await;
     let _ = std::fs::remove_file(&snapshot);
     result
 }
@@ -428,6 +450,7 @@ async fn export_snapshot(
     app_version: &str,
     contents: &[Content],
     snapshot: &Path,
+    limits: Limits,
 ) -> Result<tempfile::NamedTempFile, BackupError> {
     let with_data = contents.contains(&Content::Data);
     let (schema_version, records) = if with_data {
@@ -454,9 +477,11 @@ async fn export_snapshot(
     };
     let data_dir = data_dir.to_owned();
     let snapshot = with_data.then(|| snapshot.to_owned());
-    tokio::task::spawn_blocking(move || write_archive(&data_dir, snapshot.as_deref(), manifest))
-        .await
-        .map_err(export_failed)?
+    tokio::task::spawn_blocking(move || {
+        write_archive(&data_dir, snapshot.as_deref(), manifest, limits)
+    })
+    .await
+    .map_err(export_failed)?
 }
 
 /// The snapshot's schema version and record counts, read through the modules' public counts.
@@ -488,6 +513,7 @@ fn write_archive(
     data_dir: &Path,
     snapshot: Option<&Path>,
     mut manifest: Manifest,
+    limits: Limits,
 ) -> Result<tempfile::NamedTempFile, BackupError> {
     let mut files = Vec::new();
     if let Some(snapshot) = snapshot {
@@ -502,19 +528,19 @@ fn write_archive(
             collect(&data_dir.join(folder), folder, &mut files)?;
         }
     }
-    if files.len() >= MAX_ENTRIES {
+    if files.len() >= limits.files {
         return Err(BackupError::TooLarge);
     }
     let mut total = 0u64;
     for (_, path) in &files {
         total = total.saturating_add(fs::metadata(path).map_err(export_failed)?.len());
     }
-    if total > MAX_EXPANDED_BYTES {
+    if total > limits.bytes {
         return Err(BackupError::TooLarge);
     }
     let cache = data_dir.join("cache");
     // The backup file is at most about as large as what it holds.
-    room(total, free_space(&cache))?;
+    room(total, (limits.free_space)(&cache))?;
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     let mut file = tempfile::NamedTempFile::new_in(&cache).map_err(export_failed)?;
     let mut output = LimitedWriter {
@@ -529,7 +555,7 @@ fn write_archive(
         for (name, path) in files {
             let mut source = fs::File::open(path).map_err(export_failed)?;
             let len = source.metadata().map_err(export_failed)?.len();
-            if len > MAX_EXPANDED_BYTES - expanded {
+            if len > limits.bytes - expanded {
                 return Err(BackupError::TooLarge);
             }
             // Zip64 for a file of 4 GiB or more; one that grows past that while it is read fails the export.
@@ -546,7 +572,7 @@ fn write_archive(
                     break;
                 }
                 expanded += n as u64;
-                if expanded > MAX_EXPANDED_BYTES {
+                if expanded > limits.bytes {
                     return Err(BackupError::TooLarge);
                 }
                 size += n as u64;
@@ -615,7 +641,7 @@ async fn export_of(
     contents: &[Content],
 ) -> Result<Vec<u8>, BackupError> {
     let mut bytes = Vec::new();
-    export_file(pool, data_dir, app_version, contents)
+    export_file(pool, data_dir, app_version, contents, Limits::REAL)
         .await?
         .read_to_end(&mut bytes)
         .map_err(export_failed)?;
@@ -864,6 +890,14 @@ fn preview(m: &Manifest) -> RestorePreview {
 /// database opens (docs/architecture.md §6). Returns whether a restore was applied. On any failure the data from
 /// before is back in place, except for [`BackupError::PutBack`].
 pub async fn apply_pending(data_dir: &Path, app_version: &str) -> Result<bool, BackupError> {
+    apply_pending_within(data_dir, app_version, Limits::REAL).await
+}
+
+async fn apply_pending_within(
+    data_dir: &Path,
+    app_version: &str,
+    limits: Limits,
+) -> Result<bool, BackupError> {
     // A restore upload cancelled, cut off or left when the app ended never outlives the run it started in.
     upload::clean(data_dir);
     let pending = data_dir.join(PENDING);
@@ -880,7 +914,7 @@ pub async fn apply_pending(data_dir: &Path, app_version: &str) -> Result<bool, B
                     .map_err(|e| BackupError::PutBack(e.to_string()))
                     .and(Err(BackupError::Interrupted))
             }
-            Ok(id) => apply(data_dir, &staging, &previous, &id, app_version)
+            Ok(id) => apply(data_dir, &staging, &previous, &id, app_version, limits)
                 .await
                 .map(|()| true),
         }
@@ -920,6 +954,7 @@ async fn apply(
     previous: &Path,
     id: &str,
     app_version: &str,
+    limits: Limits,
 ) -> Result<(), BackupError> {
     let Ok(text) = fs::read(staging.join(MANIFEST)) else {
         return Err(BackupError::NothingStaged);
@@ -931,7 +966,7 @@ async fn apply(
     // before that restore. Never put back.
     remove(previous)
         .map_err(|e| restore_failed(format!("removing an old {PREVIOUS_DIR}/: {e}")))?;
-    back_up_current(data_dir, app_version, &contents).await?;
+    back_up_current(data_dir, app_version, &contents, limits).await?;
     let result = async {
         swap(data_dir, staging, previous, id, &contents).map_err(restore_failed)?;
         // The normal start path: pending migrations run, after their own backup.
@@ -956,6 +991,7 @@ async fn back_up_current(
     data_dir: &Path,
     app_version: &str,
     contents: &[Content],
+    limits: Limits,
 ) -> Result<PathBuf, BackupError> {
     let db_file = data_dir.join(db::DB_FILE);
     if !db_file.exists() {
@@ -963,7 +999,7 @@ async fn back_up_current(
         fs::write(&db_file, b"").map_err(restore_failed)?;
     }
     let pool = db::open_file(&db_file).await.map_err(restore_failed)?;
-    let archive = export_file(&pool, data_dir, app_version, contents).await;
+    let archive = export_file(&pool, data_dir, app_version, contents, limits).await;
     pool.close().await;
     let archive = archive.map_err(|e| match e {
         // Same limits as an export; the restore stops before anything moves.

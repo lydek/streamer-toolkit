@@ -60,3 +60,35 @@ it('says which kinds a backup holds and that only those are replaced', async () 
   expect(wrapper.text()).not.toContain(t('backup.records', { redemptions: 0, checkins: 0 }))
   expect(wrapper.text()).toContain(t('backup.restoreOnly.media'))
 })
+
+it('shows the upload, then the check, and cancelling stops it with no error and lets the same file be chosen again', async () => {
+  let report!: (p: { phase: 'upload' | 'check'; sent: number; total: number }) => void
+  let aborted: AbortSignal | undefined
+  previewRestore.mockImplementationOnce(
+    (_file: File, onProgress: typeof report, signal: AbortSignal) =>
+      new Promise((_, reject) => {
+        report = onProgress
+        aborted = signal
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      }),
+  )
+  const wrapper = mount(BackupRestore, { global: { plugins: [i18n, PrimeVue] } })
+  const input = wrapper.get<HTMLInputElement>('input[type="file"]')
+  Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'big.stbackup')], configurable: true })
+  await input.trigger('change')
+  report({ phase: 'upload', sent: 1.2 * 1024 ** 3, total: 3.4 * 1024 ** 3 })
+  await flushPromises()
+  // Literal on purpose: both numbers in the total's unit.
+  expect(wrapper.get('.progress [role="status"]').text()).toBe('上傳中 1.2 / 3.4 GB')
+  expect(input.attributes('disabled')).toBeDefined()
+  report({ phase: 'check', sent: 3.4 * 1024 ** 3, total: 3.4 * 1024 ** 3 })
+  await flushPromises()
+  expect(wrapper.get('.progress [role="status"]').text()).toBe(t('backup.checking'))
+  await wrapper.get('.progress button').trigger('click')
+  await flushPromises()
+  expect(aborted?.aborted).toBe(true)
+  expect(wrapper.find('.progress').exists()).toBe(false)
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  expect(input.attributes('disabled')).toBeUndefined()
+  expect(input.element.value).toBe('')
+})
