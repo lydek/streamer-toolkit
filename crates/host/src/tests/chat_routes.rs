@@ -275,6 +275,21 @@ async fn the_chat_log_keeps_exact_bounds_and_says_when_anything_was_left_out() {
     let events = log(app).await;
     assert_eq!(events["events"].as_array().unwrap().len(), 2000);
     assert_eq!(events["truncated"], true, "events count too");
+
+    // The subs gifts hand out are never shown, so they never count toward the page.
+    let (app, pool) = setup().await;
+    sqlx::query(
+        "WITH RECURSIVE i(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM i WHERE n < 2100) \
+         INSERT INTO activity_events (id, twitch_message_id, kind, user_name, gifted, occurred_at) \
+         SELECT n, 'a' || n, CASE WHEN n > 1999 THEN 'subscribe' ELSE 'follow' END, 'Fan', n > 1999, \
+         strftime('%Y-%m-%dT%H:%M:%S.000000Z', '2026-11-19', '+' || n || ' seconds') FROM i",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let events = log(app).await;
+    assert_eq!(events["events"].as_array().unwrap().len(), 1999);
+    assert_eq!(events["truncated"], false, "gifted subs left out");
 }
 
 #[tokio::test]

@@ -83,7 +83,8 @@ pub struct ActivityEntry {
     pub occurred_at: String,
 }
 
-/// What happened from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
+/// What happened from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`. The subs a
+/// gift hands out are left out (the gift stands for them), so a big gift never pushes the rest past the limit.
 pub async fn activity_between(
     pool: &SqlitePool,
     from: Option<DateTime<Utc>>,
@@ -93,8 +94,8 @@ pub async fn activity_between(
     sqlx::query_as(
         "SELECT twitch_message_id AS alert_id, kind, user_name, tier, months, count, bits, viewers, gifted, \
          message, occurred_at FROM \
-         (SELECT * FROM activity_events WHERE (?1 IS NULL OR occurred_at >= ?1) AND (?2 IS NULL OR occurred_at < ?2) \
-          ORDER BY occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
+         (SELECT * FROM activity_events WHERE gifted = 0 AND (?1 IS NULL OR occurred_at >= ?1) \
+          AND (?2 IS NULL OR occurred_at < ?2) ORDER BY occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
     )
     .bind(from.map(time_text))
     .bind(until.map(time_text))
@@ -318,6 +319,29 @@ pub(crate) mod tests {
             }
         );
         assert_eq!(session_counts(&pool, "s2").await.unwrap().raids, 1);
+    }
+
+    #[tokio::test]
+    async fn a_big_gift_never_pushes_older_activity_past_the_limit() {
+        let pool = pool().await;
+        // A follow, then a gift of 50 and the 50 subs it hands out.
+        sqlx::query(
+            "WITH RECURSIVE i(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM i WHERE n < 51) \
+             INSERT INTO activity_events (id, twitch_message_id, kind, count, gifted, occurred_at) \
+             SELECT n, 'm' || n, CASE n WHEN 0 THEN 'follow' WHEN 1 THEN 'gift' ELSE 'subscribe' END, \
+             CASE n WHEN 1 THEN 50 END, n > 1, strftime('%Y-%m-%dT%H:%M:%S.000000Z', '2026-11-19', '+' || n || ' seconds') \
+             FROM i",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let kinds: Vec<String> = activity_between(&pool, None, None, 50)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.kind)
+            .collect();
+        assert_eq!(kinds, ["follow", "gift"]);
     }
 
     /// Another module's table, as a test stand-in.
