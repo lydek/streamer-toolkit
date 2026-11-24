@@ -78,7 +78,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { remainingMs } from '../overlay/marathon/marathon'
 import { type Schemas, api, client } from './api'
-import { useDrawerSetting } from './drawer'
+import { settingQueue, useDrawerSetting } from './drawer'
 import { clockText } from './home'
 
 const props = defineProps<{
@@ -120,9 +120,10 @@ const saveOptions = (patch: Partial<Schemas['MarathonOptionsBody']>) =>
       body: { sub_minutes: subSaved.value, bits_minutes: bitsSaved.value, max_hours: hoursSaved.value, ...patch },
     }),
   )
-const sub = useDrawerSetting(subSaved, (v) => saveOptions({ sub_minutes: v }))
-const bits = useDrawerSetting(bitsSaved, (v) => saveOptions({ bits_minutes: v }))
-const hours = useDrawerSetting(hoursSaved, (v) => saveOptions({ max_hours: v }))
+const queue = settingQueue()
+const sub = useDrawerSetting(subSaved, (v) => saveOptions({ sub_minutes: v }), queue)
+const bits = useDrawerSetting(bitsSaved, (v) => saveOptions({ bits_minutes: v }), queue)
+const hours = useDrawerSetting(hoursSaved, (v) => saveOptions({ max_hours: v }), queue)
 
 async function pause(paused: boolean) {
   try {

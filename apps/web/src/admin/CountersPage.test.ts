@@ -80,6 +80,15 @@ beforeEach(() => {
   vi.spyOn(client, 'DELETE').mockImplementation((() => ok()) as never)
   toastAdd.mockReset()
 })
+  /** The next PUT waits until `release` is called. */
+  const holdNextPut = () => {
+    let release!: () => void
+    put.mockImplementationOnce(
+      (_: string, init: { body: object }) =>
+        new Promise((resolve) => (release = () => resolve({ data: { ...deaths, ...init.body }, response: new Response(null, { status: 200 }) }))),
+    )
+    return () => release()
+  }
 enableAutoUnmount(afterEach)
 afterEach(() => {
   vi.restoreAllMocks()
@@ -135,6 +144,24 @@ describe('CountersPage', () => {
     expect(put).toHaveBeenCalledWith('/api/admin/counters/{id}', {
       params: { path: { id: 'c1' } },
       body: { name: '死亡次數', command: '抓包', allowed: 'moderator', per_stream: true },
+    })
+  })
+
+  it('saves settings changed together one after another, each with the other', async () => {
+    const wrapper = await page()
+    const release = holdNextPut()
+    await wrapper.get('#counter-name-c1').setValue('被抓包')
+    await wrapper.get('#counter-name-c1').trigger('blur')
+    await wrapper.get('#counter-command-c1').setValue('抓包')
+    await wrapper.get('#counter-command-c1').trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(1)
+    release()
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(2)
+    expect(put).toHaveBeenLastCalledWith('/api/admin/counters/{id}', {
+      params: { path: { id: 'c1' } },
+      body: { name: '被抓包', command: '抓包', allowed: 'moderator', per_stream: true },
     })
   })
 
@@ -277,6 +304,24 @@ describe('MarathonPage', () => {
 
     await receive(marathon({ paused: false, live: false }))
     expect(wrapper.get('.remaining').text()).toContain(t('counter.marathon.waiting'))
+  })
+
+  it('saves options changed together one after another, each with the other', async () => {
+    const wrapper = await marathonPage()
+    await receive(marathon({}))
+    const release = holdNextPut()
+    await wrapper.get('#marathon-sub').setValue('7')
+    await wrapper.get('#marathon-sub').trigger('blur')
+    await wrapper.get('#marathon-hours').setValue('12')
+    await wrapper.get('#marathon-hours').trigger('blur')
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(1)
+    release()
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(2)
+    expect(put).toHaveBeenLastCalledWith('/api/admin/counters/marathon/options', {
+      body: { sub_minutes: 7, bits_minutes: 2, max_hours: 12 },
+    })
   })
 })
 

@@ -78,7 +78,7 @@ import Select from 'primevue/select'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
-import { useDrawerSetting } from './drawer'
+import { settingQueue, useDrawerSetting } from './drawer'
 
 const props = defineProps<{
   counter: Schemas['CounterBody']
@@ -99,15 +99,16 @@ async function put(patch: Partial<Schemas['CounterInput']>) {
     }),
   )
 }
-const name = useDrawerSetting(ref(props.counter.name), (v) => put({ name: v }))
-const command = useDrawerSetting(ref(props.counter.command), (v) => put({ command: v }))
+const queue = settingQueue()
+const name = useDrawerSetting(ref(props.counter.name), (v) => put({ name: v }), queue)
+const command = useDrawerSetting(ref(props.counter.command), (v) => put({ command: v }), queue)
 // The "!" is shown in front of the field, so a typed one is dropped (the Host drops it too).
 function commitCommand() {
   command.value.value = command.value.value.trim().replace(/^!/, '')
   void command.commit()
 }
-const allowed = useDrawerSetting(ref(props.counter.allowed), (v) => put({ allowed: v }))
-const perStream = useDrawerSetting(ref(props.counter.per_stream), (v) => put({ per_stream: v }))
+const allowed = useDrawerSetting(ref(props.counter.allowed), (v) => put({ allowed: v }), queue)
+const perStream = useDrawerSetting(ref(props.counter.per_stream), (v) => put({ per_stream: v }), queue)
 const allowedOptions = computed(() =>
   (['everyone', 'subscriber', 'vip', 'moderator'] as const).map((value) => ({ value, label: t(`commands.allowed.${value}`) })),
 )
