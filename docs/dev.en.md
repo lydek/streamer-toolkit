@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 930c2a59a840cc5c693bd4061ba237cb34cd4907e46030f074ecebf82ce9fa72 -->
+<!-- source: docs/dev.md source-sha256: 4bc7286f70132737b889378c4dc57fb7b4b2ad96ad88d5b1d6f2556a881feddd -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -139,7 +139,7 @@ A soft limit, not checked in CI. Whether to split a file depends on how many rea
 - Scope changes go into `scope.md`; layer or module rule changes go into `architecture.md`; tech choice changes get one line in the change log of `decisions.md`.
 - To-dos and ideas become GitHub Issues, not documents.
 - No ADRs, research documents or quality checklists. `docs/archive/` holds early drafts, is listed in `.gitignore`, exists only locally, and is reference only, not instructions.
-- The UI target is the clickable prototype `prototype/ui-v2.html`: it is tracked in git, so every branch has the same copy, and it holds only fake data. Change a screen there first and split issues only after it is agreed; its changes go through commits and PRs like any other file. To view it, run `python -m http.server 5180 --bind 127.0.0.1` in the repo root and open `http://localhost:5180/prototype/ui-v2.html`; opening the file directly cannot read `localStorage`, so the page stops at an old layout. Its icons load from `apps/web/node_modules/primeicons`, so install the dependencies first.
+- The UI target is the clickable prototype `prototype/ui-v2.html`: it is tracked in git, so every branch has the same copy, and it holds only fake data. Change a screen there first and split issues only after it is agreed; its changes go through commits and PRs like any other file. To view it, run `python -m http.server 5180 --bind 127.0.0.1` in the repo root and open `http://localhost:5180/prototype/ui-v2.html`; opening the file directly cannot read `localStorage`, so the page stops at an old layout. Its icons load from `apps/web/node_modules/primeicons`, so install the dependencies first. When `prototype/` changes on `main`, `.github/workflows/pages.yml` deploys it to GitHub Pages, so it can be viewed without cloning: `https://lydek.github.io/streamer-toolkit/`.
 
 ## Language
 - `README.md` and `docs/` (including `docs/modules/`) are bilingual: Traditional Chinese is the only authoritative version, and the English version is `<name>.en.md` in the same folder. `docs/archive/` is not translated. `AGENTS.md` is English only.
