@@ -1,68 +1,81 @@
 <template>
   <p v-if="!loaded">{{ t(loadFailed ? 'home.loadFailed' : 'app.loading') }}</p>
-  <div v-else class="stack">
-    <label for="checkin-command">{{ t('settings.checkin.command') }}</label>
-    <div class="command">
-      <span aria-hidden="true">!</span>
-      <InputText
-        id="checkin-command"
-        v-model="command.value.value"
-        autocomplete="off"
-        @keydown.enter="commitCommand"
-        @blur="commitCommand"
+  <FormPanel v-else class="rules-panel">
+    <FormRow :label="t('settings.checkin.command')" input-id="checkin-command">
+      <div class="command">
+        <span aria-hidden="true">!</span>
+        <InputText
+          id="checkin-command"
+          v-model="command.value.value"
+          autocomplete="off"
+          @keydown.enter="commitCommand"
+          @blur="commitCommand"
+        />
+      </div>
+    </FormRow>
+    <FormRow :label="t('commands.allowed.label')" label-id="checkin-allowed-label">
+      <Select
+        v-model="allowed.value.value"
+        input-id="checkin-allowed"
+        :options="allowedOptions"
+        option-label="label"
+        option-value="value"
+        aria-labelledby="checkin-allowed-label"
+        @update:model-value="allowed.commit()"
       />
-    </div>
-    <label id="checkin-allowed-label">{{ t('commands.allowed.label') }}</label>
-    <Select
-      v-model="allowed.value.value"
-      input-id="checkin-allowed"
-      :options="allowedOptions"
-      option-label="label"
-      option-value="value"
-      aria-labelledby="checkin-allowed-label"
-      @update:model-value="allowed.commit()"
-    />
-    <label id="checkin-reward-label">{{ t('settings.checkin.reward') }}</label>
-    <Select
-      v-model="reward.value.value"
-      input-id="checkin-reward"
-      :options="rewardOptions"
-      option-label="label"
-      option-value="value"
-      aria-labelledby="checkin-reward-label"
-      :pt="{ label: { 'aria-describedby': rewardError ? 'checkin-reward-error' : undefined } }"
-      @update:model-value="reward.commit()"
-    />
-    <p v-if="rewardError" id="checkin-reward-error">{{ rewardError }}</p>
-    <label id="checkin-zone-label">{{ t('settings.checkin.timeZone') }}</label>
-    <Select
-      v-model="zone.value.value"
-      input-id="checkin-zone"
-      :options="zones"
-      filter
-      aria-labelledby="checkin-zone-label"
-      @update:model-value="zone.commit()"
-    />
-    <label id="checkin-hour-label">{{ t('settings.checkin.resetHour') }}</label>
-    <Select
-      v-model="hour.value.value"
-      input-id="checkin-hour"
-      :options="hours"
-      option-label="label"
-      option-value="value"
-      aria-labelledby="checkin-hour-label"
-      @update:model-value="hour.commit()"
-    />
-    <label for="checkin-slots">{{ t('settings.checkin.cardSlots') }}</label>
-    <InputText
-      id="checkin-slots"
-      v-model="slots.value.value"
-      inputmode="numeric"
-      autocomplete="off"
-      @keydown.enter="slots.commit()"
-      @blur="slots.commit()"
-    />
-  </div>
+    </FormRow>
+    <FormRow :label="t('settings.checkin.reward')" label-id="checkin-reward-label">
+      <Select
+        v-model="reward.value.value"
+        input-id="checkin-reward"
+        :options="rewardOptions"
+        option-label="label"
+        option-value="value"
+        aria-labelledby="checkin-reward-label"
+        :pt="{ label: { 'aria-describedby': rewardError ? 'checkin-reward-error' : undefined } }"
+        @update:model-value="reward.commit()"
+      />
+      <template v-if="rewardError" #hint>
+        <span id="checkin-reward-error">{{ rewardError }}</span>
+      </template>
+    </FormRow>
+    <FormRow :label="t('settings.checkin.cardSlots')" input-id="checkin-slots">
+      <InputText
+        id="checkin-slots"
+        v-model="slots.value.value"
+        class="slots-input"
+        inputmode="numeric"
+        autocomplete="off"
+        @keydown.enter="slots.commit()"
+        @blur="slots.commit()"
+      />
+    </FormRow>
+    <slot name="sounds" />
+    <details class="more">
+      <summary>{{ t('settings.checkin.advanced') }}</summary>
+      <FormRow :label="t('settings.checkin.timeZone')" label-id="checkin-zone-label">
+        <Select
+          v-model="zone.value.value"
+          input-id="checkin-zone"
+          :options="zones"
+          filter
+          aria-labelledby="checkin-zone-label"
+          @update:model-value="zone.commit()"
+        />
+      </FormRow>
+      <FormRow :label="t('settings.checkin.resetHour')" label-id="checkin-hour-label">
+        <Select
+          v-model="hour.value.value"
+          input-id="checkin-hour"
+          :options="hours"
+          option-label="label"
+          option-value="value"
+          aria-labelledby="checkin-hour-label"
+          @update:model-value="hour.commit()"
+        />
+      </FormRow>
+    </details>
+  </FormPanel>
 </template>
 
 <script setup lang="ts">
@@ -73,6 +86,8 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 
 // Applied at once like the other settings; PUT takes all four values, so saves run one at a time from the last
 // saved settings and two fields committed in a row never undo each other.
@@ -170,9 +185,29 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.rules-panel {
+  max-width: 52rem;
+  margin-top: 0.75rem;
+}
+
 .command {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.slots-input {
+  max-width: 8rem;
+}
+
+.more {
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--p-surface-800);
+}
+
+.more summary {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+  cursor: pointer;
 }
 </style>

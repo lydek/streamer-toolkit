@@ -26,6 +26,22 @@
       </div>
     </div>
   </div>
+  <template v-else-if="layout === 'rows'">
+    <FormRow v-for="(s, i) in slots" :key="s.slot" :label="s.label" :label-id="`sound-slot-${s.slot}`">
+      <div class="row">
+        <Select
+          v-model="fields[i].value.value"
+          :input-id="`sound-slot-${s.slot}-input`"
+          :options="options"
+          option-label="label"
+          option-value="value"
+          :aria-labelledby="`sound-slot-${s.slot}`"
+          @update:model-value="fields[i].commit()"
+        />
+        <slot name="actions" :slot-id="s.slot" :label="s.label" />
+      </div>
+    </FormRow>
+  </template>
   <div v-else class="stack">
     <template v-for="(s, i) in slots" :key="s.slot">
       <label :id="`sound-slot-${s.slot}`">{{ s.label }}</label>
@@ -62,6 +78,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
 import { useDrawerSetting } from './drawer'
+import FormRow from './FormRow.vue'
 
 // Each slot is applied at once. DEFAULT is its default (the built-in sound for alerts, silence otherwise); not '',
 // which Select shows as nothing chosen.
@@ -72,7 +89,7 @@ const props = withDefaults(
     slots: { slot: string; label: string }[]
     builtIn?: boolean
     playable?: boolean
-    layout?: 'stack' | 'table'
+    layout?: 'stack' | 'table' | 'rows'
   }>(),
   { layout: 'stack' },
 )

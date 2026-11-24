@@ -904,7 +904,8 @@
       "noReward": "不使用（只用聊天指令）",
       "timeZone": "時區",
       "resetHour": "換日時間",
-      "cardSlots": "集點卡格數"
+      "cardSlots": "集點卡格數",
+      "advanced": "進階"
     },
     "backup": "備份與還原",
     "about": "關於",
