@@ -110,6 +110,11 @@
   "dock": {
     "title": "聊天室",
     "close": "收合聊天室",
+    "openFullPage": "開啟聊天室完整頁",
+    "pauseScroll": "暫停捲動",
+    "resumeScroll": "繼續捲動",
+    "newMessages": "{n} 則新訊息 ↓",
+    "jumpLatest": "跳到最新 ↓",
     "resize": "調整聊天室寬度",
     "filters": "篩選訊息",
     "search": "搜尋訊息",

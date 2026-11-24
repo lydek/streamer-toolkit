@@ -129,4 +129,21 @@ describe('ChatNow', () => {
     expect(wrapper.props('log').paused).toBe(false)
     wrapper.unmount()
   })
+
+  it('in dock mode hides its bar, stays paused on reopen and shows the new-messages button', async () => {
+    const paused = receive(pause(receive(EMPTY_LOG, [chat(1)])), [chat(2)])
+    const wrapper = mount(ChatNow, {
+      props: { log: paused, inDock: true },
+      global: { plugins: [i18n, PrimeVue, ToastService] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(wrapper.find('.bar').exists()).toBe(false)
+    expect(wrapper.emitted('update:log')).toBeUndefined()
+    const pill = wrapper.get('button.dock-new')
+    expect(pill.text()).toBe(i18n.global.t('dock.newMessages', { n: 1 }))
+    await pill.trigger('click')
+    expect(wrapper.emitted('update:log')![0][0]).toMatchObject({ paused: false, unseen: 0 })
+    wrapper.unmount()
+  })
 })

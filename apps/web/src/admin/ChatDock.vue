@@ -24,13 +24,42 @@
       @keydown="resizeByKey"
     ></div>
     <div class="head">
-      <h2>{{ t('dock.title') }}</h2>
+      <h2><i class="pi pi-comments" aria-hidden="true"></i>{{ t('dock.title') }}</h2>
+      <ChatDisplayMenu dock-side icon-only />
+      <Button
+        icon="pi pi-search"
+        text
+        rounded
+        :aria-label="t('dock.search')"
+        :aria-expanded="searchOpen"
+        aria-controls="dock-search"
+        @click="toggleSearch"
+      />
+      <Button
+        :icon="log.paused ? 'pi pi-play' : 'pi pi-pause'"
+        text
+        rounded
+        :aria-label="t(log.paused ? 'dock.resumeScroll' : 'dock.pauseScroll')"
+        :aria-pressed="log.paused"
+        @click="togglePause"
+      />
+      <Button icon="pi pi-window-maximize" text rounded :aria-label="t('dock.openFullPage')" @click="openFullPage" />
       <Button :icon="`pi ${wide && dock.side === 'left' ? 'pi-angle-double-left' : 'pi-angle-double-right'}`" text rounded :aria-label="t('dock.close')" @click="close" />
     </div>
     <p v-if="twitchOverview?.chat_missed_writes" role="alert">{{ t('chat.missedWrites', { n: twitchOverview.chat_missed_writes }) }}</p>
     <p v-if="twitchOverview?.chat_write_delayed" role="alert">{{ t('chat.writeDelayed') }}</p>
     <p v-if="historyFailed" role="alert">{{ t('chat.historyRetry') }}</p>
     <div class="tools">
+      <InputText
+        v-if="searchOpen"
+        id="dock-search"
+        ref="searchEl"
+        v-model="query"
+        type="search"
+        size="small"
+        :placeholder="t('dock.search')"
+        :aria-label="t('dock.search')"
+      />
       <div class="filters" role="group" :aria-label="t('dock.filters')">
         <button
           v-for="f in FILTERS"
@@ -44,7 +73,6 @@
           {{ t(`dock.filter.${f}`) }}
         </button>
       </div>
-      <InputText v-model="query" type="search" size="small" :placeholder="t('dock.search')" :aria-label="t('dock.search')" />
     </div>
     <div class="body">
       <ul v-if="filter === 'events'" class="events" role="log" aria-live="off" :aria-label="t('dock.filter.events')">
@@ -54,10 +82,11 @@
       </ul>
       <ChatNow
         v-else
+        ref="chatNow"
         :log="shownLog"
         :broadcaster-id="broadcaster?.id"
         :disconnected="live.status === 'failed'"
-        dock-side
+        in-dock
         @update:log="(next) => (log = next.paused ? pause(log) : resume(log))"
       />
     </div>
@@ -76,10 +105,11 @@ import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { alertTitle } from '../overlay/alerts/alerts'
 import { ApiError } from './api'
+import ChatDisplayMenu from './ChatDisplayMenu.vue'
 import RewardPicker from './RewardPicker.vue'
 import ChatNow from './ChatNow.vue'
 import { pause, resume, useChatHistory } from './chatLog'
@@ -110,6 +140,7 @@ const onWide = () => {
 // The chat log page shows the chat itself: the panel steps aside there and comes back after, with its saved
 // open state untouched.
 const route = useRoute()
+const router = useRouter()
 const shown = computed(
   () => !hidden.value.has('/chat') && route.path !== '/chat-log' && (wide.value ? dock.open : dock.sheet),
 )
@@ -117,6 +148,24 @@ watchEffect(() => (dock.docked = wide.value && shown.value))
 
 const filter = ref<(typeof FILTERS)[number]>('all')
 const query = ref('')
+const searchOpen = ref(false)
+const searchEl = ref<{ $el: HTMLInputElement }>()
+const chatNow = ref<InstanceType<typeof ChatNow>>()
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) void nextTick(() => searchEl.value?.$el.focus())
+  // A closed search box must not keep filtering messages out of sight.
+  else query.value = ''
+}
+function togglePause() {
+  if (!log.value.paused) log.value = pause(log.value)
+  else if (chatNow.value) void chatNow.value.jump()
+  else log.value = resume(log.value)
+}
+function openFullPage() {
+  if (!wide.value) dock.sheet = false
+  void router.push('/chat-log')
+}
 const { log, accept, historyFailed } = useChatHistory()
 const events = shallowRef<{ id: string; title: string }[]>([])
 const live = useLiveEvents(2000, (msg) => {
@@ -201,6 +250,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .dock {
+  container: dock / inline-size;
   position: sticky;
   top: 0;
   flex: none;
@@ -256,16 +306,38 @@ onBeforeUnmount(() => {
 }
 
 .head {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  gap: 0.25rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
   border-bottom: 1px solid var(--p-surface-800);
 }
 
 .head h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
   margin: 0 auto 0 0;
   font-size: 1rem;
+  white-space: nowrap;
+}
+
+.head h2 > i {
+  color: var(--p-blue-400);
+}
+
+.head :deep(.p-button) {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Five header buttons need ~310px; a narrower dock drops the title icon to keep them on one row. */
+@container dock (max-width: 320px) {
+  .head h2 > i {
+    display: none;
+  }
 }
 
 .tools {
@@ -308,13 +380,17 @@ onBeforeUnmount(() => {
 .body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .events {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   margin: 0;
-  padding: 0;
+  padding: 0.5rem 0.75rem;
   list-style: none;
 }
 

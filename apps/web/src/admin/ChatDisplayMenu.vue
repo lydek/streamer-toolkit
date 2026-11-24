@@ -1,11 +1,14 @@
 <template>
   <!-- 顯示: how chat lines look in the admin UI (saved, shared by every chat view). -->
-  <div class="display-menu">
+  <div class="display-menu" :class="{ compact: iconOnly }">
     <Button
-      :label="t('chat.display.title')"
+      :label="iconOnly ? undefined : t('chat.display.title')"
+      :aria-label="iconOnly ? t('chat.display.title') : undefined"
       icon="pi pi-sliders-h"
-      size="small"
-      outlined
+      :size="iconOnly ? undefined : 'small'"
+      :text="iconOnly"
+      :rounded="iconOnly"
+      :outlined="!iconOnly"
       :aria-expanded="open"
       :aria-controls="id"
       @click="open = !open"
@@ -66,7 +69,7 @@ import { errorToast } from './home'
 type Style = ChatDisplay['style']
 type Side = Schemas['DockSide']
 const SIDES: Side[] = ['left', 'right']
-defineProps<{ dockSide?: boolean }>()
+defineProps<{ dockSide?: boolean; iconOnly?: boolean }>()
 const STYLES: Style[] = ['compact', 'standard', 'comfortable']
 const TOGGLES = ['avatars', 'badges', 'time'] as const
 
@@ -100,6 +103,20 @@ async function save(change: Partial<ChatDisplay>) {
 .display-menu {
   display: grid;
   gap: 0.5rem;
+}
+
+.display-menu.compact {
+  display: inline-flex;
+}
+
+.display-menu.compact .panel {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0.5rem;
+  left: 0.5rem;
+  z-index: 10;
+  background: var(--p-surface-900);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.5);
 }
 
 .panel {
