@@ -577,8 +577,11 @@ dialog.dlg::backdrop { background: #000000b0; }
 .tp b { font-size: 0.875rem; }
 .tp .dots { display: flex; gap: 0.25rem; margin-top: 0.25rem; }
 .tp em { width: 0.5rem; height: 0.5rem; border-radius: 50%; }
-.tn { display: flex; align-items: baseline; gap: 0.375rem; font-size: 0.875rem; }
+.tn { display: flex; align-items: baseline; gap: 0.375rem; font-size: 0.875rem; white-space: nowrap; }
 .tn small { color: var(--s500); font-size: 0.6875rem; }
+#view-checkin .tbl td.num:last-child { white-space: nowrap; }
+#view-checkin .tbl td.num:last-child > .icon-btn { display: inline-grid; vertical-align: middle; margin-right: 0.25rem; }
+#view-checkin .tbl td.num:last-child > .btn { vertical-align: middle; white-space: nowrap; }
 /* ---------- OBS scenes and avatar ---------- */
 .scene-page { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 @media (max-width: 900px) { .scene-page { grid-template-columns: 1fr; } }
@@ -1395,7 +1398,7 @@ body[data-theme="milktea"] { color-scheme: light; --s0: #3b2a1a; --s300: #5a4532
 body[data-theme="sakura"] { color-scheme: light; --s0: #3a1f2b; --s300: #5c3a49; --s400: #7e5a6a; --s500: #a88595; --s600: #d2b6c2; --s700: #ead5de; --s800: #f6e8ee; --s900: #fffafc; --s950: #fbf0f4; --primary: #d6457f; --primary-600: #b8336a; --on-primary: #ffffff; --green: #2f7a4a; --yellow: #9a6a00; --red: #c0392b; --blue: #3b6fd4; --t-primary: #fbe1ec; --t-green: #e3f2e8; --t-yellow: #f8eccf; --t-red: #f9e0dc; --t-blue: #e2eafa; }
 body[data-theme] .tile:hover, body[data-theme] .tbl tbody tr:hover, body[data-theme] .queue li:hover { background: var(--s800); }
 body[data-theme] .clog li.mention, body[data-theme] .cm.mention { background: var(--t-primary); }
-.themes.big { grid-template-columns: repeat(auto-fill, minmax(min(8.5rem, 100%), 1fr)); }
+.themes.big { grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr)); }
 .tp-split { display: grid; grid-template-columns: 1fr 1fr; padding: 0; overflow: hidden; min-height: 4.25rem; }
 .fs-prev { color: var(--s300); line-height: 1.4; }
 /* fixed top area: top bar + group tabs + sub-tabs stay visible while the page scrolls */
