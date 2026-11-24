@@ -239,7 +239,7 @@ apps/
 - **觀眾名冊**（viewers 模組）：在聊天、特效、兌換出現過的 Twitch 使用者各一筆，存在 `viewers`（以 Twitch 使用者 ID 為主鍵，改名後更新同一筆）：登入名稱、顯示名稱、頭像、最近一次聊天徽章顯示的身分（實況主、管理員、VIP、訂閱者；只有聊天帶徽章，其他事件不改身分）、第一次與最後出現時間。沒有頭像的觀眾向 Twitch（Helix Get Users）每批最多查 100 人，暫時失敗最多再試兩次，只存 `https://static-cdn.jtvnw.net/` 的網址（與打卡共用 `core` 的檢查與查詢介面）。模擬的事件不建立也不更改觀眾；打卡自己的觀眾資料不搬過來。其他模組只透過公開查詢取得名稱（`search`、`names`、`avatars`），不讀這個資料表。
   - 每條連線訂閱 14 個事件：`channel.chat.message`；特效用的 `channel.follow`（v2）、`channel.subscribe`、`channel.subscription.message`、`channel.subscription.gift`、`channel.cheer`、`channel.raid`（條件為 `to_broadcaster_user_id`）；兌換紀錄用的 `channel.channel_points_custom_reward_redemption.add` 與 `.update`；直播狀態用的 `stream.online`、`stream.offline`；聊天紀錄用的 `channel.chat.message_delete`、`channel.chat.clear_user_messages`、`channel.chat.clear`（與 `channel.chat.message` 相同的條件與權限 `user:read:chat`）。揪團與直播狀態不需要實況主授權，各為 cost 1；其他由實況主授權，cost 為 0，合計 3，遠低於 10。
   - 更新前的登入缺少某個事件所需 scope 時，不訂閱那個事件；Twitch 對聊天以外的訂閱回錯誤狀態碼（含 429，或頻道沒有頻道點數）時只記錄警告，聊天與其他事件照常。聊天訂閱失敗，或任何訂閱遇到登入失效、連不上 Twitch、點數用完（帶重設時間），才算連線失敗並重連（點數用完時等到重設時間）。
-- **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止，不自行加快；間隔最少 1 秒。
+- **Device Code Flow**：依 Twitch 回傳的 `interval` 輪詢到 `expires_in` 為止（最多 30 分鐘），不自行加快；間隔最少 1 秒。重按登入、登出或換 Client ID 後，前一次登入不再輪詢，它的代碼也不再顯示。
 - **聊天發訊**：目前沒有發訊功能。之後要發訊（例如打卡回覆）時，必須在本機排隊並限速，採保守值 20 則／30 秒。Twitch 的上限是一般帳號 20 則／30 秒、實況主／mod／VIP 100 則／30 秒（實況主發的訊息也會算進 20 則的桶）；超過時 Twitch 會忽略該帳號的訊息 1 小時。
 
 ### OBS 連線
