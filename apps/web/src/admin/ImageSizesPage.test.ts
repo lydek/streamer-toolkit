@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
 import ImageSizesPage from './ImageSizesPage.vue'
@@ -77,6 +77,23 @@ it('sends the picture with the chosen size and fit, and shows each size on dark 
     '/api/admin/image-sizes',
     expect.objectContaining({ params: { query: { kind: 'badge', fit: 'crop', zip: false } } }),
   )
+})
+
+it('saves one size as a PNG through the shared save helper', async () => {
+  // No save picker here, so saveFile falls back to a download link for a blob URL.
+  let blob: Blob | undefined
+  const real = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
+  onTestFinished(() => void Object.assign(URL, real))
+  Object.assign(URL, { createObjectURL: (b: Blob) => ((blob = b), 'blob:x'), revokeObjectURL() {} })
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  const wrapper = await page()
+  await pick(wrapper, new File(['png'], 'logo.png', { type: 'image/png' }))
+  await wrapper.get(`.sheet.dark [aria-label="${t('imageSizes.downloadOne', { px: 36 })}"]`).trigger('click')
+  await flushPromises()
+  expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe('badge-36px.png')
+  expect(blob!.type).toBe('image/png')
+  // `AA==` is the single byte 0.
+  expect([...new Uint8Array(await blob!.arrayBuffer())]).toEqual([0])
 })
 
 it('refuses a picture over 10 MB without sending it', async () => {

@@ -1196,11 +1196,22 @@
     "bgColor": "底色顏色",
     "cropKeys": "方向鍵移動，Shift 加方向鍵縮放。",
     "tile": "轉成徽章與點數圖示的尺寸",
+    "summary": "做成 Twitch 要求的尺寸，只在這台電腦處理",
     "kind": "規格",
     "kinds": {
       "badge": "訂閱徽章 72／36／18 px",
       "points": "頻道點數圖示 112／56／28 px"
     },
+    "rules": {
+      "badge": "72 × 72、36 × 36、18 × 18 px · PNG · 透明背景 · 每張小於 25 KB",
+      "points": "112 × 112、56 × 56、28 × 28 px · PNG · 透明背景"
+    },
+    "picture": "圖片",
+    "resultsHeading": "結果",
+    "resultsHint": "在深色和淺色聊天室裡各看一次",
+    "chatDark": "深色聊天室",
+    "chatLight": "淺色聊天室",
+    "downloadOne": "下載 {px} px",
     "fit": "不是正方形時",
     "fits": {
       "pad": "補透明邊",
@@ -1359,11 +1370,13 @@
     },
     "media": {
       "heading": "兌換時播影片或 GIF",
+      "summary": "兌換時播哪一個，在「互動 › 兌換時播放」設定",
       "file": "匯入",
       "fileHint": "GIF、WebM 或 MP4，每個最多 50 MB",
       "empty": "還沒有影片或 GIF。",
       "title": "檔案",
       "length": "長度",
+      "usedIn": "用在",
       "actions": "操作",
       "seconds": "「{title}」播幾秒",
       "secondsUnit": "秒",
