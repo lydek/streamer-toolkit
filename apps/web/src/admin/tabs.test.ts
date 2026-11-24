@@ -105,8 +105,8 @@ describe('categories', () => {
     expect(categoryTarget(checkin)).toBe('/checkin')
     expect(categoryTarget(checkin, new Set(), '/card-style')).toBe('/card-style')
     expect(categoryTarget(checkin, new Set(['/card-style']), '/card-style')).toBe('/checkin')
-    // 獎勵 is not built yet, so 頻道點數 opens 兌換紀錄.
-    expect(categoryTarget(categoryOf('/redemptions')!)).toBe('/redemptions')
+    // 獎勵 is not built yet, so 頻道點數 opens 兌換時播放 (the first built page).
+    expect(categoryTarget(categoryOf('/redemptions')!)).toBe('/reward-playback')
   })
 
   it('has nowhere to go for a category with no built page', () => {

@@ -252,7 +252,7 @@
       "desc": "訂閱與小奇點目標"
     },
     "captions": {
-      "name": "即時字幕",
+      "name": "字幕",
       "desc": "把你說的話顯示在畫面上"
     },
     "musicRequests": {
@@ -451,7 +451,7 @@
       "desc": "訂閱與小奇點目標。"
     },
     "captions": {
-      "name": "即時字幕",
+      "name": "字幕",
       "desc": "把你說的話顯示在畫面上。"
     },
     "marathon": {
@@ -850,7 +850,7 @@
       "redemption": "兌換紀錄",
       "checkin": "打卡",
       "sound": "音效",
-      "scene": "OBS 場景",
+      "scene": "場景",
       "bgm": "背景音樂",
       "counter": "計數器",
       "screen-tools": "休息卡片",
@@ -1317,7 +1317,7 @@
       "twitch": "Twitch 連線中斷"
     },
     "appearance": {
-      "heading": "疊加層外觀",
+      "heading": "Overlay 外觀",
       "theme": "主題",
       "themes": {
         "dark": "深色",
@@ -1725,7 +1725,7 @@
       "break": "休息卡片",
       "warnings": "警語",
       "goals": "目標條",
-      "captions": "即時字幕",
+      "captions": "字幕",
       "avatar": "跳跳",
       "requests": "觀眾點播",
       "leaderboardOther": "排行榜：其他",
