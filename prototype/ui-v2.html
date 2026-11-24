@@ -1084,9 +1084,13 @@ body.l-tabs .w-chat { display: none; }
 .wg.mic-off .wg-s .num { color: var(--red); }
 .wg.mic-off .mix-tile-btn { border-color: var(--red); color: var(--red); }
 .mix-list { display: grid; }
-.obs-bar { align-items: center; gap: 0.5rem 0.75rem; }
-.obs-dup { display: inline-flex; align-items: center; gap: 0.375rem; margin-left: auto; padding: 0.1875rem 0.25rem 0.1875rem 0.625rem; border-radius: var(--radius); background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); font-size: 0.8125rem; }
+.obs-bar { align-items: center; gap: 0.5rem 0.75rem; min-width: 0; }
+.obs-dup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; max-width: 100%; min-width: 0; margin-left: auto; padding: 0.25rem 0.625rem; border-radius: var(--radius); background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); font-size: 0.8125rem; }
 .obs-dup .btn { padding: 0.125rem 0.5rem; font-size: 0.8125rem; }
+@container view (max-width: 56rem) {
+  .tbl.obs-src th, .tbl.obs-src td { padding-inline: 0.5rem; }
+  .tbl.obs-src td:nth-child(2), .tbl.obs-src td:nth-child(4) { white-space: normal; }
+}
 /* OBS 來源: the page fits the window; only the table rows scroll, under a fixed head. */
 @media (min-width: 601px) and (min-height: 560px) {
   #view-obssrc > .fp-body { --fit-bottom: 4.125rem; display: flex; flex-direction: column; height: calc(100vh - var(--appbar-h, 0px) - var(--pin-h, 0px) - var(--fit-bottom)); min-height: 20rem; }
