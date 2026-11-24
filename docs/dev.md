@@ -35,7 +35,7 @@
   - lefthook 是 pnpm 開發相依套件；根目錄 `package.json` 的 `prepare` script 執行 `lefthook install`，`pnpm install` 後自動啟用，不依賴套件的 postinstall。
   - Hook 檢查的是工作目錄，不是暫存區；CI 會在推上去的 commit 上再跑一次。
   - `pre-push` 依 CI 的順序跑檢查（哪些步驟會跳過見下；翻譯、script 測試、前端授權、前端 lint／test／build、API 契約是否最新、`cargo fmt`、兩次 `cargo clippy`、`cargo test`、`cargo deny check`；不跑 UI E2E），任一步失敗就擋下 push，避免推上去才在 CI 失敗。`lefthook.yml` 的 `pre-push` 步驟要和 `.github/workflows/ci.yml` 保持一致，改一邊就要改另一邊。
-  - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 不跳過，每次都跑完整檢查）：
+  - `pre-push` 只跑這次推送的檔案會影響的步驟（CI 只在 PR 只改文件或 `prototype/` 時跳過，只檢查翻譯；改到 `docs/decisions.md` 或其他任何檔案都跑完整檢查）：
     - 只改文件（根目錄的 `*.md`、`docs/`）：只檢查翻譯；改到 `docs/decisions.md` 時另跑 script 測試與前端授權檢查（授權允許清單在這份文件裡）。
     - 只改前端（`apps/web/`）：跳過 `cargo fmt`、兩次 `cargo clippy` 與 `cargo deny check`，其餘照跑。只改管理 UI（`apps/web/src/admin/`）或 E2E（`apps/web/e2e/`）時也跳過 `cargo test`；改到前端其他地方時照跑，因為 Host 內嵌 `apps/web/dist`，Rust 測試也會檢查 Overlay 頁面與內建樣板（`apps/web/src/overlay/chat/templates/`、`apps/web/src/overlay/alerts/templates/`）。
     - 改到其他任何檔案（Rust、`Cargo.*`、`lefthook.yml`、`.github/`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`scripts/` 等）：全部照跑。

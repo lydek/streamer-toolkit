@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 4bc7286f70132737b889378c4dc57fb7b4b2ad96ad88d5b1d6f2556a881feddd -->
+<!-- source: docs/dev.md source-sha256: 3a183ff55fae7a4b37df7195161a4daac5703d62609d47b84a98c2e99329e4dc -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -36,7 +36,7 @@ Principle: another Windows PC can get it running by following this document.
   - lefthook is a pnpm dev dependency; the `prepare` script in the root `package.json` runs `lefthook install`, so hooks are enabled after `pnpm install`, without relying on package postinstall scripts.
   - Hooks check the working tree, not the staged snapshot; CI runs the same check again on the pushed commit.
   - `pre-push` runs the checks in CI order (which steps it skips is below; translations, script tests, frontend licenses, frontend lint/test/build, API contracts up to date, `cargo fmt`, both `cargo clippy` runs, `cargo test`, `cargo deny check`; not UI E2E) and blocks the push at the first failure, so failures surface before CI. Keep the `pre-push` steps in `lefthook.yml` in sync with `.github/workflows/ci.yml`; change one, change the other.
-  - `pre-push` runs only the steps the pushed files can affect (CI skips nothing and always runs the full check):
+  - `pre-push` runs only the steps the pushed files can affect (CI skips only when a PR changes nothing but docs or `prototype/`, and then checks translations only; `docs/decisions.md` or any other file runs the full check):
     - Docs only (root `*.md`, `docs/`): only the translation check; a change to `docs/decisions.md` also runs the script tests and the frontend license check (the license allowlist lives in that file).
     - Frontend only (`apps/web/`): skips `cargo fmt`, both `cargo clippy` runs and `cargo deny check`; the rest runs. Changes limited to the admin UI (`apps/web/src/admin/`) or E2E (`apps/web/e2e/`) also skip `cargo test`; other frontend changes run it, because the Host embeds `apps/web/dist`, and the Rust tests also check the overlay page and the built-in templates (`apps/web/src/overlay/chat/templates/`, `apps/web/src/overlay/alerts/templates/`).
     - Any other file (Rust, `Cargo.*`, `lefthook.yml`, `.github/`, `package.json`, `pnpm-lock.yaml`, `rust-toolchain.toml`, `scripts/` and so on): everything runs.

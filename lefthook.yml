@@ -17,7 +17,8 @@ pre-commit:
 # Keep this list in sync with ci.yml. The frontend must build first: the host embeds apps/web/dist.
 #
 # Each job except translations is skipped when every pushed file ({push_files}) matches its `exclude`;
-# CI always runs everything. Exclude lists name only what a job provably ignores, so any other file
+# CI skips only docs-only PRs (root *.md, docs/ but decisions.md, prototype/: translations only, see ci.yml).
+# Exclude lists name only what a job provably ignores, so any other file
 # (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
 # - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
 # - prototype/ is a static HTML mock-up that no check reads.

@@ -18,22 +18,52 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # the PR merge commit and its base parent, to list the PR's files
+
+      # Docs-only PRs run just the translation check; the job still reports `check`, which the main ruleset
+      # requires. Docs = root *.md, docs/ (not decisions.md: it feeds the frontend license allowlist) and
+      # prototype/, the files lefthook's pre-push also skips for every check but translations. With rebase-merge
+      # main is never re-checked, so only list files no check reads.
+      - name: Changed files
+        id: changes
+        shell: bash
+        run: |
+          files=$(git diff --name-only HEAD^1 HEAD)
+          code=false
+          [ -z "$files" ] && code=true
+          while IFS= read -r f; do
+            case "$f" in
+              '') ;;
+              docs/decisions.md) code=true ;;
+              docs/* | prototype/*) ;;
+              */*) code=true ;;
+              *.md) ;;
+              *) code=true ;;
+            esac
+          done <<< "$files"
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+        if: steps.changes.outputs.code == 'true'
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: ${{ steps.changes.outputs.code == 'true' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.code == 'true'
 
       # Toolchain and components come from rust-toolchain.toml.
       - run: rustup show active-toolchain || rustup toolchain install
+        if: steps.changes.outputs.code == 'true'
       # Restores the cache cache.yml saves on main; PRs never save (1–1.7 GB each would evict main's).
       - uses: Swatinem/rust-cache@v2
+        if: steps.changes.outputs.code == 'true'
         with:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@v2
+        if: steps.changes.outputs.code == 'true'
         with:
           tool: cargo-deny
 
@@ -41,28 +71,40 @@ jobs:
         run: node scripts/check-translations.mjs
 
       - name: Script tests
+        if: steps.changes.outputs.code == 'true'
         run: pnpm test:scripts
       - name: Bundled frontend licenses (allowlist in docs/decisions.md)
+        if: steps.changes.outputs.code == 'true'
         run: pnpm check:licenses
 
       # Frontend first: the Host embeds apps/web/dist at compile time.
       - run: pnpm web:lint
+        if: steps.changes.outputs.code == 'true'
       - run: pnpm web:test
+        if: steps.changes.outputs.code == 'true'
       - name: Typecheck and build frontend
+        if: steps.changes.outputs.code == 'true'
         run: pnpm web:build
 
       # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types.
       - name: Regenerate API contracts
+        if: steps.changes.outputs.code == 'true'
         run: pnpm api:gen
       - name: API contracts are up to date (run pnpm api:gen and commit)
+        if: steps.changes.outputs.code == 'true'
         run: git diff --exit-code HEAD -- apps/web/src/api
 
       - run: cargo fmt --all --check
+        if: steps.changes.outputs.code == 'true'
       - run: cargo clippy --workspace --all-targets -- -D warnings
+        if: steps.changes.outputs.code == 'true'
       - name: Clippy on release-only code (tauri/custom-protocol; checked, never shipped)
+        if: steps.changes.outputs.code == 'true'
         run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
       - name: Tests (includes architecture tests)
+        if: steps.changes.outputs.code == 'true'
         run: cargo test --workspace
 
       - name: Licenses and advisories
+        if: steps.changes.outputs.code == 'true'
         run: cargo deny check
