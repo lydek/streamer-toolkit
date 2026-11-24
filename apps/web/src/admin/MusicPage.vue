@@ -12,13 +12,16 @@
         @click="addToScene"
       />
     </p>
-    <section v-if="part === 'player'" class="stack" aria-labelledby="music-player">
-      <h2 id="music-player">{{ t('music.player.heading') }}</h2>
+    <section v-if="part === 'player'" class="section" aria-labelledby="music-player">
+      <h2 id="music-player" class="sr-only">{{ t('music.player.heading') }}</h2>
       <MusicPlayer :event="live.bgm" :playlists="library?.playlists ?? []" @error="report" />
     </section>
 
-    <section v-if="part === 'player'" class="stack" aria-labelledby="music-rules">
-      <h2 id="music-rules">{{ t('music.rules.heading') }}</h2>
+    <section v-if="part === 'player'" class="section rules-section" aria-labelledby="music-rules">
+      <div class="sec-head">
+        <h2 id="music-rules">{{ t('music.rules.heading') }}</h2>
+        <span class="muted">{{ t('music.rules.hint') }}</span>
+      </div>
       <SceneRules
         v-if="library"
         :rules="library.scene_rules"
@@ -233,5 +236,32 @@ void refresh()
   border: 1px solid var(--p-yellow-700);
   border-radius: 6px;
   color: var(--p-yellow-200);
+  margin-bottom: 0.75rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rules-section {
+  margin-top: 1.25rem;
+}
+
+.sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.sec-head h2 {
+  margin: 0;
+}
+
+.muted {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
 }
 </style>
