@@ -162,7 +162,7 @@ test('importing previews the file, says what is skipped and why, then imports th
   // The import is a dialog, fresh each time it opens.
   const opener = page.getByRole('button', { name: zh.checkin.import.heading })
   await opener.click()
-  const file = page.getByLabel(zh.checkin.import.file)
+  const file = page.locator('#checkin-import-file')
   await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{oops') })
   await expect(page.getByText(zh.errors.checkin.import_invalid)).toBeVisible()
   expect(bodies.preview).toEqual([])

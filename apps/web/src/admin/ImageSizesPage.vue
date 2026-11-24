@@ -37,11 +37,16 @@
       <Button :label="t('imageSizes.download')" icon="pi pi-download" :disabled="!sized || busy" @click="download" />
     </div>
 
-    <label class="drop" :class="{ over }" @dragover.prevent="over = true" @dragleave="over = false" @drop.prevent="onDrop">
-      <i class="pi pi-image" aria-hidden="true"></i>
-      <span>{{ file ? file.name : t('imageSizes.drop') }}</span>
-      <input type="file" :accept="IMAGE_SIZES_ACCEPT" class="sr-only" @change="onPick" />
-    </label>
+    <div class="drop">
+      <FilePick
+        :drop-text="file ? file.name : t('imageSizes.drop')"
+        :label="t('imageSizes.pick')"
+        :hint="t('imageSizes.dropHint')"
+        icon="pi pi-image"
+        :accept="IMAGE_SIZES_ACCEPT"
+        @pick="(files) => choose(files[0])"
+      />
+    </div>
 
     <template v-if="fit === 'manual' && source">
       <ImageCropper v-model="crop" :src="source.url" :width="source.width" :height="source.height" :ratio="ratio" @commit="run" />
@@ -100,6 +105,7 @@ import { ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
+import FilePick from './FilePick.vue'
 import FullPage from './FullPage.vue'
 import ImageCropper from './ImageCropper.vue'
 import {
@@ -126,7 +132,6 @@ const fit = ref<Fit>('pad')
 const file = shallowRef<File>()
 const sized = shallowRef<Schemas['SizedImages']>()
 const busy = ref(false)
-const over = ref(false)
 const failed = ref('')
 // The picture as shown under the frame, with its own size; the frame starts centered and as large as it fits.
 const source = shallowRef<{ url: string; width: number; height: number }>()
@@ -216,17 +221,6 @@ function choose(f: File | undefined) {
   reader.readAsDataURL(f)
 }
 
-function onPick(e: Event) {
-  const input = e.target as HTMLInputElement
-  choose(input.files?.[0])
-  input.value = ''
-}
-
-function onDrop(e: DragEvent) {
-  over.value = false
-  choose(e.dataTransfer?.files[0])
-}
-
 watch([kind, fit], () => void run())
 
 async function download() {
@@ -296,21 +290,8 @@ async function download() {
 }
 
 .drop {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
   max-width: 36rem;
   margin: 1rem 0;
-  padding: 2rem 1rem;
-  border: 2px dashed var(--p-content-border-color);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.drop.over,
-.drop:focus-within {
-  border-color: var(--p-primary-color);
 }
 
 .results {

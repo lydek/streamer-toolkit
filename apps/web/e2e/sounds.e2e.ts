@@ -109,7 +109,7 @@ test('the page imports, renames, changes the volume and deletes sounds', async (
   await expect(page.getByLabel(zh.sound.label).first()).toHaveValue(HTML)
   expect(await page.evaluate(() => '__xss' in window)).toBe(false)
 
-  const file = page.getByLabel(zh.sound.file)
+  const file = page.locator('#sound-file')
   await file.setInputFiles({
     name: 'page.html',
     mimeType: 'text/html',
@@ -157,7 +157,7 @@ test('the page imports, renames, changes the volume and deletes sounds', async (
   await row.getByRole('button', { name: zh.sound.confirmDelete }).click()
   await expect(page.getByLabel(zh.sound.label)).toHaveCount(1)
   // The row took the focused button with it: focus goes to the import field.
-  await expect(page.getByLabel(zh.sound.file)).toBeFocused()
+  await expect(page.getByRole('button', { name: zh.sound.file })).toBeFocused()
   expect(s.sounds.map((x) => x.id)).toEqual(['s1'])
 })
 

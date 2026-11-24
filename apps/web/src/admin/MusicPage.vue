@@ -31,16 +31,7 @@
 
     <section v-if="part === 'library'" class="stack" aria-labelledby="music-library">
       <h2 id="music-library">{{ t('music.library') }}</h2>
-      <label for="music-file">{{ t('music.file') }}</label>
-      <input
-        id="music-file"
-        ref="input"
-        type="file"
-        multiple
-        accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg"
-        :disabled="busy"
-        @change="choose"
-      />
+      <FilePick ref="pick" input-id="music-file" :label="t('music.file')" icon="pi pi-plus" multiple accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" :disabled="busy" @pick="choose" />
       <ul v-if="importErrors.length" role="alert" class="errors">
         <li v-for="e in importErrors" :key="e">{{ e }}</li>
       </ul>
@@ -93,6 +84,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
+import FilePick from './FilePick.vue'
 import { errorToast, successToast, useLiveEvents } from './home'
 import { importMusic, measureUnmeasured, playerLine } from './music'
 import MusicPlayer from './MusicPlayer.vue'
@@ -105,7 +97,7 @@ import SceneRules from './SceneRules.vue'
 withDefaults(defineProps<{ part?: 'player' | 'playlists' | 'library' }>(), { part: 'player' })
 const { t } = useI18n()
 const toast = useToast()
-const input = ref<HTMLInputElement>()
+const pick = ref<InstanceType<typeof FilePick>>()
 const library = shallowRef<Schemas['MusicLibrary']>()
 const failed = ref('')
 const importErrors = ref<string[]>([])
@@ -160,10 +152,8 @@ async function refresh() {
   if (library.value && (await measureUnmeasured(library.value.tracks))) await load()
 }
 
-async function choose() {
+async function choose(files: File[]) {
   importErrors.value = []
-  const files = [...(input.value?.files ?? [])]
-  if (!files.length) return
   busy.value = true
   let imported = 0
   // One at a time: each file is up to 50 MB.
@@ -176,7 +166,6 @@ async function choose() {
     }
   }
   busy.value = false
-  if (input.value) input.value.value = ''
   if (imported) toast.add(successToast(t('music.imported', { n: imported })))
   await refresh()
 }
@@ -198,7 +187,7 @@ async function deleted(track: Schemas['Track']) {
   toast.add(successToast(t('music.deleted', { title: track.title })))
   await load()
   // The deleted row took the focused button with it.
-  await keepFocus(() => input.value)
+  await keepFocus(() => pick.value?.element())
 }
 
 async function playlistDeleted(p: Schemas['MusicPlaylist']) {

@@ -12,9 +12,9 @@
         <Button :label="t('backup.export')" icon="pi pi-download" :disabled="busy" @click="exportBackup" />
       </div>
     </FormRow>
-    <FormRow :label="t('backup.restoreFile')" input-id="restore-file" top>
+    <FormRow :label="t('backup.restoreFile')" label-id="restore-label" top>
       <div class="restore">
-        <input id="restore-file" ref="input" type="file" accept=".stbackup" :disabled="busy" @change="choose" />
+        <FilePick input-id="restore-file" labelled-by="restore-label" :drop-text="t('backup.drop')" accept=".stbackup" :disabled="busy" @pick="choose" />
         <div v-if="progress" class="progress">
           <p role="status">{{ progressText }}</p>
           <ProgressBar :value="progressPercent" :mode="progress.phase === 'check' ? 'indeterminate' : 'determinate'" />
@@ -52,6 +52,7 @@ import { useToast } from 'primevue/usetoast'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas } from './api'
+import FilePick from './FilePick.vue'
 import FormPanel from './FormPanel.vue'
 import FormRow from './FormRow.vue'
 import {
@@ -70,7 +71,7 @@ import { errorToast, successToast } from './home'
 const { t, locale } = useI18n()
 const toast = useToast()
 const busy = ref(false)
-const input = ref<HTMLInputElement>()
+
 const preview = shallowRef<Schemas['RestorePreview']>()
 const error = ref('')
 const restarting = ref(false)
@@ -114,10 +115,10 @@ async function exportBackup() {
 }
 
 // The Host checks and stages the file; nothing in use changes until the restore is confirmed.
-async function choose() {
+async function choose(files: File[]) {
   preview.value = undefined
   error.value = ''
-  const file = input.value?.files?.[0]
+  const file = files[0]
   if (!file) return
   busy.value = true
   controller = new AbortController()
@@ -125,18 +126,13 @@ async function choose() {
   try {
     preview.value = await previewRestore(file, (p) => (progress.value = p), signal)
   } catch (e) {
-    refuse(signal.aborted ? '' : message(e))
+    // A cancel is no error; FilePick already cleared the choice, so the same file can be picked again.
+    error.value = signal.aborted ? '' : message(e)
   } finally {
     progress.value = undefined
     controller = undefined
     busy.value = false
   }
-}
-
-/** Shows why the file was refused and clears the choice, so choosing the same file once fixed fires again. */
-function refuse(text: string) {
-  error.value = text
-  if (input.value) input.value.value = ''
 }
 
 async function restore() {
