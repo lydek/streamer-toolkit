@@ -8,7 +8,7 @@ use axum::{
     Json, Router,
     extract::{State, WebSocketUpgrade, ws},
     http::{HeaderMap, StatusCode},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{any, post},
 };
 use serde_json::{Value, json};
@@ -175,23 +175,34 @@ async fn second(ws: WebSocketUpgrade) -> Response {
     })
 }
 
-async fn subscribe(
-    State(f): State<Fake>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> StatusCode {
+async fn subscribe(State(f): State<Fake>, headers: HeaderMap, Json(body): Json<Value>) -> Response {
     let client_id = headers
         .get("Client-Id")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
-    let status = match body["type"].as_str() {
-        Some("channel.follow") => StatusCode::FORBIDDEN,
-        // An EventSub limit: a 429 without Ratelimit-Reset.
-        Some("channel.subscription.gift") => StatusCode::TOO_MANY_REQUESTS,
-        _ => StatusCode::ACCEPTED,
-    };
+    let kind = body["type"].as_str().map(str::to_owned);
     f.subscriptions.lock().unwrap().push((client_id, body));
-    status
+    match kind.as_deref() {
+        Some("channel.follow") => StatusCode::FORBIDDEN.into_response(),
+        // An EventSub limit: a 429 with points left, and the bucket's reset time as on every Helix answer.
+        Some("channel.subscription.gift") => {
+            let reset = (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 60)
+                .to_string();
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                [
+                    ("Ratelimit-Remaining", "799".to_owned()),
+                    ("Ratelimit-Reset", reset),
+                ],
+            )
+                .into_response()
+        }
+        _ => StatusCode::ACCEPTED.into_response(),
+    }
 }
 
 async fn fake_twitch() -> (String, Fake) {
@@ -413,7 +424,7 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
         .map(|(_, b)| b["type"].as_str().unwrap())
         .collect();
     // Subscriptions carry over a reconnect; cheer needs bits:read, which this token lacks; the refused
-    // follow and the rate-limited gift did not stop the rest.
+    // follow and the gift refused by an EventSub limit did not stop the rest.
     assert_eq!(
         types,
         [
@@ -465,12 +476,14 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
 }
 
 /// One behavior for every connection: a welcome (session `s<n>`, 1 s keepalive), then `after_welcome` if
-/// any, then silence. The chat subscription answers `chat_status`; the others are accepted.
+/// any, then silence. The chat subscription answers `chat_status`; the others are accepted, unless
+/// `raid_rate_limit_reset` makes the raid subscription hit an empty points bucket.
 #[derive(Clone)]
 struct Scripted {
     after_welcome: Option<String>,
     chat_status: StatusCode,
     rate_limit_reset: Option<u64>,
+    raid_rate_limit_reset: Option<u64>,
     connections: Arc<Mutex<Vec<std::time::Instant>>>,
     /// Session IDs the chat subscription was requested for.
     chat_sessions: Arc<Mutex<Vec<String>>>,
@@ -483,6 +496,7 @@ impl Scripted {
             after_welcome,
             chat_status,
             rate_limit_reset: None,
+            raid_rate_limit_reset: None,
             connections: Arc::default(),
             chat_sessions: Arc::default(),
             closed: Arc::default(),
@@ -520,6 +534,15 @@ async fn scripted_ws(ws: WebSocketUpgrade, State(f): State<Scripted>) -> Respons
 
 async fn scripted_subscribe(State(f): State<Scripted>, Json(body): Json<Value>) -> Response {
     use axum::response::IntoResponse;
+    if body["type"] == "channel.raid"
+        && let Some(reset) = f.raid_rate_limit_reset
+    {
+        let headers = [
+            ("Ratelimit-Remaining", "0".to_owned()),
+            ("Ratelimit-Reset", reset.to_string()),
+        ];
+        return (StatusCode::TOO_MANY_REQUESTS, headers).into_response();
+    }
     if body["type"] != "channel.chat.message" {
         return StatusCode::ACCEPTED.into_response();
     }
@@ -656,6 +679,26 @@ async fn a_rate_limited_chat_subscription_waits_for_the_reset() {
     let c = script.connections();
     // Longer than the 1 s backoff: at least until the reset, 3 to 4 s away when the 429 came.
     assert!(c[1] - c[0] >= Duration::from_secs(2), "{:?}", c[1] - c[0]);
+    task.abort();
+}
+
+#[tokio::test]
+async fn an_empty_points_bucket_mid_subscribing_waits_for_the_reset_and_starts_over() {
+    let mut script = Scripted::new(None, StatusCode::ACCEPTED);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    script.raid_rate_limit_reset = Some(now + 4);
+    let (task, _auth, reports) = run_scripted(&script).await;
+    until("a second session", || script.connections().len() >= 2).await;
+    let c = script.connections();
+    // The rest are not skipped: the session ends and a new one subscribes after the reset.
+    assert!(c[1] - c[0] >= Duration::from_secs(2), "{:?}", c[1] - c[0]);
+    assert!(
+        !reports.lock().unwrap().contains(&true),
+        "a session that could not subscribe is not connected"
+    );
     task.abort();
 }
 
