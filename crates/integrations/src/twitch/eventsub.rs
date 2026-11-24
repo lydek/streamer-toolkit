@@ -296,9 +296,11 @@ impl EventSub {
             };
             match self.create(kind, version, condition, session_id).await {
                 // E.g. a channel Twitch does not offer it to (channel points need Affiliate or Partner), or an
-                // EventSub limit (a 429); chat and the others carry on. Sign-in failures still end the session.
+                // EventSub limit (a 429 with points left, or one without a reset time); chat and the others carry
+                // on. An empty points bucket with a reset time ends the session, which waits for the reset and
+                // subscribes again; sign-in failures end it too.
                 Err(EventSubError::Helix(
-                    e @ (HelixError::Refused(_) | HelixError::RateLimited(_)),
+                    e @ (HelixError::Refused(_) | HelixError::RateLimited(None)),
                 )) => {
                     tracing::warn!(subscription = kind, error = ?e, "EventSub subscription refused");
                 }

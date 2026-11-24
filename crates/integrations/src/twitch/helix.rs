@@ -92,11 +92,16 @@ impl Helix {
                 .ok_or(AuthError::Unreachable)?;
             let status = res.status().as_u16();
             let reset = reset_wait(res.headers());
-            let empty = res
+            let remaining: Option<u64> = res
                 .headers()
                 .get("Ratelimit-Remaining")
-                .is_some_and(|n| n == "0");
-            if (empty || status == 429)
+                .and_then(|n| n.to_str().ok()?.parse().ok());
+            // A 429 with points left is not the rate limit (EventSub answers its subscription limits so): only that
+            // request is refused, nothing else pauses. Without a readable count it is taken as the rate limit.
+            if status == 429 && remaining.is_some_and(|n| n > 0) {
+                return Err(HelixError::Refused(429));
+            }
+            if (remaining == Some(0) || status == 429)
                 && let Some(wait) = reset
             {
                 self.auth.pause_helix(&token.user_id, wait);
@@ -210,6 +215,93 @@ mod tests {
         };
         tokio::time::advance(wait).await;
         other.get_json("/users").await.unwrap();
+    }
+
+    /// A Helix that answers `/limited` with a 429 and these headers, and `/users` with `{}`.
+    async fn answering_429(headers: Vec<(&'static str, String)>) -> Helix {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let limited = move || {
+                let mut map = HeaderMap::new();
+                for (name, value) in &headers {
+                    map.insert(*name, HeaderValue::from_str(value).unwrap());
+                }
+                async move { (http::StatusCode::TOO_MANY_REQUESTS, map, "{}") }
+            };
+            let app = axum::Router::new()
+                .route("/limited", axum::routing::get(limited))
+                .route("/users", axum::routing::get(|| async { "{}" }));
+            axum::serve(listener, app).await.unwrap();
+        });
+        let store = crate::secrets::memory::MemoryStore::default();
+        *store.value.lock().unwrap() = Some(
+            r#"{"client_id":"client","access_token":"a","refresh_token":"r","user_id":"42","login":"s","scopes":[]}"#
+                .into(),
+        );
+        let http = crate::tls::https_client(crate::tls::client_config().unwrap());
+        let auth = TwitchAuth::new(
+            "client".into(),
+            &base,
+            http.clone(),
+            std::sync::Arc::new(store),
+        );
+        Helix::new(&base, auth, http)
+    }
+
+    #[tokio::test]
+    async fn a_429_with_points_left_refuses_only_that_request() {
+        let reset = || {
+            (SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 10)
+                .to_string()
+        };
+        let helix = answering_429(vec![
+            ("Ratelimit-Remaining", "799".into()),
+            ("Ratelimit-Reset", reset()),
+        ])
+        .await;
+        assert!(matches!(
+            helix.get_json("/limited").await,
+            Err(HelixError::Refused(429))
+        ));
+        helix.get_json("/users").await.unwrap();
+
+        // No points left, or no readable count: the rate limit, and every request waits for the reset.
+        for remaining in [Some("0"), Some("lots"), None] {
+            let mut headers = vec![("Ratelimit-Reset", reset())];
+            headers.extend(remaining.map(|r| ("Ratelimit-Remaining", r.to_owned())));
+            let helix = answering_429(headers).await;
+            assert!(
+                matches!(
+                    helix.get_json("/limited").await,
+                    Err(HelixError::RateLimited(Some(_)))
+                ),
+                "{remaining:?}"
+            );
+            assert!(
+                matches!(
+                    helix.get_json("/users").await,
+                    Err(HelixError::RateLimited(Some(_)))
+                ),
+                "{remaining:?}: paused"
+            );
+        }
+
+        // Without a usable reset time nothing pauses.
+        for reset in [None, Some("soon")] {
+            let mut headers = vec![("Ratelimit-Remaining", "0".to_owned())];
+            headers.extend(reset.map(|r| ("Ratelimit-Reset", r.to_owned())));
+            let helix = answering_429(headers).await;
+            assert!(matches!(
+                helix.get_json("/limited").await,
+                Err(HelixError::RateLimited(None))
+            ));
+            helix.get_json("/users").await.unwrap();
+        }
     }
 
     #[tokio::test(start_paused = true)]
