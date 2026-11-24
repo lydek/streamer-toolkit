@@ -84,6 +84,7 @@ import RewardPicker from './RewardPicker.vue'
 import ChatNow from './ChatNow.vue'
 import { pause, resume, useChatHistory } from './chatLog'
 import { DOCK_MAX, DOCK_MIN, DOCK_WIDE_QUERY, clampWidth, saveDock, shownWidth, useDock } from './dock'
+import { followDrag } from './drag'
 import { useModules } from './features'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
 
@@ -161,16 +162,11 @@ function close() {
 // Resizing: drag the edge facing the pages, or focus it and use ←/→ (Shift for bigger steps); the arrows move the
 // edge the way they point, so they swap with the side. Saved when it ends.
 function startResize(e: PointerEvent) {
-  const edge = e.currentTarget as HTMLElement
-  edge.setPointerCapture(e.pointerId)
-  const move = (ev: PointerEvent) =>
-    (dock.width = clampWidth(dock.side === 'left' ? ev.clientX : window.innerWidth - ev.clientX))
-  const up = () => {
-    edge.removeEventListener('pointermove', move)
-    void save()
-  }
-  edge.addEventListener('pointermove', move)
-  edge.addEventListener('pointerup', up, { once: true })
+  followDrag(
+    e,
+    (ev) => (dock.width = clampWidth(dock.side === 'left' ? ev.clientX : window.innerWidth - ev.clientX)),
+    () => void save(),
+  )
 }
 function resizeByKey(e: KeyboardEvent) {
   const step = e.shiftKey ? 64 : 16

@@ -30,6 +30,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { followDrag } from './drag'
 import { type Corner, type Crop, moveCrop, resizeCrop } from './imageSizes'
 
 /** `width` and `height`: the picture's own size in pixels, which `crop` is counted in. */
@@ -53,22 +54,18 @@ function start(e: PointerEvent, mode: 'move' | Corner) {
   const box = (e.currentTarget as HTMLElement).closest('.cropper')!.getBoundingClientRect()
   const scale = props.width / box.width
   const from = { x: e.clientX, y: e.clientY, crop: crop.value }
-  const target = e.currentTarget as HTMLElement
-  target.setPointerCapture(e.pointerId)
-  const move = (ev: PointerEvent) => {
-    const dx = Math.round((ev.clientX - from.x) * scale)
-    const dy = Math.round((ev.clientY - from.y) * scale)
-    crop.value =
-      mode === 'move'
-        ? moveCrop(from.crop, dx, dy, props.width, props.height)
-        : resizeCrop(from.crop, mode, dx, dy, props.width, props.height, props.ratio)
-  }
-  const up = () => {
-    target.removeEventListener('pointermove', move)
-    emit('commit')
-  }
-  target.addEventListener('pointermove', move)
-  target.addEventListener('pointerup', up, { once: true })
+  followDrag(
+    e,
+    (ev) => {
+      const dx = Math.round((ev.clientX - from.x) * scale)
+      const dy = Math.round((ev.clientY - from.y) * scale)
+      crop.value =
+        mode === 'move'
+          ? moveCrop(from.crop, dx, dy, props.width, props.height)
+          : resizeCrop(from.crop, mode, dx, dy, props.width, props.height, props.ratio)
+    },
+    () => emit('commit'),
+  )
 }
 
 function key(e: KeyboardEvent) {
