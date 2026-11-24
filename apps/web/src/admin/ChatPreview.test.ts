@@ -118,6 +118,8 @@ describe('ChatPreview', () => {
     expect(calls.put).toHaveBeenCalledWith('/api/admin/templates/chat', { body: { selected: 'bubble' } })
     expect(radio(wrapper, 'bubble').checked).toBe(true)
     expect(calls.toast).not.toHaveBeenCalled()
+    // Only the template in use is marked so, at the top right of its card.
+    expect(wrapper.findAll('.applied').map((s) => s.element.closest('label')?.querySelector('input')?.value)).toEqual(['bubble'])
     wrapper.unmount()
   })
 

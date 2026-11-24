@@ -807,6 +807,7 @@
   },
   "preview": {
     "heading": "樣板",
+    "applied": "使用中",
     "loadFailed": "無法取得目前使用的樣板，重新選一次會再試。",
     "templates": {
       "default": "預設",
