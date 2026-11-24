@@ -48,6 +48,29 @@ export const theme = definePreset(Aura, {
     },
   },
   components: {
+    toggleswitch: {
+      colorScheme: {
+        // Explicit border on the unchecked track: surface.500 is 3.7:1 on surface.900 and 4.1:1 on surface.950 (WCAG 1.4.11).
+        dark: {
+          root: {
+            background: '{surface.800}',
+            hoverBackground: '{surface.700}',
+            checkedBackground: '{primary.400}',
+            checkedHoverBackground: '{primary.300}',
+            borderColor: '{surface.500}',
+            hoverBorderColor: '{surface.400}',
+            checkedBorderColor: '{primary.400}',
+            checkedHoverBorderColor: '{primary.300}',
+          },
+          handle: {
+            background: '{surface.200}',
+            hoverBackground: '{surface.0}',
+            checkedBackground: '{surface.950}',
+            checkedHoverBackground: '{surface.950}',
+          },
+        },
+      },
+    },
     toast: {
       colorScheme: {
         // Flat (docs/decisions.md 視覺風格): Aura's dark toasts are translucent with blur and a colored shadow.

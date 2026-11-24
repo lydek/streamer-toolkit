@@ -10,12 +10,16 @@
     <!-- Not using Twitch or OBS at all: what needs it goes off and is locked, its tabs and tiles fold away. -->
     <div class="svc-use" role="group" :aria-label="t('settings.features')">
       <div v-for="s in SERVICES" :key="s" class="svc">
+        <span class="svc-icon" :class="s === 'twitch' ? 'tint-primary' : 'tint-blue'" aria-hidden="true">
+          <i :class="s === 'twitch' ? 'pi pi-twitch' : 'pi pi-desktop'"></i>
+        </span>
         <span class="svc-text">
           <label :for="`use-${s}`" class="name">{{ t('services.use', { service: SERVICE_NAMES[s] }) }}</label>
           <span :id="`use-${s}-desc`" class="desc">{{ t('services.useDesc', { service: SERVICE_NAMES[s] }) }}</span>
         </span>
         <ToggleSwitch
           :key="`use-${s}-${drawn}`"
+          class="svc-switch"
           :input-id="`use-${s}`"
           :model-value="!services.unused.includes(s)"
           :disabled="busy"
@@ -394,22 +398,37 @@ function toggle(f: Feature) {
 .svc-use {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
-  gap: 0.5rem 1.5rem;
+  gap: 0.75rem 1.5rem;
   margin-bottom: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--p-surface-700);
+  padding: 0.875rem 1rem;
   border-radius: 6px;
+  background: var(--p-surface-900);
 }
 
 .svc {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.svc-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .svc-text {
   display: grid;
-  margin-right: auto;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.svc-switch {
+  flex-shrink: 0;
 }
 
 .svc-text .desc {

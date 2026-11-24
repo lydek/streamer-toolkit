@@ -7,6 +7,7 @@ const homeTab = (page: Page) =>
   page.getByRole('navigation', { name: zh.nav.label }).getByRole('link', { name: zh.nav.groups.home })
 const title = (page: Page) => page.getByRole('heading', { level: 1, name: zh.settings.title })
 const host = (page: Page) => page.getByLabel(zh.settings.obs.host, { exact: true })
+const editObs = (page: Page) => page.getByRole('button', { name: zh.settings.obs.edit, exact: true })
 const section = (page: Page, name: string) => page.getByRole('navigation', { name: zh.settings.sections }).getByRole('link', { name })
 /** vue-router's previous entry: null when home is the first entry, so Back (Alt+←) on home goes nowhere. */
 const previousEntry = (page: Page) => page.evaluate(() => (history.state as { back: string | null }).back)
@@ -41,6 +42,7 @@ for (const how of ['tab', 'back']) {
     })
     await gear(page).click()
     await section(page, zh.settings.menu.connections).click()
+    await editObs(page).click()
     await host(page).fill('obs.local')
     await leave(page, how)
     await expect(page).toHaveURL(/\/admin\/$/)
@@ -55,6 +57,7 @@ test('a save that fails on leaving keeps the settings page with its error', asyn
   )
   await gear(page).click()
   await section(page, zh.settings.menu.connections).click()
+  await editObs(page).click()
   await host(page).fill('bad host')
   // No blur: the router guard's submit is the save that fails, and the router puts the settings entry back.
   await page.goBack()
@@ -121,7 +124,7 @@ test('every settings section is in the menu and has its own URL; later ones say 
   // Every later section is mounted; only the shown one is visible.
   await expect(page.getByText(zh.pages.soon).filter({ visible: true })).toHaveCount(1)
   await page.goto('/admin/settings/connections')
-  await expect(host(page)).toBeVisible()
+  await expect(editObs(page)).toBeVisible()
   await expect(page.getByLabel(zh.settings.askBeforeClose)).toBeHidden()
 })
 
@@ -131,6 +134,7 @@ test('switching sections saves a field still being edited, and a failed save kee
     r.request().method() === 'PUT' ? r.fulfill({ status: 400, json: { code: 'obs.invalid_address' } }) : r.fallback(),
   )
   await page.goto('/admin/settings/connections')
+  await editObs(page).click()
   await host(page).fill('bad host')
   await section(page, zh.settings.menu.general).click()
   await expect(page).toHaveURL(/\/admin\/settings\/connections$/)
