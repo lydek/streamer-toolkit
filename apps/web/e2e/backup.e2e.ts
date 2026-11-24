@@ -113,7 +113,7 @@ test('restore previews the chosen file, then confirms it to restart', async ({ p
     confirms++
     return r.fulfill({ status: 202 })
   })
-  await page.getByLabel(zh.backup.restoreFile).setInputFiles({
+  await page.locator('#restore-file').setInputFiles({
     name: 'old.stbackup',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(BACKUP),
@@ -137,7 +137,7 @@ for (const code of ['backup.invalid', 'backup.newer_version']) {
   test(`a refused backup (${code}) shows why and offers no restore`, async ({ page }) => {
     await openSettings(page)
     await mockUpload(page, (r) => r.fulfill({ status: 400, json: { code } }))
-    await page.getByLabel(zh.backup.restoreFile).setInputFiles({
+    await page.locator('#restore-file').setInputFiles({
       name: 'bad.stbackup',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from('not a backup'),

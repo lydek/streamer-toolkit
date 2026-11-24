@@ -23,8 +23,7 @@
 
     <section class="stack" aria-labelledby="rh-own">
       <h2 id="rh-own">{{ t('rehearsal.own') }}</h2>
-      <label for="rh-file">{{ t('rehearsal.file') }}</label>
-      <input id="rh-file" type="file" accept=".json,application/json" @change="importFile" />
+      <FilePick input-id="rh-file" :label="t('rehearsal.file')" :hint="t('rehearsal.fileHint')" accept=".json,application/json" @pick="importFile" />
     </section>
 
     <p v-if="failed" role="alert">{{ failed }}</p>
@@ -39,6 +38,7 @@ import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError } from './api'
+import FilePick from './FilePick.vue'
 import FullPage from './FullPage.vue'
 import { BUILT_IN, type Speed, runBuiltIn, runScript, stopScript } from './rehearsal'
 
@@ -71,10 +71,8 @@ async function start(run: () => ReturnType<typeof runScript>) {
   }
 }
 
-async function importFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+async function importFile(files: File[]) {
+  const file = files[0]
   if (file) {
     const script = await file.text()
     await start(() => runScript(script, speed.value))

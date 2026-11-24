@@ -1,7 +1,6 @@
 <template>
   <div class="stack">
-    <label for="media-file">{{ t('screenTools.media.file') }}</label>
-    <input id="media-file" ref="input" type="file" multiple :accept="MEDIA_ACCEPT" :disabled="busy" @change="choose" />
+    <FilePick ref="pick" input-id="media-file" :label="t('screenTools.media.file')" :hint="t('screenTools.media.fileHint')" multiple :accept="MEDIA_ACCEPT" :disabled="busy" @pick="choose" />
     <ul v-if="importErrors.length" role="alert" class="errors">
       <li v-for="e in importErrors" :key="e">{{ e }}</li>
     </ul>
@@ -63,6 +62,7 @@ import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import { ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import FilePick from './FilePick.vue'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { MEDIA_ACCEPT, importMedia, measureUnmeasured, saveMedia } from './media'
@@ -72,7 +72,7 @@ import { formatLength } from './music'
 defineProps<{ usedBy?: Map<string, string[]> }>()
 const emit = defineEmits<{ error: [unknown]; imported: [number]; loaded: [Schemas['MediaItem'][]] }>()
 const { t } = useI18n()
-const input = ref<HTMLInputElement>()
+const pick = ref<InstanceType<typeof FilePick>>()
 const items = shallowRef<Schemas['MediaItem'][]>()
 const failed = ref('')
 const importErrors = ref<string[]>([])
@@ -98,8 +98,7 @@ async function refresh() {
   if (items.value && (await measureUnmeasured(items.value))) await load()
 }
 
-async function choose() {
-  const files = [...(input.value?.files ?? [])]
+async function choose(files: File[]) {
   busy.value = true
   importErrors.value = []
   let imported = 0
@@ -112,7 +111,6 @@ async function choose() {
     }
   }
   busy.value = false
-  if (input.value) input.value.value = ''
   if (imported) emit('imported', imported)
   await refresh()
 }
@@ -132,7 +130,7 @@ async function remove(item: Schemas['MediaItem']) {
   try {
     await api(client.DELETE('/api/admin/screen-tools/media/{id}', { params: { path: { id: item.id } } }))
     await load()
-    input.value?.focus()
+    pick.value?.element()?.focus()
   } catch (e) {
     emit('error', e)
   }

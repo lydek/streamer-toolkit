@@ -1,8 +1,15 @@
 <template>
   <section class="stack" aria-labelledby="checkin-import">
     <h2 id="checkin-import">{{ t('checkin.import.heading') }}</h2>
-    <label for="checkin-import-file">{{ t('checkin.import.file') }}</label>
-    <input id="checkin-import-file" ref="input" type="file" accept=".json,application/json" @change="choose" />
+    <FilePick
+      ref="pick"
+      input-id="checkin-import-file"
+      :drop-text="t('checkin.import.drop')"
+      :label="t('checkin.import.file')"
+      icon="pi pi-file"
+      accept=".json,application/json"
+      @pick="choose"
+    />
     <p v-if="error" role="alert">{{ error }}</p>
     <template v-if="preview">
       <p role="status">
@@ -21,6 +28,7 @@ import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import FilePick from './FilePick.vue'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import { successToast } from './home'
@@ -31,7 +39,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 const { t } = useI18n()
 const toast = useToast()
 const emit = defineEmits<{ imported: [] }>()
-const input = ref<HTMLInputElement>()
+const pick = ref<InstanceType<typeof FilePick>>()
 const preview = shallowRef<Schemas['ImportSummary']>()
 const error = ref('')
 const busy = ref(false)
@@ -40,18 +48,17 @@ let content: Record<string, never> | undefined
 
 const message = (e: unknown) => (e instanceof ApiError ? errorMessage(e.code) : String(e))
 
-/** Shows why the file was refused and clears the choice, so choosing the same file once fixed fires again. */
+/** Shows why the file was refused (FilePick already cleared the choice, so the same file can be chosen again). */
 function refuse(text: string) {
   error.value = text
   content = undefined
-  if (input.value) input.value.value = ''
 }
 
-async function choose() {
+async function choose(files: File[]) {
   preview.value = undefined
   error.value = ''
   content = undefined
-  const file = input.value?.files?.[0]
+  const file = files[0]
   if (!file) return
   if (file.size > MAX_BYTES) return refuse(t('errors.checkin.import_too_large'))
   try {
@@ -74,10 +81,9 @@ async function apply() {
     toast.add(successToast(t('checkin.import.done', { added: result.added, updated: result.updated })))
     preview.value = undefined
     content = undefined
-    if (input.value) input.value.value = ''
     emit('imported')
     // The confirm button is gone with the preview.
-    void keepFocus(() => input.value)
+    void keepFocus(() => pick.value?.element())
   } catch (e) {
     error.value = message(e)
   } finally {

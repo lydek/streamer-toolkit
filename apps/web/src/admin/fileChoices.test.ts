@@ -50,18 +50,19 @@ describe('a refused file can be chosen again', () => {
 })
 
 describe('CheckinImport', () => {
-  it('moves focus to the file field once the import is done and its button is gone', async () => {
+  it('moves focus to the file button once the import is done and its confirm button is gone', async () => {
     const wrapper = mount(CheckinImport, { global: { plugins: [i18n, PrimeVue] }, attachTo: document.body })
     const input = wrapper.get('input[type="file"]').element as HTMLInputElement
     client.POST.mockResolvedValueOnce(ok({ added: 1, updated: 0, skipped: [] }))
     await choose(input, new File(['{"1":{"totalCheckIns":1}}'], 'ok.json'))
-    const confirm = wrapper.get('button')
+    const button = (label: string) => wrapper.findAll('button').find((b) => b.text() === label)
+    const confirm = button(i18n.global.t('checkin.import.confirm'))!
     ;(confirm.element as HTMLButtonElement).focus()
 
     client.POST.mockResolvedValueOnce(ok({ added: 1, updated: 0 }))
     await confirm.trigger('click')
     await flushPromises()
-    expect(wrapper.find('button').exists()).toBe(false)
-    expect(document.activeElement).toBe(input)
+    expect(button(i18n.global.t('checkin.import.confirm'))).toBeUndefined()
+    expect(document.activeElement).toBe(button(i18n.global.t('checkin.import.file'))!.element)
   })
 })

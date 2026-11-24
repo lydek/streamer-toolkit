@@ -19,8 +19,7 @@
         <fieldset class="group">
           <legend>{{ t('cardStyle.packs.heading') }}</legend>
           <div class="row">
-            <label for="cs-pack">{{ t('cardStyle.packs.upload') }}</label>
-            <input id="cs-pack" type="file" accept=".zip,application/zip" :disabled="busy" @change="uploadPack" />
+            <FilePick input-id="cs-pack" :label="t('cardStyle.packs.upload')" :hint="t('cardStyle.packs.uploadHint')" accept=".zip,application/zip" :disabled="busy" @pick="uploadPack" />
           </div>
           <ul v-if="packs.length" class="plain packs">
             <li v-for="p in packs" :key="p.id">
@@ -41,8 +40,7 @@
           <div class="row">
             <label for="cs-bg-color">{{ t('cardStyle.color') }}</label>
             <input id="cs-bg-color" v-model="form.background_color" type="color" />
-            <label for="cs-bg-image">{{ t('cardStyle.image') }}</label>
-            <input id="cs-bg-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'background_image')" />
+            <FilePick input-id="cs-bg-image" :label="t('cardStyle.image')" :hint="t('cardStyle.imageHint')" icon="pi pi-image" :accept="IMAGE_ACCEPT" @pick="upload($event, 'background_image')" />
             <template v-if="form.background_image">
               <img class="thumb" :src="`/checkin/${form.background_image}`" alt="" />
               <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.background_image = null" />
@@ -55,8 +53,7 @@
           <div class="row">
             <label for="cs-stamp-color">{{ t('cardStyle.color') }}</label>
             <input id="cs-stamp-color" v-model="form.stamp_color" type="color" />
-            <label for="cs-stamp-image">{{ t('cardStyle.image') }}</label>
-            <input id="cs-stamp-image" type="file" :accept="IMAGE_ACCEPT" @change="upload($event, 'stamp_image')" />
+            <FilePick input-id="cs-stamp-image" :label="t('cardStyle.image')" :hint="t('cardStyle.imageHint')" icon="pi pi-image" :accept="IMAGE_ACCEPT" @pick="upload($event, 'stamp_image')" />
             <template v-if="form.stamp_image">
               <img class="thumb" :src="`/checkin/${form.stamp_image}`" alt="" />
               <Button :label="t('cardStyle.removeImage')" text size="small" @click="form.stamp_image = null" />
@@ -119,6 +116,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import CardPreview from './CardPreview.vue'
 import { importCardImage, IMAGE_ACCEPT, PRESET_COLORS, uploadCardPack } from './cardStyle'
 import { onDrawerSubmit } from './drawer'
+import FilePick from './FilePick.vue'
 import FullPage from './FullPage.vue'
 import { errorToast, successToast } from './home'
 
@@ -176,9 +174,8 @@ function pickPreset(preset: string) {
 }
 
 /** Installs a pack; a refused zip says which file (and where in index.html). */
-async function uploadPack(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+async function uploadPack(files: File[]) {
+  const file = files[0]
   if (!file) return
   uploadError.value = ''
   try {
@@ -188,7 +185,6 @@ async function uploadPack(e: Event) {
   } catch (err) {
     uploadError.value = t('cardStyle.uploadFailed', { file: file.name, reason: message(err) })
   }
-  input.value = ''
 }
 
 async function deletePack(p: Schemas['CardPack']) {
@@ -202,9 +198,8 @@ async function deletePack(p: Schemas['CardPack']) {
   }
 }
 
-async function upload(e: Event, field: 'background_image' | 'stamp_image') {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+async function upload(files: File[], field: 'background_image' | 'stamp_image') {
+  const file = files[0]
   if (!file || !form.value) return
   uploadError.value = ''
   try {
@@ -212,7 +207,6 @@ async function upload(e: Event, field: 'background_image' | 'stamp_image') {
   } catch (err) {
     uploadError.value = t('cardStyle.uploadFailed', { file: file.name, reason: message(err) })
   }
-  input.value = ''
 }
 
 /** Saves the form; leaving the page saves it too, and a failed save keeps the page. */

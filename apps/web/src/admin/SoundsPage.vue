@@ -1,15 +1,7 @@
 <template>
   <FullPage tile="sound" overlay="sound" :status="library ? t('sound.count', { n: library.sounds.length }) : undefined">
     <div class="stack">
-      <label for="sound-file">{{ t('sound.file') }}</label>
-      <input
-        id="sound-file"
-        ref="input"
-        type="file"
-        accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg"
-        :disabled="busy"
-        @change="choose"
-      />
+      <FilePick ref="pick" input-id="sound-file" :label="t('sound.file')" icon="pi pi-plus" accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" :disabled="busy" @pick="choose" />
       <p v-if="importError" role="alert">{{ importError }}</p>
     </div>
 
@@ -37,6 +29,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
+import FilePick from './FilePick.vue'
 import { errorToast, successToast } from './home'
 import { keepFocus } from './page'
 import { importSound, measureUnmeasured, slotLabel } from './sounds'
@@ -44,7 +37,7 @@ import SoundRow from './SoundRow.vue'
 
 const { t } = useI18n()
 const toast = useToast()
-const input = ref<HTMLInputElement>()
+const pick = ref<InstanceType<typeof FilePick>>()
 const library = shallowRef<Schemas['SoundLibrary']>()
 const failed = ref('')
 const importError = ref('')
@@ -64,9 +57,9 @@ async function load() {
   }
 }
 
-async function choose() {
+async function choose(files: File[]) {
   importError.value = ''
-  const file = input.value?.files?.[0]
+  const file = files[0]
   if (!file) return
   busy.value = true
   try {
@@ -79,7 +72,6 @@ async function choose() {
     importError.value = message(e)
   } finally {
     busy.value = false
-    if (input.value) input.value.value = ''
   }
 }
 
@@ -87,7 +79,7 @@ async function deleted(s: Schemas['Sound']) {
   toast.add(successToast(t('sound.deleted', { label: s.label })))
   await load()
   // The deleted row took the focused button with it.
-  await keepFocus(() => input.value)
+  await keepFocus(() => pick.value?.element())
 }
 
 const report = (e: unknown) => toast.add(errorToast(message(e)))

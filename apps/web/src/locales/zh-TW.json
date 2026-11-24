@@ -913,11 +913,13 @@
     "dismiss": "這版先不要",
     "check": "檢查新版"
   },
+  "filePick": { "choose": "選擇檔案" },
   "backup": {
     "export": "匯出備份",
     "exported": "已匯出備份：{file}",
     "choiceSize": "{choice} {size}",
     "restoreFile": "從備份檔還原",
+    "drop": "把 .stbackup 拖到這裡",
     "createdAt": "備份時間：",
     "appVersion": "程式版本：{version}",
     "records": "兌換紀錄 {redemptions} 筆、打卡紀錄 {checkins} 筆",
@@ -979,6 +981,7 @@
     "import": {
       "heading": "匯入舊打卡資料",
       "file": "選擇 JSON 檔",
+      "drop": "把 JSON 檔拖到這裡",
       "summary": "會新增 {added} 位、更新 {updated} 位，略過 {skipped} 筆。",
       "confirm": "確認匯入",
       "close": "關閉",
@@ -1185,7 +1188,9 @@
     ,
       "manual": "自己選範圍"
     },
-    "drop": "把圖片拖到這裡，或按一下選擇（PNG、JPEG、GIF、WebP，最多 10 MB、每邊 4096 px）",
+    "drop": "把圖片拖到這裡",
+    "pick": "選擇圖片",
+    "dropHint": "PNG、JPEG、GIF、WebP，最多 10 MB、每邊 4096 px",
     "alt": "{px} px",
     "size": "{px} px · {kb} KB",
     "tooLarge": "標紅的徽章減色後仍超過 Twitch 的 25 KB 上限，請換一張較簡單的圖片。",
@@ -1221,7 +1226,8 @@
     },
     "start": "開始",
     "own": "自己的劇本",
-    "file": "匯入劇本（JSON，最多 256 KB）",
+    "file": "匯入劇本",
+    "fileHint": "JSON，最多 256 KB",
     "stop": "停止演練",
     "running": "演練中",
     "tile": "用模擬事件試畫面與音效",
@@ -1237,7 +1243,8 @@
     "background": "背景",
     "stamp": "印章",
     "color": "顏色",
-    "image": "圖片（PNG、JPG、GIF、WebP，最多 5 MB）",
+    "image": "選擇圖片",
+    "imageHint": "PNG、JPG、GIF、WebP，最多 5 MB",
     "removeImage": "移除圖片",
     "perRow": "每排幾格",
     "title": "標題",
@@ -1257,7 +1264,8 @@
     "uploadFailed": "{file}：{reason}",
     "packs": {
       "heading": "動畫包",
-      "upload": "上傳動畫包（zip，最多 10 MB）",
+      "upload": "上傳動畫包",
+      "uploadHint": "zip，最多 10 MB",
       "delete": "刪除動畫包「{name}」",
       "installed": "已安裝動畫包「{name}」。"
     },
@@ -1313,7 +1321,8 @@
     },
     "media": {
       "heading": "兌換時播影片或 GIF",
-      "file": "匯入 GIF、WebM 或 MP4（每個最多 50 MB）",
+      "file": "匯入",
+      "fileHint": "GIF、WebM 或 MP4，每個最多 50 MB",
       "empty": "還沒有影片或 GIF。",
       "title": "檔案",
       "length": "長度",
