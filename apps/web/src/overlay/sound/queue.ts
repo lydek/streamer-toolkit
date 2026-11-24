@@ -1,5 +1,5 @@
 import type { components } from '../../api/schema'
-import { trackSound } from '../sound'
+import { playSound } from '../sound'
 
 export type PlaySound = components['schemas']['PlaySound']
 
@@ -32,10 +32,8 @@ export function soundQueue(play: (s: PlaySound) => Promise<void>) {
 /** Plays `s` to its end; a sound that fails or is refused ends at once, so the next one is never held up. */
 export function playToEnd(s: PlaySound): Promise<void> {
   return new Promise((done) => {
-    const audio = new Audio(s.url)
-    audio.volume = Math.min(Math.max(s.volume, 0), 100) / 100
-    trackSound(audio)
+    // A refusal ends it (in `playSound`, after this handler is set), so the queue goes on.
+    const audio = playSound(s.url, s.volume)
     audio.onended = audio.onerror = () => done()
-    audio.play()?.catch(() => done())
   })
 }

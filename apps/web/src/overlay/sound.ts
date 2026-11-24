@@ -2,7 +2,7 @@
 const playing = new Set<HTMLAudioElement>()
 
 /** Keeps track of `audio` until it ends or fails. */
-export function trackSound(audio: HTMLAudioElement) {
+function trackSound(audio: HTMLAudioElement) {
   playing.add(audio)
   const forget = () => playing.delete(audio)
   audio.addEventListener('ended', forget)
@@ -14,7 +14,8 @@ export function playSound(url: string, volume: number): HTMLAudioElement {
   const audio = new Audio(url)
   audio.volume = Math.min(Math.max(volume, 0), 100) / 100
   trackSound(audio)
-  audio.play()?.catch(() => {})
+  // Refused: ends as if it had finished, so it is no longer tracked.
+  audio.play()?.catch(() => audio.dispatchEvent(new Event('ended')))
   return audio
 }
 
