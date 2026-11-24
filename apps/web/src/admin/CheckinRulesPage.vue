@@ -1,13 +1,17 @@
 <template>
   <!-- 打卡規則: how check-ins work (command, reward, slots, time zone, day change) and their sounds. -->
   <FullPage tile="checkin" overlay="checkin">
-    <CheckinSettings @error="report" />
-    <SoundSlots
-      :slots="[
-        { slot: 'checkin', label: t('sound.checkinNormal') },
-        { slot: 'checkin.full', label: t('sound.checkinFull') },
-      ]"
-    />
+    <CheckinSettings @error="report">
+      <template #sounds>
+        <SoundSlots
+          layout="rows"
+          :slots="[
+            { slot: 'checkin', label: t('sound.checkinNormal') },
+            { slot: 'checkin.full', label: t('sound.checkinFull') },
+          ]"
+        />
+      </template>
+    </CheckinSettings>
   </FullPage>
 </template>
 
