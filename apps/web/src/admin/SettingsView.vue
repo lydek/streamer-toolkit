@@ -20,38 +20,41 @@
         <section v-show="section === 'general'" aria-labelledby="general">
           <h2 id="general" tabindex="-1">{{ t('settings.general') }}</h2>
           <p v-if="unreadable" role="alert">{{ t('settings.unreadable') }}</p>
-          <p v-if="ask.value.value === undefined">{{ loadText }}</p>
-          <div v-else class="choice">
-            <Checkbox v-model="ask.value.value" input-id="ask-before-close" binary @update:model-value="ask.commit()" />
-            <label for="ask-before-close">{{ t('settings.askBeforeClose') }}</label>
-          </div>
-          <div v-if="checkUpdates.value.value !== undefined" class="choice">
-            <Checkbox v-model="checkUpdates.value.value" input-id="check-updates" binary @update:model-value="checkUpdates.commit()" />
-            <label for="check-updates">{{ t('update.check') }}</label>
-          </div>
           <!-- Dragging changes only the preview; letting go applies it to the window, so the page does not jump. -->
-          <div class="text-size">
-            <label for="text-size">{{ t('settings.textSize') }}</label>
-            <span class="slider">
-              <input
-                id="text-size"
-                type="range"
-                :min="TEXT_SIZE.min"
-                :max="TEXT_SIZE.max"
-                :step="TEXT_SIZE.step"
-                :value="textDraft"
-                aria-describedby="text-size-preview"
-                @input="textDraft = Number(($event.target as HTMLInputElement).value)"
-                @change="commitTextSize"
-              />
-              <output for="text-size">{{ textDraft }}%</output>
-            </span>
-            <p id="text-size-preview" class="preview" :style="{ fontSize: `${textDraft / textSize}rem` }">
-              {{ t('settings.textSizePreview') }}
-            </p>
-          </div>
-          <h3>{{ t('outputDevice.heading') }}</h3>
-          <OutputDevicePicker />
+          <FormPanel>
+            <FormRow :label="t('settings.textSize')" input-id="text-size">
+              <span class="slider">
+                <input
+                  id="text-size"
+                  type="range"
+                  :min="TEXT_SIZE.min"
+                  :max="TEXT_SIZE.max"
+                  :step="TEXT_SIZE.step"
+                  :value="textDraft"
+                  aria-describedby="text-size-preview"
+                  @input="textDraft = Number(($event.target as HTMLInputElement).value)"
+                  @change="commitTextSize"
+                />
+                <output for="text-size">{{ textDraft }}%</output>
+              </span>
+              <p id="text-size-preview" class="preview" :style="{ fontSize: `${textDraft / textSize}rem` }">
+                {{ t('settings.textSizePreview') }}
+              </p>
+            </FormRow>
+          </FormPanel>
+          <p v-if="ask.value.value === undefined">{{ loadText }}</p>
+          <!-- Each switch shows once its own setting has loaded, so one failing read does not hide the other. -->
+          <FormPanel v-if="ask.value.value !== undefined || checkUpdates.value.value !== undefined">
+            <FormRow v-if="ask.value.value !== undefined" :label="t('settings.askBeforeClose')" input-id="ask-before-close" end>
+              <ToggleSwitch v-model="ask.value.value" input-id="ask-before-close" @update:model-value="ask.commit()" />
+            </FormRow>
+            <FormRow v-if="checkUpdates.value.value !== undefined" :label="t('update.check')" input-id="check-updates" end>
+              <ToggleSwitch v-model="checkUpdates.value.value" input-id="check-updates" @update:model-value="checkUpdates.commit()" />
+            </FormRow>
+          </FormPanel>
+          <FormPanel :heading="t('outputDevice.heading')">
+            <OutputDevicePicker />
+          </FormPanel>
         </section>
 
         <section v-show="section === 'connections'" class="card" aria-labelledby="twitch">
@@ -138,14 +141,16 @@
 
         <section v-show="section === 'about'" aria-labelledby="about">
           <h2 id="about" tabindex="-1">{{ t('settings.about') }}</h2>
-          <p>{{ t('app.name') }} {{ version }}</p>
-          <p>{{ t('settings.license') }}</p>
-          <details @toggle="loadLicenses">
-            <summary>{{ t('settings.thirdParty') }}</summary>
-            <p v-if="licenses === undefined">{{ licensesFailed ? t('home.loadFailed') : t('app.loading') }}</p>
-            <!-- Plain text: interpolation escapes it. Focusable so the keyboard can scroll it. -->
-            <pre v-else class="licenses" tabindex="0" :aria-label="t('settings.thirdParty')">{{ licenses }}</pre>
-          </details>
+          <FormPanel>
+            <FormRow :label="t('settings.version')">{{ t('app.name') }} {{ version }}</FormRow>
+            <FormRow :label="t('settings.licenseLabel')">{{ t('settings.license') }}</FormRow>
+            <details class="more" @toggle="loadLicenses">
+              <summary>{{ t('settings.thirdParty') }}</summary>
+              <p v-if="licenses === undefined">{{ licensesFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+              <!-- Plain text: interpolation escapes it. Focusable so the keyboard can scroll it. -->
+              <pre v-else class="licenses" tabindex="0" :aria-label="t('settings.thirdParty')">{{ licenses }}</pre>
+            </details>
+          </FormPanel>
         </section>
       </div>
     </div>
@@ -155,8 +160,8 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -171,6 +176,8 @@ import RecordRetention from './RecordRetention.vue'
 import CheckinDisableDialog from './CheckinDisableDialog.vue'
 import CheckinOutbox from './CheckinOutbox.vue'
 import { useDrawerSetting } from './drawer'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import FullPage from './FullPage.vue'
 import FeatureList from './FeatureList.vue'
 import { FEATURES, type Service, isOn, shareModules, unusedBy } from './features'
@@ -569,12 +576,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.text-size {
-  display: grid;
-  gap: 0.25rem;
-  margin-top: 0.75rem;
-}
-
 .slider {
   display: flex;
   align-items: center;
@@ -588,8 +589,24 @@ onBeforeUnmount(() => {
 }
 
 .preview {
-  margin: 0;
+  margin: 0.25rem 0 0;
   color: var(--p-text-muted-color);
+}
+
+/* Panels of one section, one under another. */
+.form-panel + .form-panel,
+p + .form-panel {
+  margin-top: 1rem;
+}
+
+/* The about panel's third-party licenses, under its rows. */
+.more {
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--p-surface-800);
+}
+
+.more summary {
+  cursor: pointer;
 }
 
 .soon {
@@ -612,12 +629,6 @@ onBeforeUnmount(() => {
 .plain {
   list-style: none;
   padding: 0;
-}
-
-.choice {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .card {

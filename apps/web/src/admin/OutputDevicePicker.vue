@@ -1,6 +1,6 @@
 <template>
-  <div class="field">
-    <label for="preview-output">{{ t('outputDevice.label') }}</label>
+  <!-- A row of a FormPanel. -->
+  <FormRow :label="t('outputDevice.label')" input-id="preview-output">
     <div class="row">
       <Select
         :model-value="outputDevice?.id ?? DEFAULT"
@@ -12,7 +12,7 @@
       />
       <Button v-if="!named" :label="t('outputDevice.names')" text size="small" @click="load(true)" />
     </div>
-  </div>
+  </FormRow>
 </template>
 
 <script setup lang="ts">
@@ -20,6 +20,7 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import FormRow from './FormRow.vue'
 import { type OutputDevice, chooseOutput, listOutputs, outputDevice } from './outputDevice'
 
 const { t } = useI18n()
@@ -48,13 +49,6 @@ void load()
 </script>
 
 <style scoped>
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 1rem;
-}
-
 .row {
   display: flex;
   flex-wrap: wrap;
