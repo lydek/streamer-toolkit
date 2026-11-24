@@ -588,9 +588,8 @@ dialog.dlg::backdrop { background: #000000b0; }
 .scene-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; max-height: 34rem; overflow-y: auto; }
 .scene-items .order { white-space: nowrap; }
 .studio-pill { cursor: pointer; gap: 0.5rem; }
-.lang-switch span { padding: 0.1875rem 0.5rem; font-size: 0.75rem; }
-.lang-switch { position: fixed; left: 1rem; bottom: 1rem; z-index: 20; flex-wrap: nowrap; box-shadow: 0 4px 16px rgb(0 0 0 / 0.4); }
-@media (max-width: 600px) { .lang-switch { bottom: calc(4.75rem + env(safe-area-inset-bottom)); } }
+.lang-switch span { padding: 0.1875rem 0.5rem; font-size: 0.75rem; white-space: nowrap; }
+.lang-switch { flex: none; flex-wrap: nowrap; }
 .pack-sec { display: grid; gap: 0.5rem; padding: 0.875rem 1.25rem 1.25rem; border-top: 1px solid var(--s800); }
 .pack-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
 .pack-list li { display: flex; align-items: center; gap: 0.75rem; padding: 0.375rem 0.5rem; border-radius: var(--radius); background: var(--s950); }
@@ -1727,6 +1726,8 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
     <button class="icon-btn conn-alert" type="button" aria-label="連線有問題：OBS 重新連線中" data-go="settings" data-section-go="connections"><i class="pi pi-exclamation-triangle"></i></button>
     <button class="icon-btn chat-mobile" type="button" id="chat-mobile-btn" aria-label="聊天室" aria-expanded="false"><i class="pi pi-comments"></i></button>
     <button class="icon-btn estop" type="button" id="estop" aria-label="緊急停止：停掉正在播的並取消排隊中的呈現"><i class="pi pi-stop-circle"></i></button>
+    <!-- prototype only: preview language, kept in the top bar so it never covers page content -->
+    <div class="seg lang-switch" role="radiogroup" aria-label="介面語言（預覽）"><label><input type="radio" name="ui-lang" value="zh" checked><span>繁中</span></label><label><input type="radio" name="ui-lang" value="en"><span>EN</span></label></div>
     <button class="icon-btn" type="button" aria-label="設定" data-go="settings"><i class="pi pi-cog"></i></button>
     <span class="tb-break" aria-hidden="true"></span>
   </header>
@@ -6635,8 +6636,6 @@ document.querySelectorAll('input[name="bk-what"]').forEach((r) => r.addEventList
 booting = false
 if (START_PAGE && views[START_PAGE]) show(START_PAGE)
 </script>
-<!-- prototype only: preview language, floats so it never takes layout space -->
-<div class="seg lang-switch" role="radiogroup" aria-label="介面語言（預覽）"><label><input type="radio" name="ui-lang" value="zh" checked><span>繁中</span></label><label><input type="radio" name="ui-lang" value="en"><span>EN</span></label></div>
 <script>
 // ---- i18n preview: the dictionary gives real English; other Chinese becomes pseudo-English of a similar length ----
 ;(() => {
