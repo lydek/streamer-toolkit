@@ -63,6 +63,42 @@ main :is(form, p) {
 }
 
 /* The admin tables (class "table"). */
+.tbl-wrap {
+  margin-top: 0.75rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
+  overflow: hidden;
+}
+
+.tbl-wrap > .table {
+  margin: 0;
+}
+
+.tbl-wrap > .table thead th {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.625rem 0.75rem;
+}
+
+.tbl-wrap > .table tbody :is(th, td) {
+  padding: 0.625rem 0.75rem;
+}
+
+.tbl-wrap > .table tbody:last-child tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.tbl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.625rem 0.75rem;
+  border-top: 1px solid var(--p-content-border-color);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -97,6 +133,19 @@ main :is(form, p) {
     gap: 0.25rem 0.75rem;
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--p-content-border-color);
+  }
+
+  .tbl-wrap > .table tbody tr {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .tbl-wrap > .table tbody:last-child tr:last-child {
+    border-bottom: 0;
+  }
+
+  .tbl-wrap > .table tbody :is(th, td) {
+    padding: 0;
+    border: 0;
   }
 
   .table tbody tr > :first-child {

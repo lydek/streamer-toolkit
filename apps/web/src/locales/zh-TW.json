@@ -1682,8 +1682,14 @@
     "retry": "儲存並重試"
   },
   "rewardPlayback": {
+    "summary": "音效、影片與 GIF 和特效一起依序播",
     "soundOverlay": "音效：",
-    "mediaOverlay": "影片與 GIF："
+    "mediaOverlay": "影片與 GIF：",
+    "sound": "音效",
+    "videoVolume": "影片音量",
+    "gifNoAudio": "GIF 沒有聲音",
+    "checkinManaged": "打卡的音效與集點卡在「互動 › 打卡」設定",
+    "filesHint": "檔案在「畫面與聲音」的音效庫、影片與 GIF"
   },
   "obsStatus": {
     "in": "在 OBS：{n} 個場景，{live}",

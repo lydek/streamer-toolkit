@@ -281,6 +281,8 @@ test('channel point rewards each choose a sound and test it in OBS', async ({ pa
   // `gone` has a sound but Twitch no longer lists it: it stays, by its ID.
   const s = await library(page, [sound('s1', 'Ding')], { 'reward.gone': 's1' })
   await page.route('**/api/admin/checkin/rewards', (r) => r.fulfill({ json: [{ id: 'r1', title: HTML }] }))
+  await page.route('**/api/admin/screen-tools/media', (r) => r.fulfill({ json: [] }))
+  await page.route('**/api/admin/screen-tools/media-rules', (r) => r.fulfill({ json: [] }))
   const played: string[] = []
   await page.route('**/api/admin/sounds/*/play', (r) => {
     played.push(new URL(r.request().url()).pathname)
@@ -288,9 +290,9 @@ test('channel point rewards each choose a sound and test it in OBS', async ({ pa
   })
   // What a reward plays is set on 兌換時播放.
   await page.goto('/admin/reward-playback')
-  const reward = page.getByRole('combobox', { name: HTML })
+  const reward = page.getByRole('combobox', { name: HTML, exact: true })
   await expect(reward).toHaveText(zh.sound.silent)
-  await expect(page.getByRole('combobox', { name: 'gone' })).toHaveText('Ding')
+  await expect(page.getByRole('combobox', { name: 'gone', exact: true })).toHaveText('Ding')
   expect(await page.evaluate(() => '__xss' in window)).toBe(false)
   const test = page.getByRole('button', { name: zh.sound.playInObs })
   await expect(test.first()).toBeDisabled()
