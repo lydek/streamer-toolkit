@@ -541,7 +541,7 @@ dialog.dlg::backdrop { background: #000000b0; }
   section[id^="view-"] > .cat-tabs { position: sticky; top: calc(var(--appbar-h, 0px) + var(--head-h, 0px)); z-index: 4; background: var(--s950); }
 }
 .tabs button { flex: none; white-space: nowrap; }
-.chatpage { display: flex; flex-direction: column; height: calc(100vh - 15rem); min-height: 28rem; border-radius: var(--radius); background: var(--s900); overflow: hidden; }
+.chatpage { display: flex; flex-direction: column; height: calc(100vh - 15rem); min-height: 14rem; border-radius: var(--radius); background: var(--s900); overflow: hidden; }
 .chat-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem 0.875rem; padding: 0.875rem 1rem; border-bottom: 1px solid var(--s800); }
 .chips { display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.625rem 1rem; border-bottom: 1px solid var(--s800); }
 .chipf { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; border: 1px solid var(--s700); border-radius: 999px; background: transparent;
@@ -1408,7 +1408,7 @@ body[data-theme] .clog li.mention, body[data-theme] .cm.mention { background: va
 .appbar > :last-child { margin-bottom: 0.875rem; }
 body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
 .drawer, .sb-side, .ce-prev-wrap, .toc { top: calc(var(--appbar-h, 0px) + var(--pin-h, 0px) + 0.75rem) !important; }
-.chatpage { height: calc(100vh - var(--appbar-h, 0px) - 9rem); }
+.chatpage { height: calc(100vh - var(--appbar-h, 0px) - 7.5rem); height: calc(100dvh - var(--appbar-h, 0px) - 7.5rem); }
 @media (max-width: 900px) { .appbar { margin-left: -1.25rem; margin-right: -1.25rem; padding-left: 1.25rem; padding-right: 1.25rem; } }
 @media (max-width: 600px) { .appbar .topbar { margin-bottom: 0.625rem; } }
 /* scrollbars: thin, theme colored, stronger on hover */
