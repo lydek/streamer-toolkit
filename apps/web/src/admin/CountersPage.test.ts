@@ -199,7 +199,7 @@ describe('CountersPage per-viewer counts', () => {
   it('shows the total and top three, finds viewers and counts for them', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const wrapper = await page()
-    const row = () => wrapper.get('li.viewer-counter')
+    const row = () => wrapper.get('tbody.viewer-counter')
     expect(row().text()).toContain(t('counter.viewers.total', { n: 5 }))
     expect(row().get('.top').text()).toContain('小魚 3 · 莓莓 2')
 

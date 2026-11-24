@@ -1,63 +1,96 @@
 <template>
-  <li class="counter">
-    <div class="field">
-      <label :for="`counter-name-${counter.id}`">{{ t('counter.name') }}</label>
-      <InputText
-        :id="`counter-name-${counter.id}`"
-        v-model="name.value.value"
-        autocomplete="off"
-        maxlength="100"
-        @keydown.enter="name.commit()"
-        @blur="name.commit()"
-      />
-    </div>
-    <div class="field">
-      <label :for="`counter-command-${counter.id}`">{{ t('counter.command') }}</label>
-      <span class="command">
-        <span aria-hidden="true">!</span>
-        <InputText
-          :id="`counter-command-${counter.id}`"
-          v-model="command.value.value"
-          autocomplete="off"
-          @keydown.enter="commitCommand"
-          @blur="commitCommand"
+  <li class="counter ctr-card">
+    <div class="ctr-top">
+      <div class="ctr-meta">
+        <b class="ctr-name">{{ name.value.value }}</b>
+        <span class="muted">
+          <template v-if="command.value.value">!{{ command.value.value }} · </template>
+          {{ t(perStream.value.value ? 'counter.perStream' : 'counter.keepAcrossStreams') }}
+        </span>
+      </div>
+      <div class="ctr-tools">
+        <Button
+          icon="pi pi-pencil"
+          text
+          size="small"
+          :aria-label="t('counter.editFor', { name: name.value.value })"
+          :aria-expanded="editing"
+          :aria-controls="`counter-edit-${counter.id}`"
+          @click="toggleEdit"
         />
+        <Button
+          ref="moreButton"
+          icon="pi pi-ellipsis-h"
+          text
+          size="small"
+          :aria-label="t('counter.more', { name: name.value.value })"
+          aria-haspopup="true"
+          @click="menu?.toggle($event)"
+        />
+        <Menu ref="menu" :model="menuItems" popup />
+      </div>
+    </div>
+
+    <output class="value ctr-num" :aria-label="name.value.value">{{ value }}</output>
+
+    <div class="ctr-act">
+      <Button
+        icon="pi pi-minus"
+        severity="secondary"
+        :aria-label="t('counter.minusOneFor', { name: name.value.value })"
+        @click="emit('add', -1)"
+      />
+      <Button :label="t('counter.plusOne')" icon="pi pi-plus" @click="emit('add', 1)" />
+      <Button :label="t('counter.reset')" text @click="emit('reset')" />
+    </div>
+
+    <div v-show="editing" :id="`counter-edit-${counter.id}`" class="edit-box">
+      <div class="field">
+        <label :for="`counter-name-${counter.id}`">{{ t('counter.name') }}</label>
+        <InputText
+          :id="`counter-name-${counter.id}`"
+          v-model="name.value.value"
+          autocomplete="off"
+          maxlength="100"
+          @keydown.enter="name.commit()"
+          @blur="name.commit()"
+        />
+      </div>
+      <div class="field">
+        <label :for="`counter-command-${counter.id}`">{{ t('counter.command') }}</label>
+        <span class="command">
+          <span aria-hidden="true">!</span>
+          <InputText
+            :id="`counter-command-${counter.id}`"
+            v-model="command.value.value"
+            autocomplete="off"
+            @keydown.enter="commitCommand"
+            @blur="commitCommand"
+          />
+        </span>
+      </div>
+      <div class="field">
+        <label :id="`counter-allowed-${counter.id}`">{{ t('commands.allowed.label') }}</label>
+        <Select
+          v-model="allowed.value.value"
+          :options="allowedOptions"
+          option-label="label"
+          option-value="value"
+          :aria-labelledby="`counter-allowed-${counter.id}`"
+          @update:model-value="allowed.commit()"
+        />
+      </div>
+      <span class="choice">
+        <Checkbox
+          v-model="perStream.value.value"
+          :input-id="`counter-per-stream-${counter.id}`"
+          binary
+          @update:model-value="perStream.commit()"
+        />
+        <label :for="`counter-per-stream-${counter.id}`">{{ t('counter.perStream') }}</label>
       </span>
     </div>
-    <div class="field">
-      <label :id="`counter-allowed-${counter.id}`">{{ t('commands.allowed.label') }}</label>
-      <Select
-        v-model="allowed.value.value"
-        :options="allowedOptions"
-        option-label="label"
-        option-value="value"
-        :aria-labelledby="`counter-allowed-${counter.id}`"
-        @update:model-value="allowed.commit()"
-      />
-    </div>
-    <span class="choice">
-      <Checkbox
-        v-model="perStream.value.value"
-        :input-id="`counter-per-stream-${counter.id}`"
-        binary
-        @update:model-value="perStream.commit()"
-      />
-      <label :for="`counter-per-stream-${counter.id}`">{{ t('counter.perStream') }}</label>
-    </span>
-    <output class="value" :aria-label="counter.name">{{ value }}</output>
-    <span class="buttons">
-      <Button :label="t('counter.plusOne')" icon="pi pi-plus" @click="emit('add', 1)" />
-      <Button :label="t('counter.reset')" severity="secondary" outlined @click="emit('reset')" />
-      <Button
-        ref="moreButton"
-        icon="pi pi-ellipsis-h"
-        text
-        :aria-label="t('counter.more', { name: counter.name })"
-        aria-haspopup="true"
-        @click="menu?.toggle($event)"
-      />
-      <Menu ref="menu" :model="menuItems" popup />
-    </span>
+
     <div v-if="confirming" class="confirm" role="group" :aria-label="t('counter.delete')">
       <p>{{ t('counter.deleteNote') }}</p>
       <div class="buttons">
@@ -113,6 +146,14 @@ const allowedOptions = computed(() =>
   (['everyone', 'subscriber', 'vip', 'moderator'] as const).map((value) => ({ value, label: t(`commands.allowed.${value}`) })),
 )
 
+const editing = ref(false)
+async function toggleEdit() {
+  editing.value = !editing.value
+  if (editing.value) {
+    await nextTick()
+    document.getElementById(`counter-name-${props.counter.id}`)?.focus()
+  }
+}
 const menu = ref<InstanceType<typeof Menu>>()
 const menuItems = computed<MenuItem[]>(() => [
   { label: t('counter.minusOne'), icon: 'pi pi-minus', command: () => emit('add', -1) },
@@ -147,13 +188,66 @@ async function remove() {
 </script>
 
 <style scoped>
-.counter {
+.ctr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.125rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.ctr-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ctr-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.ctr-name {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--p-text-muted-color);
+  font-size: 0.8125rem;
+}
+
+.ctr-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+
+.ctr-num {
+  font-size: 2.25rem;
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctr-act {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--p-content-border-color);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.edit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--p-surface-800);
 }
 
 .field {
@@ -161,6 +255,11 @@ async function remove() {
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+}
+
+.field :deep(.p-inputtext),
+.field :deep(.p-select) {
+  width: 100%;
 }
 
 .command,
@@ -171,15 +270,9 @@ async function remove() {
   gap: 0.5rem;
 }
 
-.value {
-  min-width: 3ch;
-  font-size: 1.75rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
 .confirm {
-  flex-basis: 100%;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--p-surface-800);
 }
 
 .confirm p {

@@ -1,75 +1,122 @@
 <template>
-  <li class="viewer-counter">
-    <div class="head">
-      <div class="field">
-        <label :for="`viewer-counter-name-${counter.id}`">{{ t('counter.name') }}</label>
-        <InputText
-          :id="`viewer-counter-name-${counter.id}`"
-          v-model="name.value.value"
-          autocomplete="off"
-          maxlength="100"
-          @keydown.enter="name.commit()"
-          @blur="name.commit()"
-        />
-      </div>
-      <span class="total">{{ t('counter.viewers.total', { n: counter.total }) }}</span>
-      <Button ref="deleteButton" :label="t('counter.delete')" icon="pi pi-trash" severity="danger" text @click="ask" />
-    </div>
-    <p class="top">
-      <span class="label">{{ t('counter.viewers.top') }}</span>
-      {{ counter.top.length ? counter.top.map((v) => `${v.display_name} ${v.value}`).join(' · ') : t('counter.viewers.none') }}
-    </p>
-    <div v-if="confirming" class="confirm" role="group" :aria-label="t('counter.delete')">
-      <p>{{ t('counter.viewers.deleteNote') }}</p>
-      <div class="buttons">
-        <Button ref="confirmButton" :label="t('counter.confirmDelete')" severity="danger" :disabled="busy" @click="remove" />
-        <Button :label="t('counter.cancel')" text @click="cancel" />
-      </div>
-    </div>
+  <tbody class="viewer-counter">
+    <tr>
+      <th scope="row">
+        <b>{{ name.value.value }}</b>
+      </th>
+      <td class="num">
+        <span>{{ counter.total }}</span>
+        <span class="sr-only">{{ t('counter.viewers.total', { n: counter.total }) }}</span>
+      </td>
+      <td class="top">
+        {{ counter.top.length ? counter.top.map((v) => `${v.display_name} ${v.value}`).join(' · ') : t('counter.viewers.none') }}
+      </td>
+      <td class="end">
+        <span class="row-actions">
+          <Button
+            ref="searchButton"
+            icon="pi pi-search"
+            text
+            size="small"
+            :aria-label="`${t('counter.viewers.search')}：${name.value.value}`"
+            :aria-expanded="searching"
+            :aria-controls="`viewer-detail-${counter.id}`"
+            @click="toggleSearch"
+          />
+          <Button
+            :label="t(all ? 'counter.viewers.hideAll' : 'counter.viewers.showAll')"
+            text
+            :aria-expanded="!!all"
+            :aria-controls="`viewer-detail-${counter.id}`"
+            @click="toggleAll"
+          />
+          <Button
+            icon="pi pi-pencil"
+            text
+            size="small"
+            :aria-label="t('counter.editFor', { name: name.value.value })"
+            :aria-expanded="editing"
+            :aria-controls="`viewer-detail-${counter.id}`"
+            @click="toggleEdit"
+          />
+          <Button
+            ref="deleteButton"
+            icon="pi pi-trash"
+            severity="danger"
+            text
+            size="small"
+            :aria-label="`${t('counter.delete')}：${name.value.value}`"
+            @click="ask"
+          />
+        </span>
+      </td>
+    </tr>
 
-    <label :for="`viewer-search-${counter.id}`">{{ t('counter.viewers.search') }}</label>
-    <InputText :id="`viewer-search-${counter.id}`" v-model="query" type="search" autocomplete="off" @input="searchSoon" />
-    <p v-if="query.trim() && found?.length === 0">{{ t('counter.viewers.noMatch') }}</p>
-    <ul v-if="found?.length" class="viewers">
-      <li v-for="v in found" :key="v.twitch_user_id">
-        <span class="who">{{ t('counter.viewers.entry', { name: v.display_name, login: v.login }) }}</span>
-        <output class="value">{{ v.value }}</output>
-        <Button :label="t('counter.plusOne')" icon="pi pi-plus" size="small" @click="step(v, 1)" />
-        <Button
-          icon="pi pi-ellipsis-h"
-          text
-          size="small"
-          :aria-label="t('counter.more', { name: v.display_name })"
-          aria-haspopup="true"
-          @click="openMenu(v, $event)"
-        />
-      </li>
-    </ul>
+    <tr v-show="editing || searching || all || confirming" :id="`viewer-detail-${counter.id}`" class="detail-row">
+      <td colspan="4">
+        <div class="detail">
+          <div v-if="editing" class="field">
+            <label :for="`viewer-counter-name-${counter.id}`">{{ t('counter.name') }}</label>
+            <InputText
+              :id="`viewer-counter-name-${counter.id}`"
+              v-model="name.value.value"
+              autocomplete="off"
+              maxlength="100"
+              @keydown.enter="name.commit()"
+              @blur="name.commit()"
+            />
+          </div>
 
-    <Button
-      :label="t(all ? 'counter.viewers.hideAll' : 'counter.viewers.showAll')"
-      text
-      :aria-expanded="!!all"
-      @click="toggleAll"
-    />
-    <ol v-if="all" class="viewers">
-      <li v-if="!all.length">{{ t('counter.viewers.none') }}</li>
-      <li v-for="v in all" :key="v.twitch_user_id">
-        <span class="who">{{ t('counter.viewers.entry', { name: v.display_name, login: v.login }) }}</span>
-        <output class="value">{{ v.value }}</output>
-        <Button :label="t('counter.plusOne')" icon="pi pi-plus" size="small" @click="step(v, 1)" />
-        <Button
-          icon="pi pi-ellipsis-h"
-          text
-          size="small"
-          :aria-label="t('counter.more', { name: v.display_name })"
-          aria-haspopup="true"
-          @click="openMenu(v, $event)"
-        />
-      </li>
-    </ol>
-    <Menu ref="menu" :model="menuItems" popup />
-  </li>
+          <div v-if="confirming" class="confirm" role="group" :aria-label="t('counter.delete')">
+            <p>{{ t('counter.viewers.deleteNote') }}</p>
+            <div class="buttons">
+              <Button ref="confirmButton" :label="t('counter.confirmDelete')" severity="danger" :disabled="busy" @click="remove" />
+              <Button :label="t('counter.cancel')" text @click="cancel" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label :for="`viewer-search-${counter.id}`">{{ t('counter.viewers.search') }}</label>
+            <InputText :id="`viewer-search-${counter.id}`" v-model="query" type="search" autocomplete="off" @input="searchSoon" />
+          </div>
+          <p v-if="query.trim() && found?.length === 0" class="muted">{{ t('counter.viewers.noMatch') }}</p>
+          <ul v-if="found?.length" class="viewers">
+            <li v-for="v in found" :key="v.twitch_user_id">
+              <span class="who">{{ t('counter.viewers.entry', { name: v.display_name, login: v.login }) }}</span>
+              <output class="value">{{ v.value }}</output>
+              <Button :label="t('counter.plusOne')" icon="pi pi-plus" size="small" @click="step(v, 1)" />
+              <Button
+                icon="pi pi-ellipsis-h"
+                text
+                size="small"
+                :aria-label="t('counter.more', { name: v.display_name })"
+                aria-haspopup="true"
+                @click="openMenu(v, $event)"
+              />
+            </li>
+          </ul>
+
+          <ol v-if="all" class="viewers">
+            <li v-if="!all.length">{{ t('counter.viewers.none') }}</li>
+            <li v-for="v in all" :key="v.twitch_user_id">
+              <span class="who">{{ t('counter.viewers.entry', { name: v.display_name, login: v.login }) }}</span>
+              <output class="value">{{ v.value }}</output>
+              <Button :label="t('counter.plusOne')" icon="pi pi-plus" size="small" @click="step(v, 1)" />
+              <Button
+                icon="pi pi-ellipsis-h"
+                text
+                size="small"
+                :aria-label="t('counter.more', { name: v.display_name })"
+                aria-haspopup="true"
+                @click="openMenu(v, $event)"
+              />
+            </li>
+          </ol>
+          <Menu ref="menu" :model="menuItems" popup />
+        </div>
+      </td>
+    </tr>
+  </tbody>
 </template>
 
 <script setup lang="ts">
@@ -93,7 +140,31 @@ const name = useDrawerSetting(ref(props.counter.name), async (v) => {
   emit('changed')
 })
 
+const editing = ref(false)
+const searching = ref(false)
+const searchButton = ref<{ $el: HTMLElement }>()
 const query = ref('')
+
+async function toggleEdit() {
+  editing.value = !editing.value
+  if (editing.value) {
+    await nextTick()
+    document.getElementById(`viewer-counter-name-${props.counter.id}`)?.focus()
+  }
+}
+
+async function toggleSearch() {
+  searching.value = !searching.value
+  if (searching.value) {
+    await nextTick()
+    document.getElementById(`viewer-search-${props.counter.id}`)?.focus()
+  } else {
+    query.value = ''
+    found.value = undefined
+    await nextTick()
+    searchButton.value?.$el.focus()
+  }
+}
 const found = shallowRef<Count[]>()
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 onBeforeUnmount(() => clearTimeout(searchTimer))
@@ -183,42 +254,47 @@ async function remove() {
 </script>
 
 <style scoped>
-.viewer-counter {
+.num {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.end {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.detail {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
-.head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
+  padding: 0.5rem 0;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  min-width: 0;
+  max-width: 20rem;
 }
 
-.total,
+.muted,
+.confirm p {
+  margin: 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
 .value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.top,
-.confirm p {
-  margin: 0;
-}
-
-.label {
-  color: var(--p-text-muted-color);
-  margin-inline-end: 0.5rem;
 }
 
 .viewers {
@@ -244,5 +320,6 @@ async function remove() {
 .buttons {
   display: flex;
   gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 </style>
