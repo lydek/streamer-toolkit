@@ -748,11 +748,12 @@ impl Obs {
         loop {
             let ended = match self.connect().await {
                 Ok(client) => {
-                    failures = 0;
                     let client = Arc::new(client);
-                    self.share(&client);
-                    self.set(ObsStatus::CONNECTED);
-                    self.follow(&client).await;
+                    // Connected (and open to commands) only once the state is read: a read that keeps failing
+                    // backs off like a failed connection instead of reconnecting every second.
+                    if self.follow(&client).await {
+                        failures = 0;
+                    }
                     self.unshare(&client);
                     self.set_state(&StreamingState::default());
                     ObsStatus::reconnecting(Some("obs.disconnected"))
@@ -848,24 +849,27 @@ impl Obs {
 
 impl Obs {
     /// Keeps the state current until obs-websocket closes the connection (OBS exits, the server stops or the
-    /// socket drops), or a read fails, which ends the connection so the next one starts fresh.
-    async fn follow(&self, client: &Client) {
+    /// socket drops), or a read fails, which ends the connection so the next one starts fresh. Reports connected
+    /// and lets commands use `client` once the first read succeeds, and returns whether it did.
+    async fn follow(&self, client: &Arc<Client>) -> bool {
         // Subscribed before reading, so no change between the read and the first event is lost.
         let Ok(mut events) = client.events() else {
-            return;
+            return false;
         };
         // Events that arrive during a read, applied after it.
         let mut pending = VecDeque::new();
         let Some(mut state) = self.read(client, &mut events, &mut pending).await else {
-            return;
+            return false;
         };
+        self.share(client);
+        self.set(ObsStatus::CONNECTED);
         self.set_state(&state);
         loop {
             let event = match pending.pop_front() {
                 Some(event) => event,
                 None => match events.next().await {
                     Some(event) => event,
-                    None => return,
+                    None => return true,
                 },
             };
             if let Event::InputVolumeMeters { inputs } = &event {
@@ -873,12 +877,12 @@ impl Obs {
                 continue;
             }
             match apply(&mut state, &event) {
-                Change::Closed => return,
+                Change::Closed => return true,
                 Change::None => continue,
                 Change::Updated => {}
                 Change::Reread => match self.read(client, &mut events, &mut pending).await {
                     Some(fresh) => state = fresh,
-                    None => return,
+                    None => return true,
                 },
             }
             self.set_state(&state);
@@ -1254,6 +1258,8 @@ mod tests {
         /// Reads `Identify` and never answers, like a stuck OBS or another WebSocket service.
         stall: bool,
         identify: Arc<Mutex<Vec<Value>>>,
+        /// When each `Identify` arrived.
+        identified_at: Arc<Mutex<Vec<tokio::time::Instant>>>,
         exit: Arc<Notify>,
         /// Events waiting to be sent: `(eventType, eventData)`.
         pending: Arc<Mutex<Vec<(&'static str, Value)>>>,
@@ -1261,6 +1267,8 @@ mod tests {
         scene_lists: Arc<Mutex<u32>>,
         /// Sends a flood of volume meters right after answering the first scene list, in the middle of the read.
         flood: bool,
+        /// Answers the scene list with an error, so reading the state always fails.
+        fail_read: bool,
         /// Fields that replace the scene item transform's defaults (a flip, crop or bounding box).
         transform: Arc<Mutex<Value>>,
         /// `Set…` requests as `(requestType, requestData)`.
@@ -1413,6 +1421,10 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(serde_json::from_str(identify.as_str()).unwrap());
+            fake.identified_at
+                .lock()
+                .unwrap()
+                .push(tokio::time::Instant::now());
             if fake.require_auth {
                 return close(&mut socket, AUTHENTICATION_FAILED).await;
             }
@@ -1437,6 +1449,7 @@ mod tests {
                             // A group is no scene for the scene's item list: OBS answers with an error.
                             let status = if data["sceneName"] == "Missing"
                                 || (request_type == "GetSceneItemList" && data["sceneName"] == "Cam set")
+                                || (fake.fail_read && request_type == "GetSceneList")
                             {
                                 json!({"result": false, "code": 600})
                             } else if request_type == "GetInputMute" && data["inputUuid"] == LOGO {
@@ -2051,6 +2064,47 @@ mod tests {
         // The first retry comes after 1 s.
         reaches(&mut rx, ObsStatus::CONNECTED).await;
         assert_eq!(fake.identify.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_state_read_that_keeps_failing_backs_off_and_never_shows_connected() {
+        let fake = FakeObs {
+            fail_read: true,
+            ..FakeObs::default()
+        };
+        let (mut rx, _, control) = run_with_state(start(fake.clone()).await, None);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let record = seen.clone();
+        tokio::spawn(async move {
+            while rx.changed().await.is_ok() {
+                record.lock().unwrap().push(*rx.borrow_and_update());
+            }
+        });
+        let three = async {
+            while fake.identified_at.lock().unwrap().len() < 3 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), three)
+            .await
+            .unwrap();
+        let at = fake.identified_at.lock().unwrap().clone();
+        // The retries back off (1 s, then 2 s) as for a failed connection.
+        assert!(
+            at[2] - at[1] >= Duration::from_millis(1800),
+            "{:?}",
+            at[2] - at[1]
+        );
+        assert_eq!(
+            control.switch_scene("Live").await,
+            Err(StreamingError::NotConnected),
+            "nor does it take commands"
+        );
+        assert!(
+            !seen.lock().unwrap().contains(&ObsStatus::CONNECTED),
+            "{:?}",
+            seen.lock().unwrap()
+        );
     }
 
     #[tokio::test]
