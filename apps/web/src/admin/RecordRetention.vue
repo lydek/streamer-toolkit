@@ -1,10 +1,9 @@
 <template>
   <!-- Settings › 資料與備份: how long activity records are kept. Shortening it deletes older ones, so it asks first. -->
-  <section class="retention" aria-labelledby="retention-heading">
-    <h3 id="retention-heading">{{ t('retention.title') }}</h3>
-    <p v-if="!saved">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
-    <template v-else>
-      <div class="options" role="radiogroup" aria-labelledby="retention-heading" aria-describedby="retention-hint">
+  <FormPanel :heading="t('retention.title')">
+    <p v-if="!saved" class="loading">{{ loadFailed ? t('home.loadFailed') : t('app.loading') }}</p>
+    <FormRow v-else :label="t('retention.records')" label-id="retention-label" top>
+      <div class="options" role="radiogroup" aria-labelledby="retention-label" aria-describedby="retention-hint">
         <label class="option">
           <input type="radio" name="retention" value="days" :checked="mode === 'days'" :disabled="busy" @change="pick('days')" />
           {{ t('retention.keep') }}
@@ -32,11 +31,13 @@
           {{ t('retention.forever') }}
         </label>
       </div>
-      <p id="retention-hint" class="hint">
-        {{ t('retention.hint') }}
-        <template v-if="mode === 'forever'">{{ t('retention.foreverNote') }}</template>
-      </p>
-    </template>
+      <template #hint>
+        <span id="retention-hint">
+          {{ t('retention.hint') }}
+          <template v-if="mode === 'forever'">{{ t('retention.foreverNote') }}</template>
+        </span>
+      </template>
+    </FormRow>
 
     <dialog ref="confirmEl" class="sheet" aria-labelledby="retention-confirm-title" @close="onConfirmClose">
       <h2 id="retention-confirm-title">{{ t('retention.confirmTitle', { days: pending }) }}</h2>
@@ -46,7 +47,7 @@
         <Button :label="t('retention.confirmOk', { days: pending })" severity="danger" @click="confirmEl?.close('ok')" />
       </div>
     </dialog>
-  </section>
+  </FormPanel>
 </template>
 
 <script setup lang="ts">
@@ -56,6 +57,8 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import { errorToast, successToast } from './home'
 
 type Retention = Schemas['RecordRetention']
@@ -146,8 +149,9 @@ void load()
 </script>
 
 <style scoped>
-.retention h3 {
-  margin: 1rem 0 0.5rem;
+.loading {
+  margin: 0;
+  padding: 0.875rem 0;
 }
 
 .options {
@@ -170,12 +174,6 @@ void load()
   background: var(--p-content-background);
   color: var(--p-text-color);
   font: inherit;
-}
-
-.hint {
-  margin: 0.5rem 0 0;
-  color: var(--p-text-muted-color);
-  font-size: 0.875rem;
 }
 
 dialog {

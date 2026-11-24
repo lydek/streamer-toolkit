@@ -479,6 +479,7 @@
   },
   "retention": {
     "title": "紀錄保存",
+    "records": "聊天與活動紀錄",
     "keep": "保存",
     "days": "保存天數",
     "daysUnit": "天",
@@ -901,6 +902,8 @@
     "backup": "備份與還原",
     "about": "關於",
     "license": "以 MIT 授權釋出。",
+    "licenseLabel": "授權",
+    "version": "版本",
     "thirdParty": "第三方授權"
   },
   "update": {

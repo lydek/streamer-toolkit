@@ -1,43 +1,47 @@
 <template>
-  <div class="stack">
-    <div class="field">
-      <span id="backup-choice">{{ t('backup.choice') }}</span>
-      <SelectButton
-        v-model="choice"
-        :options="CHOICES"
-        :option-label="choiceLabel"
-        :allow-empty="false"
-        aria-labelledby="backup-choice"
-      />
-    </div>
-    <Button :label="t('backup.export')" icon="pi pi-download" :disabled="busy" @click="exportBackup" />
-    <label for="restore-file">{{ t('backup.restoreFile') }}</label>
-    <input id="restore-file" ref="input" type="file" accept=".stbackup" :disabled="busy" @change="choose" />
-    <div v-if="progress" class="progress">
-      <p role="status">{{ progressText }}</p>
-      <ProgressBar :value="progressPercent" :mode="progress.phase === 'check' ? 'indeterminate' : 'determinate'" />
-      <Button :label="t('backup.cancel')" severity="secondary" text @click="controller?.abort()" />
-    </div>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <template v-if="preview">
-      <ul class="preview">
-        <li>
-          {{ t('backup.createdAt') }}<time :datetime="preview.created_at">{{ formatTime(preview.created_at) }}</time>
-        </li>
-        <li>{{ t('backup.appVersion', { version: preview.app_version }) }}</li>
-        <li>{{ t('backup.contains', { kinds: preview.contents.map((c) => t(`backup.choices.${c}`)).join('、') }) }}</li>
-        <li v-if="preview.contents.includes('data')">
-          {{ t('backup.records', { redemptions: preview.redemptions, checkins: preview.checkins }) }}
-        </li>
-        <li v-if="preview.contents.includes('media')">
-          {{ t('backup.files', { templates: preview.templates, sounds: preview.sounds, music: preview.music, media: preview.media }) }}
-        </li>
-      </ul>
-      <p>{{ t(preview.contents.length === 1 ? `backup.restoreOnly.${preview.contents[0]}` : 'backup.restoreNote') }}</p>
-      <Button :label="t('backup.restore')" icon="pi pi-replay" :disabled="busy" @click="restore" />
-    </template>
-    <p v-if="restarting" role="status">{{ t('backup.restarting') }}</p>
-  </div>
+  <FormPanel>
+    <FormRow :label="t('backup.choice')" label-id="backup-choice">
+      <div class="export">
+        <SelectButton
+          v-model="choice"
+          :options="CHOICES"
+          :option-label="choiceLabel"
+          :allow-empty="false"
+          aria-labelledby="backup-choice"
+        />
+        <Button :label="t('backup.export')" icon="pi pi-download" :disabled="busy" @click="exportBackup" />
+      </div>
+    </FormRow>
+    <FormRow :label="t('backup.restoreFile')" input-id="restore-file" top>
+      <div class="restore">
+        <input id="restore-file" ref="input" type="file" accept=".stbackup" :disabled="busy" @change="choose" />
+        <div v-if="progress" class="progress">
+          <p role="status">{{ progressText }}</p>
+          <ProgressBar :value="progressPercent" :mode="progress.phase === 'check' ? 'indeterminate' : 'determinate'" />
+          <Button :label="t('backup.cancel')" severity="secondary" text @click="controller?.abort()" />
+        </div>
+        <p v-if="error" role="alert">{{ error }}</p>
+        <template v-if="preview">
+          <ul class="preview">
+            <li>
+              {{ t('backup.createdAt') }}<time :datetime="preview.created_at">{{ formatTime(preview.created_at) }}</time>
+            </li>
+            <li>{{ t('backup.appVersion', { version: preview.app_version }) }}</li>
+            <li>{{ t('backup.contains', { kinds: preview.contents.map((c) => t(`backup.choices.${c}`)).join('、') }) }}</li>
+            <li v-if="preview.contents.includes('data')">
+              {{ t('backup.records', { redemptions: preview.redemptions, checkins: preview.checkins }) }}
+            </li>
+            <li v-if="preview.contents.includes('media')">
+              {{ t('backup.files', { templates: preview.templates, sounds: preview.sounds, music: preview.music, media: preview.media }) }}
+            </li>
+          </ul>
+          <p>{{ t(preview.contents.length === 1 ? `backup.restoreOnly.${preview.contents[0]}` : 'backup.restoreNote') }}</p>
+          <Button :label="t('backup.restore')" icon="pi pi-replay" :disabled="busy" @click="restore" />
+        </template>
+        <p v-if="restarting" role="status">{{ t('backup.restarting') }}</p>
+      </div>
+    </FormRow>
+  </FormPanel>
 </template>
 
 <script setup lang="ts">
@@ -48,6 +52,8 @@ import { useToast } from 'primevue/usetoast'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas } from './api'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import {
   type BackupChoice,
   type RestoreProgress,
@@ -147,10 +153,21 @@ async function restore() {
 </script>
 
 <style scoped>
-.field {
+.export {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.restore {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+.restore > * {
+  max-width: 100%;
 }
 
 .progress {
