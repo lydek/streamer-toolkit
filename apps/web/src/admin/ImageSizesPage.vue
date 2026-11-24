@@ -1,8 +1,7 @@
 <template>
-  <FullPage tile="image-sizes">
-    <div class="pickers">
-      <div class="field">
-        <span id="is-kind">{{ t('imageSizes.kind') }}</span>
+  <FullPage tile="image-sizes" :status="t('imageSizes.summary')">
+    <FormPanel class="setup-panel">
+      <FormRow :label="t('imageSizes.kind')" label-id="is-kind">
         <SelectButton
           v-model="kind"
           :options="KINDS"
@@ -10,9 +9,23 @@
           :allow-empty="false"
           aria-labelledby="is-kind"
         />
-      </div>
-      <div class="field">
-        <span id="is-fit">{{ t('imageSizes.fit') }}</span>
+        <template #hint>{{ t(`imageSizes.rules.${kind}`) }}</template>
+      </FormRow>
+
+      <FormRow :label="t('imageSizes.picture')" top>
+        <div class="drop">
+          <FilePick
+            :drop-text="file ? file.name : t('imageSizes.drop')"
+            :label="t('imageSizes.pick')"
+            :hint="t('imageSizes.dropHint')"
+            icon="pi pi-image"
+            :accept="IMAGE_SIZES_ACCEPT"
+            @pick="(files) => choose(files[0])"
+          />
+        </div>
+      </FormRow>
+
+      <FormRow :label="t('imageSizes.fit')" label-id="is-fit">
         <SelectButton
           v-model="fit"
           :options="FITS"
@@ -20,80 +33,100 @@
           :allow-empty="false"
           aria-labelledby="is-fit"
         />
-      </div>
+      </FormRow>
+
+      <FormRow v-if="fit === 'manual' && source" :label="t('imageSizes.cropFields')" top>
+        <div class="crop-wrap">
+          <ImageCropper v-model="crop" :src="source.url" :width="source.width" :height="source.height" :ratio="ratio" @commit="run" />
+          <!-- The same rectangle as numbers, in the picture's pixels; 等比例 keeps its width ÷ height. -->
+          <fieldset class="crop-fields">
+            <legend class="sr-only">{{ t('imageSizes.cropFields') }}</legend>
+            <span v-for="f in FIELDS" :key="f" class="crop-field">
+              <label :for="`crop-${f}`">{{ f === 'w' ? t('imageSizes.cropW') : f === 'h' ? t('imageSizes.cropH') : f.toUpperCase() }}</label>
+              <InputNumber
+                :input-id="`crop-${f}`"
+                :model-value="crop[f]"
+                :min="0"
+                :use-grouping="false"
+                input-class="crop-input"
+                @update:model-value="(v: number | null) => setField(f, v)"
+              />
+            </span>
+            <Button
+              :label="t('imageSizes.cropLock')"
+              :icon="ratio ? 'pi pi-lock' : 'pi pi-lock-open'"
+              :aria-pressed="!!ratio"
+              size="small"
+              outlined
+              @click="ratio = ratio ? undefined : crop.w / crop.h"
+            />
+            <Button :label="t('imageSizes.cropReset')" size="small" text @click="resetCrop" />
+          </fieldset>
+        </div>
+      </FormRow>
+
       <!-- Padding: transparent, or a color the broadcaster picks (pad and a picked rectangle use it). -->
-      <div class="field">
-        <span id="is-bg">{{ t('imageSizes.bg') }}</span>
-        <SelectButton
-          v-model="bgMode"
-          :options="BG_MODES"
-          :option-label="(m: 'none' | 'color') => t(`imageSizes.bgs.${m}`)"
-          :allow-empty="false"
-          aria-labelledby="is-bg"
-          @update:model-value="run"
-        />
-        <input v-if="bgMode === 'color'" v-model="bgColor" type="color" class="bg-color" :aria-label="t('imageSizes.bgColor')" @change="run" />
-      </div>
-      <Button :label="t('imageSizes.download')" icon="pi pi-download" :disabled="!sized || busy" @click="download" />
-    </div>
-
-    <div class="drop">
-      <FilePick
-        :drop-text="file ? file.name : t('imageSizes.drop')"
-        :label="t('imageSizes.pick')"
-        :hint="t('imageSizes.dropHint')"
-        icon="pi pi-image"
-        :accept="IMAGE_SIZES_ACCEPT"
-        @pick="(files) => choose(files[0])"
-      />
-    </div>
-
-    <template v-if="fit === 'manual' && source">
-      <ImageCropper v-model="crop" :src="source.url" :width="source.width" :height="source.height" :ratio="ratio" @commit="run" />
-      <!-- The same rectangle as numbers, in the picture's pixels; 等比例 keeps its width ÷ height. -->
-      <fieldset class="crop-fields">
-        <legend>{{ t('imageSizes.cropFields') }}</legend>
-        <span v-for="f in FIELDS" :key="f" class="crop-field">
-          <label :for="`crop-${f}`">{{ f === 'w' ? t('imageSizes.cropW') : f === 'h' ? t('imageSizes.cropH') : f.toUpperCase() }}</label>
-          <InputNumber
-            :input-id="`crop-${f}`"
-            :model-value="crop[f]"
-            :min="0"
-            :use-grouping="false"
-            input-class="crop-input"
-            @update:model-value="(v: number | null) => setField(f, v)"
+      <FormRow :label="t('imageSizes.bg')" label-id="is-bg">
+        <div class="bg-row">
+          <SelectButton
+            v-model="bgMode"
+            :options="BG_MODES"
+            :option-label="(m: 'none' | 'color') => t(`imageSizes.bgs.${m}`)"
+            :allow-empty="false"
+            aria-labelledby="is-bg"
+            @update:model-value="run"
           />
-        </span>
-        <Button
-          :label="t('imageSizes.cropLock')"
-          :icon="ratio ? 'pi pi-lock' : 'pi pi-lock-open'"
-          :aria-pressed="!!ratio"
-          size="small"
-          outlined
-          @click="ratio = ratio ? undefined : crop.w / crop.h"
-        />
-        <Button :label="t('imageSizes.cropReset')" size="small" text @click="resetCrop" />
-      </fieldset>
-    </template>
+          <input
+            v-if="bgMode === 'color'"
+            v-model="bgColor"
+            type="color"
+            class="bg-color"
+            :aria-label="t('imageSizes.bgColor')"
+            @change="run"
+          />
+        </div>
+      </FormRow>
+    </FormPanel>
 
-    <!-- The last results stay while new ones are made, so the page keeps its height and scroll position. -->
-    <p v-if="failed" role="alert">{{ failed }}</p>
-    <p v-else-if="busy && !sized">{{ t('app.loading') }}</p>
-    <div v-if="sized && !failed" class="results" :class="{ updating: busy }" :aria-busy="busy">
-      <div v-for="bg in BACKGROUNDS" :key="bg" class="sheet" :class="bg">
-        <!-- A points icon as Twitch shows it under the chat: the icon, then the balance. -->
-        <p v-if="kind === 'points'" class="balance">
-          <img :src="sized.images[0].data_url" alt="" width="20" height="20" />∞
-        </p>
-        <figure v-for="img in sized.images" :key="img.px">
-          <img :src="img.data_url" :width="img.px" :height="img.px" :alt="t('imageSizes.alt', { px: img.px })" />
-          <figcaption :class="{ over: img.too_large }">
-            {{ t('imageSizes.size', { px: img.px, kb: (img.bytes / 1024).toFixed(1) }) }}
-          </figcaption>
-        </figure>
+    <section class="results-section" aria-labelledby="out-h">
+      <div class="sec-head">
+        <h2 id="out-h">{{ t('imageSizes.resultsHeading') }}</h2>
+        <span class="muted">{{ t('imageSizes.resultsHint') }}</span>
+        <Button class="push" :label="t('imageSizes.download')" icon="pi pi-download" :disabled="!sized || busy" @click="download" />
       </div>
-      <p v-if="sized.images.some((i) => i.too_large)" class="over">{{ t('imageSizes.tooLarge') }}</p>
-    </div>
+
+      <!-- The last results stay while new ones are made, so the page keeps its height and scroll position. -->
+      <p v-if="failed" role="alert">{{ failed }}</p>
+      <p v-else-if="busy && !sized">{{ t('app.loading') }}</p>
+      <div v-if="sized && !failed" class="results" :class="{ updating: busy }" :aria-busy="busy">
+        <div v-for="bg in BACKGROUNDS" :key="bg" class="sheet" :class="bg">
+          <div class="sheet-head">
+            <span class="sheet-label">{{ t(bg === 'dark' ? 'imageSizes.chatDark' : 'imageSizes.chatLight') }}</span>
+            <!-- A points icon as Twitch shows it under the chat: the icon, then the balance. -->
+            <span v-if="kind === 'points'" class="balance">
+              <img :src="sized.images[0].data_url" alt="" width="20" height="20" />∞
+            </span>
+          </div>
+          <div class="sheet-items">
+            <figure v-for="img in sized.images" :key="img.px" class="size-item">
+              <img :src="img.data_url" :width="img.px" :height="img.px" :alt="t('imageSizes.alt', { px: img.px })" />
+              <figcaption :class="{ over: img.too_large }">
+                {{ t('imageSizes.size', { px: img.px, kb: (img.bytes / 1024).toFixed(1) }) }}
+              </figcaption>
+              <button
+                type="button"
+                class="dl-one"
+                :aria-label="t('imageSizes.downloadOne', { px: img.px })"
+                @click="downloadOne(img)"
+              >
+                <i class="pi pi-download" aria-hidden="true"></i>
+              </button>
+            </figure>
+          </div>
+        </div>
+        <p v-if="sized.images.some((i) => i.too_large)" class="over">{{ t('imageSizes.tooLarge') }}</p>
+      </div>
+    </section>
   </FullPage>
 </template>
 
@@ -106,6 +139,8 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
 import FilePick from './FilePick.vue'
+import FormPanel from './FormPanel.vue'
+import FormRow from './FormRow.vue'
 import FullPage from './FullPage.vue'
 import ImageCropper from './ImageCropper.vue'
 import {
@@ -223,6 +258,18 @@ function choose(f: File | undefined) {
 
 watch([kind, fit], () => void run())
 
+// The same save dialog as the ZIP; the PNG is already in the data URL, so it is decoded here instead of fetched.
+async function downloadOne(img: { px: number; data_url: string }) {
+  try {
+    await saveFile(`${kind.value}-${img.px}px.png`, { description: 'PNG', mime: 'image/png', extension: '.png' }, async () => {
+      const bytes = Uint8Array.from(atob(img.data_url.slice(img.data_url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
+      return new Blob([bytes], { type: 'image/png' })
+    })
+  } catch (e) {
+    failed.value = message(e)
+  }
+}
+
 async function download() {
   const picked = file.value
   if (!picked) return
@@ -237,6 +284,21 @@ async function download() {
 </script>
 
 <style scoped>
+.setup-panel {
+  width: 100%;
+}
+
+.drop {
+  max-width: 36rem;
+}
+
+.bg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .bg-color {
   width: 2.5rem;
   height: 2rem;
@@ -246,8 +308,10 @@ async function download() {
   background: none;
 }
 
-.results.updating {
-  opacity: 0.6;
+.crop-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .crop-fields {
@@ -260,12 +324,6 @@ async function download() {
   border: 0;
 }
 
-.crop-fields legend {
-  float: left;
-  margin-right: 0.25rem;
-  font-weight: 600;
-}
-
 .crop-field {
   display: inline-flex;
   align-items: center;
@@ -276,36 +334,49 @@ async function download() {
   width: 5.5rem;
 }
 
-.pickers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1.5rem;
-}
-
-.field {
+.results-section {
+  margin-top: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.75rem;
+  max-width: 52rem;
 }
 
-.drop {
-  max-width: 36rem;
-  margin: 1rem 0;
+.sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.sec-head h2 {
+  margin: 0;
+}
+
+.muted {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.push {
+  margin-left: auto;
 }
 
 .results {
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+  gap: 1rem;
+}
+
+.results.updating {
+  opacity: 0.6;
 }
 
 .sheet {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 1.5rem;
-  width: fit-content;
-  padding: 1rem;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem 1.125rem;
   border-radius: 8px;
 }
 
@@ -319,7 +390,23 @@ async function download() {
   color: #18181b;
 }
 
-figure {
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+.sheet-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.25rem;
+}
+
+.size-item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -328,19 +415,36 @@ figure {
 }
 
 figcaption {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-one {
+  color: inherit;
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  padding: 0.125rem 0.25rem;
+  border-radius: 4px;
+}
+
+.dl-one:hover {
+  opacity: 1;
 }
 
 .over {
   color: var(--p-red-500);
   font-weight: 600;
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .balance {
-  display: flex;
+  display: inline-flex;
   gap: 0.25rem;
   align-items: center;
-  margin: 0 0 0.75rem;
   font-weight: 600;
 }
 </style>
