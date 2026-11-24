@@ -345,6 +345,10 @@ body.dock-left .app { flex-direction: row-reverse; }
 body.dock-left .dock { border-left: 0; border-right: 1px solid var(--s800); }
 body.dock-left .dock-resize { left: auto; right: -5px; }
 body.dock-left .rail { right: auto; left: 0; border-right: 1px solid var(--s700); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+@media (min-width: 901px) {
+  body:not(.bare):has(#rail:not([hidden])) .shell { padding-right: 3.5rem; }
+  body.dock-left:not(.bare):has(#rail:not([hidden])) .shell { padding-right: 2rem; padding-left: 3.5rem; }
+}
 @media (max-width: 900px) { .dock, .rail { display: none !important; } }
 .seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; padding: 0.1875rem; border-radius: var(--radius); background: var(--s950); border: 1px solid var(--s500); justify-self: start; }
 .seg label { position: relative; }
@@ -724,7 +728,7 @@ body.tabs-bottom:has(#subtabs:not([hidden])) .scene-page { --sc-bottom: calc(var
 @container dock (max-width: 320px) { .dock-head h2 > i, .dock-head h2 > .muted { display: none; } }
 .dock-tools { display: grid; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--s800); }
 .dock-tools .input { max-width: none; padding: 0.375rem 0.625rem; font-size: 0.875rem; }
-.dock-chips { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; }
+.dock-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .dock-chips .chipf { flex: none; padding: 0.125rem 0.625rem; font-size: 0.75rem; white-space: nowrap; }
 .cm.ev { box-shadow: inset 3px 0 0 var(--evc); background: var(--evt); }
 .cm.ev .pi { color: var(--evc); }
