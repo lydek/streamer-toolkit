@@ -1242,10 +1242,11 @@ body.tabs-bottom .appbar .subtabs:not([hidden]) { position: fixed; left: 0; righ
 body.tabs-bottom:has(#subtabs:not([hidden])) .shell { padding-bottom: 8rem; }
 body.tabs-bottom:has(#subtabs:not([hidden])) .dock { height: calc(100vh - var(--tabbar-h, 3.25rem) - 3rem); }
 .tabbar { flex-wrap: nowrap !important; }
+@media (min-width: 601px) { .tabbar > button { flex: none; white-space: nowrap; } }
 .tabbar > button[hidden] { display: none !important; }
 .tb-menu .overflow-copy[hidden] { display: none !important; }
 @media (max-width: 600px) {
-  .subtabs { flex-wrap: nowrap; overflow-x: auto; margin: 0 -1.25rem 1rem; padding: 0 1.25rem; scrollbar-width: none; }
+  .subtabs { flex-wrap: nowrap; overflow-x: auto; margin: 0 -1.25rem 1rem; padding: 0 1.25rem; scrollbar-width: none; scroll-padding-inline: 2rem; }
   .subtabs button { flex: none; }
   .tb-menu .overflow-copy:not(.phone-only) { display: none !important; }
 }
@@ -5884,8 +5885,10 @@ function fitTabs() {
   more.hidden = !needMore; edit.hidden = needMore
   if (!needMore) document.getElementById('tb-menu').hidden = true
 }
-addEventListener('resize', fitTabs)
-new ResizeObserver(() => fitTabs()).observe(document.querySelector('.tabbar')) // dock opened, closed or dragged
+let fitRaf = 0
+const scheduleFit = () => { if (!fitRaf) fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitTabs() }) }
+addEventListener('resize', scheduleFit)
+new ResizeObserver(scheduleFit).observe(document.querySelector('.tabbar')) // dock opened, closed or dragged
 
 function markCurrent() {
   const refocusRow = document.activeElement?.closest?.('#subtabs, .cat-tabs'), refocusSub = refocusRow?.id === 'subtabs'
@@ -5908,6 +5911,7 @@ function markCurrent() {
     b.append(i, sp); if (pages.includes(name)) b.setAttribute('aria-current', 'page')
     sub.append(b)
   })
+  sub.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' })
   // third level: the category's pages as a tab row under the page title; a one-page category shows none
   document.querySelectorAll('.cat-tabs').forEach((t) => t.remove())
   if (cat && cat[2].length > 1) {
@@ -6204,8 +6208,9 @@ applyTheme()
 { const shell = document.querySelector('.shell'), bar = document.createElement('div'); bar.className = 'appbar'
   shell.prepend(bar)
   bar.append(document.querySelector('.topbar'), document.querySelector('.tabbar'), document.getElementById('subtabs'))
-  const setH = () => document.documentElement.style.setProperty('--appbar-h', bar.offsetHeight + 'px')
-  new ResizeObserver(setH).observe(bar); setH()
+  let hRaf = 0
+  const setH = () => { if (!hRaf) hRaf = requestAnimationFrame(() => { hRaf = 0; document.documentElement.style.setProperty('--appbar-h', bar.offsetHeight + 'px') }) }
+  new ResizeObserver(setH).observe(bar); document.documentElement.style.setProperty('--appbar-h', bar.offsetHeight + 'px')
   addEventListener('scroll', () => bar.classList.toggle('scrolled', scrollY > 4), { passive: true }) }
 
 // one layout only: group tabs on top (or bottom) + docked chat; the tile layout is gone
@@ -6696,7 +6701,11 @@ if (START_PAGE && views[START_PAGE]) show(START_PAGE)
     view.style.setProperty('--pin-h', `${h + (pinned.matches && tabs ? tabs.offsetHeight : 0)}px`)
   }
   // A row rebuilt since it was observed is no longer in a page; skip it.
-  const ro = new ResizeObserver((entries) => entries.forEach((e) => { const v = e.target.closest('section[id^="view-"]'); if (v) measure(v) }))
+  let roRaf = 0, roViews = new Set()
+  const ro = new ResizeObserver((entries) => {
+    entries.forEach((e) => { const v = e.target.closest('section[id^="view-"]'); if (v) roViews.add(v) })
+    if (!roRaf) roRaf = requestAnimationFrame(() => { roRaf = 0; roViews.forEach(measure); roViews.clear() })
+  })
   const all = () => document.querySelectorAll('section[id^="view-"]:not([hidden])').forEach(measure)
   const watch = () => { document.querySelectorAll('section[id^="view-"] > :is(.fp-head, .page-head, .ws-head, .cat-tabs)').forEach((el) => ro.observe(el)); all() }
   watch()
