@@ -490,6 +490,26 @@ async fn a_media_file_gone_from_the_folder_is_marked_missing() {
     assert_eq!(list[0]["missing"], true);
 }
 
+#[tokio::test]
+async fn an_entry_whose_id_is_not_a_uuid_never_reaches_outside_the_media_folder() {
+    let r = rig().await;
+    upload(&r.app, "a.gif", GIF).await;
+    // As an edited database restored from a backup could hold.
+    sqlx::query("UPDATE overlays_media SET id = '../escape'")
+        .execute(&r.pool)
+        .await
+        .unwrap();
+    let outside = r.dir.join("escape.gif");
+    std::fs::write(&outside, GIF).unwrap();
+    let (_, list) = send(&r.app, "GET", MEDIA_URL, None).await;
+    assert_eq!(list[0]["missing"], true);
+    assert_eq!(r.service.media_file("../escape").await, None);
+    r.service.delete_media("../escape").await.unwrap();
+    assert!(outside.is_file(), "the file outside media/ stays");
+    let (_, list) = send(&r.app, "GET", MEDIA_URL, None).await;
+    assert_eq!(list, json!([]));
+}
+
 fn redemption(
     id: &str,
     reward_id: &str,
@@ -595,6 +615,41 @@ async fn a_redemption_queues_its_reward_media_once_and_a_test_records_nothing() 
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["code"], "media.not_found");
+}
+
+#[tokio::test]
+async fn a_redemption_never_plays_a_file_outside_the_media_folder() {
+    use toolkit_core::{events::RedemptionChange::Added, presentation::Outcome};
+    let r = rig().await;
+    let (_, gif) = upload(&r.app, "cat.gif", GIF).await;
+    let id = gif["id"].as_str().unwrap().to_owned();
+    let rule = json!({"media_id": id, "position": "full", "volume": 80});
+    send(
+        &r.app,
+        "PUT",
+        "/api/admin/screen-tools/media-rules/rw1",
+        Some(rule),
+    )
+    .await;
+    // As an edited database restored from a backup could hold, with a file waiting outside media/.
+    for sql in [
+        "UPDATE overlays_media SET id = '../escape'",
+        "UPDATE overlays_media_rules SET media_id = '../escape'",
+    ] {
+        sqlx::query(sql).execute(&r.pool).await.unwrap();
+    }
+    std::fs::write(r.dir.join("escape.gif"), GIF).unwrap();
+    let again = restart_in(r.pool.clone(), r.dir.clone()).await;
+
+    let (_, mut events) = again.bus.subscribe();
+    again
+        .service
+        .receive_redemption(&redemption("x1", "rw1", Added));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(media_events(&mut events).is_empty());
+    let recent = again.service.media_recent();
+    assert_eq!(recent[0].item.outcome, Some(Outcome::Declined));
+    assert!(recent[0].file_missing);
 }
 
 #[tokio::test]

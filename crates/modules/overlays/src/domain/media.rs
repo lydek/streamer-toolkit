@@ -65,12 +65,6 @@ pub struct MediaEntry {
     pub duration_ms: Option<u32>,
 }
 
-impl MediaEntry {
-    pub(crate) fn file_name(&self) -> String {
-        format!("{}.{}", self.id, self.format.extension())
-    }
-}
-
 /// Where on the alerts overlay a media item shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Position {
