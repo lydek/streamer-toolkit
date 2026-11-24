@@ -1248,19 +1248,26 @@
     "badStep": "劇本的第 {step} 個步驟不正確（種類不認得、缺少欄位或時間超過 30 分鐘）。"
   },
   "cardStyle": {
-    "preset": "內建樣式",
+    "summary": "不用寫程式；改了右邊馬上看到",
+    "preset": "樣式",
     "presets": {
-      "simple": "簡約",
-      "journal": "手帳"
+      "simple": "內建：簡約",
+      "journal": "內建：手帳"
     },
     "background": "背景",
+    "backgroundImage": "背景圖",
+    "backgroundColor": "背景顏色",
+    "solidColor": "目前：純色",
     "stamp": "印章",
+    "stampImage": "印章圖案",
+    "stampColor": "印章顏色",
+    "defaultStamp": "目前：預設",
     "color": "顏色",
     "image": "選擇圖片",
     "imageHint": "PNG、JPG、GIF、WebP，最多 5 MB",
     "removeImage": "移除圖片",
     "perRow": "每排幾格",
-    "title": "標題",
+    "title": "標題文字",
     "description": "說明文字",
     "variables": "可用 #觀眾# #章數# #次數# #格數#",
     "animation": "進場動畫",
@@ -1271,18 +1278,24 @@
       "none": "沒有動畫"
     },
     "showRepeat": "今天已經打過卡也顯示卡片",
+    "repeatHeading": "今天已打過卡時",
+    "repeatShow": "顯示「今天已打卡」",
+    "repeatHide": "不顯示",
     "test": "在 OBS 試播",
     "save": "儲存",
     "saved": "已儲存卡片樣式。",
     "uploadFailed": "{file}：{reason}",
     "packs": {
       "heading": "動畫包",
+      "sandboxNote": "只在 OBS 和隔離的預覽框裡執行",
       "upload": "上傳動畫包",
       "uploadHint": "zip，最多 10 MB",
+      "inUse": "使用中",
       "delete": "刪除動畫包「{name}」",
       "installed": "已安裝動畫包「{name}」。"
     },
     "preview": "預覽",
+    "previewMode": "預覽情境",
     "previews": {
       "stamped": "打卡成功 +1",
       "repeat": "今天已打過"
