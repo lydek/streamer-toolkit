@@ -1,0 +1,38 @@
+name: prototype-pages
+
+on:
+  push:
+    branches: [main]
+    paths: [prototype/**, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build site
+        # Pages has no node_modules: pack the same primeicons version as apps/web/package.json.
+        run: |
+          mkdir -p _site/primeicons
+          npm pack primeicons@7.0.0 --silent
+          tar -xzf primeicons-7.0.0.tgz
+          cp -r package/primeicons.css package/fonts _site/primeicons/
+          sed 's#\.\./apps/web/node_modules/primeicons/primeicons\.css#primeicons/primeicons.css#' prototype/ui-v2.html > _site/index.html
+          grep -q 'href="primeicons/primeicons.css"' _site/index.html
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+      - id: deploy
+        uses: actions/deploy-pages@v5
