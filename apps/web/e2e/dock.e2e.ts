@@ -88,6 +88,7 @@ test('filters and search narrow the messages; sending waits for a later phase', 
   await expect(panel(page).getByText('hello everyone')).toHaveCount(0)
 
   await panel(page).getByRole('button', { name: zh.dock.filter.all }).click()
+  await panel(page).getByRole('button', { name: zh.dock.search }).click()
   await panel(page).getByRole('searchbox', { name: zh.dock.search }).fill('hello')
   await expect(panel(page).getByText('hello everyone')).toBeVisible()
   await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)

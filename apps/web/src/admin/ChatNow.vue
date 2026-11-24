@@ -1,12 +1,12 @@
 <template>
-  <div class="chat-now">
+  <div class="chat-now" :class="{ 'in-dock': inDock }">
     <!-- Always in the DOM, so screen readers announce the text when it appears. -->
     <p role="status" class="connection">{{ disconnected ? t('chat.disconnected') : '' }}</p>
     <p v-if="partners.length" class="shared">
       {{ t('chat.shared', { channels: partners.join('、') }) }}
       <Button :label="t('chat.ownOnly')" size="small" text :aria-pressed="ownOnly" @click="ownOnly = !ownOnly" />
     </p>
-    <div class="bar">
+    <div v-if="!inDock" class="bar">
       <span v-if="log.paused">{{ t('chat.paused', { n: log.unseen }) }}</span>
       <!-- WCAG 2.2.2: moving content can be paused without scrolling. -->
       <Button
@@ -33,6 +33,9 @@
       <!-- Viewer input only ever goes in as text ({{ }}), never as markup. -->
       <ChatLine v-for="m in shownMessages" :key="m.id" class="msg" :message="m" :name-color="color(m)" :broadcaster-id="broadcasterId" />
     </div>
+    <button v-if="inDock && log.paused" type="button" class="dock-new" @click="jump">
+      {{ log.unseen ? t('dock.newMessages', { n: log.unseen }) : t('dock.jumpLatest') }}
+    </button>
   </div>
 </template>
 
@@ -46,8 +49,9 @@ import ChatDisplayMenu from './ChatDisplayMenu.vue'
 import ChatLine from './ChatLine.vue'
 import { type ChatLog, type Rgb, backgroundOf, nameColor, pause, resume } from './chatLog'
 
-/** `dockSide`: shown in the docked panel, whose display menu also picks the panel's side. */
-const props = defineProps<{ log: ChatLog; broadcasterId?: string; disconnected?: boolean; dockSide?: boolean }>()
+/** `dockSide`: shown in the docked panel, whose display menu also picks the panel's side.
+ * `inDock`: header owns pause/display controls; list fills the panel unboxed with a floating new-messages pill. */
+const props = defineProps<{ log: ChatLog; broadcasterId?: string; disconnected?: boolean; dockSide?: boolean; inDock?: boolean }>()
 const emit = defineEmits<{ 'update:log': [ChatLog] }>()
 const { t } = useI18n()
 
@@ -111,9 +115,11 @@ watch(
 onMounted(() => {
   bg.value = backgroundOf(el.value!, bg.value)
   colors.clear()
-  // A reopened drawer starts at the latest message.
-  void jump()
+  // A reopened drawer starts at the latest message; a paused dock stays where the reader left it.
+  if (!props.inDock || !props.log.paused) void jump()
 })
+
+defineExpose({ jump })
 </script>
 
 <style scoped>
@@ -172,6 +178,48 @@ onMounted(() => {
 
 .log .msg {
   margin-bottom: 0.125rem;
+}
+
+.chat-now.in-dock {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.chat-now.in-dock .connection:not(:empty),
+.chat-now.in-dock .shared {
+  padding: 0.375rem 0.75rem;
+}
+
+.chat-now.in-dock .connection:empty {
+  margin-block-end: 0;
+}
+
+.chat-now.in-dock .log {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: 0;
+}
+
+.dock-new {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  padding: 0.375rem 0.875rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .shared {
