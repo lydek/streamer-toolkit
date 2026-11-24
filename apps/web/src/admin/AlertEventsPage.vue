@@ -1,7 +1,7 @@
 <template>
   <!-- 每種事件: each alert kind's sound, with a test that plays the kind with the current template and sound. -->
   <FullPage tile="alerts" overlay="alerts">
-    <SoundSlots built-in :slots="ALERT_KINDS.map((k) => ({ slot: `alert.${k}`, label: t(`alerts.kinds.${k}`) }))">
+    <SoundSlots built-in layout="table" :slots="ALERT_KINDS.map((k) => ({ slot: `alert.${k}`, label: t(`alerts.kinds.${k}`) }))">
       <template #actions="{ slotId, label }">
         <Button
           :label="t('alerts.test')"

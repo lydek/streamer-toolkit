@@ -1,5 +1,31 @@
 <template>
   <p v-if="!library">{{ t(failed ? 'sound.loadFailed' : 'app.loading') }}</p>
+  <div v-else-if="layout === 'table'" class="slot-list">
+    <div v-for="(s, i) in slots" :key="s.slot" class="slot-row">
+      <label :id="`sound-slot-${s.slot}`" class="slot-label">{{ s.label }}</label>
+      <Select
+        v-model="fields[i].value.value"
+        :input-id="`sound-slot-${s.slot}-input`"
+        :options="options"
+        option-label="label"
+        option-value="value"
+        :aria-labelledby="`sound-slot-${s.slot}`"
+        @update:model-value="fields[i].commit()"
+      />
+      <div class="slot-actions">
+        <Button
+          v-if="playable"
+          :label="t(testing === s.slot ? 'sound.stopInObs' : 'sound.playInObs')"
+          :icon="testing === s.slot ? 'pi pi-stop' : 'pi pi-play'"
+          outlined
+          :aria-describedby="`sound-slot-${s.slot}`"
+          :disabled="testing !== s.slot && !isFile(fields[i].value.value)"
+          @click="testing === s.slot ? stop() : play(s.slot, fields[i].value.value)"
+        />
+        <slot name="actions" :slot-id="s.slot" :label="s.label" />
+      </div>
+    </div>
+  </div>
   <div v-else class="stack">
     <template v-for="(s, i) in slots" :key="s.slot">
       <label :id="`sound-slot-${s.slot}`">{{ s.label }}</label>
@@ -41,7 +67,15 @@ import { useDrawerSetting } from './drawer'
 // which Select shows as nothing chosen.
 const DEFAULT = 'default'
 // `playable`: each slot gets a button that plays its sound on the sound overlay, to test it in OBS.
-const props = defineProps<{ slots: { slot: string; label: string }[]; builtIn?: boolean; playable?: boolean }>()
+const props = withDefaults(
+  defineProps<{
+    slots: { slot: string; label: string }[]
+    builtIn?: boolean
+    playable?: boolean
+    layout?: 'stack' | 'table'
+  }>(),
+  { layout: 'stack' },
+)
 const emit = defineEmits<{ played: []; error: [unknown] }>()
 const { t } = useI18n()
 const library = shallowRef<Schemas['SoundLibrary']>()
@@ -115,6 +149,49 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.slot-list {
+  container-type: inline-size;
+  max-width: 52rem;
+  margin-top: 0.75rem;
+  padding: 0 1rem;
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.slot-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) minmax(0, 20rem) auto;
+  gap: 0.5rem 1.25rem;
+  align-items: center;
+  padding: 0.625rem 0;
+}
+
+.slot-row + .slot-row {
+  border-top: 1px solid var(--p-surface-800);
+}
+
+.slot-row :deep(.p-select) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@container (max-width: 34rem) {
+  .slot-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .slot-actions {
+    justify-content: flex-start;
+  }
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
