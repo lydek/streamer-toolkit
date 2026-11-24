@@ -182,6 +182,9 @@ pub struct CounterService<R> {
     ids: RwLock<Vec<String>>,
     /// Loaded on first use; one change at a time, each saved before the next.
     clock: tokio::sync::Mutex<Option<Clock>>,
+    /// Creating, changing and deleting counters go one at a time, so putting a command back after a failed save
+    /// never undoes another change.
+    pub(crate) writes: tokio::sync::Mutex<()>,
     seen_alerts: Mutex<VecDeque<String>>,
 }
 
@@ -204,6 +207,7 @@ impl<R: CounterRepository> CounterService<R> {
             announce_marathon,
             ids: RwLock::new(Vec::new()),
             clock: tokio::sync::Mutex::new(None),
+            writes: tokio::sync::Mutex::new(()),
             seen_alerts: Mutex::new(VecDeque::new()),
         });
         let loading = service.clone();
@@ -243,6 +247,7 @@ impl<R: CounterRepository> CounterService<R> {
     }
 
     pub async fn create(&self, settings: CounterSettings) -> Result<Counter, CounterError> {
+        let _writing = self.writes.lock().await;
         if self.ids.read().unwrap().len() >= domain::MAX_COUNTERS {
             return Err(CounterError::Invalid);
         }
@@ -254,7 +259,10 @@ impl<R: CounterRepository> CounterService<R> {
             reset_session: None,
         };
         self.apply(&mut counter, settings).await?;
-        self.repo.insert(&counter).await?;
+        if let Err(e) = self.repo.insert(&counter).await {
+            self.restore_command(&counter.id, None);
+            return Err(e.into());
+        }
         self.ids.write().unwrap().push(counter.id.clone());
         self.announce_all().await;
         Ok(counter)
@@ -265,6 +273,7 @@ impl<R: CounterRepository> CounterService<R> {
         id: &str,
         settings: CounterSettings,
     ) -> Result<Counter, CounterError> {
+        let _writing = self.writes.lock().await;
         let mut counter = self
             .repo
             .list()
@@ -272,9 +281,20 @@ impl<R: CounterRepository> CounterService<R> {
             .into_iter()
             .find(|c| c.id == id)
             .ok_or(CounterError::NotFound)?;
+        let previous = self.commands.saved(&domain::command_key(id));
         self.apply(&mut counter, settings).await?;
-        if !self.repo.update(&counter).await? {
-            return Err(CounterError::NotFound);
+        match self.repo.update(&counter).await {
+            Ok(true) => {}
+            // Gone meanwhile (not through this service): its command goes too.
+            Ok(false) => {
+                self.restore_command(id, None);
+                self.ids.write().unwrap().retain(|i| i != id);
+                return Err(CounterError::NotFound);
+            }
+            Err(e) => {
+                self.restore_command(id, previous);
+                return Err(e.into());
+            }
         }
         self.announce_all().await;
         Ok(counter)
@@ -309,7 +329,21 @@ impl<R: CounterRepository> CounterService<R> {
         Ok(())
     }
 
+    /// Puts a counter's command back as it was (`None`: none) after the counter failed to save. A failure is logged;
+    /// the command may then stay missing or changed until the counter is saved again or deleted.
+    fn restore_command(&self, id: &str, previous: Option<CommandEntry>) {
+        let key = domain::command_key(id);
+        let restored = match previous {
+            Some(entry) => self.commands.set(&key, entry, |_| {}),
+            None => self.commands.remove(&key),
+        };
+        if let Err(e) = restored {
+            tracing::error!(code = %e, "a counter's command was not put back after the counter failed to save");
+        }
+    }
+
     pub async fn delete(&self, id: &str) -> Result<(), CounterError> {
+        let _writing = self.writes.lock().await;
         if !self.repo.delete(id).await? {
             return Err(CounterError::NotFound);
         }

@@ -767,3 +767,67 @@ async fn the_marathon_is_kept_across_a_restart_and_a_manual_pause_survives_a_str
     // The first rig shares the data folder; only the restarted one cleans it up.
     std::mem::forget(r);
 }
+
+#[tokio::test]
+async fn a_counter_that_fails_to_save_leaves_its_command_as_it_was() {
+    let r = rig("rollback").await;
+    let put = |id: &str, command: &str| {
+        let (app, uri) = (r.app.clone(), format!("/api/admin/counters/{id}"));
+        let body = json!({ "name": "死亡次數", "command": command, "allowed": "moderator", "per_stream": false });
+        async move { call(&app, "PUT", &uri, Some(body)).await.0 }
+    };
+    let trigger = |sql: &'static str| {
+        let pool = r.pool.clone();
+        async move { sqlx::query(sql).execute(&pool).await.unwrap() }
+    };
+
+    // A new counter that is not stored leaves no command: the name is free again.
+    trigger("CREATE TRIGGER no_insert BEFORE INSERT ON counter_counters BEGIN SELECT RAISE(ABORT, 'test'); END").await;
+    let (status, _) = call(
+        &r.app,
+        "POST",
+        "/api/admin/counters",
+        Some(json!({ "name": "死亡次數", "command": "死亡", "allowed": "everyone", "per_stream": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    trigger("DROP TRIGGER no_insert").await;
+    let id = create(&r, "死亡次數", "死亡", false).await;
+    let key = format!("counter.{id}");
+    let before = r.commands.saved(&key).unwrap();
+
+    // A change that is not stored puts the whole entry back.
+    trigger("CREATE TRIGGER no_update BEFORE UPDATE ON counter_counters BEGIN SELECT RAISE(ABORT, 'test'); END").await;
+    assert_eq!(put(&id, "抓包").await, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(r.commands.saved(&key), Some(before));
+    trigger("DROP TRIGGER no_update").await;
+
+    // A counter gone meanwhile (outside the service) takes its command with it.
+    trigger("CREATE TRIGGER skip_update BEFORE UPDATE ON counter_counters BEGIN SELECT RAISE(IGNORE); END").await;
+    assert_eq!(put(&id, "抓包").await, StatusCode::NOT_FOUND);
+    assert_eq!(r.commands.saved(&key), None);
+}
+
+#[tokio::test]
+async fn counter_changes_and_deletes_wait_for_the_one_before() {
+    let r = rig("one-at-a-time").await;
+    let id = create(&r, "死亡次數", "死亡", false).await;
+    let key = format!("counter.{id}");
+    let held = r.service.writes.lock().await;
+    let (app, uri) = (r.app.clone(), format!("/api/admin/counters/{id}"));
+    let change = tokio::spawn(async move {
+        let body = json!({ "name": "死亡次數", "command": "抓包", "allowed": "everyone", "per_stream": false });
+        call(&app, "PUT", &uri, Some(body)).await.0
+    });
+    // Queued after the change.
+    settle().await;
+    let (app, uri) = (r.app.clone(), format!("/api/admin/counters/{id}"));
+    let delete = tokio::spawn(async move { call(&app, "DELETE", &uri, None).await.0 });
+    settle().await;
+    assert_eq!(r.commands.get(&key).name, "死亡", "the change waits");
+    assert!(!delete.is_finished(), "the delete waits");
+    drop(held);
+    assert_eq!(change.await.unwrap(), StatusCode::OK);
+    assert_eq!(delete.await.unwrap(), StatusCode::NO_CONTENT);
+    assert_eq!(r.commands.saved(&key), None);
+}
