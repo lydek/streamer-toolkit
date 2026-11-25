@@ -2486,5 +2486,46 @@
     "change": "修改",
     "hint": "聊天提到歌名時，畫面顯示上次唱的時間",
     "hintPreview": "例如：「歌名」3 天前唱過 · 換一首吧"
+  },
+  "setup": {
+    "title": "首次設定",
+    "steps": "設定步驟",
+    "step": {
+      "register": "註冊 Twitch app",
+      "clientId": "Client ID",
+      "signIn": "登入",
+      "obs": "OBS",
+      "overlays": "加到 OBS"
+    },
+    "heading": {
+      "register": "註冊 Twitch app",
+      "clientId": "貼上 Client ID",
+      "signIn": "登入 Twitch",
+      "obs": "連線 OBS",
+      "overlays": "加到 OBS"
+    },
+    "register": {
+      "1": "開啟 Twitch Developer Console（下面的網址），按「Register Your Application」。",
+      "2": "類別選「Public」，OAuth Redirect URL 填 http://localhost。",
+      "3": "建立後複製 Client ID，下一步貼上。"
+    },
+    "copy": {
+      "redirect": "複製 Redirect URL",
+      "console": "複製 Console 網址",
+      "overlay": "複製{name}網址"
+    },
+    "copied": "已複製。",
+    "clientIdSaved": "Client ID 已儲存，下一步登入。之後可以在「設定 › 連線」修改。",
+    "clientIdFirst": "還沒有 Client ID，請回上一步貼上。",
+    "obs": {
+      "where": "OBS 的「工具 › WebSocket 伺服器設定」裡可以找到這些值。"
+    },
+    "overlays": {
+      "how": "在 OBS 新增「瀏覽器」來源，網址貼上下面的網址。之後要加其他的，到「畫面與聲音 › OBS 來源」。"
+    },
+    "back": "上一步",
+    "skip": "略過設定",
+    "next": "下一步",
+    "finish": "完成"
   }
 }
