@@ -24,6 +24,7 @@ import ChatFilterPage from './ChatFilterPage.vue'
 import AvatarPage from './AvatarPage.vue'
 import CaptionsPage from './CaptionsPage.vue'
 import GoalsPage from './GoalsPage.vue'
+import MusicRequestsPage from './MusicRequestsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -221,5 +222,15 @@ describe('字幕與目標', () => {
     const w = await page(GoalsPage, '/goals')
     expect(w.get('h1').text()).toBe(t('pages.goals.name'))
     expect(w.get('.empty-cell').text()).toBe(t('goals.empty'))
+  })
+})
+
+describe('YouTube 點播', () => {
+  it('shows no requests, with opening requests and the settings disabled', async () => {
+    const w = await page(MusicRequestsPage, '/music-requests')
+    expect(w.get('h1').text()).toBe(t('pages.musicRequests.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('musicRequests.empty'))
+    expect(w.get('#mr-open').attributes('disabled')).toBeDefined()
+    expect(button(w, t('musicRequests.settings')).attributes('disabled')).toBeDefined()
   })
 })
