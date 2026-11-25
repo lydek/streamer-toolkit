@@ -110,7 +110,7 @@ onMounted(() => {
   const kept = fromNav && document.activeElement !== document.body && document.activeElement?.isConnected
   if (kept && !target) return
   const tab = fromNav ? root.value?.querySelector<HTMLElement>('.page-tabs [aria-current="page"]') : null
-  const action = root.value?.querySelector<HTMLElement>('.page-header .actions button')
+  const action = root.value?.querySelector<HTMLElement>('.page-header .actions button:not(:disabled)')
   ;(target ?? tab ?? action ?? titleEl.value)?.focus()
 })
 </script>

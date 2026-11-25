@@ -2245,5 +2245,21 @@
     "pick": "抽一台",
     "randomHint": "從你追隨的頻道裡正在直播的挑；可以排除最近揪過的。",
     "scopes": "需要 Twitch 權限 channel:manage:raids；追隨中正在直播的頻道要 user:read:follows。"
+  },
+  "credits": {
+    "playThanks": "播感謝名單",
+    "playEnd": "播片尾名單",
+    "kinds": {
+      "raids": "揪團",
+      "subs": "訂閱",
+      "bits": "小奇點",
+      "follows": "新追隨",
+      "redemptions": "兌換",
+      "songs": "點歌",
+      "chatters": "最活躍"
+    },
+    "none": "這場還沒有。",
+    "backgrounds": "背景圖：放幾張圖片，每次隨機挑一張。",
+    "manageBackgrounds": "管理背景圖"
   }
 }

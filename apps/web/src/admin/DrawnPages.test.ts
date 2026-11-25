@@ -16,6 +16,7 @@ import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
 import ShoutoutsPage from './ShoutoutsPage.vue'
 import RaidsPage from './RaidsPage.vue'
+import CreditsPage from './CreditsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -129,6 +130,16 @@ describe('揪團', () => {
     expect(w.find('#raid-channel').exists()).toBe(true)
     expect(w.get('.empty-cell').text()).toBe(t('raids.randomHint'))
     for (const label of [t('raids.start'), t('raids.cancel'), t('raids.pick')])
+      expect(button(w, label).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('感謝名單', () => {
+  it('shows every kind empty, with playing the lists disabled', async () => {
+    const w = await page(CreditsPage, '/credits')
+    expect(w.get('h1').text()).toBe(t('pages.credits.name'))
+    expect(w.findAll('.empty-cell')).toHaveLength(7)
+    for (const label of [t('credits.playThanks'), t('credits.playEnd'), t('credits.manageBackgrounds')])
       expect(button(w, label).attributes('disabled')).toBeDefined()
   })
 })
