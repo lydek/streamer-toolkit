@@ -20,7 +20,7 @@
     <!-- Third level: the other pages of this page's category, when it has more than one. -->
     <nav v-if="pageTabs.length > 1" class="page-tabs" :aria-label="t(`nav.categories.${category!.id}`)">
       <template v-for="p in pageTabs" :key="p.path">
-        <span v-if="p.soon" class="off" aria-disabled="true" :title="t('home.unbuilt')">
+        <span v-if="isGrey(p)" class="off" aria-disabled="true" :title="t('home.unbuilt')">
           {{ t(p.tabLabel ?? p.label) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
         </span>
         <RouterLink v-else :to="p.path" @click="navOpened.path = p.path">{{ t(p.tabLabel ?? p.label) }}</RouterLink>
@@ -48,7 +48,7 @@ import { featureOfPage, servicesOf, useModules } from './features'
 import { TILES, servicesDown } from './home'
 import ObsStatusLink from './ObsStatusLink.vue'
 import { navOpened } from './page'
-import { categoryOf, tabPage } from './tabs'
+import { categoryOf, isGrey, tabPage } from './tabs'
 
 const props = defineProps<{
   /** For a page that is not a page tab (settings); a page tab is titled with its own name. */
@@ -69,7 +69,7 @@ const root = ref<HTMLElement>()
 const look = computed(() => TILES.find((tile) => tile.id === props.tile))
 const page = computed(() => tabPage(route.path))
 const heading = computed(() => (page.value ? t(page.value.label) : props.title))
-const icon = computed(() => page.value?.icon ?? look.value?.icon)
+const icon = computed(() => page.value?.icon ?? page.value?.soon?.icon ?? look.value?.icon)
 const tint = computed(() => look.value?.tint ?? page.value?.tint ?? 'muted')
 const titleEl = ref<HTMLElement>()
 const { hidden } = useModules()

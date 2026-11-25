@@ -78,7 +78,7 @@
             </RouterLink>
             <span v-if="f.fixed" class="fixed"><i class="pi pi-lock" aria-hidden="true"></i>{{ t('features.alwaysOn') }}</span>
             <template v-else>
-              <RouterLink v-if="on(f)" :to="openPage(f)" class="open">
+              <RouterLink v-if="on(f) || (!f.module && showUnbuilt() && !blockedBy(f).length)" :to="openPage(f)" class="open">
                 {{ t('features.open') }}<span class="sr-only">：{{ name(f) }}</span>
               </RouterLink>
               <ToggleSwitch
@@ -123,7 +123,7 @@ import type { Schemas } from './api'
 import { FEATURES, type Feature, type Service, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan, unusedBy } from './features'
 import { servicesDown } from './home'
 import { useServices } from './services'
-import { GROUPS, SOON_PAGES } from './tabs'
+import { GROUPS, SOON_PAGES, showUnbuilt } from './tabs'
 
 const props = defineProps<{ modules?: Schemas['ModuleState'][]; busy: boolean; loadText: string; withSettings?: string[] }>()
 /** `bulk`: a whole group's changes, confirmed once; the page applies them (and asks check-in's pause or close).

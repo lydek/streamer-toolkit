@@ -181,6 +181,15 @@ export const GROUPS: TabGroup[] = [
 /** Every page not built yet: grey in the tabs, its URL leads home, and `tile` ones are grey home tiles. */
 export const SOON_PAGES = GROUPS.flatMap((g) => g.pages).filter((p) => p.soon)
 
+/**
+ * Dev mode (the Vite dev server: `pnpm tauri dev`, `pnpm web:dev`) opens the pages not built yet, to draw them ahead
+ * of their backend. Release builds, `cargo run`, unit tests (mode `test`) and E2E (mode `e2e`) keep them grey.
+ */
+export const showUnbuilt = () => import.meta.env.DEV && import.meta.env.MODE === 'development'
+
+/** Grey and closed: a page not built yet, outside dev mode. */
+export const isGrey = (p: TabPage) => !!p.soon && !showUnbuilt()
+
 /** The page tab at a route path, or undefined (settings, not found). */
 export const tabPage = (path: string): TabPage | undefined => groupOf(path)?.pages.find((p) => p.path === path)
 
@@ -199,13 +208,13 @@ export function categoryOf(path: string): TabCategory | undefined {
  * turned off; undefined when it has none (the category is grey).
  */
 export function categoryTarget(c: TabCategory, hidden: Set<string> = new Set(), last?: string): string | undefined {
-  const open = c.pages.filter((p) => !p.soon && !hidden.has(p.path))
+  const open = c.pages.filter((p) => !isGrey(p) && !hidden.has(p.path))
   return open.find((p) => p.path === last)?.path ?? open[0]?.path
 }
 
 /** A group can be opened while it has a page that is built and not turned off; otherwise its tab is grey. */
 export const groupUsable = (g: TabGroup, hidden: Set<string> = new Set()) =>
-  g.pages.some((p) => !p.soon && !hidden.has(p.path))
+  g.pages.some((p) => !isGrey(p) && !hidden.has(p.path))
 
 /**
  * Where a group tab goes before any of its pages was visited: its first built page, else its first page; pages in
@@ -213,7 +222,7 @@ export const groupUsable = (g: TabGroup, hidden: Set<string> = new Set()) =>
  */
 export function firstPage(g: TabGroup, hidden: Set<string> = new Set()): string {
   const pages = g.pages.filter((p) => !hidden.has(p.path))
-  return (pages.find((p) => !p.soon) ?? pages[0] ?? g.pages[0]).path
+  return (pages.find((p) => !isGrey(p)) ?? pages[0] ?? g.pages[0]).path
 }
 
 /** Where a turned-off page leads instead: the first open page of its group, or home when none is left. */

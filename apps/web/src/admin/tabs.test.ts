@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { FEATURES, shareModules } from './features'
 import { UNBUILT_TILES } from './home'
-import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, closedPageTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
+import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, closedPageTarget, firstPage, fittingTabs, groupOf, groupUsable, isGrey } from './tabs'
 import { router } from './router'
 
 // The alerts feature's pages: turning it off hides all of them.
@@ -81,8 +81,23 @@ describe('what counts as built', () => {
     expect(UNBUILT_TILES.map((t) => t.id)).toEqual(tilePages)
   })
 
+  // The guard, not a static redirect, so dev mode can open these pages (showUnbuilt).
+  const enter = (path: string) => (router.resolve(path).matched[0]?.beforeEnter as () => unknown)()
+
   it('sends a page not built yet home', () => {
-    for (const p of SOON_PAGES) expect(router.resolve(p.path).matched[0]?.redirect, p.path).toBe('/')
+    for (const p of SOON_PAGES) expect(enter(p.path), p.path).toBe('/')
+  })
+
+  it('opens a page not built yet in dev mode only, and no longer greys it there', () => {
+    expect(isGrey(SOON_PAGES[0])).toBe(true)
+    vi.stubEnv('MODE', 'development')
+    try {
+      for (const p of SOON_PAGES) expect(enter(p.path), p.path).toBe(true)
+      expect(isGrey(SOON_PAGES[0])).toBe(false)
+      expect(groupUsable(GROUPS.find((g) => g.id === 'song')!)).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
