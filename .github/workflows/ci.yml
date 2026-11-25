@@ -22,8 +22,9 @@ jobs:
           fetch-depth: 2 # the PR merge commit and its base parent, to list the PR's files
 
       # Docs-only PRs run just the translation check; the job still reports `check`, which the main ruleset
-      # requires. Docs = root *.md, docs/ (not decisions.md: it feeds the frontend license allowlist) and
-      # prototype/, the files lefthook's pre-push also skips for every check but translations. With rebase-merge
+      # requires. Docs = root *.md, docs/ (not decisions.md: it feeds the frontend license allowlist),
+      # prototype/ and the agent folders .agents/ and .claude/, the files lefthook's pre-push also skips for
+      # every check but translations. With rebase-merge
       # main is never re-checked, so only list files no check reads.
       - name: Changed files
         id: changes
@@ -36,7 +37,7 @@ jobs:
             case "$f" in
               '') ;;
               docs/decisions.md) code=true ;;
-              docs/* | prototype/*) ;;
+              docs/* | prototype/* | .agents/* | .claude/*) ;;
               */*) code=true ;;
               *.md) ;;
               *) code=true ;;

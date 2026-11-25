@@ -17,11 +17,12 @@ pre-commit:
 # Keep this list in sync with ci.yml. The frontend must build first: the host embeds apps/web/dist.
 #
 # Each job except translations is skipped when every pushed file ({push_files}) matches its `exclude`;
-# CI skips only docs-only PRs (root *.md, docs/ but decisions.md, prototype/: translations only, see ci.yml).
+# CI skips only docs-only PRs (root *.md, docs/ but decisions.md, prototype/, .agents/, .claude/: translations only,
+# see ci.yml).
 # Exclude lists name only what a job provably ignores, so any other file
 # (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
 # - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
-# - prototype/ is a static HTML mock-up that no check reads.
+# - prototype/ is a static HTML mock-up and .agents/ and .claude/ hold agent skills and settings; no check reads them.
 # - Rust-only jobs ignore apps/web/, except cargo-test: the Host embeds dist/ and the overlay's
 #   built-in templates and tests them, so only admin UI and E2E changes skip it.
 # shortcut: lefthook drops paths that no longer exist from {push_files}, so a push that only deletes or renames files may skip
@@ -40,6 +41,8 @@ pre-push:
         - "docs/**/*.en.md"
         - "docs/modules/**"
         - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
     - name: frontend-licenses
       run: pnpm check:licenses
       exclude: *docs-but-decisions
@@ -49,6 +52,8 @@ pre-push:
         - "*.md"
         - "docs/**"
         - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
     - name: web-test
       run: pnpm web:test
       exclude: *docs
@@ -67,6 +72,8 @@ pre-push:
         - "*.md"
         - "docs/**"
         - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
         - "apps/web/**"
     - name: clippy
       run: cargo clippy --workspace --all-targets -- -D warnings
@@ -82,6 +89,8 @@ pre-push:
         - "apps/web/src/admin/**"
         - "apps/web/e2e/**"
         - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
     - name: cargo-deny
       run: cargo deny check
       exclude: *docs-and-web
