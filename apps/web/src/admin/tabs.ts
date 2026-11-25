@@ -159,7 +159,14 @@ export const GROUPS: TabGroup[] = [
         { path: '/image-sizes', label: 'pages.imageSizes.name', icon: 'pi pi-image' },
       ],
     },
-    { id: 'avatar', pages: [soon('/avatar', 'avatar', 'pi pi-face-smile', true)] },
+    {
+      id: 'avatar',
+      pages: [
+        { ...soon('/avatar', 'avatar', 'pi pi-face-smile', true), tabLabel: 'nav.pageTabs.avatar3d' },
+        soon('/mic-avatar', 'micAvatar', 'pi pi-microphone'),
+        soon('/outfits', 'outfits', 'pi pi-user'),
+      ],
+    },
   ]),
   grouped('viewers', 'pi pi-users', [
     {

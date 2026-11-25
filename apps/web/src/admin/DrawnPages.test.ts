@@ -28,6 +28,8 @@ import MusicRequestsPage from './MusicRequestsPage.vue'
 import ChatWindowPage from './ChatWindowPage.vue'
 import SettingsHotkeys from './SettingsHotkeys.vue'
 import SettingsProfiles from './SettingsProfiles.vue'
+import MicAvatarPage from './MicAvatarPage.vue'
+import OutfitsPage from './OutfitsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -201,17 +203,29 @@ describe('聊天過濾', () => {
 })
 
 describe('虛擬形象', () => {
-  it('shows both apps not connected, the faces and setups disabled, and no items or image sets', async () => {
+  it('3D: shows both apps not connected, the faces and setups disabled, and no interactions', async () => {
     const w = await page(AvatarPage, '/avatar')
     expect(w.get('h1').text()).toBe(t('pages.avatar.name'))
     expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([
       t('avatar.notConnected'),
       t('avatar.notConnected'),
       t('avatar.noItems'),
-      t('avatar.noSets'),
     ])
     expect(button(w, t('avatar.face.joy')).attributes('disabled')).toBeDefined()
+  })
+
+  it('跳跳: shows the mic settings with the filter switch disabled and no image sets', async () => {
+    const w = await page(MicAvatarPage, '/mic-avatar')
+    expect(w.get('h1').text()).toBe(t('pages.micAvatar.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('avatar.noSets'))
     expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('換裝: shows no outfits and no reward to pick', async () => {
+    const w = await page(OutfitsPage, '/outfits')
+    expect(w.get('h1').text()).toBe(t('pages.outfits.name'))
+    expect(w.text()).toContain(t('avatar.outfits.none'))
+    expect(w.find('#av-reward').exists()).toBe(true)
   })
 })
 

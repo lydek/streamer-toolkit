@@ -71,7 +71,8 @@
       "breakCard": "休息卡片",
       "alertTemplates": "樣板",
       "checkin": "打卡名單",
-      "rewards": "獎勵"
+      "rewards": "獎勵",
+      "avatar3d": "3D 形象"
     }
   },
   "chatLog": {
@@ -280,8 +281,16 @@
       "desc": "訂閱、小奇點會延長的倒數計時"
     },
     "avatar": {
-      "name": "虛擬形象",
-      "desc": "表情、換裝與互動"
+      "name": "3D 形象",
+      "desc": "VTuber Plus、VSeeFace 的表情與互動"
+    },
+    "micAvatar": {
+      "name": "跳跳",
+      "desc": "麥克風形象：講話、待機、AFK 自動換圖"
+    },
+    "outfits": {
+      "name": "換裝",
+      "desc": "veadotube mini 換裝"
     },
     "shoutouts": {
       "name": "SO",
@@ -388,7 +397,15 @@
     },
     "avatar": {
       "name": "虛擬形象",
-      "desc": "控制 VTuber Plus、VSeeFace 的表情、換裝與互動。"
+      "desc": "控制 VTuber Plus、VSeeFace 的表情與互動。"
+    },
+    "micAvatar": {
+      "name": "跳跳",
+      "desc": "麥克風形象：講話、待機、AFK 自動換圖。"
+    },
+    "outfits": {
+      "name": "換裝",
+      "desc": "觀眾用頻道點數兌換後選衣服，幾分鐘後換回預設。"
     },
     "shoutouts": {
       "name": "SO",
@@ -2370,7 +2387,7 @@
     "itemsNote": "之後可以綁到頻道點數獎勵",
     "addItem": "新增互動",
     "mic": {
-      "heading": "跳跳（麥克風形象）",
+      "summary": "麥克風形象 · 講話、待機、AFK 自動換圖",
       "device": "麥克風",
       "noDevice": "還沒有麥克風",
       "level": "即時音量",
@@ -2387,7 +2404,7 @@
     "addSet": "新增組合",
     "noSets": "還沒有圖片組合；每組有講話、待機、AFK 三張圖。",
     "outfits": {
-      "heading": "換裝（veadotube mini）",
+      "summary": "veadotube mini · 觀眾兌換後選衣服",
       "list": "衣服",
       "none": "還沒有衣服；連上 veadotube mini 後會列出。",
       "reward": "兌換的獎勵",
