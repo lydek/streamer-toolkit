@@ -2300,19 +2300,19 @@
       },
       "repeats": {
         "name": "重複訊息",
-        "hint": "同一句短時間內出現好幾次"
+        "hint": "同一句 {seconds} 秒內出現 {times} 次"
       },
       "emotes": {
         "name": "表情太多",
-        "hint": "一則訊息的表情太多"
+        "hint": "一則超過 {count} 個表情"
       },
       "caps": {
         "name": "全大寫",
-        "hint": "英文字母都是大寫"
+        "hint": "至少 {count} 個英文字母都是大寫"
       },
       "chars": {
         "name": "同一字元洗版",
-        "hint": "同一個字元連續出現很多次"
+        "hint": "同一個字元連續 {count} 次以上"
       }
     },
     "actions": {
@@ -2321,6 +2321,15 @@
       "ban": "封鎖（永久）"
     },
     "enabled": "啟用：{name}",
+    "duration": "{name}的禁言長度",
+    "unit": "{name}的禁言單位",
+    "units": { "s": "秒", "m": "分鐘", "h": "小時", "d": "天" },
+    "limits": {
+      "repeats": { "seconds": "重複訊息的秒數", "times": "重複訊息的次數" },
+      "emotes": { "count": "表情數量" },
+      "caps": { "count": "全大寫的字母數" },
+      "chars": { "count": "連續字元數" }
+    },
     "exempt": "不受影響的人",
     "exemptWho": "管理員、VIP、訂閱者",
     "change": "修改",
@@ -2364,11 +2373,15 @@
       "heading": "跳跳（麥克風形象）",
       "device": "麥克風",
       "noDevice": "還沒有麥克風",
+      "level": "即時音量",
+      "levelNone": "即時音量：還沒有麥克風",
       "threshold": "講話門檻",
       "smoothing": "平滑（不讓敲鍵盤觸發）",
       "highPass": "擋低頻雜音（高通濾波）",
       "afk": "多久沒聲音算 AFK",
-      "afkUnit": "分鐘（0 = 不切換）"
+      "afkUnit": "分鐘（0 = 不切換）",
+      "animation": "切換動畫",
+      "animations": { "bounce": "跳一下", "fade": "淡入淡出", "zoom": "縮放", "slide": "滑入", "cut": "直接切換" }
     },
     "sets": "圖片組合",
     "addSet": "新增組合",

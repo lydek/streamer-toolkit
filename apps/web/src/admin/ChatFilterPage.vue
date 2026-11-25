@@ -6,15 +6,44 @@
         <FormPanel :heading="t('chatFilter.rules')">
           <FormRow v-for="r in RULES" :key="r" :label="t(`chatFilter.rule.${r}.name`)" :input-id="`cf-${r}`">
             <div class="rule">
-              <Select
-                v-model="actions[r]"
-                :input-id="`cf-${r}`"
-                :options="ACTIONS"
-                :option-label="(a: string) => t(`chatFilter.actions.${a}`)"
-              />
+              <span class="action">
+                <Select
+                  v-model="rules[r].action"
+                  :input-id="`cf-${r}`"
+                  :options="ACTIONS"
+                  :option-label="(a: string) => t(`chatFilter.actions.${a}`)"
+                />
+                <template v-if="rules[r].action === 'timeout'">
+                  <InputNumber
+                    v-model="rules[r].duration"
+                    :min="1"
+                    :use-grouping="false"
+                    input-class="num-input"
+                    :aria-label="t('chatFilter.duration', { name: t(`chatFilter.rule.${r}.name`) })"
+                  />
+                  <Select
+                    v-model="rules[r].unit"
+                    :options="UNITS"
+                    :option-label="(u: string) => t(`chatFilter.units.${u}`)"
+                    :aria-label="t('chatFilter.unit', { name: t(`chatFilter.rule.${r}.name`) })"
+                  />
+                </template>
+              </span>
               <ToggleSwitch disabled :aria-label="t('chatFilter.enabled', { name: t(`chatFilter.rule.${r}.name`) })" />
             </div>
-            <template #hint>{{ t(`chatFilter.rule.${r}.hint`) }}</template>
+            <template #hint>
+              <i18n-t :keypath="`chatFilter.rule.${r}.hint`" tag="span" scope="global" class="limits">
+                <template v-for="(_, k) in rules[r].limits" :key="k" #[k]>
+                  <InputNumber
+                    v-model="rules[r].limits[k]"
+                    :min="1"
+                    :use-grouping="false"
+                    input-class="num-input"
+                    :aria-label="t(`chatFilter.limits.${r}.${k}`)"
+                  />
+                </template>
+              </i18n-t>
+            </template>
           </FormRow>
           <FormRow :label="t('chatFilter.exempt')" label-id="cf-exempt">
             <span class="with-button">
@@ -61,6 +90,7 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
@@ -72,10 +102,19 @@ import FullPage from './FullPage.vue'
 
 const RULES = ['terms', 'links', 'repeats', 'emotes', 'caps', 'chars'] as const
 const ACTIONS = ['delete', 'timeout', 'ban']
+const UNITS = ['s', 'm', 'h', 'd']
 
 const { t } = useI18n()
-// The prototype's defaults: spam that repeats is timed out, the rest deleted.
-const actions = reactive<Record<string, string>>(Object.fromEntries(RULES.map((r) => [r, r === 'repeats' ? 'timeout' : 'delete'])))
+// The prototype's defaults: repeats and repeated characters are timed out, the rest deleted.
+const rule = (action: string, duration: number, unit: string, limits: Record<string, number> = {}) => ({ action, duration, unit, limits })
+const rules = reactive({
+  terms: rule('delete', 10, 'm'),
+  links: rule('delete', 10, 'm'),
+  repeats: rule('timeout', 1, 'm', { seconds: 30, times: 3 }),
+  emotes: rule('delete', 10, 'm', { count: 15 }),
+  caps: rule('delete', 10, 'm', { count: 10 }),
+  chars: rule('timeout', 30, 's', { count: 12 }),
+})
 </script>
 
 <style scoped>
@@ -113,6 +152,18 @@ const actions = reactive<Record<string, string>>(Object.fromEntries(RULES.map((r
 
 .with-button {
   justify-content: flex-start;
+}
+
+.action,
+.limits {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.chat-filter :deep(.num-input) {
+  width: 4rem;
 }
 
 .note {
