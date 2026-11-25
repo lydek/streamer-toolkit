@@ -22,6 +22,8 @@ import ViewersPage from './ViewersPage.vue'
 import RolesPage from './RolesPage.vue'
 import ChatFilterPage from './ChatFilterPage.vue'
 import AvatarPage from './AvatarPage.vue'
+import CaptionsPage from './CaptionsPage.vue'
+import GoalsPage from './GoalsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -203,5 +205,21 @@ describe('虛擬形象', () => {
     ])
     expect(button(w, t('avatar.face.joy')).attributes('disabled')).toBeDefined()
     expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('字幕與目標', () => {
+  it('shows the caption settings with their switches disabled', async () => {
+    const w = await page(CaptionsPage, '/captions')
+    expect(w.get('h1').text()).toBe(t('pages.captions.name'))
+    const switches = w.findAll('[role="switch"]')
+    expect(switches).toHaveLength(2)
+    expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
+  })
+
+  it('shows no goals', async () => {
+    const w = await page(GoalsPage, '/goals')
+    expect(w.get('h1').text()).toBe(t('pages.goals.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('goals.empty'))
   })
 })
