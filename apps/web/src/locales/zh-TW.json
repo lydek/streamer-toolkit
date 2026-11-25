@@ -2395,5 +2395,17 @@
   "goals": {
     "summary": "用 Twitch 的目標，或自己設定",
     "empty": "還沒有目標。"
+  },
+  "musicRequests": {
+    "summary": "!play 網址 · 播 YouTube 時背景音樂自動暫停，播完再繼續",
+    "mode": "播放方式",
+    "modes": {
+      "audio": "只播聲音",
+      "video": "播影片"
+    },
+    "open": "開放點播",
+    "empty": "還沒有人點播。",
+    "rules": "誰能點、每首多長、每人同時幾首，在點播設定裡改",
+    "settings": "點播設定"
   }
 }
