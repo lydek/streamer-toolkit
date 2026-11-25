@@ -2183,5 +2183,24 @@
       },
       "enabled": "啟用：{name}"
     }
+  },
+  "songs": {
+    "now": "正在演唱",
+    "nothingNow": "沒有正在唱的歌。",
+    "next": "唱完了，下一首",
+    "skip": "不唱這首",
+    "queue": "接下來",
+    "shownLabel": "顯示",
+    "shown": {
+      "all": "全部",
+      "review": "待審核"
+    },
+    "emptyQueue": "還沒有人點歌。",
+    "add": "加歌",
+    "search": "搜尋歌單",
+    "for": "幫誰點",
+    "forHint": "選填",
+    "boothOff": "練唱台還沒連線。",
+    "prepare": "先準備接下來 3 首"
   }
 }

@@ -3,7 +3,7 @@
   <FullPage>
     <div class="rewards">
       <section class="tbl-wrap" aria-labelledby="rw-heading">
-        <div class="top">
+        <div class="tbl-top">
           <h3 id="rw-heading" class="tbl-head">{{ t('rewards.heading') }}</h3>
           <Button :label="t('rewards.add')" icon="pi pi-plus" disabled />
         </div>
@@ -25,18 +25,6 @@ const { t } = useI18n()
 <style scoped>
 .rewards {
   max-width: 72rem;
-}
-
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.75rem 0 0;
-}
-
-.top .tbl-head {
-  padding-top: 0;
 }
 
 .note {

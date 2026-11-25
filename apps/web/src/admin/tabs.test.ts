@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { FEATURES, shareModules } from './features'
 import { UNBUILT_TILES } from './home'
 import { GROUPS, SOON_PAGES, categoryOf, categoryTarget, closedPageTarget, firstPage, fittingTabs, groupOf, groupUsable, isGrey } from './tabs'
-import { router } from './router'
+import { DRAWN, router } from './router'
 
 // The alerts feature's pages: turning it off hides all of them.
 const ALERT_PAGES = FEATURES.find((f) => f.id === 'alerts')!.pages
@@ -86,6 +86,11 @@ describe('what counts as built', () => {
 
   it('sends a page not built yet home', () => {
     for (const p of SOON_PAGES) expect(enter(p.path), p.path).toBe('/')
+  })
+
+  it('draws only pages that are not built yet, under their own paths', () => {
+    const soon = SOON_PAGES.map((p) => p.path)
+    for (const path of Object.keys(DRAWN)) expect(soon, path).toContain(path)
   })
 
   it('opens a page not built yet in dev mode only, and no longer greys it there', () => {
