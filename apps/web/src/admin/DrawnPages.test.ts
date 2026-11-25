@@ -30,6 +30,7 @@ import SettingsHotkeys from './SettingsHotkeys.vue'
 import SettingsProfiles from './SettingsProfiles.vue'
 import MicAvatarPage from './MicAvatarPage.vue'
 import OutfitsPage from './OutfitsPage.vue'
+import SongRulesPage from './SongRulesPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -273,5 +274,16 @@ describe('設定 › 設定檔與快捷鍵', () => {
     const hotkeys = await page(SettingsHotkeys, '/settings/hotkeys')
     expect(hotkeys.get('[role="switch"]').attributes('disabled')).toBeDefined()
     expect(button(hotkeys, t('hotkeys.add')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('點歌規則', () => {
+  it('shows the request rules with their switches disabled', async () => {
+    const w = await page(SongRulesPage, '/song-rules')
+    expect(w.get('h1').text()).toBe(t('pages.songRules.name'))
+    const switches = w.findAll('[role="switch"]')
+    expect(switches).toHaveLength(3)
+    expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
+    expect(button(w, t('songRules.change')).attributes('disabled')).toBeDefined()
   })
 })

@@ -344,8 +344,12 @@
       "desc": "觀眾用聊天指令或頻道點數點歌，依序排隊。"
     },
     "songList": {
-      "name": "歌單與規則",
-      "desc": "管理可以點的歌和點歌規則。"
+      "name": "歌單",
+      "desc": "管理可以點的歌和它們的 YouTube 連結。"
+    },
+    "songRules": {
+      "name": "點歌規則",
+      "desc": "誰能點、多久能點一次、怎麼比對歌名。"
     },
     "singingBooth": {
       "name": "練唱台",
@@ -2466,5 +2470,21 @@
     "empty": "還沒有快捷鍵。",
     "conflicts": "跟其他程式衝突的組合會提示",
     "add": "新增快捷鍵"
+  },
+  "songRules": {
+    "summary": "誰能點、多久能點一次、怎麼比對歌名",
+    "randomCooldown": "隨機點歌冷卻",
+    "days": "天",
+    "favorOld": "很久沒被點的比較容易抽到",
+    "fuzzy": "比對打錯字、羅馬拼音、假名",
+    "perViewer": "每人同時最多",
+    "songs": "首",
+    "sameSong": "同一首歌唱完後",
+    "sameSongUnit": "天內不能再點",
+    "blocked": "不能點歌的觀眾",
+    "noneBlocked": "還沒有",
+    "change": "修改",
+    "hint": "聊天提到歌名時，畫面顯示上次唱的時間",
+    "hintPreview": "例如：「歌名」3 天前唱過 · 換一首吧"
   }
 }
