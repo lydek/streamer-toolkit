@@ -35,6 +35,7 @@ import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 const DRAWN: Record<string, () => Promise<unknown>> = {
   '/stream-info': () => import('./StreamInfoPage.vue'),
   '/rewards': () => import('./RewardsPage.vue'),
+  '/polls': () => import('./PollsPage.vue'),
 }
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.

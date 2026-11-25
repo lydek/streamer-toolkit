@@ -5,6 +5,7 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
+import PollsPage from './PollsPage.vue'
 import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
 import { testRouter } from './testRouter'
@@ -38,5 +39,17 @@ describe('頻道點數 › 獎勵', () => {
     expect(w.get('h1').text()).toBe(t('pages.rewards.name'))
     expect(w.get('.empty-cell').text()).toBe(t('rewards.empty'))
     expect(button(w, t('rewards.add')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('投票與預測', () => {
+  it('shows nothing running, and a new poll form that adds up to 5 options but cannot start', async () => {
+    const w = await page(PollsPage, '/polls')
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('polls.none.poll'), t('polls.none.prediction')])
+    const add = button(w, t('polls.addOption'))
+    for (let i = 0; i < 4; i++) await add.trigger('click')
+    expect(w.findAll('[role="group"] input')).toHaveLength(5)
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(button(w, t('polls.start')).attributes('disabled')).toBeDefined()
   })
 })
