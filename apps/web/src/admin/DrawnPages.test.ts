@@ -12,6 +12,7 @@ import PollsPage from './PollsPage.vue'
 import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
 import SongsPage from './SongsPage.vue'
+import SongListPage from './SongListPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -86,6 +87,16 @@ describe('點歌', () => {
     expect(w.get('h1').text()).toBe(t('pages.songs.name'))
     expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songs.nothingNow'), t('songs.emptyQueue'), t('songs.boothOff')])
     for (const label of [t('songs.next'), t('songs.skip'), t('songs.prepare')])
+      expect(button(w, label).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('歌單', () => {
+  it('shows no songs and no links, with reloading and finding links disabled', async () => {
+    const w = await page(SongListPage, '/song-list')
+    expect(w.get('h1').text()).toBe(t('pages.songList.name'))
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songList.empty'), t('songList.noLinks')])
+    for (const label of [t('songList.reload'), t('songList.findLinks')])
       expect(button(w, label).attributes('disabled')).toBeDefined()
   })
 })
