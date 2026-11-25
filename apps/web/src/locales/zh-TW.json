@@ -2214,5 +2214,19 @@
     "off": "練唱台還沒連線",
     "openOwn": "在自己的視窗開啟",
     "body": "連上練唱台後，伴奏與歌詞會顯示在這裡。"
+  },
+  "shoutouts": {
+    "summary": "SO 時在畫面播對方的 Clip",
+    "player": "正在播",
+    "nothingPlaying": "沒有正在播的 Clip。",
+    "session": "本場 SO",
+    "none": "這場還沒有 SO。",
+    "settings": "設定",
+    "onRaid": "有人揪團時自動 SO",
+    "longest": "Clip 最長",
+    "seconds": "秒",
+    "recent": "從最近幾天的 Clip 挑",
+    "days": "天",
+    "commands": "管理員指令：!so 帳號、!replay、!stop"
   }
 }

@@ -14,6 +14,7 @@ import StreamInfoPage from './StreamInfoPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
+import ShoutoutsPage from './ShoutoutsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -108,5 +109,14 @@ describe('練唱台', () => {
     expect(w.get('h1').text()).toBe(t('pages.singingBooth.name'))
     expect(w.get('.embed-body').text()).toBe(t('singingBooth.body'))
     expect(button(w, t('singingBooth.openOwn')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('SO', () => {
+  it('shows no clip and no shoutouts, with the automatic shoutout switch disabled', async () => {
+    const w = await page(ShoutoutsPage, '/shoutouts')
+    expect(w.get('h1').text()).toBe(t('pages.shoutouts.name'))
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('shoutouts.nothingPlaying'), t('shoutouts.none')])
+    expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
   })
 })
