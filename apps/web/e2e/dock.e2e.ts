@@ -52,12 +52,12 @@ test('docked by default, and the pages still fit; closing saves it, and opening 
   await panel(page).getByRole('button', { name: zh.dock.close }).click()
   await expect(panel(page)).toHaveCount(0)
   await expect(chatButton(page)).toBeFocused()
-  await expect.poll(() => puts.at(-1)).toEqual({ open: false, width: 340 })
+  await expect.poll(() => puts.at(-1)).toEqual({ open: false, width: 340, side: 'right' })
 
   await chatButton(page).click()
   await expect(panel(page)).toBeVisible()
   await expect(chatButton(page)).toHaveAttribute('aria-expanded', 'true')
-  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 340 })
+  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 340, side: 'right' })
 })
 
 test('a saved "closed" stays closed', async ({ page }) => {
@@ -77,7 +77,7 @@ test('the saved state comes back after a restart, and the edge resizes from the 
   await edge.focus()
   await page.keyboard.press('ArrowLeft')
   await expect(edge).toHaveAttribute('aria-valuenow', '416')
-  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 416 })
+  await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 416, side: 'right' })
 })
 
 test('filters and search narrow the messages; sending waits for a later phase', async ({ page }) => {

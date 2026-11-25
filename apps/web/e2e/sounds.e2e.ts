@@ -303,8 +303,9 @@ test('channel point rewards each choose a sound and test it in OBS', async ({ pa
   await expect(page.getByText(zh.sound.playedInObs)).toBeVisible()
   expect(played).toEqual(['/api/admin/sounds/s1/play'])
 
+  // Deleting it, on the sound library page, lists both rewards that use it.
   s.sounds[0].used_by = ['reward.gone', 'reward.r1']
-  await page.reload()
+  await page.goto('/admin/sounds')
   await page.getByRole('button', { name: zh.sound.delete }).click()
   await expect(page.locator('li.sound').getByRole('listitem')).toHaveText([
     fill(zh.sound.where.reward, { title: 'gone' }),
