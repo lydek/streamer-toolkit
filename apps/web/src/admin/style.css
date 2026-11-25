@@ -99,6 +99,24 @@ main :is(form, p) {
   border-top: 1px solid var(--p-content-border-color);
 }
 
+/* A table panel's heading, its text when it has no rows, and a note in its foot. */
+.tbl-head {
+  margin: 0;
+  padding: 0.75rem 0.75rem 0;
+  font-size: 1.0625rem;
+}
+
+.empty-cell {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.tbl-foot .note {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

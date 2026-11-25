@@ -2083,5 +2083,20 @@
       "nothing_staged": "請先選擇備份檔。",
       "restore_failed": "無法還原備份，請檢視記錄檔。目前的資料沒有變動。"
     }
+  },
+  "streamInfo": {
+    "summary": "觀眾在 Twitch 看到的標題、分類與標籤",
+    "now": "現在",
+    "title": "標題",
+    "category": "分類",
+    "tags": "標籤",
+    "addTag": "加標籤（最多 10 個）",
+    "language": "直播語言",
+    "update": "更新到 Twitch",
+    "templates": {
+      "heading": "每個模式的範本",
+      "empty": "還沒有模式；建立模式後，可以為每個模式設定切換時套用的標題與分類。"
+    },
+    "scope": "需要 Twitch 權限 channel:manage:broadcast。"
   }
 }
