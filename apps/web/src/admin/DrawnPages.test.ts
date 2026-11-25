@@ -26,6 +26,8 @@ import CaptionsPage from './CaptionsPage.vue'
 import GoalsPage from './GoalsPage.vue'
 import MusicRequestsPage from './MusicRequestsPage.vue'
 import ChatWindowPage from './ChatWindowPage.vue'
+import SettingsHotkeys from './SettingsHotkeys.vue'
+import SettingsProfiles from './SettingsProfiles.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -243,5 +245,16 @@ describe('桌面置頂聊天室', () => {
     expect(button(w, t('chatWindow.open')).attributes('disabled')).toBeDefined()
     expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
     expect(w.findAll('[role="group"] input[type="checkbox"]')).toHaveLength(4)
+  })
+})
+
+describe('設定 › 設定檔與快捷鍵', () => {
+  it('shows no other profiles and no hotkeys, with adding them and global hotkeys disabled', async () => {
+    const profiles = await page(SettingsProfiles, '/settings/profiles')
+    expect(profiles.get('.empty-cell').text()).toBe(t('profiles.empty'))
+    expect(button(profiles, t('profiles.add')).attributes('disabled')).toBeDefined()
+    const hotkeys = await page(SettingsHotkeys, '/settings/hotkeys')
+    expect(hotkeys.get('[role="switch"]').attributes('disabled')).toBeDefined()
+    expect(button(hotkeys, t('hotkeys.add')).attributes('disabled')).toBeDefined()
   })
 })
