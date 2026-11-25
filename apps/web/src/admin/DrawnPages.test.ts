@@ -15,6 +15,7 @@ import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
 import ShoutoutsPage from './ShoutoutsPage.vue'
+import RaidsPage from './RaidsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -118,5 +119,16 @@ describe('SO', () => {
     expect(w.get('h1').text()).toBe(t('pages.shoutouts.name'))
     expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('shoutouts.nothingPlaying'), t('shoutouts.none')])
     expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('揪團', () => {
+  it('shows the raid form and the random pick, with every raid action disabled', async () => {
+    const w = await page(RaidsPage, '/raids')
+    expect(w.get('h1').text()).toBe(t('pages.raids.name'))
+    expect(w.find('#raid-channel').exists()).toBe(true)
+    expect(w.get('.empty-cell').text()).toBe(t('raids.randomHint'))
+    for (const label of [t('raids.start'), t('raids.cancel'), t('raids.pick')])
+      expect(button(w, label).attributes('disabled')).toBeDefined()
   })
 })

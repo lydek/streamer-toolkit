@@ -2228,5 +2228,22 @@
     "recent": "從最近幾天的 Clip 挑",
     "days": "天",
     "commands": "管理員指令：!so 帳號、!replay、!stop"
+  },
+  "raids": {
+    "summary": "直接從工具發起揪團",
+    "to": "揪團到",
+    "channel": "頻道",
+    "channelHint": "帳號",
+    "before": "出發前",
+    "beforeItems": {
+      "credits": "先播片尾名單",
+      "announce": "聊天室說一聲"
+    },
+    "cancel": "取消揪團",
+    "start": "開始揪團",
+    "random": "隨機挑一台",
+    "pick": "抽一台",
+    "randomHint": "從你追隨的頻道裡正在直播的挑；可以排除最近揪過的。",
+    "scopes": "需要 Twitch 權限 channel:manage:raids；追隨中正在直播的頻道要 user:read:follows。"
   }
 }
