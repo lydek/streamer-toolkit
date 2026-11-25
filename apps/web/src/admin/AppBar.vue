@@ -178,7 +178,7 @@ import { useTabBar } from './tabbar'
 import TabBarEditor from './TabBarEditor.vue'
 import SimulateDialog from './SimulateDialog.vue'
 import { navOpened } from './page'
-import { GROUPS, type TabGroup, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable } from './tabs'
+import { GROUPS, type TabGroup, categoryOf, categoryTarget, firstPage, fittingTabs, groupOf, groupUsable, isGrey } from './tabs'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -306,7 +306,7 @@ const subItems = computed<{ key: string; label: string; to?: string; current?: '
   if (!g.categories)
     return g.pages
       .filter((p) => !hidden.value.has(p.path))
-      .map((p) => ({ key: p.path, label: t(p.label), to: p.soon ? undefined : p.path, current: p.path === route.path ? 'page' : undefined }))
+      .map((p) => ({ key: p.path, label: t(p.label), to: isGrey(p) ? undefined : p.path, current: p.path === route.path ? 'page' : undefined }))
   return g.categories.flatMap((c) => {
     const pages = c.pages.filter((p) => !hidden.value.has(p.path))
     if (!pages.length) return []

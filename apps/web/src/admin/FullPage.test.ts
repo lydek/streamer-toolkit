@@ -89,6 +89,17 @@ describe('FullPage page tabs', () => {
     expect(off.text()).toContain(t('nav.pageTabs.rewards'))
   })
 
+  it('links a page not built yet in dev mode', async () => {
+    vi.stubEnv('MODE', 'development')
+    try {
+      const nav = (await at('/redemptions')).get('nav.page-tabs')
+      expect(nav.find('.off').exists()).toBe(false)
+      expect(nav.findAll('a').map((a) => a.text())).toContain(t('nav.pageTabs.rewards'))
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('has no row for a page without a category, or when only one page of the category is left', async () => {
     expect((await at('/leaderboard')).find('nav.page-tabs').exists()).toBe(false)
     expect((await at('/songs')).find('nav.page-tabs').exists()).toBe(false)

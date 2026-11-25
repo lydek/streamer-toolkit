@@ -29,7 +29,10 @@ import MediaPage from './MediaPage.vue'
 import ScreenToolsPage from './ScreenToolsPage.vue'
 import WarningsPage from './WarningsPage.vue'
 import SoundsPage from './SoundsPage.vue'
-import { SOON_PAGES, closedPageTarget } from './tabs'
+import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
+
+// Unbuilt pages drawn ahead of their backend (UI-G), opened in dev mode only; lazy, so release never loads them.
+const DRAWN: Record<string, () => Promise<unknown>> = {}
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
 export const router = createRouter({
@@ -64,9 +67,13 @@ export const router = createRouter({
     { path: '/warnings', component: WarningsPage },
     { path: '/overlay-look', component: OverlayLookPage },
     { path: '/media', component: MediaPage },
-    // Screens of the design that are not built yet (docs/scope.md 階段 0).
-    // A page not built yet has a grey tab; its URL leads home.
-    ...SOON_PAGES.map((p) => ({ path: p.path, redirect: '/' })),
+    // Screens of the design that are not built yet (docs/scope.md 階段 0): their URL leads home, except in dev mode,
+    // where a page drawn ahead of its backend opens (DRAWN) and the rest show a placeholder.
+    ...SOON_PAGES.map((p) => ({
+      path: p.path,
+      component: DRAWN[p.path] ?? (() => import('./UnbuiltPage.vue')),
+      beforeEnter: () => showUnbuilt() || '/',
+    })),
     { path: '/:path(.*)*', component: NotFoundView },
   ],
 })

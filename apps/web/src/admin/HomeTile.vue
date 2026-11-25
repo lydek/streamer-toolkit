@@ -1,6 +1,10 @@
 <template>
-  <!-- A feature not built yet: the same tile, grey, as a plain block that does nothing (no drawer, not focusable). -->
-  <div v-if="unbuilt" class="tile off" :title="t('home.unbuilt')">
+  <!-- A feature not built yet: the same tile, grey, as a plain block that does nothing (no drawer, not focusable);
+       in dev mode it opens its page (tabs.ts showUnbuilt), whose path is the tile ID. -->
+  <RouterLink v-if="unbuilt && showUnbuilt()" :to="`/${id}`" class="tile off dev" :data-page-opener="id">
+    <TileFace :name="name" :icon="icon" :tint="tint" :line="{ state: 'ready', text: t('home.unbuilt') }" rows />
+  </RouterLink>
+  <div v-else-if="unbuilt" class="tile off" :title="t('home.unbuilt')">
     <TileFace :name="name" :icon="icon" :tint="tint" :line="{ state: 'ready', text: t('home.unbuilt') }" rows />
   </div>
   <!-- Actions a tile does in place sit beside its button (never inside it), over the line they replace. Clicks and
@@ -29,6 +33,7 @@
 import { useI18n } from 'vue-i18n'
 import { drawerId } from './drawer'
 import { type Line, type Tile, useThrottled } from './home'
+import { showUnbuilt } from './tabs'
 import TileFace from './TileFace.vue'
 
 defineOptions({ inheritAttrs: false })
@@ -120,6 +125,11 @@ const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
   background: var(--p-surface-900);
   color: var(--p-text-muted-color);
   cursor: default;
+}
+
+.tile.off.dev {
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .dot {

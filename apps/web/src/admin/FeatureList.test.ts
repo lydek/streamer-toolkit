@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
+import { useServices } from './services'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -37,6 +38,21 @@ describe('FeatureList', () => {
       [category('bot'), [name('bot')]],
     ])
     expect(sections('viewers')[2]).toEqual([category('raids'), [name('shoutouts'), name('credits'), name('raids')]])
+  })
+
+  it("links a feature not built yet to its page in dev mode only", () => {
+    const link = () => list().findAll('li.feat').find((li) => li.get('.name').text() === name('streamInfo'))!.find('a.open')
+    expect(link().exists()).toBe(false)
+    vi.stubEnv('MODE', 'development')
+    try {
+      expect(link().attributes('href')).toBe('/stream-info')
+      // Twitch not used: its pages are closed, so there is nothing to open.
+      useServices().unused = ['twitch']
+      expect(link().exists()).toBe(false)
+    } finally {
+      useServices().unused = []
+      vi.unstubAllEnvs()
+    }
   })
 
   it('lists the features of a group without categories with no heading', () => {

@@ -29,8 +29,9 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // The admin UI with its API mocked per test (e2e/fixtures.ts); also serves e2e/harness/.
-      command: `pnpm exec vite --port ${VITE_PORT} --strictPort`,
+      // The admin UI with its API mocked per test (e2e/fixtures.ts); also serves e2e/harness/. Mode `e2e` keeps
+      // unbuilt pages grey as in release (tabs.ts showUnbuilt).
+      command: `pnpm exec vite --port ${VITE_PORT} --strictPort --mode e2e`,
       url: `http://localhost:${VITE_PORT}/@vite/client`,
     },
     {
