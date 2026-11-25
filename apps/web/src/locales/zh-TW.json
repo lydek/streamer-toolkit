@@ -2202,5 +2202,12 @@
     "forHint": "選填",
     "boothOff": "練唱台還沒連線。",
     "prepare": "先準備接下來 3 首"
+  },
+  "songList": {
+    "reload": "重新讀取",
+    "empty": "還沒有歌單。",
+    "links": "YouTube 連結",
+    "findLinks": "幫沒有的找",
+    "noLinks": "歌單裡還沒有歌；練唱台靠這些連結準備伴奏。"
   }
 }
