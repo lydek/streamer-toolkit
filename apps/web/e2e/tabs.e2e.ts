@@ -44,7 +44,7 @@ test('every group, category and page is one click away, and the current one is m
 
   // A group tab goes back to the page last seen in it.
   await tab(page, 'media').click()
-  await expect(page).toHaveURL(/\/admin\/sounds$/)
+  await expect(page).toHaveURL(/\/admin\/scenes$/)
   await tab(page, 'interact').click()
   await expect(page).toHaveURL(/\/admin\/card-style$/)
 
@@ -73,6 +73,12 @@ test('the app bar stays in view while the page scrolls', async ({ page }) => {
 test('"More" shows only when the groups do not fit, and holds the ones that do not', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 640 })
   await openAdmin(page)
+  // 點歌, the one group with no built page, saved last in the bar, so it is the one that moves to "More".
+  await page.route('**/api/admin/tab-bar', (r) =>
+    r.fulfill({ json: { groups: ['home', 'chat', 'interact', 'media', 'viewers', 'song'], position: 'top' } }),
+  )
+  await page.reload()
+  await toLiveHome(page)
   await expect(more(page)).toBeHidden()
 
   // Large text: the groups no longer fit in one row at 640px.
@@ -85,9 +91,9 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
   // The last item of "More" is always 「編輯分頁」.
   const items = page.locator('#tabs-more').getByRole('menuitem').filter({ hasNotText: zh.nav.edit })
   expect(visible + (await items.count())).toBe(Object.keys(zh.nav.groups).length)
-  // A group with no built page (viewers) is in "More" too, but greyed; a usable one opens.
-  await expect(items.filter({ hasText: zh.nav.groups.viewers })).toHaveAttribute('aria-disabled', 'true')
-  await expect(items.filter({ hasText: zh.nav.groups.viewers })).toHaveAttribute('title', zh.home.unbuilt)
+  // A group with no built page (點歌) is in "More" too, but greyed; a usable one opens.
+  await expect(items.filter({ hasText: zh.nav.groups.song })).toHaveAttribute('aria-disabled', 'true')
+  await expect(items.filter({ hasText: zh.nav.groups.song })).toHaveAttribute('title', zh.home.unbuilt)
   await page.locator('#tabs-more [role="menuitem"]:not([aria-disabled="true"])').filter({ hasNotText: zh.nav.edit }).last().click()
   await expect(more(page)).toHaveClass(/current/)
 })
@@ -156,14 +162,15 @@ test('the app bar says how long the stream has run and for how many viewers', as
   await page.setViewportSize({ width: 1280, height: 800 })
   const startedAt = new Date(Date.now() - (3600 + 2 * 60 + 5) * 1000).toISOString()
   await openWithStream(page, { state: 'live', startedAt, viewers: 42 })
-  const pill = page.getByRole('banner').getByText(zh.nav.live)
+  // The pill itself; the same words are also announced from a hidden live region.
+  const pill = page.getByRole('banner').locator('.live-pill')
   await expect(pill).toBeVisible()
   await expect(pill).toContainText(/1:02:0\d · 42 位觀眾/)
 })
 
 test('after the stream the app bar says it ended, and before Twitch answers it says nothing', async ({ page }) => {
   await openWithStream(page, { state: 'offline' })
-  await expect(page.getByRole('banner').getByText(zh.nav.offline)).toBeVisible()
+  await expect(page.getByRole('banner').locator('.live-pill.offline')).toContainText(zh.nav.offline)
   await openWithStream(page, { state: 'unknown' })
   await expect(page.getByRole('banner').getByText(zh.nav.live)).toHaveCount(0)
   await expect(page.getByRole('banner').getByText(zh.nav.offline)).toHaveCount(0)
@@ -192,10 +199,11 @@ test('below 600px the tabs are a bottom bar, and a warning replaces the status l
   }
   await more(page).click()
   await page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups.media }).click()
-  await expect(page).toHaveURL(/\/admin\/sounds$/)
+  await expect(page).toHaveURL(/\/admin\/scenes$/)
   expect(await scrollsSideways(page), 'media').toBe(false)
   await more(page).click()
-  await expect(page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups.viewers })).toHaveAttribute('aria-disabled', 'true')
+  // 觀眾 has a built page now (排行榜), so it opens from "More" too.
+  await expect(page.locator('#tabs-more').getByRole('menuitem', { name: zh.nav.groups.viewers })).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 test('a narrower bar keeps the lights that have a problem', async ({ page }) => {
@@ -247,8 +255,8 @@ test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home',
   await expect(tabs(page).getByRole('link', { name: zh.nav.groups.song })).toHaveCount(0)
   // Sub-tabs of a page not built yet are grey too.
   const sub = page.getByRole('navigation', { name: zh.nav.sub })
-  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.pages.rehearsal.name })).toBeVisible()
-  await expect(sub.getByRole('link', { name: zh.pages.rehearsal.name })).toHaveCount(0)
+  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.pages.streamInfo.name })).toBeVisible()
+  await expect(sub.getByRole('link', { name: zh.pages.streamInfo.name })).toHaveCount(0)
   await page.goto('/admin/songs')
   await expect(page).toHaveURL(/\/admin\/$/)
 })
@@ -292,8 +300,10 @@ test('with nothing in "More", 編輯分頁 is in the bar; pinning and order are 
   await expect(editor).toBeHidden()
   await expect.poll(() => puts).toEqual([{ groups: ['home', 'song', 'chat', 'media', 'interact'], position: 'top' }])
 
+  // 點歌 has no built page: it keeps its place in the bar as a grey tab, not a link.
   const order = await tabs(page).getByRole('link').allTextContents()
-  expect(order.map((t) => t.trim())).toEqual(['home', 'song', 'chat', 'media', 'interact'].map((g) => zh.nav.groups[g]))
+  expect(order.map((t) => t.trim())).toEqual(['home', 'chat', 'media', 'interact'].map((g) => zh.nav.groups[g]))
+  await expect(greyTab(page, 'song')).toBeVisible()
   await expect(more(page)).toBeVisible()
   await more(page).click()
   const items = page.locator('#tabs-more').getByRole('menuitem')

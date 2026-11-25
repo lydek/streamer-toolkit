@@ -7,6 +7,10 @@ const fill = (text: string, values: Record<string, string | number>) =>
   Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), text)
 
 test('each row sends its test event, a feature turned off cannot, and Esc returns focus', async ({ page }) => {
+  // Home first: the mocks' catch-all for unmocked requests is registered then, and later routes win over it.
+  await openAdmin(page, {
+    modules: ['chat', 'alerts', 'checkin', 'counter', 'marathon', 'sound'].map((id) => ({ id, enabled: true, closed: false })),
+  })
   const sent: { path: string; body: unknown }[] = []
   await page.route(/\/api\/admin\/(simulate\/[\w-]+|sounds\/[^/]+\/play|music\/player\/test)$/, (r) => {
     sent.push({ path: new URL(r.request().url()).pathname, body: r.request().postDataJSON() })
@@ -17,17 +21,16 @@ test('each row sends its test event, a feature turned off cannot, and Esc return
     r.fulfill({ json: { sounds: [{ id: 's1', label: '叮咚' }, { id: 's2', label: '鈴聲' }], slots: {}, volume: 100 } }),
   )
   await page.route('**/api/admin/checkin/settings', (r) => r.fulfill({ json: { card_slots: 10 } }))
-  await openAdmin(page, {
-    modules: ['chat', 'alerts', 'checkin', 'counter', 'sound'].map((id) => ({ id, enabled: true, closed: false })),
-  })
   const opener = page.getByRole('banner').getByRole('button', { name: zh.simulate.dialog.title })
   await opener.click()
   const dialog = page.getByRole('dialog', { name: zh.simulate.dialog.title })
   await expect(dialog.getByRole('button', { name: zh.app.close })).toBeFocused()
 
   const row = (id: string) => dialog.locator(`[data-row="${id}"]`)
+  // The dialog's own result line; the sound list adds a hidden status of its own.
+  const result = dialog.locator('p[role="status"]')
   await row('chat').getByRole('button', { name: zh.simulate.dialog.sendMessage }).click()
-  await expect(dialog.getByRole('status')).toHaveText(fill(zh.simulate.dialog.sent, { row: zh.simulate.dialog.rows.chat, button: zh.simulate.dialog.sendMessage }))
+  await expect(result).toHaveText(fill(zh.simulate.dialog.sent, { row: zh.simulate.dialog.rows.chat, button: zh.simulate.dialog.sendMessage }))
   for (const kind of ['follow', 'subscribe', 'resubscribe', 'gift', 'cheer', 'raid'] as const) {
     await row('alerts').getByRole('button', { name: zh.alerts.kinds[kind], exact: true }).click()
   }
@@ -61,7 +64,7 @@ test('each row sends its test event, a feature turned off cannot, and Esc return
   // A failure says why.
   await page.route('**/api/admin/simulate/chat', (r) => r.fulfill({ status: 400, json: { code: 'simulate.invalid' } }))
   await row('chat').getByRole('button', { name: zh.simulate.dialog.sendMessage }).click()
-  await expect(dialog.getByRole('status')).not.toContainText(zh.simulate.dialog.rows.chat)
+  await expect(result).not.toContainText(zh.simulate.dialog.rows.chat)
 
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
