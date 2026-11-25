@@ -32,13 +32,14 @@ import SoundsPage from './SoundsPage.vue'
 import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 
 // Unbuilt pages drawn ahead of their backend (UI-G), opened in dev mode only; lazy, so release never loads them.
-const DRAWN: Record<string, () => Promise<unknown>> = {
+export const DRAWN: Record<string, () => Promise<unknown>> = {
   '/stream-info': () => import('./StreamInfoPage.vue'),
   '/rewards': () => import('./RewardsPage.vue'),
   '/polls': () => import('./PollsPage.vue'),
   '/commands': () => import('./BotCommandsPage.vue'),
   '/timers': () => import('./BotTimersPage.vue'),
   '/greetings': () => import('./BotGreetingsPage.vue'),
+  '/songs': () => import('./SongsPage.vue'),
 }
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.

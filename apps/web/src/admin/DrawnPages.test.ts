@@ -11,6 +11,7 @@ import BotTimersPage from './BotTimersPage.vue'
 import PollsPage from './PollsPage.vue'
 import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
+import SongsPage from './SongsPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -76,5 +77,15 @@ describe('聊天機器人', () => {
     expect(switches).toHaveLength(6)
     expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
     expect(w.get('#greet-follow').attributes('placeholder')).toBe('謝謝 {觀眾} 的追隨，歡迎！')
+  })
+})
+
+describe('點歌', () => {
+  it('shows nothing on and an empty queue, with the song actions disabled', async () => {
+    const w = await page(SongsPage, '/songs')
+    expect(w.get('h1').text()).toBe(t('pages.songs.name'))
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songs.nothingNow'), t('songs.emptyQueue'), t('songs.boothOff')])
+    for (const label of [t('songs.next'), t('songs.skip'), t('songs.prepare')])
+      expect(button(w, label).attributes('disabled')).toBeDefined()
   })
 })
