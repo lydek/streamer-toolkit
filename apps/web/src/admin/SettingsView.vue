@@ -166,7 +166,12 @@
         <section v-for="s in SOON" v-show="section === s" :key="s" :aria-labelledby="`soon-${s}`">
           <h2 :id="`soon-${s}`" tabindex="-1">{{ t(`settings.menu.${s}`) }}</h2>
           <p>{{ t(`settings.soon.${s}`) }}</p>
-          <p class="soon"><i class="pi pi-hourglass" aria-hidden="true"></i>{{ t('pages.soon') }}</p>
+          <!-- Dev mode shows the screen drawn ahead of its backend (tabs.ts showUnbuilt). -->
+          <template v-if="showUnbuilt()">
+            <SettingsProfiles v-if="s === 'profiles'" />
+            <SettingsHotkeys v-else />
+          </template>
+          <p v-else class="soon"><i class="pi pi-hourglass" aria-hidden="true"></i>{{ t('pages.soon') }}</p>
         </section>
 
         <section v-show="section === 'debug'" aria-labelledby="debug">
@@ -223,7 +228,9 @@ import FullPage from './FullPage.vue'
 import FeatureList from './FeatureList.vue'
 import { FEATURES, type Service, isOn, shareModules, unusedBy } from './features'
 import { saveServices, useServices } from './services'
-import { GROUPS } from './tabs'
+import SettingsHotkeys from './SettingsHotkeys.vue'
+import SettingsProfiles from './SettingsProfiles.vue'
+import { GROUPS, showUnbuilt } from './tabs'
 import { errorToast, useLiveEvents } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
 import { TEXT_SIZE, saveTextSize, useTextSize } from './textsize'
