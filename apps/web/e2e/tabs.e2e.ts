@@ -1,6 +1,6 @@
 // The app bar: sticky top, group tabs, categories, page tabs and "More" (docs/decisions.md 管理 UI 版面), with the API mocked.
 import { type Page, expect, test } from '@playwright/test'
-import { mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
+import { mockAdmin, openAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
 
 const tabs = (page: Page) => page.getByRole('navigation', { name: zh.nav.label })
 const tab = (page: Page, group: string) => tabs(page).getByRole('link', { name: zh.nav.groups[group] })
@@ -276,7 +276,7 @@ async function openWithTabBar(page: Page, saved: unknown = null) {
     return r.fulfill({ status: 204 })
   })
   await page.goto('/admin/')
-  await page.locator('[data-drawer-tile], [data-drawer-arrange]').first().waitFor()
+  await toLiveHome(page)
   return puts
 }
 

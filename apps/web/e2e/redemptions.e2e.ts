@@ -2,7 +2,7 @@
 // API and `/ws/overlay` mocked (filtering itself is tested on real SQLite in crates/modules/redemption).
 import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import type { components } from '../src/api/schema'
-import { mockAdmin, openAdmin, scrollsSideways, zh } from './fixtures'
+import { mockAdmin, openAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
 
 type Schemas = components['schemas']
 
@@ -65,6 +65,7 @@ test('the tile shows the latest redemption; its drawer lists recent ones as text
   const queries = await mockRecords(page, () => ({ items, total: items.length }))
   const live = await liveSocket(page)
   await page.goto('/admin/')
+  await toLiveHome(page)
 
   const features = page.getByRole('region', { name: zh.home.tiles })
   await expect(features.locator('[data-drawer-tile="redemption"]')).toContainText('Viewer2：Hydrate')
@@ -91,6 +92,7 @@ test('no records: the drawer and the full page say so', async ({ page }) => {
   await mockAdmin(page, { modules })
   await mockRecords(page, () => ({ items: [], total: 0 }))
   await page.goto('/admin/')
+  await toLiveHome(page)
   await expect(tile(page)).toContainText(zh.redemption.empty)
   await tile(page).click()
   await expect(page.locator('#drawer-redemption').getByText(zh.redemption.empty)).toBeVisible()
@@ -165,6 +167,7 @@ for (const width of [1280, 640, 320]) {
       total: 120,
     }))
     await page.reload()
+    await toLiveHome(page)
     await tile(page).click()
     const drawer = page.locator('#drawer-redemption')
     await expect(drawer.getByText(long).first()).toBeVisible()

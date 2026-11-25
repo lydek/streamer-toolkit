@@ -2,9 +2,13 @@
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, zh } from './fixtures'
 
-/** Opens home with the queue status `queue` in the snapshot; returns the requests to clear and stop. */
+/**
+ * Opens home with the queue status `queue` in the snapshot; returns the requests to clear and stop. A function is
+ * called when the page connects, so times in it start then rather than before the page loaded.
+ */
 async function openWithQueue(page: Page, queue: unknown) {
-  await mockAdmin(page)
+  // A saved home with the queue tile, served for every stage: no stage to pick, which keeps the timing checks tight.
+  await mockAdmin(page, { homeTiles: ['queue'] })
   const calls: string[] = []
   await page.route('**/api/admin/queue/clear', (r) => (calls.push('clear'), r.fulfill({ json: { cancelled: 2 } })))
   await page.route('**/api/admin/queue/stop', (r) => (calls.push('stop'), r.fulfill({ json: { stopped: true, cancelled: 2 } })))
@@ -19,15 +23,17 @@ async function openWithQueue(page: Page, queue: unknown) {
           'chat.message': [],
           'obs.status': [],
           'obs.state': [],
-          'presentation.queue': [{ id: 'q', type: 'presentation.queue', version: 1, seq: 1, occurredAt: '', source: 'system', payload: queue }],
+          'presentation.queue': [
+            { id: 'q', type: 'presentation.queue', version: 1, seq: 1, occurredAt: '', source: 'system', payload: typeof queue === 'function' ? queue() : queue },
+          ],
           'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [],
         },
       }),
     ),
   )
   await page.goto('/admin/')
-  // The queue starts as a small tile on home; it opens in place into its block.
-  await page.locator('#tiles [data-expand="queue"]').click()
+  // The queue is a tile; it opens its drawer.
+  await page.locator('[data-drawer-tile="queue"]').click()
   return calls
 }
 
@@ -41,7 +47,7 @@ const queue = (startedAt: string, problem: string | null = null, soundOnAir = tr
 })
 
 test('home shows what plays, what waits and about how long, and 清空排隊 clears it', async ({ page }) => {
-  const calls = await openWithQueue(page, queue(new Date().toISOString()))
+  const calls = await openWithQueue(page, () => queue(new Date().toISOString()))
   const area = page.getByRole('region', { name: zh.queue.title })
   await expect(area.getByRole('listitem')).toHaveText([
     `${zh.queue.playing}特效：阿凱 訂閱了${zh.queue.skip}`,

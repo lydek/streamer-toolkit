@@ -72,11 +72,15 @@ async function open(
 // The stage switch sits above the home grid; each stage's content is a block in the grid.
 const stage = (page: Page) => page.getByRole('main')
 const pressed = (page: Page, name: string) => stage(page).getByRole('button', { name, exact: true })
+// One row of 開播前檢查: the innermost list item with the text (the home grid is a list too).
+const check = (page: Page, text: string) =>
+  stage(page).getByRole('listitem').filter({ hasText: text, hasNot: page.getByRole('listitem') })
 
 test("while live it shows how long, the peak and this stream's numbers", async ({ page }) => {
-  await open(page, { state: 'live', startedAt: '2026-11-18T11:58:00.000Z', viewers: 50 }, summary(null))
+  // 本場直播 is not on the default 直播中 home; a home that has it shows it as a small tile with the time.
+  await open(page, { state: 'live', startedAt: '2026-11-18T11:58:00.000Z', viewers: 50 }, summary(null), { homeTiles: ['stats'] })
   await expect(pressed(page, zh.stage.live)).toHaveAttribute('aria-pressed', 'true')
-  // 本場直播 starts as a small tile with the time; it opens in place into the numbers.
+  // It opens in place into the numbers.
   const toggle = page.locator('#tiles [data-expand="stats"]')
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await toggle.click()
@@ -119,19 +123,20 @@ test('before the stream it checks Twitch, EventSub, OBS and each overlay, with a
     obs: { state: 'connected', reason: null },
   })
   await expect(stage(page).getByText('3 / 4 好了')).toBeVisible()
-  await expect(stage(page).getByText(zh.stage.checks.overlay.chat.bad)).toBeVisible()
-  await expect(stage(page).getByRole('link', { name: zh.stage.checks.fix })).toHaveAttribute('href', /\/chat$/)
+  // A missing overlay links to the OBS sources page, which adds it.
+  const chat = check(page, zh.stage.checks.overlay.chat.bad)
+  await expect(chat.getByRole('link')).toHaveAttribute('href', /\/obs-sources$/)
 
   // The overlay is added to OBS: the next poll sees it.
   overlays = { ...overlays, chat: 1 }
   await expect(stage(page).getByText('4 / 4 好了')).toBeVisible()
-  await expect(stage(page).getByRole('link', { name: zh.stage.checks.fix })).toHaveCount(0)
+  await expect(stage(page).locator('a.fix')).toHaveCount(0)
 })
 
 test('signed out and OBS away, the checks say so and fixing leads to the connection settings', async ({ page }) => {
   await open(page, { state: 'unknown' }, null)
   await expect(stage(page).getByText(zh.stage.checks.twitch.bad)).toBeVisible()
   await expect(stage(page).getByText(zh.stage.checks.obs.bad)).toBeVisible()
-  await stage(page).getByRole('listitem').filter({ hasText: zh.stage.checks.obs.bad }).getByRole('link').click()
+  await check(page, zh.stage.checks.obs.bad).getByRole('link').click()
   await expect(page).toHaveURL(/\/settings\/connections#obs$/)
 })

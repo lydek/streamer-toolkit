@@ -27,7 +27,8 @@ test('never scrolls sideways at 1280px, 640px and 320px, nor do the drawers', as
 for (const width of [1280, 800]) {
   test(`keyboard only at ${width}px: skip link, tile, drawer, simulate, close`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
-    await openAdmin(page)
+    // A saved home with chat first, so the page opens with nothing focused yet (no stage to pick).
+    await openAdmin(page, { homeTiles: ['chat', 'alerts'] })
     await page.route('**/api/admin/simulate/chat', (r) => r.fulfill({ status: 204 }))
 
     await page.keyboard.press('Tab')
