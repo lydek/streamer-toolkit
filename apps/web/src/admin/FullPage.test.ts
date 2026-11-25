@@ -128,6 +128,14 @@ describe('FullPage page tabs', () => {
     expect(document.activeElement?.textContent).toBe('隱藏')
     expect(withActions.find('.page-end .actions').exists()).toBe(true)
     withActions.unmount()
+    // Disabled buttons cannot take focus: the title does when they all are.
+    const allDisabled = mount(FullPage, {
+      slots: { actions: '<button type="button" disabled>播放</button>' },
+      global: { plugins: [router, i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    expect(document.activeElement?.tagName).toBe('H1')
+    allDisabled.unmount()
     // A category link stays on the app bar, so it keeps focus.
     const category = document.body.appendChild(document.createElement('a'))
     category.href = '#'
