@@ -2261,5 +2261,9 @@
     "none": "這場還沒有。",
     "backgrounds": "背景圖：放幾張圖片，每次隨機挑一張。",
     "manageBackgrounds": "管理背景圖"
+  },
+  "modes": {
+    "fromObs": "從目前 OBS 畫面建立",
+    "empty": "還沒有模式；可以從目前的 OBS 畫面建立一個。"
   }
 }
