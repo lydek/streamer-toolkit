@@ -2407,5 +2407,21 @@
     "empty": "還沒有人點播。",
     "rules": "誰能點、每首多長、每人同時幾首，在點播設定裡改",
     "settings": "點播設定"
+  },
+  "chatWindow": {
+    "open": "開啟視窗",
+    "opacity": "不透明度",
+    "zoom": "縮放",
+    "clickThrough": "滑鼠穿透",
+    "clickThroughHint": "點擊會穿過視窗，按快捷鍵暫時解鎖",
+    "unlock": "解鎖快捷鍵",
+    "rebind": "重新設定",
+    "show": "顯示",
+    "items": {
+      "time": "時間",
+      "firstChat": "第一次聊天",
+      "redemptions": "兌換",
+      "support": "訂閱、小奇點、揪團"
+    }
   }
 }

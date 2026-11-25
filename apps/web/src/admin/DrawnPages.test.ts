@@ -25,6 +25,7 @@ import AvatarPage from './AvatarPage.vue'
 import CaptionsPage from './CaptionsPage.vue'
 import GoalsPage from './GoalsPage.vue'
 import MusicRequestsPage from './MusicRequestsPage.vue'
+import ChatWindowPage from './ChatWindowPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -232,5 +233,15 @@ describe('YouTube 點播', () => {
     expect(w.get('.empty-cell').text()).toBe(t('musicRequests.empty'))
     expect(w.get('#mr-open').attributes('disabled')).toBeDefined()
     expect(button(w, t('musicRequests.settings')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('桌面置頂聊天室', () => {
+  it('shows the window settings, with opening it and click-through disabled', async () => {
+    const w = await page(ChatWindowPage, '/chat-window')
+    expect(w.get('h1').text()).toBe(t('pages.chatWindow.name'))
+    expect(button(w, t('chatWindow.open')).attributes('disabled')).toBeDefined()
+    expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
+    expect(w.findAll('[role="group"] input[type="checkbox"]')).toHaveLength(4)
   })
 })
