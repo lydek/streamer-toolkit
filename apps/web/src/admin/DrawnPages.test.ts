@@ -5,6 +5,7 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
+import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
 import { testRouter } from './testRouter'
 
@@ -28,5 +29,14 @@ describe('直播資訊', () => {
     expect(w.find('#si-title').exists()).toBe(true)
     expect(button(w, t('streamInfo.update')).attributes('disabled')).toBeDefined()
     expect(w.get('.empty-cell').text()).toBe(t('streamInfo.templates.empty'))
+  })
+})
+
+describe('頻道點數 › 獎勵', () => {
+  it('shows no rewards, with adding one disabled', async () => {
+    const w = await page(RewardsPage, '/rewards')
+    expect(w.get('h1').text()).toBe(t('pages.rewards.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('rewards.empty'))
+    expect(button(w, t('rewards.add')).attributes('disabled')).toBeDefined()
   })
 })
