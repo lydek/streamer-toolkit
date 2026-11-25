@@ -20,6 +20,7 @@ import CreditsPage from './CreditsPage.vue'
 import ModesPage from './ModesPage.vue'
 import ViewersPage from './ViewersPage.vue'
 import RolesPage from './RolesPage.vue'
+import ChatFilterPage from './ChatFilterPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -170,5 +171,21 @@ describe('觀眾清單', () => {
     expect(w.get('h1').text()).toBe(t('pages.roles.name'))
     expect(w.get('.empty-cell').text()).toBe(t('viewers.groups.empty'))
     expect(button(w, t('viewers.groups.add')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('聊天過濾', () => {
+  it('shows one row per rule with its switch disabled, and nothing caught yet', async () => {
+    const w = await page(ChatFilterPage, '/chat-filter')
+    expect(w.get('h1').text()).toBe(t('pages.chatFilter.name'))
+    const switches = w.findAll('[role="switch"]')
+    expect(switches).toHaveLength(6)
+    expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([
+      t('chatFilter.noTerms'),
+      t('chatFilter.noUrls'),
+      t('chatFilter.noRecent'),
+    ])
+    expect(button(w, t('chatFilter.addUrlButton')).attributes('disabled')).toBeDefined()
   })
 })
