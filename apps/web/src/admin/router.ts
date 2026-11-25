@@ -36,6 +36,9 @@ const DRAWN: Record<string, () => Promise<unknown>> = {
   '/stream-info': () => import('./StreamInfoPage.vue'),
   '/rewards': () => import('./RewardsPage.vue'),
   '/polls': () => import('./PollsPage.vue'),
+  '/commands': () => import('./BotCommandsPage.vue'),
+  '/timers': () => import('./BotTimersPage.vue'),
+  '/greetings': () => import('./BotGreetingsPage.vue'),
 }
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.

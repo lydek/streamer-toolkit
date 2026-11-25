@@ -5,6 +5,9 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
+import BotCommandsPage from './BotCommandsPage.vue'
+import BotGreetingsPage from './BotGreetingsPage.vue'
+import BotTimersPage from './BotTimersPage.vue'
 import PollsPage from './PollsPage.vue'
 import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
@@ -51,5 +54,27 @@ describe('投票與預測', () => {
     expect(w.findAll('[role="group"] input')).toHaveLength(5)
     expect(add.attributes('disabled')).toBeDefined()
     expect(button(w, t('polls.start')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('聊天機器人', () => {
+  it('shows no commands or timers, with adding them disabled', async () => {
+    for (const [component, path, kind] of [
+      [BotCommandsPage, '/commands', 'commands'],
+      [BotTimersPage, '/timers', 'timers'],
+    ] as const) {
+      const w = await page(component, path)
+      expect(w.get('h1').text()).toBe(t(`pages.${kind}.name`))
+      expect(w.get('.empty-cell').text()).toBe(t(`bot.${kind}.empty`))
+      expect(button(w, t(`bot.${kind}.add`)).attributes('disabled')).toBeDefined()
+    }
+  })
+
+  it('shows one message per greeting with its switch disabled, and the variables as written', async () => {
+    const w = await page(BotGreetingsPage, '/greetings')
+    const switches = w.findAll('[role="switch"]')
+    expect(switches).toHaveLength(6)
+    expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
+    expect(w.get('#greet-follow').attributes('placeholder')).toBe('謝謝 {觀眾} 的追隨，歡迎！')
   })
 })
