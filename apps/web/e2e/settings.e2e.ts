@@ -144,7 +144,8 @@ test('switching sections saves a field still being edited, and a failed save kee
 test("check-in's row in features links to its rules page, which holds its settings", async ({ page }) => {
   await openAdmin(page, { modules: [{ id: 'checkin', enabled: true, closed: false }] })
   await page.goto('/admin/settings/features')
-  await page.getByRole('link', { name: `${zh.features.rules}：${zh.features.checkin.name}` }).click()
+  // The template's line break puts a space before the hidden 「：打卡」.
+  await page.getByRole('link', { name: new RegExp(`^${zh.features.rules}\\s*：${zh.features.checkin.name}$`) }).click()
   await expect(page).toHaveURL(/\/admin\/checkin-rules$/)
   await expect(page.getByRole('combobox', { name: zh.sound.checkinNormal })).toBeVisible()
 })

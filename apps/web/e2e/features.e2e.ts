@@ -24,8 +24,9 @@ const tabs = (page: Page) => page.getByRole('navigation', { name: zh.nav.label }
 
 test('turning a built feature off hides its tabs, also after a reload, and on brings them back', async ({ page }) => {
   await openFeatures(page)
+  // 31 features can be switched (features.ts, without the always-on ones).
   await expect(page.getByRole('status').filter({ hasText: '已開啟' })).toHaveText(
-    zh.features.count.replace('{on}', '5').replace('{all}', '26'),
+    zh.features.count.replace('{on}', '5').replace('{all}', '31'),
   )
 
   await sw(page, 'sound').click()
@@ -55,14 +56,16 @@ test("a feature's page link opens its first built page", async ({ page }) => {
 test('features not built yet say so and cannot be switched; home is always on', async ({ page }) => {
   await openFeatures(page)
   await expect(sw(page, 'songs')).toBeDisabled()
-  await expect(page.getByText(zh.features.alwaysOn)).toBeVisible()
+  const home = page.getByRole('listitem').filter({ has: page.getByText(zh.features.home.name, { exact: true }) })
+  await expect(home.getByText(zh.features.alwaysOn)).toBeVisible()
   await expect(sw(page, 'home')).toHaveCount(0)
 })
 
 test('search finds features by name or description', async ({ page }) => {
   await openFeatures(page)
   const search = page.getByRole('searchbox', { name: zh.features.search })
-  await search.fill('換裝')
+  // Found by its description only.
+  await search.fill('VSeeFace')
   await expect(page.getByText(zh.features.avatar.name, { exact: true })).toBeVisible()
   await expect(sw(page, 'chat')).toHaveCount(0)
   await search.fill('沒有這個功能')

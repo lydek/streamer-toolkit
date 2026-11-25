@@ -19,7 +19,9 @@ const fakeSaveDialog = (page: Page, choose: boolean) =>
         if (!choose) throw new DOMException('cancelled', 'AbortError')
         const saved = { name: options.suggestedName, bytes: [] as number[] }
         window.__e2eSaved = saved
+        // Like a FileSystemFileHandle: the app reports the saved file by its name.
         return {
+          name: options.suggestedName,
           createWritable: async () =>
             new WritableStream<Uint8Array>({
               write: (chunk) => void saved.bytes.push(...chunk),
@@ -32,7 +34,7 @@ const fakeSaveDialog = (page: Page, choose: boolean) =>
 async function openSettings(page: Page) {
   await openAdmin(page)
   let exports = 0
-  await page.route('**/api/admin/backup', (r) => {
+  await page.route(/\/api\/admin\/backup(\?.*)?$/, (r) => {
     exports++
     return r.fulfill({ body: Buffer.from(BACKUP), contentType: 'application/octet-stream' })
   })
@@ -47,7 +49,8 @@ test('export asks where to save, then writes the backup there', async ({ page })
   await fakeSaveDialog(page, true)
   await openSettings(page)
   await exportButton(page).click()
-  await expect(page.getByText(zh.backup.exported)).toBeVisible()
+  // The message names the file, checked below.
+  await expect(page.getByText(zh.backup.exported.replace('{file}', ''))).toBeVisible()
   const saved = await page.evaluate(() => window.__e2eSaved)
   expect(saved?.name).toMatch(/^streamer-toolkit-\d{8}-\d{4}\.stbackup$/)
   expect(saved?.bytes).toEqual(BACKUP)
@@ -73,7 +76,7 @@ test('without a save dialog the backup is downloaded', async ({ page }) => {
 test('a refused export shows why', async ({ page }) => {
   await fakeSaveDialog(page, true)
   await openSettings(page)
-  await page.route('**/api/admin/backup', (r) => r.fulfill({ status: 500, json: { code: 'backup.too_large' } }))
+  await page.route(/\/api\/admin\/backup(\?.*)?$/, (r) => r.fulfill({ status: 500, json: { code: 'backup.too_large' } }))
   await exportButton(page).click()
   await expect(page.getByText(zh.errors.backup.too_large)).toBeVisible()
 })
