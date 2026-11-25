@@ -50,6 +50,8 @@ export const DRAWN: Record<string, () => Promise<unknown>> = {
   '/roles': () => import('./RolesPage.vue'),
   '/chat-filter': () => import('./ChatFilterPage.vue'),
   '/avatar': () => import('./AvatarPage.vue'),
+  '/mic-avatar': () => import('./MicAvatarPage.vue'),
+  '/outfits': () => import('./OutfitsPage.vue'),
   '/captions': () => import('./CaptionsPage.vue'),
   '/goals': () => import('./GoalsPage.vue'),
   '/music-requests': () => import('./MusicRequestsPage.vue'),
