@@ -2382,5 +2382,18 @@
       "back": "換回預設",
       "backUnit": "分鐘後（0 = 不換回）"
     }
+  },
+  "captions": {
+    "summary": "把你說的話變成畫面上的字幕",
+    "on": "即時字幕",
+    "onHint": "用 Windows 內建的語音辨識在本機處理，準確度和 CPU 用量要實測",
+    "mic": "麥克風",
+    "noMic": "還沒有麥克風",
+    "language": "語言",
+    "offWhenSinging": "唱歌模式時自動關閉"
+  },
+  "goals": {
+    "summary": "用 Twitch 的目標，或自己設定",
+    "empty": "還沒有目標。"
   }
 }
