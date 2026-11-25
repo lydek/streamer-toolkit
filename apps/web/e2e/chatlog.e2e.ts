@@ -23,6 +23,8 @@ const stored = (id: string, sentAt: string, userName: string, text: string, over
 
 async function open(page: Page, sockets?: WebSocketRoute[], removals: object[] = [], messages: object[] = []) {
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
+  // The Host's list of known bots, which 隱藏機器人 hides.
+  await page.route('**/api/admin/chat/bots', (r) => r.fulfill({ json: ['nightbot', 'streamelements'] }))
   await page.route('**/api/admin/chat/messages', (r) => r.fulfill({ json: [stored('l1', '2026-11-19T12:00:00.000Z', 'Now', 'live hello')] }))
   await page.route('**/api/admin/chat/periods', (r) =>
     r.fulfill({
@@ -68,7 +70,7 @@ test('即時 shows chat from before the page opened; a past stream shows its mes
   await expect(lines(page)).toContainText('live hello')
 
   await page.getByRole('combobox').click()
-  await expect(page.getByRole('option', { name: '11/15（沒有直播）' })).toBeVisible()
+  await expect(page.getByRole('option', { name: /^11\/15 .*（沒有直播）$/ })).toBeVisible()
   await page.getByRole('option', { name: /^11\/16 .*的直播$/ }).click()
   await expect(lines(page)).toHaveCount(5)
   await expect(lines(page).nth(1)).toContainText('Berry 兌換了「喝水提醒」')
