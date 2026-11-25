@@ -42,6 +42,7 @@ export const DRAWN: Record<string, () => Promise<unknown>> = {
   '/songs': () => import('./SongsPage.vue'),
   '/song-list': () => import('./SongListPage.vue'),
   '/singing-booth': () => import('./SingingBoothPage.vue'),
+  '/shoutouts': () => import('./ShoutoutsPage.vue'),
 }
 
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
