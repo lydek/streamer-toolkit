@@ -29,6 +29,7 @@ import MediaPage from './MediaPage.vue'
 import ScreenToolsPage from './ScreenToolsPage.vue'
 import WarningsPage from './WarningsPage.vue'
 import SoundsPage from './SoundsPage.vue'
+import { needsSetup } from './setup'
 import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 
 // Unbuilt pages drawn ahead of their backend (UI-G), opened in dev mode only; lazy, so release never loads them.
@@ -64,6 +65,7 @@ export const router = createRouter({
   history: createWebHistory('/admin/'),
   routes: [
     { path: '/', component: HomeView },
+    { path: '/setup', component: () => import('./SetupPage.vue') },
     { path: '/settings', redirect: '/settings/general' },
     { path: '/settings/:section(general|connections|features|profiles|hotkeys|debug|backup|about)', component: SettingsView },
     { path: '/chat-log', component: ChatLogPage },
@@ -109,6 +111,8 @@ export const router = createRouter({
 router.beforeEach(async (to, from) => {
   const focused = document.activeElement
   if (!(await useDrawer().close())) return false
+  // A data folder that never finished or skipped the first-run setup opens on it instead of home.
+  if (to.path === '/' && (await needsSetup())) return '/setup'
   await modulesLoaded()
   // The matched route's path: the router also takes other letter cases and a trailing slash.
   const instead = closedPageTarget(to.matched.at(-1)?.path ?? to.path, useModules().hidden.value)
