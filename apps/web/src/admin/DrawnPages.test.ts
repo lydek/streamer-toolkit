@@ -194,6 +194,9 @@ describe('聊天過濾', () => {
       t('chatFilter.noRecent'),
     ])
     expect(button(w, t('chatFilter.addUrlButton')).attributes('disabled')).toBeDefined()
+    // The prototype's thresholds, and a timeout length only on the rules that time out (repeats, characters).
+    expect(w.find(`[aria-label="${t('chatFilter.limits.repeats.seconds')}"]`).exists()).toBe(true)
+    expect(w.findAll(`[aria-label$="${t('chatFilter.duration', { name: '' })}"]`)).toHaveLength(2)
   })
 })
 

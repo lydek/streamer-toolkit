@@ -33,11 +33,20 @@
           <FormRow :label="t('avatar.mic.device')" input-id="av-mic">
             <Select input-id="av-mic" :options="[]" :placeholder="t('avatar.mic.noDevice')" disabled />
           </FormRow>
+          <FormRow :label="t('avatar.mic.level')" label-id="av-level">
+            <!-- No mic yet: the bar stays empty; the line marks the speaking threshold. -->
+            <span class="meter" role="img" :aria-label="t('avatar.mic.levelNone')">
+              <b :style="{ left: `${threshold}%` }"></b>
+            </span>
+          </FormRow>
           <FormRow :label="t('avatar.mic.threshold')" input-id="av-threshold">
             <span class="range">
               <input id="av-threshold" v-model.number="threshold" type="range" min="0" max="100" />
               <output for="av-threshold">{{ threshold }}%</output>
             </span>
+          </FormRow>
+          <FormRow :label="t('avatar.mic.highPass')" label-id="av-high-pass" end>
+            <ToggleSwitch disabled aria-labelledby="av-high-pass" />
           </FormRow>
           <FormRow :label="t('avatar.mic.smoothing')" input-id="av-smoothing">
             <span class="range">
@@ -45,14 +54,19 @@
               <output for="av-smoothing">{{ smoothing }}%</output>
             </span>
           </FormRow>
-          <FormRow :label="t('avatar.mic.highPass')" label-id="av-high-pass" end>
-            <ToggleSwitch disabled aria-labelledby="av-high-pass" />
-          </FormRow>
           <FormRow :label="t('avatar.mic.afk')" input-id="av-afk">
             <span class="unit-field">
               <InputNumber v-model="afk" input-id="av-afk" :min="0" :max="60" :use-grouping="false" />
               <span>{{ t('avatar.mic.afkUnit') }}</span>
             </span>
+          </FormRow>
+          <FormRow :label="t('avatar.mic.animation')" input-id="av-animation">
+            <Select
+              v-model="animation"
+              input-id="av-animation"
+              :options="ANIMATIONS"
+              :option-label="(a: string) => t(`avatar.mic.animations.${a}`)"
+            />
           </FormRow>
         </FormPanel>
         <section class="tbl-wrap" aria-labelledby="av-sets">
@@ -95,11 +109,13 @@ import FullPage from './FullPage.vue'
 
 const APPS = ['vtuberPlus', 'vseeface']
 const FACES = ['joy', 'angry', 'sorrow', 'fun', 'surprised', 'neutral']
+const ANIMATIONS = ['bounce', 'fade', 'zoom', 'slide', 'cut']
 
 const { t } = useI18n()
 const threshold = ref(30)
 const smoothing = ref(60)
 const afk = ref(3)
+const animation = ref('bounce')
 const back = ref(10)
 </script>
 
@@ -133,6 +149,23 @@ const back = ref(10)
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.meter {
+  position: relative;
+  display: block;
+  width: min(14rem, 100%);
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--p-surface-800);
+}
+
+.meter b {
+  position: absolute;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  width: 2px;
+  background: var(--p-text-muted-color);
 }
 
 .range input {
