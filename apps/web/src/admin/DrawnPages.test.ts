@@ -21,6 +21,7 @@ import ModesPage from './ModesPage.vue'
 import ViewersPage from './ViewersPage.vue'
 import RolesPage from './RolesPage.vue'
 import ChatFilterPage from './ChatFilterPage.vue'
+import AvatarPage from './AvatarPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -187,5 +188,20 @@ describe('聊天過濾', () => {
       t('chatFilter.noRecent'),
     ])
     expect(button(w, t('chatFilter.addUrlButton')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('虛擬形象', () => {
+  it('shows both apps not connected, the faces and setups disabled, and no items or image sets', async () => {
+    const w = await page(AvatarPage, '/avatar')
+    expect(w.get('h1').text()).toBe(t('pages.avatar.name'))
+    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([
+      t('avatar.notConnected'),
+      t('avatar.notConnected'),
+      t('avatar.noItems'),
+      t('avatar.noSets'),
+    ])
+    expect(button(w, t('avatar.face.joy')).attributes('disabled')).toBeDefined()
+    expect(w.get('[role="switch"]').attributes('disabled')).toBeDefined()
   })
 })

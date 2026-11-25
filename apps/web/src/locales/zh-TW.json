@@ -2339,5 +2339,48 @@
     "recent": "最近處理的",
     "noRecent": "還沒有處理過的訊息。",
     "scopes": "需要 Twitch 權限 moderator:manage:chat_messages、moderator:manage:banned_users、moderator:manage:blocked_terms。"
+  },
+  "avatar": {
+    "apps": {
+      "vtuberPlus": "VTuber Plus",
+      "vseeface": "VSeeFace"
+    },
+    "setup": "設定",
+    "notConnected": "還沒連線。",
+    "faces": "表情",
+    "face": {
+      "joy": "開心",
+      "angry": "生氣",
+      "sorrow": "難過",
+      "fun": "好玩",
+      "surprised": "驚訝",
+      "neutral": "預設"
+    },
+    "items": "VTuber Plus 互動",
+    "noItems": "還沒有互動。",
+    "itemsNote": "之後可以綁到頻道點數獎勵",
+    "addItem": "新增互動",
+    "mic": {
+      "heading": "跳跳（麥克風形象）",
+      "device": "麥克風",
+      "noDevice": "還沒有麥克風",
+      "threshold": "講話門檻",
+      "smoothing": "平滑（不讓敲鍵盤觸發）",
+      "highPass": "擋低頻雜音（高通濾波）",
+      "afk": "多久沒聲音算 AFK",
+      "afkUnit": "分鐘（0 = 不切換）"
+    },
+    "sets": "圖片組合",
+    "addSet": "新增組合",
+    "noSets": "還沒有圖片組合；每組有講話、待機、AFK 三張圖。",
+    "outfits": {
+      "heading": "換裝（veadotube mini）",
+      "list": "衣服",
+      "none": "還沒有衣服；連上 veadotube mini 後會列出。",
+      "reward": "兌換的獎勵",
+      "noReward": "還沒有獎勵",
+      "back": "換回預設",
+      "backUnit": "分鐘後（0 = 不換回）"
+    }
   }
 }
