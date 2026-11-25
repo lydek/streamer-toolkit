@@ -12,11 +12,13 @@ const chatAction = (page: Page, key: 'remove' | 'add') =>
   page.getByRole('button', { name: `${zh.arrange[key]}：${zh.modules.names.chat}` })
 
 test('an emptied home stays empty after a reload, and "Arrange tiles" brings the tile back', async ({ page }) => {
+  // The home these steps were written for: chat, alerts, redemptions, check-ins and sounds.
   const state = await openAdmin(page, {
     modules: [
       { id: 'chat', enabled: true, closed: false },
       { id: 'alerts', enabled: false, closed: false },
     ],
+    homeTiles: ['chat', 'alerts', 'redemption', 'checkin', 'sound'],
   })
   await pencil(page).click()
   await expect(done(page)).toBeFocused()

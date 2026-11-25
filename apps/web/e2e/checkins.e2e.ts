@@ -2,7 +2,7 @@
 // admin API and `/ws/overlay` mocked (the rules themselves are tested on real SQLite in crates/modules/checkin).
 import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import type { components } from '../src/api/schema'
-import { mockAdmin, scrollsSideways, zh } from './fixtures'
+import { mockAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
 
 type Schemas = components['schemas']
 
@@ -55,6 +55,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
   await page.route('**/api/admin/checkin/today', (r) => r.fulfill({ json: today }))
   const changed = await liveSocket(page)
   await page.goto('/admin/')
+  await toLiveHome(page)
 
   const tile = page.locator('[data-drawer-tile="checkin"]')
   const features = page.getByRole('region', { name: zh.home.tiles })

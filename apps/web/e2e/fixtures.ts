@@ -162,8 +162,19 @@ export async function mockAdmin(page: Page, state: Partial<AdminState> = {}): Pr
 export async function openAdmin(page: Page, state: Partial<AdminState> = {}) {
   const s = await mockAdmin(page, state)
   await page.goto('/admin/')
-  await page.locator('[data-drawer-tile], [data-drawer-arrange]').first().waitFor()
+  // A saved home is served for every stage, so it needs no stage picked.
+  if (s.homeTiles) await page.locator('[data-drawer-tile], [data-expand], [data-drawer-arrange]').first().waitFor()
+  else await toLiveHome(page)
   return s
+}
+
+/**
+ * Home opens on the stage Twitch reports, 開播前 with no stream, whose blocks hold no drawer tiles. Picks the
+ * 直播中 home (the only home when most specs were written) and waits until its tiles have loaded.
+ */
+export async function toLiveHome(page: Page) {
+  await page.getByRole('main').getByRole('button', { name: zh.stage.live, exact: true }).click()
+  await page.locator('[data-drawer-tile], [data-expand], [data-drawer-arrange]').first().waitFor()
 }
 
 /**

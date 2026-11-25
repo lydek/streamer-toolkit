@@ -1,6 +1,6 @@
 // The docked chat panel: docked and saved on wide windows, a slide-in panel below 1000px (API and `/ws/overlay` mocked).
 import { type Page, expect, test } from '@playwright/test'
-import { mockAdmin, scrollsSideways, zh } from './fixtures'
+import { mockAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
 
 const chat = (seq: number, userName: string, text: string) => ({
   id: `c${seq}`,
@@ -33,7 +33,7 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
     ),
   )
   await page.goto('/admin/')
-  await page.locator('[data-drawer-tile], [data-drawer-arrange]').first().waitFor()
+  await toLiveHome(page)
   return puts
 }
 
