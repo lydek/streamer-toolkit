@@ -27,6 +27,8 @@ pub struct Settings {
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
     pub skip_close_hint: bool,
+    /// The first-run setup was finished or skipped; see `Settings::setup_finished` for older data folders.
+    pub setup_done: bool,
     /// Admin home tile IDs in display order. `None`: never arranged, the admin UI shows its defaults (and nothing
     /// is written); `Some([])`: the broadcaster removed every tile.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,6 +148,12 @@ impl Settings {
         self.services
             .as_ref()
             .is_some_and(|s| s.unused.contains(&service))
+    }
+
+    /// Whether the first-run setup is behind the broadcaster: finished or skipped, or a data folder from before
+    /// the setup existed that already has a Twitch Client ID or OBS settings of its own.
+    pub fn setup_finished(&self) -> bool {
+        self.setup_done || !self.twitch_client_id.is_empty() || self.obs != ObsSettings::default()
     }
 }
 
@@ -417,6 +425,7 @@ impl Default for Settings {
             modules_split: false,
             obs: ObsSettings::default(),
             skip_close_hint: false,
+            setup_done: false,
             home_tiles: None,
             home_tiles_before: None,
             home_tiles_after: None,
@@ -546,6 +555,21 @@ mod tests {
         assert_eq!(s.twitch_client_id, "");
         assert_eq!(s.obs, ObsSettings::default());
         assert_eq!((s.obs.host.as_str(), s.obs.port), ("127.0.0.1", 4455));
+    }
+
+    #[test]
+    fn setup_counts_as_finished_for_folders_set_up_before_it_existed() {
+        let fresh: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!fresh.setup_finished());
+        let done: Settings = serde_json::from_str(r#"{"setup_done":true}"#).unwrap();
+        assert!(done.setup_finished());
+        // Upgraded folders: no flag yet, but a Client ID or OBS settings of their own.
+        let with_client_id: Settings =
+            serde_json::from_str(r#"{"twitch_client_id":"abc"}"#).unwrap();
+        assert!(with_client_id.setup_finished());
+        let with_obs: Settings =
+            serde_json::from_str(r#"{"obs":{"host":"192.168.1.5","port":4455}}"#).unwrap();
+        assert!(with_obs.setup_finished());
     }
 
     fn temp_dir(name: &str) -> PathBuf {

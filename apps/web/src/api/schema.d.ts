@@ -924,6 +924,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/first-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["first_run"];
+        put: operations["set_first_run"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/general": {
         parameters: {
             query?: never;
@@ -3302,6 +3318,10 @@ export interface components {
             /** @description The reward sound's name (raw text), for a sound. */
             sound: string | null;
             triggered: components["schemas"]["Triggered"];
+        };
+        /** @description The first-run setup: shown until it is finished or skipped (`Settings::setup_finished`). */
+        FirstRun: {
+            done: boolean;
         };
         /**
          * @description How a picture that is not square becomes square.
@@ -7160,6 +7180,54 @@ export interface operations {
                 };
             };
             /** @description `feed.storage_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    first_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirstRun"];
+                };
+            };
+        };
+    };
+    set_first_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirstRun"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             500: {
                 headers: {
                     [name: string]: unknown;

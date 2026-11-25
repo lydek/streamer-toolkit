@@ -53,7 +53,7 @@ pub(super) mod simulate;
 pub(super) mod twitch_account;
 
 use checkin_admin::{checkin_outbox, checkin_rewards, retry_dead_letter, skip_dead_letter};
-use general_settings::{general, list_modules, set_general, set_module};
+use general_settings::{first_run, general, list_modules, set_first_run, set_general, set_module};
 use simulate::{simulate_alert, simulate_chat, simulate_checkin};
 use twitch_account::{login, logout, set_client_id, twitch_overview};
 
@@ -277,6 +277,7 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .route("/api/admin/twitch/login", post(login))
         .route("/api/admin/twitch/logout", post(logout))
         .route("/api/admin/general", get(general).put(set_general))
+        .route("/api/admin/first-run", get(first_run).put(set_first_run))
         .route("/api/admin/modules", get(list_modules))
         .route("/api/admin/modules/{id}", put(set_module))
         .route("/api/admin/checkin/rewards", get(checkin_rewards))

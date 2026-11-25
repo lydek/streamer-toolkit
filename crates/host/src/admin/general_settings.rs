@@ -39,6 +39,36 @@ pub(super) async fn set_general(
     }
 }
 
+/// The first-run setup: shown until it is finished or skipped (`Settings::setup_finished`).
+#[derive(Serialize, Deserialize, ToSchema)]
+pub(crate) struct FirstRun {
+    done: bool,
+}
+
+#[utoipa::path(get, path = "/api/admin/first-run", tag = "admin", responses((status = 200, body = FirstRun)))]
+pub(super) async fn first_run(State(s): State<Arc<AdminState>>) -> Json<FirstRun> {
+    Json(FirstRun {
+        done: settings::load(&s.data_dir).setup_finished(),
+    })
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/first-run",
+    tag = "admin",
+    request_body = FirstRun,
+    responses((status = 204), (status = 500, body = ErrorBody))
+)]
+pub(super) async fn set_first_run(
+    State(s): State<Arc<AdminState>>,
+    Json(body): Json<FirstRun>,
+) -> Response {
+    match settings::update(&s.data_dir, |set| set.setup_done = body.done) {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed"),
+    }
+}
+
 #[utoipa::path(get, path = "/api/admin/modules", tag = "admin", responses((status = 200, body = Vec<ModuleState>)))]
 pub(super) async fn list_modules(State(s): State<Arc<AdminState>>) -> Response {
     Json(s.modules.list()).into_response()
