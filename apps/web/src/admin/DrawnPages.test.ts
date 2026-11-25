@@ -13,6 +13,7 @@ import RewardsPage from './RewardsPage.vue'
 import StreamInfoPage from './StreamInfoPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
+import SingingBoothPage from './SingingBoothPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -98,5 +99,14 @@ describe('歌單', () => {
     expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songList.empty'), t('songList.noLinks')])
     for (const label of [t('songList.reload'), t('songList.findLinks')])
       expect(button(w, label).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('練唱台', () => {
+  it('shows where the booth will be, with opening it disabled', async () => {
+    const w = await page(SingingBoothPage, '/singing-booth')
+    expect(w.get('h1').text()).toBe(t('pages.singingBooth.name'))
+    expect(w.get('.embed-body').text()).toBe(t('singingBooth.body'))
+    expect(button(w, t('singingBooth.openOwn')).attributes('disabled')).toBeDefined()
   })
 })
