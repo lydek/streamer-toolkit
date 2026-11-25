@@ -2104,5 +2104,27 @@
     "empty": "還沒有頻道點數獎勵。",
     "note": "Twitch 只允許修改由本工具建立的獎勵，兌換也只有這些能從這裡標成完成或退還。在 Twitch 後台建立的獎勵可以「接管」：本工具建立一份一樣的，原本那個請到 Twitch 後台停用。",
     "add": "新增獎勵"
+  },
+  "polls": {
+    "summary": "Twitch 原生的投票、預測，結果可以顯示在畫面上",
+    "kinds": {
+      "poll": "投票",
+      "prediction": "預測"
+    },
+    "none": {
+      "poll": "沒有進行中的投票。",
+      "prediction": "沒有進行中的預測。"
+    },
+    "new": "開新的",
+    "kind": "種類",
+    "question": "題目",
+    "questionHint": "例如：下一首唱什麼？",
+    "options": "選項",
+    "option": "選項 {n}",
+    "addOption": "加選項（最多 5 個）",
+    "duration": "時間",
+    "minutes": "{n} 分鐘",
+    "saveHint": "也可以存成常用題目，直播中一鍵開",
+    "start": "開始"
   }
 }
