@@ -2265,5 +2265,26 @@
   "modes": {
     "fromObs": "從目前 OBS 畫面建立",
     "empty": "還沒有模式；可以從目前的 OBS 畫面建立一個。"
+  },
+  "viewers": {
+    "history": "異動紀錄",
+    "sync": "從 Twitch 同步",
+    "search": "搜尋觀眾",
+    "viewer": "觀眾",
+    "viewerHint": "名稱或帳號",
+    "role": "身分",
+    "roles": {
+      "all": "全部",
+      "subscriber": "訂閱者",
+      "moderator": "管理員",
+      "vip": "VIP"
+    },
+    "searchButton": "搜尋",
+    "empty": "還沒有觀眾資料；從 Twitch 同步後會列在這裡。",
+    "groups": {
+      "empty": "還沒有自訂身分組。",
+      "note": "在觀眾詳細資料裡加入或移除",
+      "add": "新增身分組"
+    }
   }
 }

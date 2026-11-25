@@ -18,6 +18,8 @@ import ShoutoutsPage from './ShoutoutsPage.vue'
 import RaidsPage from './RaidsPage.vue'
 import CreditsPage from './CreditsPage.vue'
 import ModesPage from './ModesPage.vue'
+import ViewersPage from './ViewersPage.vue'
+import RolesPage from './RolesPage.vue'
 import { testRouter } from './testRouter'
 
 const t = i18n.global.t
@@ -151,5 +153,22 @@ describe('模式', () => {
     expect(w.get('h1').text()).toBe(t('pages.modes.name'))
     expect(w.get('.empty-cell').text()).toBe(t('modes.empty'))
     expect(button(w, t('modes.fromObs')).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('觀眾清單', () => {
+  it('shows the search with no viewers yet, with syncing and searching disabled', async () => {
+    const w = await page(ViewersPage, '/viewers')
+    expect(w.get('h1').text()).toBe(t('pages.viewers.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('viewers.empty'))
+    for (const label of [t('viewers.sync'), t('viewers.history'), t('viewers.searchButton')])
+      expect(button(w, label).attributes('disabled')).toBeDefined()
+  })
+
+  it('shows no custom roles, with adding one disabled', async () => {
+    const w = await page(RolesPage, '/roles')
+    expect(w.get('h1').text()).toBe(t('pages.roles.name'))
+    expect(w.get('.empty-cell').text()).toBe(t('viewers.groups.empty'))
+    expect(button(w, t('viewers.groups.add')).attributes('disabled')).toBeDefined()
   })
 })
