@@ -25,6 +25,8 @@ use crate::{
         admin::twitch_account::logout,
         admin::general_settings::general,
         admin::general_settings::set_general,
+        admin::general_settings::first_run,
+        admin::general_settings::set_first_run,
         admin::general_settings::list_modules,
         admin::general_settings::set_module,
         admin::checkin_admin::checkin_rewards,

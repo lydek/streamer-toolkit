@@ -297,6 +297,50 @@ async fn ask_before_close_is_the_inverse_of_skip_close_hint() {
 }
 
 #[tokio::test]
+async fn first_run_setup_is_done_once_finished_or_for_an_upgraded_folder() {
+    let dir = std::env::temp_dir().join(format!("st-host-first-run-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = test_config();
+    config.data_dir = dir.clone();
+    let app = router(config).unwrap();
+    let get = || {
+        get_req("/api/admin/first-run", "127.0.0.1:47810")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let done = |res: axum::response::Response| async {
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["done"].clone()
+    };
+
+    // A new data folder: the setup shows.
+    assert_eq!(done(app.clone().oneshot(get()).await.unwrap()).await, false);
+    let put = get_req("/api/admin/first-run", "127.0.0.1:47810")
+        .method(Method::PUT)
+        .header(header::ORIGIN, "http://127.0.0.1:47810")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"done":true}"#))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(put).await.unwrap().status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(settings::load(&dir).setup_done);
+    assert_eq!(done(app.clone().oneshot(get()).await.unwrap()).await, true);
+
+    // A folder from before the setup existed, with a Client ID: never sent through it.
+    settings::update(&dir, |s| {
+        s.setup_done = false;
+        s.twitch_client_id = "abc".into();
+    })
+    .unwrap();
+    assert_eq!(done(app.oneshot(get()).await.unwrap()).await, true);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn broken_settings_are_reported_and_never_saved_over() {
     let dir = std::env::temp_dir().join(format!("st-host-broken-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

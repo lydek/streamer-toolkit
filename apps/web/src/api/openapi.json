@@ -2770,6 +2770,53 @@
         }
       }
     },
+    "/api/admin/first-run": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "first_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirstRun"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_first_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/general": {
       "get": {
         "tags": [
@@ -9889,6 +9936,18 @@
           },
           "triggered": {
             "$ref": "#/components/schemas/Triggered"
+          }
+        }
+      },
+      "FirstRun": {
+        "type": "object",
+        "description": "The first-run setup: shown until it is finished or skipped (`Settings::setup_finished`).",
+        "required": [
+          "done"
+        ],
+        "properties": {
+          "done": {
+            "type": "boolean"
           }
         }
       },
