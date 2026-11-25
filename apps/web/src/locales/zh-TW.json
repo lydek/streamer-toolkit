@@ -2286,5 +2286,58 @@
       "note": "在觀眾詳細資料裡加入或移除",
       "add": "新增身分組"
     }
+  },
+  "chatFilter": {
+    "rules": "規則",
+    "rule": {
+      "terms": {
+        "name": "封鎖字詞",
+        "hint": "封鎖字詞清單裡的字詞"
+      },
+      "links": {
+        "name": "連結",
+        "hint": "不在「允許的網址」裡的連結"
+      },
+      "repeats": {
+        "name": "重複訊息",
+        "hint": "同一句短時間內出現好幾次"
+      },
+      "emotes": {
+        "name": "表情太多",
+        "hint": "一則訊息的表情太多"
+      },
+      "caps": {
+        "name": "全大寫",
+        "hint": "英文字母都是大寫"
+      },
+      "chars": {
+        "name": "同一字元洗版",
+        "hint": "同一個字元連續出現很多次"
+      }
+    },
+    "actions": {
+      "delete": "刪除這則訊息",
+      "timeout": "禁言",
+      "ban": "封鎖（永久）"
+    },
+    "enabled": "啟用：{name}",
+    "exempt": "不受影響的人",
+    "exemptWho": "管理員、VIP、訂閱者",
+    "change": "修改",
+    "automod": "Twitch AutoMod",
+    "automodWhere": "在 Twitch 後台設定",
+    "open": "開啟",
+    "terms": "封鎖字詞",
+    "add": "新增",
+    "noTerms": "還沒有封鎖字詞。",
+    "urls": "允許的網址",
+    "noUrls": "還沒有允許的網址。",
+    "urlHint": "例如 instagram.com",
+    "addUrl": "新增允許的網址",
+    "addUrlButton": "加入",
+    "urlNote": "網域底下的網址都算，例如 youtube.com 也包含 m.youtube.com。",
+    "recent": "最近處理的",
+    "noRecent": "還沒有處理過的訊息。",
+    "scopes": "需要 Twitch 權限 moderator:manage:chat_messages、moderator:manage:banned_users、moderator:manage:blocked_terms。"
   }
 }
