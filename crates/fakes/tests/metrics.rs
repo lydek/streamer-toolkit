@@ -245,8 +245,17 @@ async fn each_anomaly_made_on_purpose_is_flagged() {
     })
     .await
     .unwrap();
-    for i in 0..12 {
-        raw(f.port, "GET", &format!("/helix/users?id={i}"), GOOD, "").await;
+    // All at once, so they land within the reaction window even where a round trip is slow.
+    let port = f.port;
+    let burst: Vec<_> = (0..12)
+        .map(|i| {
+            tokio::spawn(async move {
+                raw(port, "GET", &format!("/helix/users?id={i}"), GOOD, "").await
+            })
+        })
+        .collect();
+    for request in burst {
+        request.await.unwrap();
     }
     // Reconnecting without backoff: four EventSub connections 100 ms apart.
     for _ in 0..4 {

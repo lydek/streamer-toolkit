@@ -3,7 +3,10 @@
 //! real OBS would for each change. Anything else gets `UnknownRequestType`, so a request the fake lacks shows up.
 
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -89,6 +92,47 @@ struct World {
     meter_interval: Duration,
     /// Extra inputs in the audio meters only, for load runs.
     meter_extra: usize,
+}
+
+/// What the fake OBS looks like now, for the control panel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObsSnapshot {
+    /// Connections open right now.
+    pub open: u32,
+    /// In the order OBS shows them, top first; each scene's items top first too.
+    pub scenes: Vec<SceneView>,
+    pub program: String,
+    pub preview: Option<String>,
+    pub studio_mode: bool,
+    pub streaming: bool,
+    pub recording: bool,
+    pub stats: Stats,
+    /// Inputs with audio.
+    pub audio: Vec<AudioView>,
+    pub meter_extra: usize,
+    pub meter_interval: Duration,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneView {
+    pub name: String,
+    pub items: Vec<ItemView>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemView {
+    pub source: String,
+    pub enabled: bool,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AudioView {
+    pub name: String,
+    pub volume_db: f64,
+    pub muted: bool,
+    /// The level the audio meters send, 0–1.
+    pub level: f64,
 }
 
 /// What `GetStats` and `GetStreamStatus` report; the frame and byte counters grow with time from these.
@@ -841,6 +885,16 @@ pub struct FakeObs {
     close: broadcast::Sender<()>,
     password: Option<String>,
     recorder: Recorder,
+    open: Arc<AtomicU32>,
+}
+
+/// Counts a connection as open until dropped.
+struct Open(Arc<AtomicU32>);
+
+impl Drop for Open {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl FakeObs {
@@ -857,6 +911,7 @@ impl FakeObs {
             close: broadcast::channel(1).0,
             password,
             recorder,
+            open: Arc::default(),
         }
     }
 
@@ -916,6 +971,65 @@ impl FakeObs {
 
     /// Changes OBS makes on its own, `count` times, with the events each sends: `scenes` switches the program scene
     /// back and forth; `items` adds a logo to "Live" and removes it again. The app re-reads its state after each.
+    pub fn snapshot(&self) -> ObsSnapshot {
+        let w = self.world.lock().unwrap();
+        ObsSnapshot {
+            open: self.open.load(Ordering::Relaxed),
+            scenes: w
+                .scenes
+                .iter()
+                .filter(|s| !s.group)
+                .map(|s| SceneView {
+                    name: s.name.clone(),
+                    items: s
+                        .items
+                        .iter()
+                        .rev()
+                        .map(|i| ItemView {
+                            source: i.source.clone(),
+                            enabled: i.enabled,
+                            locked: i.locked,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            program: w.program.clone(),
+            preview: w.preview.clone(),
+            studio_mode: w.studio_mode,
+            streaming: w.streaming,
+            recording: w.recording,
+            stats: w.stats,
+            audio: w
+                .inputs
+                .iter()
+                .filter(|i| i.audio)
+                .map(|i| AudioView {
+                    name: i.name.clone(),
+                    volume_db: db(i.volume_mul),
+                    muted: i.muted,
+                    level: if i.muted { 0.0 } else { 0.25 * i.volume_mul },
+                })
+                .collect(),
+            meter_extra: w.meter_extra,
+            meter_interval: w.meter_interval,
+        }
+    }
+
+    /// Turns studio mode on or off in OBS itself, with the event OBS sends.
+    pub fn set_studio_mode(&self, enabled: bool) {
+        let _ = self.request(
+            "SetStudioModeEnabled",
+            &json!({ "studioModeEnabled": enabled }),
+        );
+    }
+
+    /// Switches the program scene in OBS itself (not through the app), with the event OBS sends.
+    pub fn set_program(&self, scene: &str) -> Result<(), String> {
+        self.request("SetCurrentProgramScene", &json!({ "sceneName": scene }))
+            .map(drop)
+            .map_err(|(_, e)| e)
+    }
+
     pub fn burst(&self, kind: &str, count: usize) -> Result<(), String> {
         let names: Vec<String> = self
             .world
@@ -1056,6 +1170,8 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
         if !send(&mut socket, json!({"op": 2, "d": {"negotiatedRpcVersion": 1}})).await {
             return;
         }
+        fake.open.fetch_add(1, Ordering::Relaxed);
+        let _open = Open(fake.open.clone());
         let mut events = fake.events.subscribe();
         let mut close = fake.close.subscribe();
         // Requests are answered in their own tasks, as OBS does: a slow one holds up neither the next requests,
