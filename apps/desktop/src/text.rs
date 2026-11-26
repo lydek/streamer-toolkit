@@ -11,6 +11,13 @@ pub fn data_folder_unusable(dir: &str, error: &str) -> String {
     )
 }
 
+/// Dev builds only; never shown to streamers.
+pub fn dev_refuses_folder(dir: &str, flag: &str) -> String {
+    format!(
+        "開發版不開啟不是由開發版建立的資料夾（可能是正式版的資料）：\n{dir}\n\n開發中的 migration 套用到正式版的資料庫後，正式版會無法開啟它。\n\n確定要用這份資料（例如複製出來的一份）時，加上 {flag}。"
+    )
+}
+
 pub fn database_unusable(file: &str, error: &str) -> String {
     format!(
         "無法開啟或升級資料庫，程式不會繼續執行：\n{file}\n\n{error}\n\n升級前的備份在資料夾的 backups 裡。"

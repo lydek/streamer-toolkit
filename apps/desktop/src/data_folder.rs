@@ -9,6 +9,80 @@ use std::{
 };
 
 const INSTANCE_FILE: &str = "instance-id";
+/// Written by dev builds into folders they create. Scripts that prepare a folder before starting a dev build
+/// with `--data-dir` (e.g. `pnpm dev:fake`) must create this file too.
+pub const DEV_MARKER: &str = "dev-folder";
+/// Lets a dev build open a non-empty folder it did not create (e.g. a copy of release data). Never marks it.
+pub const ALLOW_RELEASE_DATA: &str = "--allow-release-data";
+
+/// What a dev build found in the data folder.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FolderState {
+    Missing,
+    Empty,
+    /// Has the dev marker.
+    Marked,
+    /// Non-empty and unmarked: made by a release build, or by hand.
+    Foreign,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DevAccess {
+    Allow,
+    /// Allow, and write the dev marker first.
+    Mark,
+    Refuse,
+}
+
+/// Keeps dev builds out of release data: in-progress migrations applied there make the release build refuse the
+/// database. Release builds are always allowed and never look at the folder (`state` is not called).
+pub fn dev_access(
+    is_dev: bool,
+    explicit_dir: bool,
+    allow_release_data: bool,
+    state: impl FnOnce() -> io::Result<FolderState>,
+) -> io::Result<DevAccess> {
+    if !is_dev {
+        return Ok(DevAccess::Allow);
+    }
+    Ok(match state()? {
+        FolderState::Marked => DevAccess::Allow,
+        FolderState::Missing | FolderState::Empty => DevAccess::Mark,
+        // The default folder next to a dev executable (`target\debug\data`) is a dev folder by definition.
+        FolderState::Foreign if !explicit_dir => DevAccess::Mark,
+        FolderState::Foreign if allow_release_data => DevAccess::Allow,
+        FolderState::Foreign => DevAccess::Refuse,
+    })
+}
+
+/// Only a missing folder counts as missing; any other read error is returned, never taken for empty.
+pub fn folder_state(dir: &Path) -> io::Result<FolderState> {
+    let mut entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(FolderState::Missing),
+        Err(e) => return Err(e),
+    };
+    if dir.join(DEV_MARKER).is_file() {
+        return Ok(FolderState::Marked);
+    }
+    Ok(match entries.next() {
+        None => FolderState::Empty,
+        Some(entry) => {
+            entry?;
+            FolderState::Foreign
+        }
+    })
+}
+
+pub fn mark_dev(dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(dir)?;
+    fs::write(dir.join(DEV_MARKER), b"")
+}
+
+/// Whether `flag` is on the command line.
+pub fn has_flag(flag: &str) -> bool {
+    env::args().any(|a| a == flag)
+}
 
 /// `--data-dir <path>` on the command line, otherwise the `data` folder next to the executable.
 pub fn resolve() -> io::Result<PathBuf> {
@@ -98,6 +172,70 @@ fn new_id() -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn access(explicit: bool, allow: bool, state: FolderState) -> DevAccess {
+        dev_access(true, explicit, allow, || Ok(state)).unwrap()
+    }
+
+    #[test]
+    fn dev_builds_refuse_a_foreign_folder_given_with_data_dir() {
+        assert_eq!(access(true, false, FolderState::Foreign), DevAccess::Refuse);
+        assert_eq!(access(true, true, FolderState::Foreign), DevAccess::Allow);
+    }
+
+    #[test]
+    fn dev_builds_mark_new_and_default_folders() {
+        for explicit in [true, false] {
+            assert_eq!(
+                access(explicit, false, FolderState::Missing),
+                DevAccess::Mark
+            );
+            assert_eq!(access(explicit, false, FolderState::Empty), DevAccess::Mark);
+            assert_eq!(
+                access(explicit, false, FolderState::Marked),
+                DevAccess::Allow
+            );
+        }
+        assert_eq!(access(false, false, FolderState::Foreign), DevAccess::Mark);
+    }
+
+    #[test]
+    fn release_builds_never_look_at_the_folder() {
+        let got = dev_access(false, true, false, || -> io::Result<FolderState> {
+            panic!("release builds must not read the folder")
+        });
+        assert_eq!(got.unwrap(), DevAccess::Allow);
+    }
+
+    #[test]
+    fn an_unreadable_folder_is_an_error_not_empty() {
+        let got = dev_access(true, true, false, || {
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        });
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn folder_state_reads_missing_empty_marked_and_foreign() {
+        let dir = env::temp_dir().join(format!("st-dev-marker-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(folder_state(&dir).unwrap(), FolderState::Missing);
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(folder_state(&dir).unwrap(), FolderState::Empty);
+        fs::write(dir.join("settings.json"), "{}").unwrap();
+        assert_eq!(folder_state(&dir).unwrap(), FolderState::Foreign);
+        mark_dev(&dir).unwrap();
+        assert_eq!(folder_state(&dir).unwrap(), FolderState::Marked);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_file_where_the_folder_should_be_is_an_error() {
+        let path = env::temp_dir().join(format!("st-dev-marker-file-{}", std::process::id()));
+        fs::write(&path, "x").unwrap();
+        assert!(folder_state(&path).is_err());
+        let _ = fs::remove_file(path);
+    }
 
     #[test]
     fn instance_id_is_created_once_and_kept() {

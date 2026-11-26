@@ -22,6 +22,7 @@
 - API 契約：改了 Host 的 HTTP API 或 WebSocket 事件後執行 `pnpm api:gen`（需要先建置前端），由 Rust（`utoipa`）產生 `apps/web/src/api/openapi.json`，再由 `openapi-typescript` 產生 `schema.d.ts`，兩個檔案一起 commit；CI 重新產生後有差異就失敗。WebSocket 的快照與事件型別也放在 OpenAPI components，測試會拿實際送出的 JSON 比對；新增對外事件或快照保留的事件種類時，要一起在 `crates/host/src/openapi.rs` 的 components 加型別。
 - 檢查：`pnpm web:lint`、`pnpm web:test`、`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo deny check`；UI E2E 另外跑（見下方「測試底線」）；要跑和 CI 相同的步驟（另含翻譯、script 測試、前端授權、前端建置、API 契約、正式版 clippy），用 `pnpm lefthook run pre-push --force`（不加 `--force` 會依推送的檔案跳過步驟，見下方「Git」）
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`（`pnpm tauri dev` 的 Vite proxy 只讀 `target\debug\data\` 的 port，所以那份資料的 port 要和它相同）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
+  - dev 建置只開自己建立的資料夾：在 `target\debug\data\` 與新建或空的資料夾放 `dev-folder` 標記；`--data-dir` 指向不是空的、又沒有標記的資料夾（例如正式版的資料）時，什麼都不寫就結束，因為開發中的 migration 套用後，正式版就打不開那個資料庫。先寫好設定再啟動 dev 建置的腳本要一併建立 `dev-folder`。確定要用時加 `--allow-release-data`（每次都要加）；複製出來的正式版資料夾沿用同一個 `instance-id`，也就和原本那份共用 Credential Manager 裡的 token。
 
 ## Git
 - Repo 是 public：任何人都看得到程式碼與 commit 紀錄。
