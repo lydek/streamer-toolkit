@@ -24,6 +24,12 @@
 - 資料：dev 建置的資料在 `target\debug\data\`，不會碰到其他份的資料；要用另一份資料測試，加 `--data-dir <資料夾>`，並把環境變數 `DEV_DATA_DIR` 設成同一個資料夾的絕對路徑（`pnpm tauri dev` 的 Vite proxy 從那裡讀 port；沒設就讀 `target\debug\data\`）。記錄檔在資料夾的 `logs\`（JSON），用 `RUST_LOG=debug` 看更多細節。
   - dev 建置在新資料夾預設用 port `47811`，正式版是 `47810`（OBS 的瀏覽器來源指向它），所以正式版沒開時，OBS 不會連到 dev 建置。已經存在的 `target\debug\data\settings.json` 存的 port 不會自動改，要改回 dev 的預設就手動改 `port` 或刪掉這個檔案。先寫好 `settings.json` 再啟動 dev 建置的腳本要自己寫入 `port`，否則會用正式版的預設。
   - dev 建置只開自己建立的資料夾：在 `target\debug\data\` 與新建或空的資料夾放 `dev-folder` 標記；`--data-dir` 指向不是空的、又沒有標記的資料夾（例如正式版的資料）時，什麼都不寫就結束，因為開發中的 migration 套用後，正式版就打不開那個資料庫。先寫好設定再啟動 dev 建置的腳本要一併建立 `dev-folder`。確定要用時加 `--allow-release-data`（每次都要加）；複製出來的正式版資料夾沿用同一個 `instance-id`，也就和原本那份共用 Credential Manager 裡的 token。
+- 不連 OBS 與 Twitch 測試（假服務，`crates/fakes`）：
+  - `pnpm dev:fake` 啟動假 OBS（`127.0.0.1:4466`）、假 Twitch（`127.0.0.1:4467`）與 dev 建置；資料夾是 `target\dev-fake-data\`（port `47812`），每次執行都重建，加 `--keep` 保留上一份。app 一啟動就登入假 Twitch、連上假 OBS。
+  - 送事件：`cargo run -q -p fakes -- send <種類> [--user <login>] [--count <數量>] [--message <文字>] [--reward <獎勵名稱>] [--bits <數量>] [--tier 1000|2000|3000] [--months <月數>]`。種類：`follow`、`sub`、`resub`、`gift`（另外每位收禮者各一則 `sub`）、`cheer`、`raid`、`chat`（`--first` 加上首次聊天標記）、`delete`、`clear-user`、`clear`、`redeem`、`redeem-update`（`--id` 與 `--status fulfilled|canceled`）、`online`、`offline`。事件走真正的連線流程（`source=twitch`），會寫進那個資料夾的正式紀錄。
+  - 其他指令：`obs drop`（OBS 斷線，app 會自己重連）、`obs stats [--cpu <%>] [--dropped <%>] [--kbps <數字>]`（效能頁以 60 秒視窗計算，掉幀調回 0 後要等視窗平均降回 5% 以下警告才消失）、`obs stream on|off`、`obs record on|off`、`eventsub drop`、`scenario stream-start|stream-end|gift-bomb|redemption-flood`。另一個 port 用 `--port <假 Twitch 的 port>`。
+  - 只用假 OBS：`cargo run -p fakes`，在設定把 OBS 指向 `127.0.0.1:4466`；`--password <密碼>` 會要求驗證。
+  - 開發版是靠 `TOOLKIT_FAKE_SERVICES=127.0.0.1:<port>` 改連假 Twitch（見 [architecture.md](architecture.md)「資料夾」）；`e2e_host` 用 `E2E_FAKE_SERVICES=127.0.0.1:<port>` 與 `E2E_FAKE_OBS_PORT=<port>`。
 
 ## Git
 - Repo 是 public：任何人都看得到程式碼與 commit 紀錄。
