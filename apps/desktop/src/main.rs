@@ -59,20 +59,32 @@ fn main() {
     let base_identifier = context.config().identifier.clone();
     let data_dir = data_folder::resolve()
         .unwrap_or_else(|e| fail(&text::data_folder_unusable("", &e.to_string())));
-    if let Err(e) = data_folder::ensure_writable(&data_dir) {
+    // Before anything is written: a refused folder must not even get logs.
+    let unusable = |e: std::io::Error| -> ! {
         fail(&text::data_folder_unusable(
             &data_dir.display().to_string(),
             &e.to_string(),
-        ));
-    }
-    let mut log_guard = init_logs(&data_dir.join("logs"));
-    let instance = match data_folder::instance_id(&data_dir) {
-        Ok(id) => id,
-        Err(e) => fail(&text::data_folder_unusable(
-            &data_dir.display().to_string(),
-            &e.to_string(),
-        )),
+        ))
     };
+    match data_folder::dev_access(
+        cfg!(dev),
+        data_folder::has_flag("--data-dir"),
+        data_folder::has_flag(data_folder::ALLOW_RELEASE_DATA),
+        || data_folder::folder_state(&data_dir),
+    ) {
+        Ok(data_folder::DevAccess::Allow) => {}
+        Ok(data_folder::DevAccess::Mark) => {
+            data_folder::mark_dev(&data_dir).unwrap_or_else(|e| unusable(e))
+        }
+        Ok(data_folder::DevAccess::Refuse) => fail(&text::dev_refuses_folder(
+            &data_dir.display().to_string(),
+            data_folder::ALLOW_RELEASE_DATA,
+        )),
+        Err(e) => unusable(e),
+    }
+    data_folder::ensure_writable(&data_dir).unwrap_or_else(|e| unusable(e));
+    let mut log_guard = init_logs(&data_dir.join("logs"));
+    let instance = data_folder::instance_id(&data_dir).unwrap_or_else(|e| unusable(e));
     tracing::info!(data_dir = %data_dir.display(), "starting");
     // The single-instance plugin names its lock after the identifier: one running copy per data folder.
     context.config_mut().identifier = format!("{base_identifier}.i{instance}");

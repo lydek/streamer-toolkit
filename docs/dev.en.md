@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: da9f9f2dc7addf88206ab17a3d13ad8e9cb28589a37f5b63b3aadf39abba6aca -->
+<!-- source: docs/dev.md source-sha256: 15fdefde76e84144e04dc1f0babb2db596a74daecb20c20026b3e78feed871ff -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -23,6 +23,7 @@ Principle: another Windows PC can get it running by following this document.
 - API contracts: after changing the Host's HTTP API or WebSocket events, run `pnpm api:gen` (build the frontend first). Rust (`utoipa`) writes `apps/web/src/api/openapi.json`, then `openapi-typescript` writes `schema.d.ts`; commit both files. CI fails when regenerating changes them. The WebSocket snapshot and event types are also OpenAPI components, and tests compare them with the JSON actually sent; when you add an external event or a snapshot-retained event type, also add its type to the components in `crates/host/src/openapi.rs`.
 - Checks: `pnpm web:lint`, `pnpm web:test`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check`; UI E2E runs separately (see "Testing baseline" below); to run the same steps as CI (also covering translations, script tests, frontend licenses, the frontend build, API contracts and release clippy), use `pnpm lefthook run pre-push --force` (without `--force` it skips steps based on the pushed files; see "Git" below)
 - Data: dev builds keep their data in `target\debug\data\` and never touch other copies' data; to test with another set of data, add `--data-dir <directory>` (the Vite proxy of `pnpm tauri dev` reads the port only from `target\debug\data\`, so that data's port must match it). Logs are in the data directory's `logs\` (JSON); use `RUST_LOG=debug` for more detail.
+  - Dev builds open only folders they created: they put a `dev-folder` marker in `target\debug\data\` and in new or empty folders; when `--data-dir` points at a non-empty folder without the marker (such as release data), they exit without writing anything, because once in-progress migrations are applied, the release build can no longer open that database. Scripts that write settings before starting a dev build must create `dev-folder` too. To use such a folder anyway, add `--allow-release-data` (every time); a copied release folder keeps the same `instance-id`, so it shares the original's tokens in Credential Manager.
 
 ## Git
 - The repo is public: anyone can see the code and commit history.

@@ -273,6 +273,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。只有 `instance-id` 不存在時才產生新的（`create_new`，同時啟動的兩份拿到同一個 ID）；其他讀取錯誤會顯示錯誤並結束，不會換成新 ID。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
+- dev 建置只開自己建立的資料夾：在執行檔旁的 `data`（`target\debug\data\`）與不存在或空的資料夾寫入 `dev-folder` 標記；`--data-dir` 指向不是空的、又沒有標記的資料夾時，在寫入任何檔案（含 `logs/`）之前顯示錯誤並結束，加 `--allow-release-data` 才開（不寫標記）。資料夾讀不到時照「無法寫入」處理，不當成空資料夾。正式版不讀也不寫這個標記。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。
 
 備份檔（`.stbackup`，設定頁的「備份與還原」）：

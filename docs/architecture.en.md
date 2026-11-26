@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: 0a44c3e9ffd56ee40e77bebdb12c795832442119bd43135f552225bbaa7435f1 -->
+<!-- source: docs/architecture.md source-sha256: 3e2af586602aa047345fde1320cd220f89b42233dc49431ba676b7450d1f1a63 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -274,6 +274,7 @@ Each data directory is a separate app instance, identified by its `instance-id`:
 - Only one instance may run per data directory; different data directories can run side by side (for example to test a new version). `instance-id` is a random ID inside the data directory and survives moving it; a copied data directory keeps the same `instance-id`, counts as the same instance and cannot run next to the original. A new `instance-id` is made only when the file does not exist (`create_new`, so two copies starting together get the same ID); any other read error is shown and the app exits instead of switching to a new ID.
 - Twitch sign-in and the OBS password are per data directory: the Credential Manager entries are named `<instance-id>/twitch` and `<instance-id>/obs`.
 - If the data directory is not writable, show an error and exit; never fall back to another location.
+- Dev builds open only directories they created: they write a `dev-folder` marker into the `data` directory next to the executable (`target\debug\data\`) and into missing or empty directories; when `--data-dir` points at a non-empty directory without the marker, they show an error and exit before writing any file (including `logs/`), and open it only with `--allow-release-data` (which writes no marker). An unreadable directory is handled as "not writable", never taken for empty. Release builds neither read nor write this marker.
 - Side-by-side copies: extract the package more than once, or point `--data-dir` at different directories. There is no installer (see "Distribution" in decisions.en.md).
 
 Backup files (`.stbackup`, "Backup and restore" on the settings page):
