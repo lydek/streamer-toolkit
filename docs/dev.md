@@ -137,7 +137,7 @@ CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合
 - 時間一律存 UTC；「每日」類功能（如打卡）依實況主設定的時區判斷。
 
 ## 授權
-- 本專案為 MIT。Rust 相依套件的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0）。
+- 本專案為 MIT。Rust 相依套件的授權必須在 `cargo-deny` 允許清單內（MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0）。
 - 前端相依套件由 `scripts/check-licenses.mjs`（`pnpm check:licenses`）檢查，CI 與 pre-push 都會跑：只看會打包進產物的相依套件（`pnpm licenses list --prod`，開發工具不算），允許清單另加 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。清單直接讀 `docs/decisions.md` 的「相依套件授權」列，腳本不必改；改清單時同步該列與本節（Rust 部分另改 `deny.toml`）。授權不在清單內、未知、或寫成 `SEE LICENSE IN …`（例如 PrimeVue 5）都算失敗；清單不得為了讓檢查通過而放寬。
 - GPL／LGPL／AGPL 一律不得引入。
 - 第三方授權清單 `THIRD_PARTY_LICENSES` 由 `scripts/third-party-licenses.mjs`（`pnpm licenses:gen`）產生：Rust 用 `cargo-about`（設定在 `scripts/about.toml`，只列執行檔用到的 crate），前端用 `pnpm licenses list --prod` 並附上各套件的授權檔，再加上 `assets/CREDITS.md` 的內建素材。只在發佈建置時產生、不 commit，所以永遠和當次建置的 lockfile 一致，新增套件後不必手動更新。產物寫到 `apps/web/public/THIRD_PARTY_LICENSES.txt`（已列入 `.gitignore`），前端建置時一起內嵌，設定頁「關於」以純文字顯示；同一份也放進 zip。dev 建置沒有這個檔案，「關於」會顯示載入失敗；要在本機產生，先 `cargo install --locked cargo-about --features cli`，再執行 `pnpm licenses:gen`。

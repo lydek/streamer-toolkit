@@ -35,7 +35,7 @@
 | AI 指引 | `AGENTS.md`（英文）；`CLAUDE.md` 只引用 `AGENTS.md` |
 | 遠端 repo | GitHub public |
 | 授權 | MIT（`LICENSE`） |
-| 相依套件授權 | Rust（`cargo-deny`）允許清單：MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0、CDLA-Permissive-2.0。前端另設清單，只檢查會打包進產物的相依套件：上述加上 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。GPL／LGPL／AGPL 一律擋下 |
+| 相依套件授權 | Rust（`cargo-deny`）允許清單：MIT、Apache-2.0、BSD-2／3-Clause、ISC、Zlib、Unicode-3.0、MPL-2.0。前端另設清單，只檢查會打包進產物的相依套件：上述加上 0BSD、CC0-1.0、CC-BY-4.0、BlueOak-1.0.0、Python-2.0。GPL／LGPL／AGPL 一律擋下 |
 | 第三方授權清單 | `cargo-about`（Rust）＋`pnpm licenses`（前端）＋`assets/CREDITS.md` 合成 `THIRD_PARTY_LICENSES`，只在發佈建置時產生、不 commit；放進可攜版 zip 與設定頁「關於」 |
 | 內建素材 | 只收可再散布的素材（CC0、CC-BY、字型 OFL 等），來源與授權記在 `assets/CREDITS.md`；使用者匯入的素材不進 repo |
 | 分支 | 預設 `main`；工作在短命分支進行，PR 經 CI 通過後 rebase-merge（repo 只開放這種合併方式），`main` 保持一條直線；每個 issue 固定一個 commit，一個 PR 可以放同一階段的多個獨立 issue |

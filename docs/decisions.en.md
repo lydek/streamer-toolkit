@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: 25bcea02cc1fb25412422b7fde941273eba66bd449e5c23c52bfd73dc928a69b -->
+<!-- source: docs/decisions.md source-sha256: a1f08be33bd6530dfcc4eb0bbae900ee7dde88da02c849911f88b1dc50492328 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -36,7 +36,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | AI guide | `AGENTS.md` (English); `CLAUDE.md` only references `AGENTS.md` |
 | Remote repo | GitHub public |
 | License | MIT (`LICENSE`) |
-| Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CDLA-Permissive-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
+| Dependency licenses | Rust (`cargo-deny`) allowlist: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0. The frontend has its own list and checks only dependencies shipped in the build: the above plus 0BSD, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0. GPL/LGPL/AGPL always blocked |
 | Third-party license list | `cargo-about` (Rust) + `pnpm licenses` (frontend) + `assets/CREDITS.md` combined into `THIRD_PARTY_LICENSES`, generated only by release builds and never committed; shipped in the portable zip and the settings page's About section |
 | Bundled assets | Only redistributable assets (CC0, CC-BY, OFL for fonts, etc.), with source and license recorded in `assets/CREDITS.md`; user-imported assets never go into the repo |
 | Branches | Default `main`; work happens on short-lived branches, rebase-merged by PR after CI passes (the only merge method the repo allows), so `main` stays one straight line; exactly one commit per issue, and one PR may hold several independent issues from the same stage |
