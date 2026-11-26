@@ -676,6 +676,21 @@ impl CheckinService {
         &self.config
     }
 
+    /// Points check-ins at reward `to` when they use `from` (a reward taken over); `true` when it changed. The error
+    /// is the reason the settings were not saved.
+    pub fn repoint_reward(&self, from: &str, to: &str) -> Result<bool, String> {
+        let rules = self.config.rules();
+        if rules.reward.as_ref().is_none_or(|r| r.as_str() != from) {
+            return Ok(false);
+        }
+        let mut next = settings_of(&rules);
+        next.reward_id = Some(to.to_owned());
+        self.config
+            .update(&next, rules.allowed)
+            .map(|_| true)
+            .map_err(|e| e.to_string())
+    }
+
     pub(crate) fn on_checked_in(&self) -> &OnCheckedIn {
         &self.on_checked_in
     }

@@ -1696,6 +1696,26 @@ export interface paths {
         patch: operations["update_reward"];
         trace?: never;
     };
+    "/api/admin/rewards/{id}/takeover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes a toolkit reward with the original's settings under a new title, then points check-in, the reward sound
+         *     and the reward video or GIF at it. The original is left as it is: the toolkit cannot change it.
+         */
+        post: operations["take_over_reward"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/screen-tools/appearance": {
         parameters: {
             query?: never;
@@ -4376,6 +4396,11 @@ export interface components {
             /** @description Up to 45 characters; unique in the channel (Twitch ignores case). */
             title?: string | null;
         };
+        /**
+         * @description A setting that used the original reward.
+         * @enum {string}
+         */
+        RewardUse: "checkin" | "sound" | "media";
         RunScript: {
             /** @description The script file's text: `{"steps": [{"type": "chat" | "alert" | "checkin" | "stop", "at": <ms>, …}]}`. */
             script: string;
@@ -4853,6 +4878,20 @@ export interface components {
         };
         /** @enum {string} */
         TabBarPosition: "top" | "bottom";
+        TakenOver: {
+            /** @description The new reward's ID. */
+            id: string;
+            /** @description Settings now pointing at the new reward. */
+            moved: components["schemas"]["RewardUse"][];
+            /** @description Settings that still point at the original: saving them failed, so the broadcaster picks the new reward there. */
+            not_moved: components["schemas"]["RewardUse"][];
+            /** @description The original is paused, but pausing the new reward failed: viewers can redeem it until it is paused here. */
+            pause_failed: boolean;
+        };
+        TakeoverBody: {
+            /** @description The new reward's title; Twitch refuses the original's while that one exists. */
+            title: string;
+        };
         /** @description A `template.changed` event exactly as `/ws/overlay` sends it; not kept in snapshots. */
         TemplateChangedEvent: {
             id: string;
@@ -9597,6 +9636,76 @@ export interface operations {
                 };
             };
             /** @description `rewards.duplicate_title` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    take_over_reward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The reward made in the Twitch dashboard */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeoverBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakenOver"];
+                };
+            };
+            /** @description `rewards.invalid` (a bad title, or the reward is already the toolkit's), `rewards.refused`, or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.duplicate_title` (still the original's, or another reward's) or `rewards.limit` */
             409: {
                 headers: {
                     [name: string]: unknown;

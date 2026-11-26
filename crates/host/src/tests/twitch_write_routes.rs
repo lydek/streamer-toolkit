@@ -44,6 +44,12 @@ struct Fake {
     reward_status: Arc<Mutex<u16>>,
     /// More rewards on the channel besides the two (made in the dashboard).
     extra_rewards: Arc<Mutex<usize>>,
+    /// Reward list reads so far.
+    reward_reads: Arc<Mutex<usize>>,
+    /// Status reward list reads answer with; 0: the list.
+    list_status: Arc<Mutex<u16>>,
+    /// The dashboard reward is paused.
+    dash_paused: Arc<Mutex<bool>>,
 }
 
 /// A Helix custom reward; `r-own` is the toolkit's, `r-dash` was made in the Twitch dashboard.
@@ -68,9 +74,16 @@ async fn reward_request(
     use axum::response::IntoResponse;
     let query = query.unwrap_or_default();
     if method == Method::GET {
+        *f.reward_reads.lock().unwrap() += 1;
+        let status = *f.list_status.lock().unwrap();
+        if status != 0 {
+            return StatusCode::from_u16(status).unwrap().into_response();
+        }
         let mut data = vec![helix_reward("r-own", "每日打卡")];
         if !query.contains("only_manageable_rewards=true") {
-            data.push(helix_reward("r-dash", "Hydrate!"));
+            let mut dash = helix_reward("r-dash", "Hydrate!");
+            dash["is_paused"] = (*f.dash_paused.lock().unwrap()).into();
+            data.push(dash);
             for n in 0..*f.extra_rewards.lock().unwrap() {
                 data.push(helix_reward(&format!("r-{n}"), &format!("extra {n}")));
             }
@@ -155,10 +168,24 @@ async fn signed_in_app(name: &str, fake: &Fake) -> Router {
 }
 
 async fn signed_in_with(name: &str, fake: &Fake, scopes: &'static [&'static str]) -> Router {
+    signed_in_prepared(name, fake, scopes, |_| {}).await
+}
+
+/// `prepare` changes the settings before the Host starts.
+async fn signed_in_prepared(
+    name: &str,
+    fake: &Fake,
+    scopes: &'static [&'static str],
+    prepare: impl FnOnce(&mut settings::Settings),
+) -> Router {
     let dir =
         std::env::temp_dir().join(format!("st-host-stream-info-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    settings::update(&dir, |s| s.twitch_client_id = "cid".into()).unwrap();
+    settings::update(&dir, |s| {
+        s.twitch_client_id = "cid".into();
+        prepare(s);
+    })
+    .unwrap();
     let mut config = test_config();
     config.data_dir = dir;
     config.twitch_secrets = Arc::new(SignedIn(scopes));
@@ -317,6 +344,7 @@ async fn rewards_are_listed_with_the_ones_the_toolkit_made_marked() {
     let fake = Fake::default();
     let app = signed_in_app("rewards-list", &fake).await;
     let res = app
+        .clone()
         .oneshot(req(Method::GET, "/api/admin/rewards", None))
         .await
         .unwrap();
@@ -329,6 +357,15 @@ async fn rewards_are_listed_with_the_ones_the_toolkit_made_marked() {
     assert_eq!(list[0]["max_per_user_per_stream"], 3);
     assert_eq!(list[1]["id"], "r-dash");
     assert_eq!(list[1]["manageable"], false);
+
+    // A channel without channel points: Twitch refuses the list, which is not about whose reward it is.
+    *fake.list_status.lock().unwrap() = 403;
+    let res = app
+        .oneshot(req(Method::GET, "/api/admin/rewards", None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(json(res).await["code"], "twitch.request_refused");
 }
 
 #[tokio::test]
@@ -405,6 +442,8 @@ async fn a_reward_is_added_unless_the_title_is_taken_or_the_channel_is_full() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(json(res).await, serde_json::json!({ "id": "r-new" }));
+    // One read: the titles and the count need no manageable list.
+    assert_eq!(*fake.reward_reads.lock().unwrap(), 1);
     assert_eq!(
         fake.rewards.lock().unwrap().as_slice(),
         [(
@@ -494,5 +533,96 @@ async fn a_reward_is_edited_or_deleted_on_twitch() {
                 serde_json::Value::Null
             ),
         ]
+    );
+}
+
+#[tokio::test]
+async fn a_dashboard_reward_is_taken_over_and_what_used_it_moves_to_the_new_one() {
+    let fake = Fake::default();
+    let app = signed_in_prepared(
+        "rewards-takeover",
+        &fake,
+        &["channel:manage:redemptions"],
+        |s| {
+            s.checkin.reward_id = Some("r-dash".into());
+            s.sound.library.push(settings::SoundEntry {
+                id: "s1".into(),
+                label: "喝水".into(),
+                volume: 80,
+                format: "mp3".into(),
+                duration_ms: None,
+            });
+            s.sound.slots.insert("reward.r-dash".into(), "s1".into());
+        },
+    )
+    .await;
+    *fake.dash_paused.lock().unwrap() = true;
+    let take_over = |id: &str, title: &str| {
+        req(
+            Method::POST,
+            &format!("/api/admin/rewards/{id}/takeover"),
+            Some(serde_json::json!({ "title": title })),
+        )
+    };
+
+    // The original's title is still taken while it exists.
+    let res = app
+        .clone()
+        .oneshot(take_over("r-dash", "Hydrate!"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    assert_eq!(json(res).await["code"], "rewards.duplicate_title");
+    // The toolkit's own reward needs no takeover.
+    let res = app.clone().oneshot(take_over("r-own", "x")).await.unwrap();
+    assert_eq!(json(res).await["code"], "rewards.invalid");
+    assert!(fake.rewards.lock().unwrap().is_empty());
+
+    *fake.reward_reads.lock().unwrap() = 0;
+    let res = app
+        .clone()
+        .oneshot(take_over("r-dash", "Hydrate! 2"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        json(res).await,
+        serde_json::json!({
+            "id": "r-new", "moved": ["checkin", "sound"], "not_moved": [], "pause_failed": false
+        })
+    );
+    // The list and the manageable list, read once each.
+    assert_eq!(*fake.reward_reads.lock().unwrap(), 2);
+    // Create Custom Reward takes no is_paused: the new reward is paused right after, like the original.
+    let (method, query, pause) = fake.rewards.lock().unwrap()[1].clone();
+    assert_eq!(
+        (method.as_str(), query.as_str(), pause),
+        (
+            "PATCH",
+            "broadcaster_id=42&id=r-new",
+            serde_json::json!({ "is_paused": true })
+        )
+    );
+    // Same settings as the original, under the new title.
+    let (method, _, sent) = fake.rewards.lock().unwrap()[0].clone();
+    assert_eq!(method, "POST");
+    assert_eq!(sent.get("is_paused"), None);
+    assert_eq!(sent["title"], "Hydrate! 2");
+    assert_eq!(sent["cost"], 100);
+    assert_eq!(sent["global_cooldown_seconds"], 300);
+    assert_eq!(sent["max_per_user_per_stream"], 3);
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/admin/checkin/settings", None))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["reward_id"], "r-new");
+    let res = app
+        .oneshot(req(Method::GET, "/api/admin/sounds", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        json(res).await["slots"],
+        serde_json::json!({ "reward.r-new": "s1" })
     );
 }
