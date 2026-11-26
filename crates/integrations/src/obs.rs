@@ -47,6 +47,9 @@ use crate::secrets::SecretStore;
 /// Covers the whole connect: TCP, upgrade, handshake and version check (obws times out only the first two).
 // shortcut: 1 s in tests keeps the stalled-handshake test fast; make it a field if callers ever need to tune it.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 10 });
+/// How long a re-read waits after the first structural change, so the changes OBS sends together (an item with its
+/// input, a reorder, many at once) are read once.
+const REREAD_DELAY: Duration = Duration::from_millis(100);
 /// obs-websocket close code for a missing or wrong password.
 const AUTHENTICATION_FAILED: u16 = 4009;
 
@@ -864,13 +867,30 @@ impl Obs {
         self.share(client);
         self.set(ObsStatus::CONNECTED);
         self.set_state(&state);
+        // When a waiting re-read starts; every change until then is read with it, so a burst is read once.
+        let mut reread_at = None;
         loop {
             let event = match pending.pop_front() {
                 Some(event) => event,
-                None => match events.next().await {
-                    Some(event) => event,
-                    None => return true,
-                },
+                None => {
+                    let next = match reread_at {
+                        Some(at) => tokio::time::timeout_at(at, events.next()).await.ok(),
+                        None => Some(events.next().await),
+                    };
+                    match next {
+                        Some(Some(event)) => event,
+                        Some(None) => return true,
+                        None => {
+                            reread_at = None;
+                            match self.read(client, &mut events, &mut pending).await {
+                                Some(fresh) => state = fresh,
+                                None => return true,
+                            }
+                            self.set_state(&state);
+                            continue;
+                        }
+                    }
+                }
             };
             if let Event::InputVolumeMeters { inputs } = &event {
                 self.set_meters(inputs);
@@ -879,11 +899,13 @@ impl Obs {
             match apply(&mut state, &event) {
                 Change::Closed => return true,
                 Change::None => continue,
+                Change::Reread => {
+                    reread_at.get_or_insert_with(|| tokio::time::Instant::now() + REREAD_DELAY);
+                    continue;
+                }
+                // Published with the re-read: the old state with this change applied may not match OBS.
+                Change::Updated if reread_at.is_some() => continue,
                 Change::Updated => {}
-                Change::Reread => match self.read(client, &mut events, &mut pending).await {
-                    Some(fresh) => state = fresh,
-                    None => return true,
-                },
             }
             self.set_state(&state);
         }
@@ -1269,6 +1291,8 @@ mod tests {
         flood: bool,
         /// Answers the scene list with an error, so reading the state always fails.
         fail_read: bool,
+        /// Answers every item as hidden.
+        hidden: Arc<Mutex<bool>>,
         /// Fields that replace the scene item transform's defaults (a flip, crop or bounding box).
         transform: Arc<Mutex<Value>>,
         /// `Set…` requests as `(requestType, requestData)`.
@@ -1338,7 +1362,9 @@ mod tests {
                     "sourceType": "OBS_SOURCE_TYPE_INPUT", "inputKind": "dshow_input", "isGroup": null}]}),
                 "GetSpecialInputs" => json!({"desktop1": null, "desktop2": null, "mic1": "Mic",
                     "mic2": null, "mic3": null, "mic4": null}),
-                "GetSceneItemEnabled" => json!({"sceneItemEnabled": true}),
+                "GetSceneItemEnabled" => {
+                    json!({"sceneItemEnabled": !*self.hidden.lock().unwrap()})
+                }
                 "GetSceneItemLocked" => json!({"sceneItemLocked": false}),
                 t if t.starts_with("Set")
                     || t.starts_with("Remove")
@@ -1587,6 +1613,32 @@ mod tests {
         assert!(state.borrow().scene.is_some(), "the state stays");
         assert_eq!(fake.identify.lock().unwrap().len(), 1, "no reconnect");
         assert_eq!(control.meters().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_burst_of_structural_changes_is_read_once() {
+        let fake = FakeObs::default();
+        let (mut status, mut state, _) = run_with_state(start(fake.clone()).await, None);
+        reaches(&mut status, ObsStatus::CONNECTED).await;
+        state_reaches(&mut state, "read on connect", |s| s.scene.is_some()).await;
+        let lists = *fake.scene_lists.lock().unwrap();
+        // OBS changed (every item now hidden) and sends one event per item added.
+        *fake.hidden.lock().unwrap() = true;
+        for id in 0..20 {
+            fake.event(
+                "SceneItemCreated",
+                json!({"sceneName": "Live", "sceneUuid": LIVE, "sourceName": "Logo",
+                       "sourceUuid": LOGO, "sceneItemId": 10 + id, "sceneItemIndex": 3}),
+            );
+        }
+        state_reaches(&mut state, "read after the burst", |s| {
+            s.scenes[0].items.iter().all(|i| !i.enabled)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let reads = *fake.scene_lists.lock().unwrap() - lists;
+        // One, or two when the burst straddles the first read on a slow machine; each event read alone is 20.
+        assert!((1..=2).contains(&reads), "{reads} reads for one burst");
     }
 
     #[tokio::test]
