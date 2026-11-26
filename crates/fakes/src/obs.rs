@@ -2,7 +2,10 @@
 //! It answers the requests `crates/integrations/src/obs.rs` sends (the `obws` 0.15 client) and sends the events a
 //! real OBS would for each change. Anything else gets `UnknownRequestType`, so a request the fake lacks shows up.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use axum::{
     Router,
@@ -52,6 +55,8 @@ struct Item {
     source: String,
     enabled: bool,
     locked: bool,
+    /// Fields set with `SetSceneItemTransform`; the rest come from the source's size.
+    transform: Value,
 }
 
 #[derive(Clone)]
@@ -77,7 +82,40 @@ struct World {
     recording: bool,
     next_id: u64,
     next_uuid: u64,
+    stats: Stats,
+    counters: Counters,
 }
+
+/// What `GetStats` and `GetStreamStatus` report; the frame and byte counters grow with time from these.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stats {
+    pub cpu_percent: f64,
+    /// Share of rendered (and, while streaming, sent) frames that are dropped.
+    pub dropped_percent: f64,
+    /// The stream output's bitrate while streaming.
+    pub bitrate_kbps: u64,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            cpu_percent: 2.5,
+            dropped_percent: 0.0,
+            bitrate_kbps: 6000,
+        }
+    }
+}
+
+struct Counters {
+    render_total: f64,
+    render_skipped: f64,
+    output_total: f64,
+    output_skipped: f64,
+    output_bytes: f64,
+    at: Instant,
+}
+
+const FPS: f64 = 60.0;
 
 fn uuid(n: u64) -> String {
     format!("00000000-0000-4000-8000-{n:012x}")
@@ -106,6 +144,15 @@ impl World {
             recording: false,
             next_id: 1,
             next_uuid: 1,
+            stats: Stats::default(),
+            counters: Counters {
+                render_total: 0.0,
+                render_skipped: 0.0,
+                output_total: 0.0,
+                output_skipped: 0.0,
+                output_bytes: 0.0,
+                at: Instant::now(),
+            },
         };
         for (name, kind, audio, settings) in [
             ("Mic", "wasapi_input_capture", true, json!({})),
@@ -165,7 +212,80 @@ impl World {
             source: source.into(),
             enabled: true,
             locked: false,
+            transform: json!({}),
         }
+    }
+
+    /// Frames and bytes since the last read, at `FPS` and the set drop share and bitrate.
+    fn tick(&mut self) {
+        let now = Instant::now();
+        let secs = now.duration_since(self.counters.at).as_secs_f64();
+        self.counters.at = now;
+        let frames = secs * FPS;
+        let dropped = frames * self.stats.dropped_percent / 100.0;
+        let c = &mut self.counters;
+        c.render_total += frames;
+        c.render_skipped += dropped;
+        if self.streaming {
+            c.output_total += frames;
+            c.output_skipped += dropped;
+            c.output_bytes += self.stats.bitrate_kbps as f64 * 1000.0 / 8.0 * secs;
+        }
+    }
+
+    /// `(width, height)` of a source as OBS reports it before scaling.
+    fn source_size(&self, name: &str) -> (f64, f64) {
+        if let Some(input) = self.inputs.iter().find(|i| i.name == name) {
+            return match input.kind.as_str() {
+                "dshow_input" => (1920.0, 1080.0),
+                "image_source" => (300.0, 100.0),
+                "browser_source" => (
+                    input.settings["width"].as_f64().unwrap_or(800.0),
+                    input.settings["height"].as_f64().unwrap_or(600.0),
+                ),
+                _ => (0.0, 0.0),
+            };
+        }
+        (1920.0, 1080.0)
+    }
+
+    fn transform(&self, scene: usize, item: usize) -> Value {
+        let it = &self.scenes[scene].items[item];
+        let (w, h) = self.source_size(&it.source);
+        let mut t = json!({"sourceWidth": w, "sourceHeight": h, "positionX": 0.0, "positionY": 0.0,
+            "rotation": 0.0, "scaleX": 1.0, "scaleY": 1.0, "alignment": 5, "boundsType": "OBS_BOUNDS_NONE",
+            "boundsAlignment": 0, "boundsWidth": 0.0, "boundsHeight": 0.0,
+            "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0});
+        if let (Some(t), Some(set)) = (t.as_object_mut(), it.transform.as_object()) {
+            t.extend(set.clone());
+        }
+        let sx = t["scaleX"].as_f64().unwrap_or(1.0).abs();
+        let sy = t["scaleY"].as_f64().unwrap_or(1.0).abs();
+        t["width"] = json!(w * sx);
+        t["height"] = json!(h * sy);
+        t
+    }
+
+    fn meters(&self) -> Value {
+        let inputs: Vec<Value> = self
+            .inputs
+            .iter()
+            .filter(|i| i.audio)
+            .map(|i| {
+                let level = if i.muted { 0.0 } else { 0.25 * i.volume_mul };
+                let peak = (level * 1.2).min(1.0);
+                json!({"inputName": i.name, "inputUuid": i.uuid,
+                       "inputLevelsMul": [[level, peak, peak], [level, peak, peak]]})
+            })
+            .collect();
+        json!({ "inputs": inputs })
+    }
+
+    fn input_event(&self, input: usize, field: &str, value: Value) -> Value {
+        let i = &self.inputs[input];
+        let mut event = json!({"inputName": i.name, "inputUuid": i.uuid});
+        event[field] = value;
+        event
     }
 
     fn scene_index(&self, data: &Value) -> Result<usize, Failure> {
@@ -283,15 +403,135 @@ impl World {
                 "platformDescription": "fake-services"})
             }
             "GetStats" => {
-                json!({"cpuUsage": 2.5, "memoryUsage": 300.0, "availableDiskSpace": 100000.0,
-                "activeFps": 60.0, "averageFrameRenderTime": 2.0, "renderSkippedFrames": 0,
-                "renderTotalFrames": 0, "outputSkippedFrames": 0, "outputTotalFrames": 0,
+                self.tick();
+                let c = &self.counters;
+                json!({"cpuUsage": self.stats.cpu_percent, "memoryUsage": 300.0,
+                "availableDiskSpace": 100000.0, "activeFps": FPS, "averageFrameRenderTime": 2.0,
+                "renderSkippedFrames": c.render_skipped as u32, "renderTotalFrames": c.render_total as u32,
+                "outputSkippedFrames": c.output_skipped as u32, "outputTotalFrames": c.output_total as u32,
                 "webSocketSessionIncomingMessages": 0, "webSocketSessionOutgoingMessages": 0})
             }
             "GetStreamStatus" => {
+                self.tick();
+                let c = &self.counters;
                 json!({"outputActive": self.streaming, "outputReconnecting": false,
                 "outputTimecode": "00:00:00.000", "outputDuration": 0, "outputCongestion": 0.0,
-                "outputBytes": 0, "outputSkippedFrames": 0, "outputTotalFrames": 0})
+                "outputBytes": c.output_bytes as u64, "outputSkippedFrames": c.output_skipped as u32,
+                "outputTotalFrames": c.output_total as u32})
+            }
+            "GetVideoSettings" => {
+                json!({"fpsNumerator": 60, "fpsDenominator": 1, "baseWidth": 1920,
+                "baseHeight": 1080, "outputWidth": 1920, "outputHeight": 1080})
+            }
+            "GetSceneItemTransform" => {
+                let scene = self.scene_index(data)?;
+                let item = self.item_index(scene, data)?;
+                json!({ "sceneItemTransform": self.transform(scene, item) })
+            }
+            "SetSceneItemTransform" => {
+                let scene = self.scene_index(data)?;
+                let item = self.item_index(scene, data)?;
+                let set = data["sceneItemTransform"]
+                    .as_object()
+                    .ok_or((MISSING_REQUEST_FIELD, "sceneItemTransform".into()))?;
+                // Sizes follow from the source and the scale; OBS ignores them here too.
+                let kept = set.iter().filter(|(k, _)| {
+                    !matches!(
+                        k.as_str(),
+                        "width" | "height" | "sourceWidth" | "sourceHeight"
+                    )
+                });
+                if let Some(t) = self.scenes[scene].items[item].transform.as_object_mut() {
+                    t.extend(kept.map(|(k, v)| (k.clone(), v.clone())));
+                }
+                Value::Null
+            }
+            "SetInputVolume" => {
+                let input = self.audio_input(data)?;
+                let mul = match (
+                    data["inputVolumeMul"].as_f64(),
+                    data["inputVolumeDb"].as_f64(),
+                ) {
+                    (Some(mul), _) => mul.clamp(0.0, 20.0),
+                    (None, Some(db)) => 10f64.powf(db.clamp(-100.0, 26.0) / 20.0),
+                    _ => {
+                        return Err((
+                            MISSING_REQUEST_FIELD,
+                            "inputVolumeMul or inputVolumeDb".into(),
+                        ));
+                    }
+                };
+                self.inputs[input].volume_mul = mul;
+                let mut event = self.input_event(input, "inputVolumeMul", json!(mul));
+                event["inputVolumeDb"] = json!(db(mul));
+                events.push(("InputVolumeChanged", event));
+                Value::Null
+            }
+            "SetInputMute" => {
+                let input = self.audio_input(data)?;
+                let muted = data["inputMuted"]
+                    .as_bool()
+                    .ok_or((MISSING_REQUEST_FIELD, "inputMuted".into()))?;
+                self.inputs[input].muted = muted;
+                let event = self.input_event(input, "inputMuted", json!(muted));
+                events.push(("InputMuteStateChanged", event));
+                Value::Null
+            }
+            "SetInputAudioMonitorType" => {
+                let input = self.audio_input(data)?;
+                let monitor = match data["monitorType"].as_str() {
+                    Some("OBS_MONITORING_TYPE_NONE") => "OBS_MONITORING_TYPE_NONE",
+                    Some("OBS_MONITORING_TYPE_MONITOR_ONLY") => "OBS_MONITORING_TYPE_MONITOR_ONLY",
+                    Some("OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT") => {
+                        "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
+                    }
+                    _ => return Err((MISSING_REQUEST_FIELD, "monitorType".into())),
+                };
+                self.inputs[input].monitor = monitor;
+                let event = self.input_event(input, "monitorType", json!(monitor));
+                events.push(("InputAudioMonitorTypeChanged", event));
+                Value::Null
+            }
+            "GetInputDefaultSettings" => {
+                let kind = data["inputKind"]
+                    .as_str()
+                    .ok_or((MISSING_REQUEST_FIELD, "inputKind".into()))?;
+                let defaults = match kind {
+                    "browser_source" => json!({"url": "", "width": 800, "height": 600, "css": "",
+                        "shutdown": false, "restart_when_active": false, "reroute_audio": false}),
+                    _ => json!({}),
+                };
+                json!({ "defaultInputSettings": defaults })
+            }
+            "SetInputSettings" => {
+                let input = self.input_index(data)?;
+                let set = data["inputSettings"]
+                    .as_object()
+                    .ok_or((MISSING_REQUEST_FIELD, "inputSettings".into()))?
+                    .clone();
+                let settings = &mut self.inputs[input].settings;
+                // `overlay` defaults to true: merge into the current settings instead of replacing them.
+                if data["overlay"].as_bool() == Some(false) {
+                    *settings = Value::Object(set);
+                } else if let Some(current) = settings.as_object_mut() {
+                    current.extend(set);
+                }
+                Value::Null
+            }
+            "GetInputPropertiesListPropertyItems" => {
+                let input = self.input_index(data)?;
+                let kind = self.inputs[input].kind.as_str();
+                let items = match (kind, data["propertyName"].as_str()) {
+                    ("dshow_input", Some("video_device_id")) => json!([
+                        {"itemName": "Fake Camera", "itemEnabled": true, "itemValue": "fake-camera-1"},
+                        {"itemName": "Busy Camera", "itemEnabled": false, "itemValue": "fake-camera-2"}]),
+                    _ => json!([]),
+                };
+                json!({ "propertyItems": items })
+            }
+            "PressInputPropertiesButton" => {
+                self.input_index(data)?;
+                Value::Null
             }
             "GetRecordStatus" => json!({"outputActive": self.recording, "outputPaused": false,
                 "outputTimecode": "00:00:00.000", "outputDuration": 0, "outputBytes": 0}),
@@ -605,8 +845,51 @@ impl FakeObs {
     }
 
     /// Serves until the listener fails; bind it to `127.0.0.1` only.
+    /// Also sends audio levels every 50 ms, as OBS does.
     pub async fn serve(self, listener: TcpListener) -> std::io::Result<()> {
+        tokio::spawn(meters(self.clone()));
         axum::serve(listener, self.router()).await
+    }
+
+    /// What `GetStats` and `GetStreamStatus` report from now on.
+    pub fn set_stats(&self, stats: Stats) {
+        let mut w = self.world.lock().unwrap();
+        w.tick();
+        w.stats = stats;
+    }
+
+    pub fn stats(&self) -> Stats {
+        self.world.lock().unwrap().stats
+    }
+
+    /// Starts or stops streaming and recording (the app never does), with the events OBS sends.
+    pub fn set_output(&self, streaming: Option<bool>, recording: Option<bool>) {
+        let state = |on: bool| {
+            if on {
+                "OBS_WEBSOCKET_OUTPUT_STARTED"
+            } else {
+                "OBS_WEBSOCKET_OUTPUT_STOPPED"
+            }
+        };
+        let mut events = Vec::new();
+        {
+            let mut w = self.world.lock().unwrap();
+            w.tick();
+            if let Some(on) = streaming.filter(|on| *on != w.streaming) {
+                w.streaming = on;
+                let event = json!({"outputActive": on, "outputState": state(on)});
+                events.push(("StreamStateChanged", event));
+            }
+            if let Some(on) = recording.filter(|on| *on != w.recording) {
+                w.recording = on;
+                let event =
+                    json!({"outputActive": on, "outputState": state(on), "outputPath": null});
+                events.push(("RecordStateChanged", event));
+            }
+        }
+        for event in events {
+            let _ = self.events.send(event);
+        }
     }
 
     /// Answers one request as a connection would, sending its events to every connection.
@@ -617,6 +900,18 @@ impl FakeObs {
             let _ = self.events.send(event);
         }
         result
+    }
+}
+
+/// `InputVolumeMeters` at OBS's 50 ms, from the inputs' volume and mute (fixed levels, no real audio).
+async fn meters(fake: FakeObs) {
+    let mut every = tokio::time::interval(Duration::from_millis(50));
+    loop {
+        every.tick().await;
+        if fake.events.receiver_count() > 0 {
+            let levels = fake.world.lock().unwrap().meters();
+            let _ = fake.events.send(("InputVolumeMeters", levels));
+        }
     }
 }
 
