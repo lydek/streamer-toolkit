@@ -68,7 +68,7 @@ describe('twitchLight', () => {
     client_id,
     status,
     eventsub_connected: false,
-    irc_connected: false,
+    irc_connected: false, scopes: [],
   })
 
   it('maps loading, failure and each sign-in state', () => {
@@ -469,7 +469,7 @@ describe('pre-stream checks', () => {
     client_id: 'cid',
     status: { state: 'signed_in', user_id: '42', login: 'me' },
     eventsub_connected: eventsub,
-    irc_connected: false,
+    irc_connected: false, scopes: [],
   })
   const live = (obs: 'connected' | 'reconnecting'): LiveState => ({ status: 'open', lastSeq: 1, obs: { state: obs, reason: null } })
   const modules: Schemas['ModuleState'][] = [

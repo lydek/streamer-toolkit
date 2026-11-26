@@ -6936,6 +6936,23 @@
           "admin"
         ],
         "operationId": "login",
+        "requestBody": {
+          "description": "Absent: sign in with the base and the saved feature scopes.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -6947,6 +6964,7 @@
             }
           },
           "400": {
+            "description": "`twitch.unknown_scope`, or a sign-in error",
             "content": {
               "application/json": {
                 "schema": {
@@ -6956,6 +6974,16 @@
             }
           },
           "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10474,6 +10502,18 @@
           }
         }
       },
+      "LoginBody": {
+        "type": "object",
+        "properties": {
+          "add_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Scopes a feature needs, kept for every later sign-in too; each must be in `FEATURE_SCOPES`."
+          }
+        }
+      },
       "ManualCheckIn": {
         "type": "object",
         "required": [
@@ -11428,7 +11468,8 @@
           "client_id",
           "status",
           "eventsub_connected",
-          "irc_connected"
+          "irc_connected",
+          "scopes"
         ],
         "properties": {
           "chat_missed_writes": {
@@ -11457,6 +11498,13 @@
           "irc_connected": {
             "type": "boolean",
             "description": "Twitch's first-chat mark can be read (anonymous IRC joined); otherwise 第一次聊天 is the toolkit's first\nsighting of the viewer."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The scopes the current sign-in granted; empty while signed out. Features check theirs against it."
           },
           "status": {
             "$ref": "#/components/schemas/AuthStatus"

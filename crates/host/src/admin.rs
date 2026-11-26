@@ -21,7 +21,7 @@ use integrations::{
     secrets::SecretStore,
     tls::{ClientConfig, HttpsClient},
     twitch::{
-        MVP_SCOPES,
+        FEATURE_SCOPES, MVP_SCOPES,
         auth::{AuthError, AuthStatus, DeviceLogin, TwitchAuth},
         eventsub::EventSub,
         helix::{Helix, HelixError},

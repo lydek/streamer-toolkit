@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
+import FeatureList from './FeatureList.vue'
 import SettingsView from './SettingsView.vue'
 import { testRouter } from './testRouter'
 import { useServices } from './services'
@@ -240,6 +241,39 @@ describe('SettingsView', () => {
       }),
     )
     wrapper.unmount()
+  })
+
+  it('turns a feature needing Twitch scopes on only once the sign-in grants them', async () => {
+    client.PUT.mockResolvedValue(ok())
+    client.POST.mockResolvedValue(ok({ user_code: 'ABCD', verification_uri: 'https://www.twitch.tv/activate', expires_in_secs: 600 }))
+    const router = testRouter([{ path: '/settings/:section?', component: SettingsView }])
+    await router.push('/settings/features')
+    const wrapper = mount(SettingsView, { global: { plugins: [router, i18n, PrimeVue, ToastService] }, attachTo: document.body })
+    await vi.waitFor(() => expect(wrapper.find('#obs-host').exists()).toBe(true))
+    const signedIn = (scopes: string[]) => ({ client_id: 'cid', scopes, status: { state: 'signed_in', user_id: '1', login: 'me' } })
+    GETS['/api/admin/twitch'] = signedIn([])
+    try {
+      wrapper.findComponent(FeatureList).vm.$emit('scopes', ['channel:manage:broadcast'], [{ id: 'stream-info', enabled: true }])
+      await vi.waitFor(() =>
+        expect(client.POST).toHaveBeenCalledWith('/api/admin/twitch/login', { body: { add_scopes: ['channel:manage:broadcast'] } }),
+      )
+      await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/settings/connections'))
+      await flushPromises()
+      expect(client.PUT).not.toHaveBeenCalled()
+      // The sign-in finishes with the scope: the next read turns the feature on.
+      GETS['/api/admin/twitch'] = signedIn(['channel:manage:broadcast'])
+      await vi.waitFor(
+        () =>
+          expect(client.PUT).toHaveBeenCalledWith('/api/admin/modules/{id}', {
+            params: { path: { id: 'stream-info' } },
+            body: { enabled: true, close: false },
+          }),
+        { timeout: 3000 },
+      )
+    } finally {
+      GETS['/api/admin/twitch'] = { client_id: '', status: { state: 'signed_out' } }
+      wrapper.unmount()
+    }
   })
 
   describe('check-in switch and outbox', () => {

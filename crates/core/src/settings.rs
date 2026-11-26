@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 pub struct Settings {
     pub port: u16,
     pub twitch_client_id: String,
+    /// Twitch scopes the broadcaster agreed to for features, asked for at every sign-in besides the base ones.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub twitch_scopes: Vec<String>,
     /// Modules the broadcaster turned off; everything else is enabled.
     pub disabled_modules: Vec<String>,
     /// Disabled modules that skip outbox events instead of keeping them (paused, the default, keeps them).
@@ -420,6 +423,7 @@ impl Default for Settings {
         Self {
             port: crate::DEFAULT_PORT,
             twitch_client_id: String::new(),
+            twitch_scopes: Vec::new(),
             disabled_modules: Vec::new(),
             closed_modules: Vec::new(),
             modules_split: false,
