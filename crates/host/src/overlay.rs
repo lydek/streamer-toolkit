@@ -322,6 +322,9 @@ struct SnapshotPayload {
     /// At most one: the chat overlay's text size.
     #[serde(rename = "chat.text_size")]
     chat_text_size: Vec<crate::templates::ChatTextSizeEvent>,
+    /// At most one: the latest poll.
+    #[serde(rename = "twitch.contest")]
+    twitch_contest: Vec<crate::contests::ContestEvent>,
 }
 
 #[cfg(test)]
@@ -420,6 +423,18 @@ mod tests {
         bus.retain("screen.warnings", 1);
         bus.retain("screen.appearance", 1);
         bus.retain("leaderboard.update", 1);
+        bus.retain("twitch.contest", 1);
+        bus.publish(toolkit_core::bus::Event {
+            id: "v".into(),
+            event_type: "twitch.contest",
+            version: 1,
+            occurred_at: "2026-11-27T10:00:00.000Z".into(),
+            source: Source::Twitch,
+            payload: serde_json::json!({ "poll": {
+                "id": "p1", "title": "下一首？", "status": "active", "endsAt": "2026-11-27T10:02:00Z",
+                "choices": [{ "id": "c1", "title": "晴天", "votes": 3 }]
+            }}),
+        });
         bus.publish(toolkit_core::bus::Event {
             id: "l".into(),
             event_type: "leaderboard.update",

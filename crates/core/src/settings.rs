@@ -30,6 +30,9 @@ pub struct Settings {
     /// on later sticks.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub modules_defaulted: Vec<String>,
+    /// 投票 saved to start again in one click, in the broadcaster's order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub poll_templates: Vec<PollTemplate>,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -432,6 +435,7 @@ impl Default for Settings {
             closed_modules: Vec::new(),
             modules_split: false,
             modules_defaulted: Vec::new(),
+            poll_templates: Vec::new(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
             setup_done: false,
@@ -660,4 +664,12 @@ mod tests {
         assert_eq!(load(&dir), saved);
         let _ = fs::remove_dir_all(dir);
     }
+}
+
+/// A poll saved to start again: its question, choices and how long voting lasts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct PollTemplate {
+    pub title: String,
+    pub choices: Vec<String>,
+    pub seconds: u32,
 }

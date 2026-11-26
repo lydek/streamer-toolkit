@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 bytes = "1.12.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 form_urlencoded = "1.2.2"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 http = "1.5.0"

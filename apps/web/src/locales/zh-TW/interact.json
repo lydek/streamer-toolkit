@@ -386,11 +386,27 @@
     "questionHint": "例如：下一首唱什麼？",
     "options": "選項",
     "option": "選項 {n}",
+    "removeOption": "刪除選項 {n}",
     "addOption": "加選項（最多 5 個）",
     "duration": "時間",
     "minutes": "{n} 分鐘",
+    "seconds": "{n} 秒",
     "saveHint": "也可以存成常用題目，直播中一鍵開",
-    "start": "開始"
+    "start": "開始",
+    "end": "結束",
+    "save": "存成常用題目",
+    "saved": "常用題目",
+    "noSaved": "還沒有常用題目。填好上面的題目後按「存成常用題目」。",
+    "fill": "填入上面的表單",
+    "deleteSaved": "刪除常用題目：{name}",
+    "started": "已在 Twitch 開始投票。",
+    "voters": "{n} 票",
+    "left": "進行中 · 剩 {time}",
+    "status": {
+      "completed": "已結束",
+      "terminated": "已提早結束"
+    },
+    "tile": "開投票、看即時結果"
   },
   "shoutouts": {
     "summary": "SO 時在畫面播對方的 Clip",

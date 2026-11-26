@@ -131,7 +131,7 @@ describe('categories', () => {
   })
 
   it('has nowhere to go for a category with no built page', () => {
-    expect(categoryTarget(categoryOf('/polls')!)).toBeUndefined()
+    expect(categoryTarget(categoryOf('/shoutouts')!)).toBeUndefined()
   })
 })
 

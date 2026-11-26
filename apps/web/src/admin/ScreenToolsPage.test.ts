@@ -54,7 +54,7 @@ const snapshot = (payload: Schemas['BreakPayload'], w = warnings) => ({
     'screen.break': [{ id: 'b', type: 'screen.break', version: 1, seq: 1, occurredAt: '', source: 'system', payload }],
     'screen.warnings': [{ id: 'w', type: 'screen.warnings', version: 1, seq: 1, occurredAt: '', source: 'system', payload: w }],
     'screen.appearance': [],
-    'leaderboard.update': [],
+    'leaderboard.update': [], 'twitch.contest': [],
     'chat.text_size': [],
   },
 })

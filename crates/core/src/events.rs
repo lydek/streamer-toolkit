@@ -205,3 +205,40 @@ pub enum RedemptionStatus {
     Canceled,
     Unknown,
 }
+
+/// A poll on the broadcaster's channel, whole, as its latest notification or Helix answer reports it; Twitch's field
+/// names and status strings stop at the integration layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Poll {
+    pub id: String,
+    pub title: String,
+    pub choices: Vec<PollChoice>,
+    pub status: PollStatus,
+    /// RFC 3339: when voting ends, or ended.
+    pub ends_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollChoice {
+    pub id: String,
+    pub title: String,
+    /// Every vote, channel points ones included.
+    pub votes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PollStatus {
+    Active,
+    /// Ended on time.
+    Completed,
+    /// Ended early; the result still shows on Twitch.
+    Terminated,
+    /// Ended and hidden (or removed by Twitch).
+    Archived,
+}
+
+/// A poll or prediction starting, changing or ending on Twitch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Contest {
+    Poll(Poll),
+}

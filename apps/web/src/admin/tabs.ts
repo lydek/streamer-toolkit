@@ -121,7 +121,7 @@ export const GROUPS: TabGroup[] = [
         { path: '/marathon', label: 'pages.marathon.name', icon: 'pi pi-stopwatch' },
       ],
     },
-    { id: 'polls', pages: [soon('/polls', 'polls', 'pi pi-chart-bar', true)] },
+    { id: 'polls', pages: [{ path: '/polls', label: 'pages.polls.name', icon: 'pi pi-chart-bar' }] },
   ]),
   grouped('media', 'pi pi-images', [
     {

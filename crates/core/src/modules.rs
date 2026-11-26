@@ -37,6 +37,8 @@ pub const STREAM_INFO: &str = "stream-info";
 /// 頻道點數獎勵管理: listing and changing the channel's custom rewards; the switch only shows or hides its page and
 /// tile.
 pub const REWARDS: &str = "rewards";
+/// 投票與預測: Twitch's own polls and predictions; the switch only shows or hides its page and tile.
+pub const POLLS: &str = "polls";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -53,10 +55,11 @@ pub const ALL: &[&str] = &[
     MIXER,
     STREAM_INFO,
     REWARDS,
+    POLLS,
 ];
 
 /// Modules that start off: each needs a Twitch scope the base sign-in lacks, so turning it on asks for that first.
-pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO, REWARDS];
+pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO, REWARDS, POLLS];
 
 /// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).
 const SPLIT: &[(&str, &str)] = &[

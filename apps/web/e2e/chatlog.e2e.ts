@@ -54,7 +54,7 @@ async function open(page: Page, sockets?: WebSocketRoute[], removals: object[] =
     await page.routeWebSocket('**/ws/overlay', ws => {
       sockets.push(ws)
       ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 10, payload: {
-        'chat.message': messages, 'chat.removed': removals, 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [],
+        'chat.message': messages, 'chat.removed': removals, 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
       } }))
     })
   }

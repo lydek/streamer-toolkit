@@ -40,7 +40,7 @@ describe('changesRecords', () => {
       payload: { id: 'r' },
     } as const
     expect(changesRecords(changed)).toBe(true)
-    expect(changesRecords({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] } })).toBe(true)
+    expect(changesRecords({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.removed': [], 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] } })).toBe(true)
     expect(changesRecords({ ...changed, type: 'template.changed', payload: { overlay: 'chat' } })).toBe(false)
   })
 })

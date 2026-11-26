@@ -1553,6 +1553,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/polls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["current_polls"];
+        put?: never;
+        post: operations["start_poll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/polls/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["poll_templates"];
+        put: operations["set_poll_templates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/polls/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["end_poll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/queue/clear": {
         parameters: {
             query?: never;
@@ -3302,6 +3350,24 @@ export interface components {
          * @enum {string}
          */
         Content: "data" | "media";
+        /** @description A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll changes. */
+        ContestEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["ContestPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["ContestType"];
+            /** Format: int32 */
+            version: number;
+        };
+        /** @description What is on: the latest poll, `None` before any or once it was archived. */
+        ContestPayload: {
+            poll: components["schemas"]["PollView"] | null;
+        };
+        /** @enum {string} */
+        ContestType: "twitch.contest";
         /** @description A counter with its command. `name` is broadcaster text: render it as text. */
         CounterBody: {
             /** @description Who may use the command; the broadcaster always may. */
@@ -3900,6 +3966,17 @@ export interface components {
             /** @description The names of the scene rules that play it; the admin UI lists them before deleting it. */
             used_by: string[];
         };
+        NewPoll: {
+            /** @description 2–5, each up to 25 characters. */
+            choices: string[];
+            /**
+             * Format: int32
+             * @description 15–1800.
+             */
+            seconds: number;
+            /** @description Up to 60 characters. */
+            title: string;
+        };
         /** @description More than is available; nothing was deducted. */
         NotEnoughStamps: {
             /** Format: int64 */
@@ -4166,6 +4243,31 @@ export interface components {
         PlaylistName: {
             /** @description 1–100 characters after trimming. */
             name: string;
+        };
+        /** @description A choice and its votes so far (channel points votes included). `title` is raw Twitch text. */
+        PollChoiceView: {
+            id: string;
+            title: string;
+            /** Format: int64 */
+            votes: number;
+        };
+        /** @enum {string} */
+        PollStatusName: "active" | "completed" | "terminated";
+        /** @description A poll saved to start again: its question, choices and how long voting lasts. */
+        PollTemplate: {
+            choices: string[];
+            /** Format: int32 */
+            seconds: number;
+            title: string;
+        };
+        /** @description `title` is raw Twitch text. */
+        PollView: {
+            choices: components["schemas"]["PollChoiceView"][];
+            /** @description RFC 3339: when voting ends, or ended. */
+            endsAt: string;
+            id: string;
+            status: components["schemas"]["PollStatusName"];
+            title: string;
         };
         /** @description A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
         PresentationQueueEvent: {
@@ -4623,6 +4725,8 @@ export interface components {
             "screen.warnings": components["schemas"]["WarningsEvent"][];
             /** @description At most one: the latest live state. */
             "stream.status": components["schemas"]["StreamStatusEvent"][];
+            /** @description At most one: the latest poll. */
+            "twitch.contest": components["schemas"]["ContestEvent"][];
         };
         /** @enum {string} */
         SnapshotType: "snapshot";
@@ -9250,6 +9354,212 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Performance"] | null;
+                };
+            };
+        };
+    };
+    current_polls: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is on, read from Twitch (and announced as `twitch.contest`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestPayload"];
+                };
+            };
+            /** @description Not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` or `polls.unavailable` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    start_poll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPoll"];
+            };
+        };
+        responses: {
+            /** @description What is on, with the new poll */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestPayload"];
+                };
+            };
+            /** @description `polls.invalid` (over Twitch's limits), `polls.refused` (e.g. a poll is already running), or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` or `polls.unavailable` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    poll_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollTemplate"][];
+                };
+            };
+        };
+    };
+    set_poll_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PollTemplate"][];
+            };
+        };
+        responses: {
+            /** @description The saved polls as kept (trimmed) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollTemplate"][];
+                };
+            };
+            /** @description `polls.invalid`: one is over Twitch's limits, or more than 20 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    end_poll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Twitch's poll ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is on, with the poll ended (its result still shows on Twitch) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestPayload"];
+                };
+            };
+            /** @description `polls.invalid`, `polls.refused` (e.g. it already ended), or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

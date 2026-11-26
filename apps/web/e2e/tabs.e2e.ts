@@ -131,7 +131,7 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
           'chat.message': [],
           'obs.status': [],
           'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
-          'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [],
+          'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
         },
       }),
     ),
@@ -151,7 +151,7 @@ async function openWithStream(page: Page, stream: unknown) {
         type: 'snapshot',
         version: 1,
         seq: 1,
-        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [status], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] },
+        payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [status], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] },
       }),
     ),
   )
@@ -220,7 +220,7 @@ test('when every connection is fine, a narrower bar shows one "connected" light'
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
   const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
   await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
-    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] } })),
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] } })),
   )
   await page.goto('/admin/')
   const all = light(page, zh.nav.connections)
@@ -254,10 +254,10 @@ test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home',
   await expect(song).toHaveAttribute('title', zh.home.unbuilt)
   await expect(tabs(page).getByRole('link', { name: zh.nav.groups.song })).toHaveCount(0)
   // A category whose only page is not built yet is grey in the second row too.
-  await tab(page, 'interact').click()
+  await tab(page, 'viewers').click()
   const sub = page.getByRole('navigation', { name: zh.nav.sub })
-  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.nav.categories.polls })).toBeVisible()
-  await expect(sub.getByRole('link', { name: zh.nav.categories.polls })).toHaveCount(0)
+  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.nav.categories.raids })).toBeVisible()
+  await expect(sub.getByRole('link', { name: zh.nav.categories.raids })).toHaveCount(0)
   await page.goto('/admin/songs')
   await expect(page).toHaveURL(/\/admin\/$/)
 })
