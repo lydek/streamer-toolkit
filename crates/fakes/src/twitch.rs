@@ -47,6 +47,8 @@ struct Inner {
     eventsub: broadcast::Sender<String>,
     /// Ends every EventSub session, as a dropped connection would.
     close: broadcast::Sender<()>,
+    /// Ends every IRC connection.
+    irc_close: broadcast::Sender<()>,
     /// IRC lines for every chat connection.
     irc: broadcast::Sender<String>,
     keepalive: Duration,
@@ -82,6 +84,7 @@ impl FakeTwitch {
             }),
             eventsub: broadcast::channel(1024).0,
             close: broadcast::channel(1).0,
+            irc_close: broadcast::channel(1).0,
             irc: broadcast::channel(1024).0,
             keepalive,
             recorder,
@@ -162,6 +165,11 @@ impl FakeTwitch {
             "@first-msg=1;id={id} :{login}!{login}@{login}.tmi.twitch.tv PRIVMSG #{BROADCASTER_LOGIN} :{text}\r\n"
         );
         let _ = self.0.irc.send(line);
+    }
+
+    /// Ends every IRC connection; the app connects again on its own.
+    pub fn drop_irc(&self) {
+        let _ = self.0.irc_close.send(());
     }
 
     /// Ends every EventSub session; the app connects again on its own.
@@ -354,11 +362,39 @@ async fn send(socket: &mut ws::WebSocket, text: String) -> bool {
     socket.send(ws::Message::Text(text.into())).await.is_ok()
 }
 
+/// A connection attempt: logged, then refused or closed while a fault for `ws-connect <socket>` lasts.
+pub(crate) async fn refused(
+    recorder: &Recorder,
+    service: &'static str,
+    socket: &str,
+    upgrade: WebSocketUpgrade,
+) -> Result<WebSocketUpgrade, Response> {
+    recorder.connect(service, socket);
+    let Some(f) = recorder.fault(&format!("ws-connect {socket}")) else {
+        return Ok(upgrade);
+    };
+    tokio::time::sleep(f.delay).await;
+    if let Some(status) = f.status {
+        return Err(StatusCode::from_u16(status)
+            .unwrap_or(StatusCode::SERVICE_UNAVAILABLE)
+            .into_response());
+    }
+    if f.close {
+        return Err(upgrade.on_upgrade(|mut s| async move {
+            let _ = s.send(ws::Message::Close(None)).await;
+        }));
+    }
+    Ok(upgrade)
+}
+
 async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Response {
+    let upgrade = match refused(&fake.0.recorder, "twitch", "eventsub", upgrade).await {
+        Ok(upgrade) => upgrade,
+        Err(refused) => return refused,
+    };
     upgrade.on_upgrade(move |mut socket| async move {
         let session = fake.id("session");
         fake.0.world.lock().unwrap().eventsub_connects += 1;
-        fake.0.recorder.connect("twitch", "eventsub");
         let keepalive = fake.0.keepalive;
         let welcome = json!({"metadata": {"message_id": fake.id("message"), "message_type": "session_welcome",
                                           "message_timestamp": TIMESTAMP},
@@ -445,7 +481,18 @@ async fn record(State(fake): State<FakeTwitch>, request: Request, next: Next) ->
     let params = metrics::hash(&[query.as_bytes(), &body]);
     let in_flight = fake.0.recorder.start("twitch");
     let started = Instant::now();
-    let response = next.run(Request::from_parts(parts, Body::from(body))).await;
+    let fault = fake.0.recorder.fault(&key);
+    if let Some(f) = fault {
+        tokio::time::sleep(f.delay).await;
+    }
+    let response = match fault.and_then(|f| f.status) {
+        Some(status) => (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            Json(json!({"status": status, "message": "fake fault"})),
+        )
+            .into_response(),
+        None => next.run(Request::from_parts(parts, Body::from(body))).await,
+    };
     fake.0.recorder.call(Call {
         at: started,
         service: "twitch",
@@ -461,14 +508,22 @@ async fn record(State(fake): State<FakeTwitch>, request: Request, next: Next) ->
 
 /// Anonymous IRC: acknowledges the capabilities, confirms the join and pings now and then.
 async fn irc(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Response {
+    let upgrade = match refused(&fake.0.recorder, "twitch", "irc", upgrade).await {
+        Ok(upgrade) => upgrade,
+        Err(refused) => return refused,
+    };
     upgrade.on_upgrade(move |mut socket| async move {
-        fake.0.recorder.connect("twitch", "irc");
         let mut nick = String::from("justinfan");
         let mut lines = fake.0.irc.subscribe();
+        let mut close = fake.0.irc_close.subscribe();
         let mut every = tokio::time::interval(fake.0.keepalive / 2);
         every.tick().await;
         loop {
             tokio::select! {
+                _ = close.recv() => {
+                    let _ = socket.send(ws::Message::Close(None)).await;
+                    return;
+                }
                 _ = every.tick() => if !send(&mut socket, "PING :tmi.twitch.tv\r\n".into()).await { return },
                 line = lines.recv() => match line {
                     Ok(line) => if !send(&mut socket, line).await { return },

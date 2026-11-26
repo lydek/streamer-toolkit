@@ -34,6 +34,13 @@ pub const RECONNECT_BURST: usize = 3;
 pub const HELIX_POINTS_PER_MINUTE: f64 = 800.0;
 /// Twitch asks apps to validate tokens at least hourly.
 pub const VALIDATE_EVERY: Duration = Duration::from_secs(3600);
+/// After a failure, each retry gap must be at least this many times the previous one until `RETRY_CAP`: steady or
+/// shrinking retries are no backoff (`integrations::backoff` doubles).
+pub const RETRY_GROWTH: f64 = 1.5;
+/// Gaps this long count as capped, so equal capped gaps are fine.
+pub const RETRY_CAP: Duration = Duration::from_secs(55);
+/// More retries than this in one run look like retrying without end.
+pub const RETRY_LIMIT: usize = 20;
 /// shortcut: the oldest half is dropped past this many entries; enough for a 10-minute load run.
 const MAX_ENTRIES: usize = 500_000;
 
@@ -69,6 +76,17 @@ struct Log {
     /// `InputVolumeMeters` sent; counted, not logged, since no call is expected after them.
     meters: u64,
     in_flight: HashMap<&'static str, u32>,
+    /// Faults set with `fake-services fault`, by call key.
+    faults: HashMap<String, Fault>,
+}
+
+/// A fault for one call key: answer with `status`, close the connection, and/or wait `delay` first, until `until`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fault {
+    pub status: Option<u16>,
+    pub close: bool,
+    pub delay: Duration,
+    pub until: Instant,
 }
 
 /// Shared by the fake OBS and the fake Twitch, so one timeline holds both.
@@ -83,6 +101,7 @@ impl Default for Recorder {
             events: Vec::new(),
             meters: 0,
             in_flight: HashMap::new(),
+            faults: HashMap::new(),
         })))
     }
 }
@@ -165,6 +184,23 @@ impl Recorder {
             kind: kind.into(),
         });
         trim(&mut log.events);
+    }
+
+    /// Makes calls with this key fail, close or slow down until `fault.until`.
+    pub fn set_fault(&self, key: &str, fault: Fault) {
+        self.0.lock().unwrap().faults.insert(key.into(), fault);
+    }
+
+    pub fn clear_faults(&self) {
+        self.0.lock().unwrap().faults.clear();
+    }
+
+    /// The fault for `key` while it lasts.
+    pub fn fault(&self, key: &str) -> Option<Fault> {
+        let mut log = self.0.lock().unwrap();
+        let now = Instant::now();
+        log.faults.retain(|_, f| f.until > now);
+        log.faults.get(key).copied()
     }
 
     pub fn reset(&self) {
@@ -380,6 +416,64 @@ pub fn analyze(calls: &[Call], events: &[Sent], since: Instant, now: Instant) ->
         }
     }
 
+    // Retries: identical requests after a failed answer must wait longer each time, and stop at some point.
+    // Failures worth retrying: server errors and 429. OBS's 600s are answers about the resource (e.g. 604: this
+    // input has no audio), which the app asks on purpose, so they never start a retry run.
+    let failed = |c: &Call| {
+        (c.status >= 500 || c.status == 429)
+            && !(c.service == "obs" && (600..700).contains(&c.status))
+    };
+    let mut retries = Vec::new();
+    for ((key, _), list) in &identical {
+        let mut i = 0;
+        while i < list.len() {
+            if !failed(list[i]) {
+                i += 1;
+                continue;
+            }
+            // A run: the failed call and every identical call that followed a failure.
+            let mut end = i;
+            while end + 1 < list.len() && failed(list[end]) {
+                end += 1;
+            }
+            let run = &list[i..=end];
+            i = end + 1;
+            if run.len() < 2 {
+                continue;
+            }
+            let times: Vec<Instant> = run.iter().map(|c| c.at).collect();
+            let g = gaps(&times);
+            let start = times[0].duration_since(since);
+            retries.push(
+                json!({"key": key, "at_s": secs(start), "retries": run.len() - 1,
+                                "gaps_ms": g.iter().take(20).map(|d| ms(*d)).collect::<Vec<_>>()}),
+            );
+            let steady = g.windows(2).position(|w| {
+                w[0] < RETRY_CAP && w[1].as_secs_f64() < RETRY_GROWTH * w[0].as_secs_f64()
+            });
+            if let Some(at) = steady {
+                let detail = format!(
+                    "retried after {} s following a {} s wait: no backoff",
+                    secs(g[at + 1]),
+                    secs(g[at])
+                );
+                warnings.push(warning(
+                    "retry_backoff",
+                    key,
+                    times[at + 2].duration_since(since),
+                    detail,
+                ));
+            }
+            if run.len() - 1 > RETRY_LIMIT {
+                let detail = format!(
+                    "{} retries without stopping (limit {RETRY_LIMIT})",
+                    run.len() - 1
+                );
+                warnings.push(warning("retry_without_end", key, start, detail));
+            }
+        }
+    }
+
     // Headers and tokens.
     let mut problems: BTreeMap<(&str, &str), (usize, Instant)> = BTreeMap::new();
     for c in &calls {
@@ -433,6 +527,7 @@ pub fn analyze(calls: &[Call], events: &[Sent], since: Instant, now: Instant) ->
                   "bucket_percent": (helix_peak as f64 / HELIX_POINTS_PER_MINUTE * 1000.0).round() / 10.0},
         "validate": {"total": validates.len(),
                      "avg_interval_s": (!vg.is_empty()).then(|| secs(vg.iter().sum::<Duration>() / vg.len() as u32))},
+        "retries": retries,
         "warnings": warnings,
     })
 }
@@ -480,10 +575,24 @@ pub fn text(report: &Value) -> String {
         report["helix"]["bucket_percent"]
     ));
     out.push_str(&format!(
-        "token checks (/validate): {}, every {} s on average\n\nwarnings\n",
+        "token checks (/validate): {}, every {} s on average\n",
         report["validate"]["total"],
         n(&report["validate"]["avg_interval_s"])
     ));
+    let retries = report["retries"].as_array().cloned().unwrap_or_default();
+    if !retries.is_empty() {
+        out.push_str("\nretries after a failure\n");
+    }
+    for r in retries {
+        out.push_str(&format!(
+            "  {:>8} s  {}: {} retries, gaps ms {}\n",
+            n(&r["at_s"]),
+            r["key"].as_str().unwrap_or_default(),
+            n(&r["retries"]),
+            n(&r["gaps_ms"])
+        ));
+    }
+    out.push_str("\nwarnings\n");
     let warnings = report["warnings"].as_array().cloned().unwrap_or_default();
     if warnings.is_empty() {
         out.push_str("  none\n");
@@ -633,6 +742,63 @@ mod tests {
             kinds(&analyze(&calls, &[], base, at(base, 3_700_000))),
             ["validate"]
         );
+    }
+
+    fn failing(base: Instant, times: &[u64], key: &str) -> Vec<Call> {
+        times
+            .iter()
+            .map(|t| Call {
+                status: 500,
+                ..call(base, *t, key, 1)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn retries_must_back_off_and_stop() {
+        let base = Instant::now();
+        let doubling = failing(base, &[0, 1000, 3000, 7000, 15000], "GET /helix/users");
+        let r = analyze(&doubling, &[], base, at(base, 20_000));
+        assert_eq!(r["retries"][0]["retries"], 4);
+        assert_eq!(
+            r["retries"][0]["gaps_ms"],
+            json!([1000.0, 2000.0, 4000.0, 8000.0])
+        );
+        assert!(!kinds(&r).contains(&"retry_backoff".to_owned()), "{r}");
+
+        let steady = failing(base, &[0, 2000, 4000, 6000], "GET /helix/users");
+        assert!(
+            kinds(&analyze(&steady, &[], base, at(base, 10_000)))
+                .contains(&"retry_backoff".to_owned())
+        );
+
+        let endless: Vec<u64> = (0..25).map(|i| i * 60_000).collect();
+        let r = analyze(
+            &failing(base, &endless, "GET /helix/users"),
+            &[],
+            base,
+            at(base, 1_600_000),
+        );
+        let found = kinds(&r);
+        assert!(found.contains(&"retry_without_end".to_owned()), "{found:?}");
+        assert!(
+            !found.contains(&"retry_backoff".to_owned()),
+            "capped gaps are fine, the count is not"
+        );
+    }
+
+    #[test]
+    fn obs_resource_answers_are_no_retries() {
+        let base = Instant::now();
+        let probes: Vec<Call> = (0..30)
+            .map(|i| Call {
+                status: 604,
+                ..call(base, i * 2000, "GetInputMute", 1)
+            })
+            .collect();
+        let r = analyze(&probes, &[], base, at(base, 70_000));
+        assert!(r["retries"].as_array().unwrap().is_empty(), "{r}");
+        assert!(kinds(&r).is_empty(), "{r}");
     }
 
     #[test]

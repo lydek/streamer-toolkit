@@ -1,5 +1,5 @@
-//! The control API under `/_control/…` on the fake Twitch's port, and the `fake-services send|obs|eventsub|scenario`
-//! commands that call it. Only `127.0.0.1` ever serves it.
+//! The control API under `/_control/…` on the fake Twitch's port, and the
+//! `fake-services send|obs|eventsub|scenario|stats|fault` commands that call it. Only `127.0.0.1` ever serves it.
 
 use std::{
     io::{Read, Write},
@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 
 use crate::{
     events::{self, Params},
+    metrics::Fault,
     obs::{FakeObs, Stats},
     twitch::FakeTwitch,
 };
@@ -36,7 +37,67 @@ pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
         .route("/_control/eventsub/drop", post(eventsub_drop))
         .route("/_control/scenario", post(scenario))
         .route("/_control/stats", post(stats))
+        .route("/_control/fault", post(fault))
         .with_state(Fakes { obs, twitch })
+}
+
+/// `{"key", "status"?, "delay_ms"?, "for_ms"?, "close"?}` sets a fault for a call key (`GET /helix/users`, an OBS
+/// request type, or `ws-connect eventsub|irc|obs`); `{"clear": true}` removes them all.
+async fn fault(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    let recorder = fakes.twitch.recorder();
+    if body["clear"].as_bool() == Some(true) {
+        recorder.clear_faults();
+        return Json(json!({ "cleared": true })).into_response();
+    }
+    let Some(key) = body["key"].as_str().filter(|k| !k.is_empty()) else {
+        return bad("a fault needs a call key".into());
+    };
+    let status = number(&body["status"]).map(|s| s as u16);
+    if status.is_some_and(|s| !(100..=999).contains(&s)) {
+        return bad("the status must be 100–999".into());
+    }
+    let delay = Duration::from_millis(number(&body["delay_ms"]).unwrap_or(0.0).max(0.0) as u64);
+    let lasts = Duration::from_millis(number(&body["for_ms"]).unwrap_or(60_000.0).max(0.0) as u64);
+    let close = body["close"].as_bool() == Some(true);
+    if status.is_none() && !close && delay.is_zero() {
+        return bad("a fault needs --status, --delay or --close".into());
+    }
+    let until = std::time::Instant::now() + lasts;
+    recorder.set_fault(
+        key,
+        Fault {
+            status,
+            close,
+            delay,
+            until,
+        },
+    );
+    // Closing also ends the connections that are open now.
+    if close {
+        match key {
+            "ws-connect eventsub" => fakes.twitch.drop_eventsub(),
+            "ws-connect irc" => fakes.twitch.drop_irc(),
+            "ws-connect obs" => fakes.obs.drop_connections(),
+            _ => {}
+        }
+    }
+    Json(
+        json!({"key": key, "status": status, "close": close, "delay_ms": delay.as_millis() as u64,
+                "for_ms": lasts.as_millis() as u64}),
+    )
+    .into_response()
+}
+
+/// `500ms`, `3s` or `2m` in milliseconds.
+fn duration_ms(text: &str) -> Option<u64> {
+    let (number, unit) = text.split_at(text.find(|c: char| !c.is_ascii_digit())?);
+    let n: u64 = number.parse().ok()?;
+    match unit {
+        "ms" => Some(n),
+        "s" => n.checked_mul(1000),
+        "m" => n.checked_mul(60_000),
+        _ => None,
+    }
 }
 
 fn bad(message: String) -> Response {
@@ -265,6 +326,32 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
             }
             Ok(("/_control/stats", body))
         }
+        "fault" => {
+            let (first, rest) = rest
+                .split_first()
+                .ok_or("fault needs a call key or --clear")?;
+            if first == "--clear" {
+                body["clear"] = json!(true);
+                return Ok(("/_control/fault", body));
+            }
+            body["key"] = json!(first);
+            let mut it = rest.iter();
+            while let Some(flag) = it.next() {
+                let mut value = || it.next().ok_or_else(|| format!("{flag} needs a value"));
+                let time = |v: &String| {
+                    duration_ms(v)
+                        .ok_or_else(|| format!("{flag} needs a time like 500ms, 3s or 2m"))
+                };
+                match flag.as_str() {
+                    "--status" => body["status"] = json!(value()?),
+                    "--delay" => body["delay_ms"] = json!(time(value()?)?),
+                    "--for" => body["for_ms"] = json!(time(value()?)?),
+                    "--close" => body["close"] = json!(true),
+                    _ => return Err(format!("unexpected argument {flag}")),
+                }
+            }
+            Ok(("/_control/fault", body))
+        }
         "scenario" => {
             let name = rest.first().ok_or("scenario needs a name")?;
             if !SCENARIOS.iter().any(|(n, _)| n == name) {
@@ -329,6 +416,30 @@ mod tests {
             cmd(&["scenario", "gift-bomb"]).unwrap().1["name"],
             "gift-bomb"
         );
+        let (path, body) = cmd(&[
+            "fault",
+            "GET /helix/users",
+            "--status",
+            "500",
+            "--for",
+            "2m",
+            "--delay",
+            "300ms",
+        ])
+        .unwrap();
+        assert_eq!(path, "/_control/fault");
+        assert_eq!(
+            body,
+            json!({"key": "GET /helix/users", "status": "500", "for_ms": 120_000, "delay_ms": 300})
+        );
+        assert_eq!(
+            cmd(&["fault", "ws-connect obs", "--close"]).unwrap().1["close"],
+            true
+        );
+        assert_eq!(
+            cmd(&["fault", "--clear"]).unwrap().1,
+            json!({"clear": true})
+        );
         let (path, body) = cmd(&["stats", "--reset", "--json"]).unwrap();
         assert_eq!(
             (path, body),
@@ -347,6 +458,9 @@ mod tests {
             &["obs", "fly"],
             &["scenario", "nope"],
             &["stats", "--nope"],
+            &["fault"],
+            &["fault", "GET /helix/users", "--for", "soon"],
+            &["fault", "GET /helix/users", "--status"],
             &["nope"],
         ] {
             assert!(cmd(bad).is_err(), "{bad:?}");
