@@ -104,23 +104,35 @@ fn bad(message: String) -> Response {
     (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
 }
 
+/// Sends the event a control body describes (`send` command or panel): `{"kind", "first"?, …Params}`.
+pub fn send_body(twitch: &FakeTwitch, body: &Value) -> Result<Value, String> {
+    let kind = body["kind"].as_str().unwrap_or_default();
+    let first = body["first"].as_bool().unwrap_or(false);
+    send_event(twitch, kind, &Params::from_json(body), first)
+}
+
 /// Sends one event (and what Twitch sends with it). Returns which Twitch types went out and which the app has no
 /// subscription for.
-fn send_event(fakes: &Fakes, kind: &str, p: &Params, first: bool) -> Result<Value, String> {
+pub fn send_event(
+    twitch: &FakeTwitch,
+    kind: &str,
+    p: &Params,
+    first: bool,
+) -> Result<Value, String> {
     let twitch_type =
         events::twitch_type(kind).ok_or_else(|| format!("unknown event kind {kind}"))?;
     let (mut sent, mut skipped) = (Vec::new(), Vec::new());
-    let id = fakes.twitch.id("fake");
+    let id = twitch.id("fake");
     let mut out = |t: &str, event: Value| {
-        if fakes.twitch.notify(t, event, Some(&id)) {
+        if twitch.notify(t, event, Some(&id)) {
             sent.push(t.to_owned());
         } else {
             skipped.push(t.to_owned());
         }
     };
     match twitch_type {
-        "stream.online" => fakes.twitch.set_live(true),
-        "stream.offline" => fakes.twitch.set_live(false),
+        "stream.online" => twitch.set_live(true),
+        "stream.offline" => twitch.set_live(false),
         _ => {}
     }
     out(
@@ -141,15 +153,13 @@ fn send_event(fakes: &Fakes, kind: &str, p: &Params, first: bool) -> Result<Valu
         }
     }
     if twitch_type == "channel.chat.message" && first {
-        fakes.twitch.first_chat(&id, &p.user, &p.message);
+        twitch.first_chat(&id, &p.user, &p.message);
     }
     Ok(json!({"sent": sent, "skipped": skipped, "id": id}))
 }
 
 async fn send(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
-    let kind = body["kind"].as_str().unwrap_or_default();
-    let first = body["first"].as_bool().unwrap_or(false);
-    match send_event(&fakes, kind, &Params::from_json(&body), first) {
+    match send_body(&fakes.twitch, &body) {
         Ok(result) => Json(result).into_response(),
         Err(e) => bad(e),
     }
@@ -229,20 +239,20 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ),
 ];
 
-async fn scenario(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
-    let name = body["name"].as_str().unwrap_or_default();
+/// Runs a scenario to its end (the redemption flood takes about 3 s).
+pub async fn run_scenario(obs: &FakeObs, twitch: &FakeTwitch, name: &str) -> Result<Value, String> {
     let p = Params::default();
-    let result = match name {
+    match name {
         "stream-start" => {
-            fakes.obs.set_output(Some(true), None);
-            send_event(&fakes, "online", &p, false)
+            obs.set_output(Some(true), None);
+            send_event(twitch, "online", &p, false)
         }
         "stream-end" => {
-            fakes.obs.set_output(Some(false), None);
-            send_event(&fakes, "offline", &p, false)
+            obs.set_output(Some(false), None);
+            send_event(twitch, "offline", &p, false)
         }
         "gift-bomb" => send_event(
-            &fakes,
+            twitch,
             "gift",
             &Params {
                 user: "generous_viewer".into(),
@@ -252,19 +262,28 @@ async fn scenario(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Respon
             false,
         ),
         "redemption-flood" => {
-            tokio::spawn(async move {
-                for n in 1..=30 {
-                    let viewer = Params {
-                        user: format!("viewer_{n}"),
-                        ..Params::default()
-                    };
-                    let _ = send_event(&fakes, "redeem", &viewer, false);
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-            Ok(json!({"started": "redemption-flood"}))
+            for n in 1..=30 {
+                let viewer = Params {
+                    user: format!("viewer_{n}"),
+                    ..Params::default()
+                };
+                let _ = send_event(twitch, "redeem", &viewer, false);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Ok(json!({"done": "redemption-flood"}))
         }
         _ => Err(format!("unknown scenario {name}")),
+    }
+}
+
+async fn scenario(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    let name = body["name"].as_str().unwrap_or_default().to_owned();
+    // The flood runs on after answering, so the command returns at once.
+    let result = if name == "redemption-flood" {
+        tokio::spawn(async move { run_scenario(&fakes.obs, &fakes.twitch, &name).await });
+        Ok(json!({"started": "redemption-flood"}))
+    } else {
+        run_scenario(&fakes.obs, &fakes.twitch, &name).await
     };
     match result {
         Ok(result) => Json(result).into_response(),
