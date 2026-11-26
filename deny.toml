@@ -26,6 +26,12 @@ allow = [
     "MPL-2.0",
 ]
 confidence-threshold = 0.9
+# BSL-1.0 (permissive, OSI) only for the clipboard crates iced pulls in on Windows, for the fake-services panel
+# (`crates/fakes`, `ui` feature, never shipped). Not allowed anywhere else.
+exceptions = [
+    { allow = ["BSL-1.0"], crate = "clipboard-win" },
+    { allow = ["BSL-1.0"], crate = "error-code" },
+]
 
 [licenses.private]
 # Workspace crates are not published; their own MIT license is covered by the root LICENSE.

@@ -1,6 +1,7 @@
-// `pnpm dev:fake [--keep]`: the fake OBS and fake Twitch (crates/fakes) plus a dev build in its own data folder,
-// signed in and connected from the start. The folder is made fresh each run (fake events reach the business records);
-// `--keep` keeps the last one. Send events with `cargo run -q -p fakes -- send follow` (see docs/dev.md).
+// `pnpm dev:fake [--keep] [--no-ui]`: the fake OBS and fake Twitch (crates/fakes) with their control panel, plus a
+// dev build in its own data folder, signed in and connected from the start. The folder is made fresh each run (fake
+// events reach the business records); `--keep` keeps the last one. `--no-ui` skips the panel (and its build); send
+// events with `cargo run -q -p fakes -- send follow` then (see docs/dev.md). Closing the panel ends the run.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createConnection } from 'node:net'
@@ -17,6 +18,15 @@ export const HOST_PORT = 47812
 const DEV_MARKER = 'dev-folder'
 
 /** Makes the data folder: the dev marker, and settings that point at the fakes (written with `port`, see DEV-2). */
+/** `cargo build` and `fake-services` arguments: the panel unless `--no-ui`. */
+export function fakesArgs(argv) {
+  const ui = !argv.includes('--no-ui')
+  return {
+    build: ['build', '-q', '-p', 'fakes', ...(ui ? ['--features', 'ui'] : [])],
+    run: ['--obs-port', String(OBS_PORT), '--twitch-port', String(TWITCH_PORT), ...(ui ? ['--ui'] : [])],
+  }
+}
+
 export function prepare(dir, keep) {
   if (!keep) rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
@@ -61,12 +71,11 @@ async function main() {
     }
   }
   prepare(DATA_DIR, keep)
-  const build = spawnSync('cargo', ['build', '-q', '-p', 'fakes'], { cwd: root, stdio: 'inherit', shell: false })
+  const args = fakesArgs(process.argv)
+  const build = spawnSync('cargo', args.build, { cwd: root, stdio: 'inherit', shell: false })
   if (build.status !== 0) process.exit(build.status ?? 1)
   const exe = join(root, 'target', 'debug', process.platform === 'win32' ? 'fake-services.exe' : 'fake-services')
-  const fakes = spawn(exe, ['--obs-port', String(OBS_PORT), '--twitch-port', String(TWITCH_PORT)], {
-    stdio: 'inherit',
-  })
+  const fakes = spawn(exe, args.run, { stdio: 'inherit' })
   let app
   process.on('exit', () => {
     fakes.kill()
@@ -74,8 +83,9 @@ async function main() {
   })
   process.on('SIGINT', () => process.exit(130))
   fakes.on('exit', (code) => {
-    console.error(`fake-services stopped (${code}).`)
-    process.exit(1)
+    // 0: the panel was closed, which ends the run.
+    if (code !== 0) console.error(`fake-services stopped (${code}).`)
+    process.exit(code === 0 ? 0 : 1)
   })
   const up = async () => (await listening(OBS_PORT)) && (await listening(TWITCH_PORT))
   if (!(await waitUntil(up, () => fakes.exitCode !== null))) {

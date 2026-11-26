@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { HOST_PORT, OBS_PORT, prepare, waitUntil } from './dev-fake.mjs'
+import { HOST_PORT, OBS_PORT, fakesArgs, prepare, waitUntil } from './dev-fake.mjs'
 
 test('prepare makes a fresh dev folder that points at the fakes', () => {
   const dir = join(mkdtempSync(join(tmpdir(), 'st-dev-fake-')), 'data')
@@ -40,4 +40,13 @@ test('waiting for the fakes stops as soon as they exit or come up', async () => 
   assert.equal(stopped, false)
   assert.equal(checks, 0, 'an exited fake-services is not waited for')
   assert.equal(await waitUntil(async () => false, () => false, 3, 1), false, 'never up')
+})
+
+test('the panel is built and opened unless --no-ui', () => {
+  const ui = fakesArgs(['node', 'dev-fake.mjs'])
+  assert.deepEqual(ui.build.slice(-2), ['--features', 'ui'])
+  assert.equal(ui.run.at(-1), '--ui')
+  const plain = fakesArgs(['node', 'dev-fake.mjs', '--no-ui'])
+  assert.ok(!plain.build.includes('--features'))
+  assert.ok(!plain.run.includes('--ui'))
 })
