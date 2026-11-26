@@ -90,12 +90,9 @@
         @update:log="(next) => (log = next.paused ? pause(log) : resume(log))"
       />
     </div>
-    <!-- Sending needs the chat send channel (a later phase); the box shows where it will be. -->
-    <div class="send">
+    <ChatComposer class="send">
       <RewardPicker />
-      <InputText disabled :placeholder="t('dock.sendLater')" :aria-label="t('dock.send')" />
-      <Button icon="pi pi-send" disabled :aria-label="t('dock.send')" />
-    </div>
+    </ChatComposer>
   </aside>
 </template>
 
@@ -103,6 +100,7 @@
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useToast } from 'primevue/usetoast'
+import ChatComposer from './ChatComposer.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'

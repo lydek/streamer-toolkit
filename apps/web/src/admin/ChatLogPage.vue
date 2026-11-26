@@ -54,12 +54,14 @@
           </template>
         </li>
       </ol>
+      <ChatComposer class="composer" />
     </section>
   </FullPage>
 </template>
 
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import ChatComposer from './ChatComposer.vue'
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
@@ -347,5 +349,9 @@ time {
 
 .event {
   color: var(--p-primary-color);
+}
+.composer {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--p-surface-800);
 }
 </style>

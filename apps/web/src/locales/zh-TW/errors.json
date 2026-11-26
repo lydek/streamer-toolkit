@@ -78,7 +78,10 @@
       "not_found": "最近事件裡已經沒有這則特效。"
     },
     "chat": {
-      "storage_failed": "讀不到聊天紀錄。"
+      "storage_failed": "讀不到聊天紀錄。",
+      "send_invalid": "訊息不能是空的，最多 500 字。",
+      "send_dropped": "Twitch 沒有送出這則訊息，例如和上一則重複，或被 AutoMod 擋下。",
+      "send_refused": "Twitch 拒絕了這則訊息，請修改內容後再送出。"
     },
     "chat_log": {
       "invalid_time": "時間格式不正確。"

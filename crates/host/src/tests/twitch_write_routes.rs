@@ -1,4 +1,4 @@
-//! 直播資訊 against a fake Helix, signed in from a stored token.
+//! Writing to Twitch (直播資訊, sending chat) against a fake Helix, signed in from a stored token.
 use super::*;
 use axum::{
     Json,
@@ -33,6 +33,11 @@ struct Fake {
     searches: Arc<Mutex<Vec<String>>>,
     /// Status the PATCH answers with.
     patch_status: Arc<Mutex<u16>>,
+    sent: Arc<Mutex<Vec<serde_json::Value>>>,
+    /// Whether Twitch says a sent message went out.
+    is_sent: Arc<Mutex<bool>>,
+    /// Status a sent message is refused with; 0: accepted.
+    send_refused: Arc<Mutex<u16>>,
 }
 
 async fn fake_helix(fake: Fake) -> String {
@@ -55,6 +60,20 @@ async fn fake_helix(fake: Fake) -> String {
             get(|AxumState(f): AxumState<Fake>, Query(q): Query<HashMap<String, String>>| async move {
                 f.searches.lock().unwrap().push(q["query"].clone());
                 Json(serde_json::json!({ "data": [{ "id": "26936", "name": "Music", "box_art_url": "" }] }))
+            }),
+        )
+        .route(
+            "/chat/messages",
+            axum::routing::post(|AxumState(f): AxumState<Fake>, Json(body): Json<serde_json::Value>| async move {
+                use axum::response::IntoResponse;
+                f.sent.lock().unwrap().push(body);
+                let refused = *f.send_refused.lock().unwrap();
+                if refused != 0 {
+                    return StatusCode::from_u16(refused).unwrap().into_response();
+                }
+                let is_sent = *f.is_sent.lock().unwrap();
+                Json(serde_json::json!({ "data": [{ "message_id": "m1", "is_sent": is_sent, "drop_reason": null }] }))
+                    .into_response()
             }),
         )
         .with_state(fake);
@@ -178,4 +197,46 @@ async fn categories_are_searched_by_name() {
         serde_json::json!([{ "id": "26936", "name": "Music" }])
     );
     assert_eq!(fake.searches.lock().unwrap().as_slice(), ["Just Chatting"]);
+}
+
+#[tokio::test]
+async fn chat_is_sent_as_the_streamer_and_a_dropped_message_says_so() {
+    let fake = Fake {
+        is_sent: Arc::new(Mutex::new(true)),
+        ..Fake::default()
+    };
+    let app = signed_in_app("chat", &fake).await;
+    let send = |text: &str| {
+        req(
+            Method::POST,
+            "/api/admin/chat/send",
+            Some(serde_json::json!({ "text": text })),
+        )
+    };
+
+    let res = app.clone().oneshot(send("  大家好  ")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json(res).await, serde_json::json!({ "message_id": "m1" }));
+    assert_eq!(
+        fake.sent.lock().unwrap().as_slice(),
+        [serde_json::json!({ "broadcaster_id": "42", "sender_id": "42", "message": "大家好" })]
+    );
+
+    for text in ["   ", &"字".repeat(501)] {
+        let res = app.clone().oneshot(send(text)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(json(res).await["code"], "chat.send_invalid");
+    }
+    assert_eq!(fake.sent.lock().unwrap().len(), 1);
+
+    *fake.is_sent.lock().unwrap() = false;
+    let res = app.clone().oneshot(send("again")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json(res).await["code"], "chat.send_dropped");
+
+    // Twitch refuses the message itself: said as such, not as a Twitch outage.
+    *fake.send_refused.lock().unwrap() = 400;
+    let res = app.oneshot(send("again")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(res).await["code"], "chat.send_refused");
 }

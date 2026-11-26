@@ -831,6 +831,74 @@
         }
       }
     },
+    "/api/admin/chat/send": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "chat_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSendBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`chat.send_invalid` (empty or over 500 characters), `chat.send_refused` (Twitch refused the message), or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required`: the sign-in lacks `user:write:chat`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`chat.send_dropped`: Twitch took the message but did not send it (e.g. a duplicate or AutoMod)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/checkin/card-style": {
       "get": {
         "tags": [
@@ -8893,6 +8961,29 @@
           "userName": {
             "type": "string",
             "description": "Raw viewer text; overlays escape it when rendering."
+          }
+        }
+      },
+      "ChatSendBody": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatSent": {
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "description": "Twitch's ID of the message, as chat events carry it."
           }
         }
       },
