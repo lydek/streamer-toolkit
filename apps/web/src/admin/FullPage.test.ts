@@ -83,19 +83,19 @@ describe('FullPage page tabs', () => {
   })
 
   it('shows a page not built yet greyed, with no link and out of the tab order', async () => {
-    const off = (await at('/redemptions')).get('nav.page-tabs .off')
+    const off = (await at('/chat-log')).get('nav.page-tabs .off')
     expect(off.element.tagName).toBe('SPAN')
     expect(off.attributes('aria-disabled')).toBe('true')
     expect(off.attributes('tabindex')).toBeUndefined()
-    expect(off.text()).toContain(t('nav.pageTabs.rewards'))
+    expect(off.text()).toContain(t('pages.chatWindow.name'))
   })
 
   it('links a page not built yet in dev mode', async () => {
     vi.stubEnv('MODE', 'development')
     try {
-      const nav = (await at('/redemptions')).get('nav.page-tabs')
+      const nav = (await at('/chat-log')).get('nav.page-tabs')
       expect(nav.find('.off').exists()).toBe(false)
-      expect(nav.findAll('a').map((a) => a.text())).toContain(t('nav.pageTabs.rewards'))
+      expect(nav.findAll('a').map((a) => a.text())).toContain(t('pages.chatWindow.name'))
     } finally {
       vi.unstubAllEnvs()
     }

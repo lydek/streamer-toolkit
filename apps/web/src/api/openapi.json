@@ -5257,6 +5257,118 @@
         }
       }
     },
+    "/api/admin/rewards": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_rewards",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChannelReward"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`twitch.request_refused` (e.g. a channel without channel points), `twitch.rate_limited` or `twitch.unreachable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/rewards/{id}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_reward",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewardChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`rewards.invalid`, `rewards.refused`, or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` (no `channel:manage:redemptions`) or `rewards.not_ours` (made in the Twitch dashboard or by another app)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`rewards.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/screen-tools/appearance": {
       "get": {
         "tags": [
@@ -8475,6 +8587,86 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ChannelReward": {
+        "type": "object",
+        "description": "A custom reward. `title` and `prompt` are raw Twitch text.",
+        "required": [
+          "id",
+          "title",
+          "prompt",
+          "cost",
+          "background_color",
+          "is_enabled",
+          "is_paused",
+          "is_user_input_required",
+          "skip_queue",
+          "manageable"
+        ],
+        "properties": {
+          "background_color": {
+            "type": "string",
+            "description": "`#RRGGBB`."
+          },
+          "cooldown_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`None`: no cooldown.",
+            "minimum": 0
+          },
+          "cost": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "is_paused": {
+            "type": "boolean"
+          },
+          "is_user_input_required": {
+            "type": "boolean"
+          },
+          "manageable": {
+            "type": "boolean",
+            "description": "Made by the toolkit, so it can change the reward and its redemptions; others are read-only here."
+          },
+          "max_per_stream": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`None`: no limit.",
+            "minimum": 0
+          },
+          "max_per_user_per_stream": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`None`: no limit.",
+            "minimum": 0
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "skip_queue": {
+            "type": "boolean",
+            "description": "Redemptions are marked fulfilled at once instead of waiting in the queue."
+          },
+          "title": {
             "type": "string"
           }
         }
@@ -12759,6 +12951,24 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "RewardChange": {
+        "type": "object",
+        "description": "What changes; fields left out stay as they are.",
+        "properties": {
+          "is_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "is_paused": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         }
       },
