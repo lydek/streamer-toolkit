@@ -38,6 +38,7 @@ use crate::{
         admin::rewards::update_reward,
         admin::rewards::create_reward,
         admin::rewards::delete_reward,
+        admin::rewards::take_over_reward,
         admin::checkin_admin::checkin_outbox,
         admin::checkin_admin::retry_dead_letter,
         admin::checkin_admin::skip_dead_letter,

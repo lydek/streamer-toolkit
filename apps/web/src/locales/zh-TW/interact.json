@@ -320,6 +320,23 @@
     "full": "已達 Twitch 的 {max} 個獎勵上限",
     "actions": "操作",
     "editLabel": "編輯：{name}",
+    "takeover": {
+      "button": "接管",
+      "title": "接管「{name}」？",
+      "text": "本工具會建立一個設定一樣、由本工具管理的獎勵；用到原本獎勵的打卡、音效、影片與 GIF 會改用新的。原本的獎勵本工具改不了，請到 Twitch 後台把它停用，不然觀眾會看到兩個。",
+      "name": "新獎勵的名稱",
+      "help": "Twitch 不允許兩個同名的獎勵，名稱要和原本的不同；或先到 Twitch 後台把原本的改名或刪除。",
+      "sameName": "頻道上已經有這個名稱的獎勵（包括原本的），請改個名字。",
+      "ok": "接管",
+      "done": "已建立新的獎勵，請到 Twitch 後台停用原本的「{name}」。",
+      "partly": "已建立新的獎勵，但{uses}沒能改用它，請到那裡重新選；也請到 Twitch 後台停用原本的「{name}」。",
+      "notPaused": "原本的獎勵是暫停的，但新的「{name}」沒能暫停，觀眾現在就能兌換；請在獎勵頁把它暫停。",
+      "uses": {
+        "checkin": "打卡",
+        "sound": "音效",
+        "media": "影片與 GIF"
+      }
+    },
     "dialog": {
       "addTitle": "新增獎勵",
       "editTitle": "編輯獎勵",

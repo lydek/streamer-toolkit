@@ -116,6 +116,7 @@ describe('adding, editing and deleting', () => {
     await w.get('#rwd-cost').setValue('200')
     await w.get('#rwd-cost').trigger('blur')
     expect(w.text()).toContain(t('rewards.dialog.titleTaken'))
+    expect(w.get('.reward-dialog').findAll('button').find((b) => b.text() === t('rewards.dialog.save'))!.attributes('disabled')).toBeDefined()
     await w.get('#rwd-form').trigger('submit')
     expect(post).not.toHaveBeenCalled()
 
@@ -160,5 +161,39 @@ describe('adding, editing and deleting', () => {
     const w = await open()
     expect(button(w, t('rewards.add')).attributes('disabled')).toBeDefined()
     expect(w.text()).toContain(t('rewards.full', { max: 50 }))
+  })
+})
+
+describe('taking over a reward made in the Twitch dashboard', () => {
+  beforeAll(() => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true
+    }
+  })
+  const okButton = (w: Awaited<ReturnType<typeof open>>) =>
+    w.get('.takeover-dialog').findAll('button').find((b) => b.text() === t('rewards.takeover.ok'))!
+
+  it('asks for a new name, then says what still uses the original', async () => {
+    const post = vi.fn(() => ok({ id: 'r-new', moved: ['checkin'], not_moved: ['sound'], pause_failed: true }))
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const w = await open()
+    await row(w, 'r-dash').get('button').trigger('click')
+    expect(w.get('#tk-title').text()).toBe(t('rewards.takeover.title', { name: 'Hydrate!' }))
+    // Prefilled with the original's name, which Twitch would refuse.
+    expect((w.get('#tk-name').element as HTMLInputElement).value).toBe('Hydrate!')
+    expect(w.get('#tk-help').text()).toBe(t('rewards.takeover.sameName'))
+    expect(okButton(w).attributes('disabled')).toBeDefined()
+    await w.get('#tk-name').setValue('喝水提醒')
+    expect(okButton(w).attributes('disabled')).toBeDefined()
+
+    await w.get('#tk-name').setValue('Hydrate! 2')
+    await w.get('#tk-form').trigger('submit')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/rewards/{id}/takeover', { params: { path: { id: 'r-dash' } }, body: { title: 'Hydrate! 2' } })
+    expect(toastAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: 'warn', summary: t('rewards.takeover.partly', { name: 'Hydrate!', uses: t('rewards.takeover.uses.sound') }) }),
+    )
+    // The original was paused but the new one is not: viewers can redeem it now, so it says so.
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warn', summary: t('rewards.takeover.notPaused', { name: 'Hydrate! 2' }) }))
   })
 })

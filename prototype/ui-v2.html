@@ -4326,11 +4326,13 @@ primevue 4 — MIT
 <dialog class="dlg" id="dlg-takeover" aria-labelledby="tk-h">
   <div class="dlg-body">
     <h2 id="tk-h">接管「Hydrate!」？</h2>
-    <p>本工具會建立一個設定一樣、由本工具管理的獎勵。原本的獎勵本工具改不了，請到 Twitch 後台把它停用，不然觀眾會看到兩個。</p>
+    <p>本工具會建立一個設定一樣、由本工具管理的獎勵；用到原本獎勵的打卡、音效、影片與 GIF 會改用新的。原本的獎勵本工具改不了，請到 Twitch 後台把它停用，不然觀眾會看到兩個。</p>
+    <div class="field"><label for="tk-name">新獎勵的名稱</label><input id="tk-name" class="input" value="Hydrate!" maxlength="45" aria-describedby="tk-help">
+      <p class="help" id="tk-help">Twitch 不允許兩個同名的獎勵，名稱要和原本的不同；或先到 Twitch 後台把原本的改名或刪除。</p></div>
   </div>
   <div class="dlg-foot">
     <button class="btn btn-text" type="button" data-close autofocus>取消</button>
-    <button class="btn btn-primary" type="button" data-close="takeover" data-toast="success:已建立「Hydrate!」，請到 Twitch 後台停用原本的獎勵。">接管</button>
+    <button class="btn btn-primary" type="button" data-close="takeover" data-toast="success:已建立新的獎勵，請到 Twitch 後台停用原本的「Hydrate!」。">接管</button>
   </div>
 </dialog>
 <dialog class="dlg dlg-wide" id="dlg-viewer" aria-labelledby="vd-h">

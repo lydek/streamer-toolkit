@@ -69,7 +69,9 @@
               </template>
               <template v-else>
                 <td class="num muted" colspan="2">{{ t('rewards.dashboardOnly') }}</td>
-                <td></td>
+                <td class="num">
+                  <Button :label="t('rewards.takeover.button')" text :disabled="full" @click="takeover?.open(r, titles)" />
+                </td>
               </template>
             </tr>
           </tbody>
@@ -78,6 +80,7 @@
       <p class="note">{{ t('rewards.note') }}</p>
     </div>
     <RewardDialog ref="dialog" @saved="reload" />
+    <TakeoverDialog ref="takeover" @done="reloadAll" />
   </FullPage>
 </template>
 
@@ -92,6 +95,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast } from './home'
 import RewardDialog from './RewardDialog.vue'
+import TakeoverDialog from './TakeoverDialog.vue'
 
 type Reward = Schemas['ChannelReward']
 // Twitch's limit of custom rewards per channel.
@@ -111,6 +115,8 @@ const rules = shallowRef<Schemas['MediaRuleBody'][]>([])
 const own = computed(() => rewards.value?.filter((r) => r.manageable) ?? [])
 const full = computed(() => (rewards.value?.length ?? 0) >= MAX_REWARDS)
 const dialog = ref<InstanceType<typeof RewardDialog>>()
+const takeover = ref<InstanceType<typeof TakeoverDialog>>()
+const titles = computed(() => rewards.value?.map((x) => x.title) ?? [])
 const status = computed(() => {
   if (!rewards.value) return ''
   const on = rewards.value.filter((r) => r.is_enabled)
@@ -149,7 +155,7 @@ async function load() {
 }
 
 function edit(r?: Reward) {
-  dialog.value?.open(r, rewards.value?.map((x) => x.title) ?? [], r ? usedBy(r.id) : [])
+  dialog.value?.open(r, titles.value, r ? usedBy(r.id) : [])
 }
 
 function reload() {
@@ -168,12 +174,22 @@ async function change(r: Reward, body: { is_enabled?: boolean; is_paused?: boole
   }
 }
 
-load().catch((e: unknown) => (loadFailed.value = message(e)))
 // Each is only for the "used by" column; one failing leaves its part out.
-void api(client.GET('/api/admin/checkin/settings')).then((s) => (checkinReward.value = s.reward_id ?? null), () => {})
-void api(client.GET('/api/admin/sounds')).then((l) => (library.value = l), () => {})
-void api(client.GET('/api/admin/screen-tools/media')).then((m) => (media.value = m), () => {})
-void api(client.GET('/api/admin/screen-tools/media-rules')).then((r) => (rules.value = r), () => {})
+function loadUses() {
+  void api(client.GET('/api/admin/checkin/settings')).then((s) => (checkinReward.value = s.reward_id ?? null), () => {})
+  void api(client.GET('/api/admin/sounds')).then((l) => (library.value = l), () => {})
+  void api(client.GET('/api/admin/screen-tools/media')).then((m) => (media.value = m), () => {})
+  void api(client.GET('/api/admin/screen-tools/media-rules')).then((r) => (rules.value = r), () => {})
+}
+
+// A takeover also moves what used the original.
+function reloadAll() {
+  reload()
+  loadUses()
+}
+
+load().catch((e: unknown) => (loadFailed.value = message(e)))
+loadUses()
 </script>
 
 <style scoped>

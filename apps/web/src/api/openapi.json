@@ -5503,6 +5503,96 @@
         }
       }
     },
+    "/api/admin/rewards/{id}/takeover": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Makes a toolkit reward with the original's settings under a new title, then points check-in, the reward sound\nand the reward video or GIF at it. The original is left as it is: the toolkit cannot change it.",
+        "operationId": "take_over_reward",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The reward made in the Twitch dashboard",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeoverBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakenOver"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`rewards.invalid` (a bad title, or the reward is already the toolkit's), `rewards.refused`, or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`rewards.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`rewards.duplicate_title` (still the original's, or another reward's) or `rewards.limit`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/screen-tools/appearance": {
       "get": {
         "tags": [
@@ -13186,6 +13276,15 @@
           }
         }
       },
+      "RewardUse": {
+        "type": "string",
+        "description": "A setting that used the original reward.",
+        "enum": [
+          "checkin",
+          "sound",
+          "media"
+        ]
+      },
       "RunScript": {
         "type": "object",
         "required": [
@@ -14564,6 +14663,51 @@
           "top",
           "bottom"
         ]
+      },
+      "TakenOver": {
+        "type": "object",
+        "required": [
+          "id",
+          "moved",
+          "not_moved",
+          "pause_failed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The new reward's ID."
+          },
+          "moved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RewardUse"
+            },
+            "description": "Settings now pointing at the new reward."
+          },
+          "not_moved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RewardUse"
+            },
+            "description": "Settings that still point at the original: saving them failed, so the broadcaster picks the new reward there."
+          },
+          "pause_failed": {
+            "type": "boolean",
+            "description": "The original is paused, but pausing the new reward failed: viewers can redeem it until it is paused here."
+          }
+        }
+      },
+      "TakeoverBody": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The new reward's title; Twitch refuses the original's while that one exists."
+          }
+        }
       },
       "TemplateChangedEvent": {
         "type": "object",
