@@ -59,6 +59,13 @@ export function clockText(ms: number): string {
   return `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
+/** A short time left (polls, predictions: 30 minutes at most) as m:ss; empty when it is not known (NaN). */
+export function shortClockText(ms: number): string {
+  if (!Number.isFinite(ms)) return ''
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
 export type Stage = 'before' | 'live' | 'after'
 
 /**
@@ -91,7 +98,7 @@ export interface Check {
   fix: string
 }
 
-type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm'
+type OverlayKind = 'chat' | 'alerts' | 'checkin' | 'sound' | 'bgm' | 'polls'
 
 /**
  * Each overlay kind, the module that needs it in OBS, and the page with its OBS address. The counter and marathon
@@ -103,6 +110,7 @@ const OVERLAYS: { kind: OverlayKind; module: string; page: string }[] = [
   { kind: 'checkin', module: 'checkin', page: '/checkin' },
   { kind: 'sound', module: 'sound', page: '/sounds' },
   { kind: 'bgm', module: 'bgm', page: '/music' },
+  { kind: 'polls', module: 'polls', page: '/polls' },
 ]
 
 /**

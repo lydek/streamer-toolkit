@@ -29,7 +29,8 @@
         "alerts": { "ok": "特效已放進 OBS", "bad": "特效還沒放進 OBS" },
         "checkin": { "ok": "打卡卡片已放進 OBS", "bad": "打卡卡片還沒放進 OBS" },
         "sound": { "ok": "兌換音效已放進 OBS", "bad": "兌換音效還沒放進 OBS" },
-        "bgm": { "ok": "背景音樂已放進 OBS", "bad": "背景音樂還沒放進 OBS" }
+        "bgm": { "ok": "背景音樂已放進 OBS", "bad": "背景音樂還沒放進 OBS" },
+        "polls": { "ok": "投票與預測已放進 OBS", "bad": "投票與預測還沒放進 OBS" }
       }
     },
     "stats": {

@@ -112,7 +112,7 @@ describe('StageCard checks', () => {
       Promise.resolve({
         data:
           path === '/api/admin/overlays'
-            ? { chat: 0, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, other: 0 }
+            ? { chat: 0, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, polls: 0, other: 0 }
             : path === '/api/admin/obs/sources'
               ? { connected: true, local: true, live_scene: 'Live', scenes: ['Live'], sources: [] }
               : null,
@@ -139,7 +139,7 @@ describe('StageCard checks', () => {
       Promise.resolve({
         data:
           path === '/api/admin/overlays'
-            ? { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, other: 0 }
+            ? { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 0, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, polls: 0, other: 0 }
             : null,
         response: new Response(null, { status: 200 }),
       })) as never)

@@ -1,7 +1,7 @@
 <template>
   <!-- 投票與預測: Twitch's own polls and predictions, started and ended here; the live state arrives as
        `twitch.contest`. -->
-  <FullPage :status="t('polls.summary')">
+  <FullPage :status="t('polls.summary')" overlay="polls">
     <div class="polls">
       <p v-if="loadFailed" role="alert">{{ loadFailed }}</p>
       <div class="current">
@@ -158,7 +158,7 @@ import { ApiError, type Schemas, api, client } from './api'
 import FormPanel from './FormPanel.vue'
 import FormRow from './FormRow.vue'
 import FullPage from './FullPage.vue'
-import { clockText, errorToast, successToast, useLiveEvents } from './home'
+import { shortClockText, errorToast, successToast, useLiveEvents } from './home'
 
 type Template = Schemas['PollTemplate']
 type Kind = 'poll' | 'prediction'
@@ -198,6 +198,8 @@ const durations = computed(() => (kind.value === 'poll' ? DURATIONS : WINDOWS).m
 // A prediction takes up to 10 outcomes and stays open 30 s at least; switching keeps what still fits.
 watch(kind, (k) => {
   if (k === 'poll') choices.value = choices.value.slice(0, MAX_CHOICES)
+  // A prediction's question is shorter (45); the box shows what is kept.
+  else title.value = title.value.slice(0, PREDICTION_TITLE_MAX)
   if (!durations.value.some((d) => d.value === seconds.value)) seconds.value = 120
 })
 const totalVotes = computed(() => poll.value?.choices.reduce((sum, c) => sum + c.votes, 0) ?? 0)
@@ -206,12 +208,16 @@ const pollState = computed(() => {
   const p = poll.value
   if (!p) return ''
   if (p.status !== 'active') return t(`polls.status.${p.status}`)
-  return t('polls.left', { time: clockText(Math.max(0, Date.parse(p.endsAt) - now.value)) })
+  const time = shortClockText(Date.parse(p.endsAt) - now.value)
+  return time ? t('polls.left', { time }) : t('polls.running')
 })
 const predictionState = computed(() => {
   const p = prediction.value
   if (!p) return ''
-  if (p.status === 'active') return t('polls.locksIn', { time: clockText(Math.max(0, Date.parse(p.locksAt) - now.value)) })
+  if (p.status === 'active') {
+    const time = shortClockText(Date.parse(p.locksAt) - now.value)
+    return time ? t('polls.locksIn', { time }) : t('polls.betting')
+  }
   if (p.status === 'resolved') {
     const winner = p.outcomes.find((o) => o.id === p.winningOutcomeId)?.title ?? ''
     return t('polls.predictionStatus.resolved', { name: winner })

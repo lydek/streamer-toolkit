@@ -402,6 +402,8 @@
     "started": "已在 Twitch 開始投票。",
     "voters": "{n} 票",
     "left": "進行中 · 剩 {time}",
+    "running": "進行中",
+    "betting": "開放下注",
     "status": {
       "completed": "已結束",
       "terminated": "已提早結束"

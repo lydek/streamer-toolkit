@@ -12613,6 +12613,7 @@
           "break",
           "warnings",
           "leaderboard",
+          "polls",
           "other"
         ],
         "properties": {
@@ -12649,6 +12650,10 @@
             "minimum": 0
           },
           "other": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "polls": {
             "type": "integer",
             "minimum": 0
           },

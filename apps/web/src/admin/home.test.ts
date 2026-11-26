@@ -484,7 +484,7 @@ describe('pre-stream checks', () => {
     // Optional on screen: never a check.
     { id: 'counter', enabled: true, closed: false },
   ]
-  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 1, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, other: 1 }
+  const overlays = { chat: 1, alerts: 0, checkin: 0, sound: 0, bgm: 1, counter: 0, marathon: 0, break: 0, warnings: 0, leaderboard: 0, polls: 0, other: 1 }
 
   it('lists Twitch, EventSub, OBS and the overlay of each enabled feature, with where to fix them', () => {
     expect(preStreamChecks(signedIn(true), live('connected'), modules, overlays)).toEqual([
@@ -495,6 +495,15 @@ describe('pre-stream checks', () => {
       { id: 'overlay.alerts', ok: false, fix: '/alerts' },
       { id: 'overlay.bgm', ok: true, fix: '/music' },
     ])
+  })
+
+  it('checks the poll overlay once 投票與預測 is on', () => {
+    const withPolls = [...modules, { id: 'polls', enabled: true, closed: false }]
+    expect(preStreamChecks(signedIn(true), live('connected'), withPolls, { ...overlays, polls: 1 }).at(-1)).toEqual({
+      id: 'overlay.polls',
+      ok: true,
+      fix: '/polls',
+    })
   })
 
   it('counts nothing as fine before it is known', () => {

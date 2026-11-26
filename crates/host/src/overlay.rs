@@ -1,5 +1,5 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
-//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard`; the Host counts open sockets per kind so it
+//! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard|polls`; the Host counts open sockets per kind so it
 //! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
 
 use std::sync::{
@@ -40,6 +40,7 @@ pub(crate) enum OverlayKind {
     Break,
     Warnings,
     Leaderboard,
+    Polls,
 }
 
 impl OverlayKind {
@@ -56,6 +57,7 @@ impl OverlayKind {
             "break" => Some(Self::Break),
             "warnings" => Some(Self::Warnings),
             "leaderboard" => Some(Self::Leaderboard),
+            "polls" => Some(Self::Polls),
             _ => None,
         }
     }
@@ -83,6 +85,7 @@ pub(crate) struct OverlayConnections {
     break_card: AtomicUsize,
     warnings: AtomicUsize,
     leaderboard: AtomicUsize,
+    polls: AtomicUsize,
     other: AtomicUsize,
     /// Ticks whenever a socket opens or closes.
     changes: watch::Sender<()>,
@@ -101,6 +104,7 @@ impl Default for OverlayConnections {
             break_card: AtomicUsize::default(),
             warnings: AtomicUsize::default(),
             leaderboard: AtomicUsize::default(),
+            polls: AtomicUsize::default(),
             other: AtomicUsize::default(),
             changes: watch::channel(()).0,
         }
@@ -120,6 +124,7 @@ impl OverlayConnections {
             Some(OverlayKind::Break) => &self.break_card,
             Some(OverlayKind::Warnings) => &self.warnings,
             Some(OverlayKind::Leaderboard) => &self.leaderboard,
+            Some(OverlayKind::Polls) => &self.polls,
             None => &self.other,
         }
     }
@@ -158,6 +163,7 @@ impl OverlayConnections {
             break_card: load(&self.break_card),
             warnings: load(&self.warnings),
             leaderboard: load(&self.leaderboard),
+            polls: load(&self.polls),
             other: load(&self.other),
         }
     }
@@ -214,6 +220,7 @@ pub(crate) struct OverlayCounts {
     break_card: usize,
     warnings: usize,
     leaderboard: usize,
+    polls: usize,
     other: usize,
 }
 
@@ -354,6 +361,7 @@ mod tests {
                 break_card: 0,
                 warnings: 0,
                 leaderboard: 0,
+                polls: 0,
                 other: 2
             }
         );
@@ -377,6 +385,7 @@ mod tests {
                 break_card: 0,
                 warnings: 0,
                 leaderboard: 0,
+                polls: 0,
                 other: 0
             }
         );

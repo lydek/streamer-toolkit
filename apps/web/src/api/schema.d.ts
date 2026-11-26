@@ -4131,6 +4131,7 @@ export interface components {
             leaderboard: number;
             marathon: number;
             other: number;
+            polls: number;
             sound: number;
             warnings: number;
         };
