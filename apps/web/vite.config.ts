@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
-import { devDataDir, devServer, hostProxy } from './dev-server.ts'
+import { devDataDeny, devDataDir, devServer, hostProxy } from './dev-server.ts'
 
 export default defineConfig(({ mode }) => ({
   // Locale JSON is precompiled at build time; the runtime-only vue-i18n build never needs eval.
@@ -19,7 +19,17 @@ export default defineConfig(({ mode }) => ({
     fs: {
       // Vite's defaults (this list replaces them; dev-server.test.ts keeps it a superset) plus Cargo's target folder:
       // the dev data folder (settings, logs, WebView2 profile) is inside it, and the null origin may read what Vite serves.
-      deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx,cer,der}', '.npmrc', '.yarnrc.yml', '**/.git/**', '**/target/**'],
+      // A DEV_DATA_DIR elsewhere is denied too.
+      deny: [
+        '.env',
+        '.env.*',
+        '*.{crt,pem,key,p12,pfx,cer,der}',
+        '.npmrc',
+        '.yarnrc.yml',
+        '**/.git/**',
+        '**/target/**',
+        ...devDataDeny(),
+      ],
     },
   },
   // Every dev page, incl. the E2E harness: with build inputs set, Vite would scan only those at startup and reload

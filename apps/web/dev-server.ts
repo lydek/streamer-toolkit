@@ -19,24 +19,36 @@ export const adminCsp = (host = '') =>
 /** The CSP the Host sends for the page at `url`, so violations show up while developing. */
 export const devCsp = (url = '', host = '') => (url.startsWith('/overlay/') ? OVERLAY_CSP : adminCsp(host))
 
-const DEFAULT_PORT = 47810
+/** A dev build's port in a new folder; must match `DEV_DEFAULT_PORT` in apps/desktop/src/main.rs. */
+export const DEV_DEFAULT_PORT = 47811
 // Vite's proxy matches these as plain prefixes, so the null-origin rule uses the same test.
 const HOST_PREFIXES = ['/api', '/ws', '/templates', '/sounds', '/music', '/media', '/checkin']
 const isHostPath = (url = '') => HOST_PREFIXES.some((p) => url.startsWith(p))
 
-/** `tauri dev` runs the debug build, whose data folder sits next to the executable. */
-// shortcut: ignores `--data-dir`, and CARGO_TARGET_DIR must be absolute (cargo resolves a relative one from its
-// own working directory, not apps/web); pass the folder here if dev runs ever need either.
-export const devDataDir = () =>
-  resolve(process.env.CARGO_TARGET_DIR ?? resolve(import.meta.dirname, '../../target'), 'debug', 'data')
+/**
+ * `tauri dev` runs the debug build, whose data folder sits next to the executable; a run with `--data-dir` sets
+ * `DEV_DATA_DIR` to the same folder. Both must be absolute (cargo resolves a relative CARGO_TARGET_DIR from its own
+ * working directory, not apps/web).
+ */
+export const devDataDir = (env: Record<string, string | undefined> = process.env) =>
+  env.DEV_DATA_DIR
+    ? resolve(env.DEV_DATA_DIR)
+    : resolve(env.CARGO_TARGET_DIR ?? resolve(import.meta.dirname, '../../target'), 'debug', 'data')
 
-/** The port saved in the data folder's settings.json; the Host's default when there is none yet. */
+/**
+ * `server.fs.deny` entries for a `DEV_DATA_DIR` outside `target/`: it holds the same settings and logs, and the null
+ * origin may read whatever Vite serves.
+ */
+export const devDataDeny = (env: Record<string, string | undefined> = process.env) =>
+  env.DEV_DATA_DIR ? [`${resolve(env.DEV_DATA_DIR).replaceAll('\\', '/')}/**`] : []
+
+/** The port saved in the data folder's settings.json; a dev build's default when there is none yet. */
 export function hostPort(dataDir: string): number {
   try {
     const { port } = JSON.parse(readFileSync(resolve(dataDir, 'settings.json'), 'utf8'))
-    return Number.isInteger(port) && port > 0 && port <= 65535 ? port : DEFAULT_PORT
+    return Number.isInteger(port) && port > 0 && port <= 65535 ? port : DEV_DEFAULT_PORT
   } catch {
-    return DEFAULT_PORT
+    return DEV_DEFAULT_PORT
   }
 }
 

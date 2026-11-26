@@ -38,6 +38,8 @@ const TWITCH_ACTIVATE_URL: &str = "https://www.twitch.tv/activate";
 const RELEASES_URL: &str = "https://github.com/lydek/streamer-toolkit/releases/latest";
 const WEBVIEW2_DOWNLOAD_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 const LOG_DAYS: usize = 14;
+/// Release builds keep `host::DEFAULT_PORT` (47810). Must match apps/web/dev-server.ts (dev-server.test.ts checks).
+const DEV_DEFAULT_PORT: u16 = 47811;
 /// How long quitting waits for chat writes already accepted.
 const EXIT_DRAIN: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -142,7 +144,7 @@ fn main() {
             let handle = app.handle().clone();
             // A folder without settings has no OBS URL yet, so a taken default port can be swapped for a free one.
             let first_run = !settings::path(&data_dir).exists();
-            let port = settings::load(&data_dir).port;
+            let port = start_port(cfg!(dev), first_run, || settings::load(&data_dir).port);
             let bound = match tauri::async_runtime::block_on(host::bind(host_config(&handle, port))) {
                 Err(HostError::PortInUse(_)) if first_run => {
                     tauri::async_runtime::block_on(host::bind(host_config(&handle, 0)))
@@ -196,6 +198,17 @@ fn main() {
         RunEvent::Exit => drop(log_guard.take()),
         _ => {}
     });
+}
+
+/// The port the first try binds. A new folder of a dev build starts on `DEV_DEFAULT_PORT`, so a dev build never
+/// takes the port OBS browser sources point at. A `settings.json` written by a script makes the folder not new:
+/// such scripts must write `port` themselves, or the saved default (`host::DEFAULT_PORT`) applies.
+fn start_port(is_dev: bool, first_run: bool, saved: impl FnOnce() -> u16) -> u16 {
+    if is_dev && first_run {
+        DEV_DEFAULT_PORT
+    } else {
+        saved()
+    }
 }
 
 /// JSON lines, one file per day, the last `LOG_DAYS` kept. Dev builds also print to stderr.
@@ -691,6 +704,19 @@ fn show_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_a_new_folder_of_a_dev_build_starts_on_the_dev_port() {
+        use super::{DEV_DEFAULT_PORT, start_port};
+        assert_eq!(start_port(true, true, || unreachable!()), DEV_DEFAULT_PORT);
+        assert_eq!(start_port(true, false, || 47810), 47810);
+        assert_eq!(
+            start_port(false, true, || host::DEFAULT_PORT),
+            host::DEFAULT_PORT
+        );
+        assert_eq!(start_port(false, false, || 51234), 51234);
+        assert_ne!(DEV_DEFAULT_PORT, host::DEFAULT_PORT);
+    }
+
     #[test]
     fn the_twitch_chat_url_takes_only_a_login() {
         assert_eq!(
