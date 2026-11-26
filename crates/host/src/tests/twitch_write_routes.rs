@@ -7,14 +7,14 @@ use axum::{
 };
 use std::{collections::HashMap, sync::Mutex};
 
-/// A stored sign-in for client ID `cid`, user 42.
-struct SignedIn;
+/// A stored sign-in for client ID `cid`, user 42, with these scopes.
+struct SignedIn(&'static [&'static str]);
 impl SecretStore for SignedIn {
     fn read(&self) -> Result<Option<String>, SecretStoreError> {
         Ok(Some(
             serde_json::json!({
                 "client_id": "cid", "access_token": "a", "refresh_token": "r",
-                "user_id": "42", "login": "me", "scopes": ["channel:manage:broadcast"]
+                "user_id": "42", "login": "me", "scopes": self.0
             })
             .to_string(),
         ))
@@ -38,6 +38,50 @@ struct Fake {
     is_sent: Arc<Mutex<bool>>,
     /// Status a sent message is refused with; 0: accepted.
     send_refused: Arc<Mutex<u16>>,
+    /// Reward requests: method, query, body.
+    rewards: Arc<Mutex<Vec<(String, String, serde_json::Value)>>>,
+    /// Status reward changes answer with; 0: done.
+    reward_status: Arc<Mutex<u16>>,
+}
+
+/// A Helix custom reward; `r-own` is the toolkit's, `r-dash` was made in the Twitch dashboard.
+fn helix_reward(id: &str, title: &str) -> serde_json::Value {
+    serde_json::json!({
+        "broadcaster_id": "42", "id": id, "title": title, "prompt": "", "cost": 100,
+        "background_color": "#9146FF", "is_enabled": true, "is_paused": false,
+        "is_user_input_required": false, "should_redemptions_skip_request_queue": false,
+        "global_cooldown_setting": { "is_enabled": true, "global_cooldown_seconds": 300 },
+        "max_per_stream_setting": { "is_enabled": false, "max_per_stream": 0 },
+        "max_per_user_per_stream_setting": { "is_enabled": true, "max_per_user_per_stream": 3 },
+        "image": null, "default_image": {}
+    })
+}
+
+async fn reward_request(
+    f: Fake,
+    method: Method,
+    query: Option<String>,
+    body: Option<serde_json::Value>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let query = query.unwrap_or_default();
+    if method == Method::GET {
+        let mut data = vec![helix_reward("r-own", "每日打卡")];
+        if !query.contains("only_manageable_rewards=true") {
+            data.push(helix_reward("r-dash", "Hydrate!"));
+        }
+        return Json(serde_json::json!({ "data": data })).into_response();
+    }
+    f.rewards
+        .lock()
+        .unwrap()
+        .push((method.to_string(), query, body.unwrap_or_default()));
+    match *f.reward_status.lock().unwrap() {
+        0 => {
+            Json(serde_json::json!({ "data": [helix_reward("r-own", "每日打卡")] })).into_response()
+        }
+        status => StatusCode::from_u16(status).unwrap().into_response(),
+    }
 }
 
 async fn fake_helix(fake: Fake) -> String {
@@ -76,6 +120,17 @@ async fn fake_helix(fake: Fake) -> String {
                     .into_response()
             }),
         )
+        .route(
+            "/channel_points/custom_rewards",
+            axum::routing::any(
+                |AxumState(f): AxumState<Fake>,
+                 method: Method,
+                 axum::extract::RawQuery(q): axum::extract::RawQuery,
+                 body: Option<Json<serde_json::Value>>| async move {
+                    reward_request(f, method, q, body.map(|Json(b)| b)).await
+                },
+            ),
+        )
         .with_state(fake);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -84,13 +139,22 @@ async fn fake_helix(fake: Fake) -> String {
 }
 
 async fn signed_in_app(name: &str, fake: &Fake) -> Router {
+    signed_in_with(
+        name,
+        fake,
+        &["channel:manage:broadcast", "channel:manage:redemptions"],
+    )
+    .await
+}
+
+async fn signed_in_with(name: &str, fake: &Fake, scopes: &'static [&'static str]) -> Router {
     let dir =
         std::env::temp_dir().join(format!("st-host-stream-info-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     settings::update(&dir, |s| s.twitch_client_id = "cid".into()).unwrap();
     let mut config = test_config();
     config.data_dir = dir;
-    config.twitch_secrets = Arc::new(SignedIn);
+    config.twitch_secrets = Arc::new(SignedIn(scopes));
     config.twitch.helix = fake_helix(fake.clone()).await;
     router(config).unwrap()
 }
@@ -239,4 +303,82 @@ async fn chat_is_sent_as_the_streamer_and_a_dropped_message_says_so() {
     let res = app.oneshot(send("again")).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json(res).await["code"], "chat.send_refused");
+}
+
+#[tokio::test]
+async fn rewards_are_listed_with_the_ones_the_toolkit_made_marked() {
+    let fake = Fake::default();
+    let app = signed_in_app("rewards-list", &fake).await;
+    let res = app
+        .oneshot(req(Method::GET, "/api/admin/rewards", None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let list = json(res).await;
+    assert_eq!(list[0]["id"], "r-own");
+    assert_eq!(list[0]["manageable"], true);
+    assert_eq!(list[0]["cooldown_seconds"], 300);
+    assert_eq!(list[0]["max_per_stream"], serde_json::Value::Null);
+    assert_eq!(list[0]["max_per_user_per_stream"], 3);
+    assert_eq!(list[1]["id"], "r-dash");
+    assert_eq!(list[1]["manageable"], false);
+}
+
+#[tokio::test]
+async fn a_reward_is_enabled_or_paused_only_with_the_scope_and_when_it_is_ours() {
+    let fake = Fake::default();
+    let app = signed_in_app("rewards-toggle", &fake).await;
+    let patch = |id: &str, body: serde_json::Value| {
+        req(
+            Method::PATCH,
+            &format!("/api/admin/rewards/{id}"),
+            Some(body),
+        )
+    };
+
+    let res = app
+        .clone()
+        .oneshot(patch("r-own", serde_json::json!({ "is_paused": true })))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        fake.rewards.lock().unwrap().as_slice(),
+        [(
+            "PATCH".to_owned(),
+            "broadcaster_id=42&id=r-own".to_owned(),
+            serde_json::json!({ "is_paused": true })
+        )]
+    );
+
+    // Nothing to change, or an ID that could break the URL: refused here.
+    for (id, body) in [
+        ("r-own", serde_json::json!({})),
+        ("r%26id%3Dx", serde_json::json!({ "is_enabled": false })),
+    ] {
+        let res = app.clone().oneshot(patch(id, body)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(json(res).await["code"], "rewards.invalid");
+    }
+    assert_eq!(fake.rewards.lock().unwrap().len(), 1);
+
+    // Twitch refuses a reward made in its dashboard.
+    *fake.reward_status.lock().unwrap() = 403;
+    let res = app
+        .oneshot(patch("r-dash", serde_json::json!({ "is_enabled": false })))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(res).await["code"], "rewards.not_ours");
+
+    // Without the scope nothing is sent.
+    let fake = Fake::default();
+    let app = signed_in_with("rewards-no-scope", &fake, &["channel:read:redemptions"]).await;
+    let res = app
+        .oneshot(patch("r-own", serde_json::json!({ "is_enabled": false })))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(res).await["code"], "twitch.scope_required");
+    assert!(fake.rewards.lock().unwrap().is_empty());
 }

@@ -1664,6 +1664,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_rewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/rewards/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["update_reward"];
+        trace?: never;
+    };
     "/api/admin/screen-tools/appearance": {
         parameters: {
             query?: never;
@@ -2755,6 +2787,38 @@ export interface components {
         Category: {
             id: string;
             name: string;
+        };
+        /** @description A custom reward. `title` and `prompt` are raw Twitch text. */
+        ChannelReward: {
+            /** @description `#RRGGBB`. */
+            background_color: string;
+            /**
+             * Format: int64
+             * @description `None`: no cooldown.
+             */
+            cooldown_seconds?: number | null;
+            /** Format: int64 */
+            cost: number;
+            id: string;
+            is_enabled: boolean;
+            is_paused: boolean;
+            is_user_input_required: boolean;
+            /** @description Made by the toolkit, so it can change the reward and its redemptions; others are read-only here. */
+            manageable: boolean;
+            /**
+             * Format: int64
+             * @description `None`: no limit.
+             */
+            max_per_stream?: number | null;
+            /**
+             * Format: int64
+             * @description `None`: no limit.
+             */
+            max_per_user_per_stream?: number | null;
+            prompt: string;
+            /** @description Redemptions are marked fulfilled at once instead of waiting in the queue. */
+            skip_queue: boolean;
+            title: string;
         };
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
@@ -4272,6 +4336,11 @@ export interface components {
         Reward: {
             id: string;
             title: string;
+        };
+        /** @description What changes; fields left out stay as they are. */
+        RewardChange: {
+            is_enabled?: boolean | null;
+            is_paused?: boolean | null;
         };
         RunScript: {
             /** @description The script file's text: `{"steps": [{"type": "chat" | "alert" | "checkin" | "stop", "at": <ms>, …}]}`. */
@@ -9287,6 +9356,101 @@ export interface operations {
             };
             /** @description `redemption.storage_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_rewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelReward"][];
+                };
+            };
+            /** @description Not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.request_refused` (e.g. a channel without channel points), `twitch.rate_limited` or `twitch.unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_reward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RewardChange"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `rewards.invalid`, `rewards.refused`, or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` (no `channel:manage:redemptions`) or `rewards.not_ours` (made in the Twitch dashboard or by another app) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

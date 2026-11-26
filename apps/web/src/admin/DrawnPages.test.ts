@@ -9,7 +9,6 @@ import BotCommandsPage from './BotCommandsPage.vue'
 import BotGreetingsPage from './BotGreetingsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
 import PollsPage from './PollsPage.vue'
-import RewardsPage from './RewardsPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
@@ -44,15 +43,6 @@ async function page(component: Component, path: string) {
 }
 
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
-
-describe('頻道點數 › 獎勵', () => {
-  it('shows no rewards, with adding one disabled', async () => {
-    const w = await page(RewardsPage, '/rewards')
-    expect(w.get('h1').text()).toBe(t('pages.rewards.name'))
-    expect(w.get('.empty-cell').text()).toBe(t('rewards.empty'))
-    expect(button(w, t('rewards.add')).attributes('disabled')).toBeDefined()
-  })
-})
 
 describe('投票與預測', () => {
   it('shows nothing running, and a new poll form that adds up to 5 options but cannot start', async () => {

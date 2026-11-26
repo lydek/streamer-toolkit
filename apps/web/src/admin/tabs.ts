@@ -109,7 +109,7 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'points',
       pages: [
-        { ...soon('/rewards', 'rewards', 'pi pi-star', true), tabLabel: 'nav.pageTabs.rewards' },
+        { path: '/rewards', label: 'pages.rewards.name', icon: 'pi pi-star', tabLabel: 'nav.pageTabs.rewards' },
         { path: '/reward-playback', label: 'pages.rewardPlayback.name', icon: 'pi pi-play', tint: 'yellow' },
         { path: '/redemptions', label: 'modules.names.redemption', icon: 'pi pi-gift' },
       ],

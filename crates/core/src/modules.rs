@@ -34,6 +34,9 @@ pub const MEDIA: &str = "media";
 pub const MIXER: &str = "mixer";
 /// 直播資訊: the title, category and tags on Twitch; the switch only shows or hides its page and tile.
 pub const STREAM_INFO: &str = "stream-info";
+/// 頻道點數獎勵管理: listing and changing the channel's custom rewards; the switch only shows or hides its page and
+/// tile.
+pub const REWARDS: &str = "rewards";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -49,10 +52,11 @@ pub const ALL: &[&str] = &[
     MEDIA,
     MIXER,
     STREAM_INFO,
+    REWARDS,
 ];
 
 /// Modules that start off: each needs a Twitch scope the base sign-in lacks, so turning it on asks for that first.
-pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO];
+pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO, REWARDS];
 
 /// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).
 const SPLIT: &[(&str, &str)] = &[

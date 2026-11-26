@@ -142,6 +142,12 @@
       "invalid": "標題最多 140 字、標籤最多 10 個（每個最多 25 字），分類要從搜尋結果選。",
       "refused": "Twitch 不接受這些內容，例如標籤裡有空白或符號。"
     },
+    "rewards": {
+      "invalid": "獎勵的資料不完整或格式不對。",
+      "not_ours": "這個獎勵不是本工具建立的，只能到 Twitch 後台修改。",
+      "not_found": "Twitch 上已經沒有這個獎勵，可能在 Twitch 後台刪掉了。",
+      "refused": "Twitch 不接受這個獎勵的設定。"
+    },
     "twitch": {
       "scope_required": "目前的 Twitch 登入沒有這個功能需要的權限，請重新登入並授權。",
       "client_id_required": "請先設定 Client ID。",
