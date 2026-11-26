@@ -35,6 +35,7 @@ pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
         .route("/_control/obs", post(obs_control))
         .route("/_control/eventsub/drop", post(eventsub_drop))
         .route("/_control/scenario", post(scenario))
+        .route("/_control/stats", post(stats))
         .with_state(Fakes { obs, twitch })
 }
 
@@ -125,6 +126,16 @@ async fn obs_control(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Res
 async fn eventsub_drop(State(fakes): State<Fakes>) -> Response {
     fakes.twitch.drop_eventsub();
     Json(json!({})).into_response()
+}
+
+/// The API calls and events so far (`crate::metrics`); `{"reset": true}` starts over after answering.
+async fn stats(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    let recorder = fakes.twitch.recorder();
+    let report = recorder.report();
+    if body["reset"].as_bool() == Some(true) {
+        recorder.reset();
+    }
+    Json(report).into_response()
 }
 
 pub const SCENARIOS: &[(&str, &str)] = &[
@@ -244,6 +255,16 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
         "eventsub" if rest.first().map(String::as_str) == Some("drop") => {
             Ok(("/_control/eventsub/drop", body))
         }
+        "stats" => {
+            for flag in rest {
+                match flag.as_str() {
+                    "--reset" => body["reset"] = json!(true),
+                    "--json" => body["json"] = json!(true),
+                    _ => return Err(format!("unexpected argument {flag}")),
+                }
+            }
+            Ok(("/_control/stats", body))
+        }
         "scenario" => {
             let name = rest.first().ok_or("scenario needs a name")?;
             if !SCENARIOS.iter().any(|(n, _)| n == name) {
@@ -308,6 +329,11 @@ mod tests {
             cmd(&["scenario", "gift-bomb"]).unwrap().1["name"],
             "gift-bomb"
         );
+        let (path, body) = cmd(&["stats", "--reset", "--json"]).unwrap();
+        assert_eq!(
+            (path, body),
+            ("/_control/stats", json!({"reset": true, "json": true}))
+        );
     }
 
     #[test]
@@ -320,6 +346,7 @@ mod tests {
             &["obs", "stream"],
             &["obs", "fly"],
             &["scenario", "nope"],
+            &["stats", "--nope"],
             &["nope"],
         ] {
             assert!(cmd(bad).is_err(), "{bad:?}");

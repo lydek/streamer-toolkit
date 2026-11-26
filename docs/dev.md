@@ -28,6 +28,7 @@
   - `pnpm dev:fake` 啟動假 OBS（`127.0.0.1:4466`）、假 Twitch（`127.0.0.1:4467`）與 dev 建置；資料夾是 `target\dev-fake-data\`（port `47812`），每次執行都重建，加 `--keep` 保留上一份。app 一啟動就登入假 Twitch、連上假 OBS。
   - 送事件：`cargo run -q -p fakes -- send <種類> [--user <login>] [--count <數量>] [--message <文字>] [--reward <獎勵名稱>] [--bits <數量>] [--tier 1000|2000|3000] [--months <月數>]`。種類：`follow`、`sub`、`resub`、`gift`（另外每位收禮者各一則 `sub`）、`cheer`、`raid`、`chat`（`--first` 加上首次聊天標記）、`delete`、`clear-user`、`clear`、`redeem`、`redeem-update`（`--id` 與 `--status fulfilled|canceled`）、`online`、`offline`。事件走真正的連線流程（`source=twitch`），會寫進那個資料夾的正式紀錄。
   - 其他指令：`obs drop`（OBS 斷線，app 會自己重連）、`obs stats [--cpu <%>] [--dropped <%>] [--kbps <數字>]`（效能頁以 60 秒視窗計算，掉幀調回 0 後要等視窗平均降回 5% 以下警告才消失）、`obs stream on|off`、`obs record on|off`、`eventsub drop`、`scenario stream-start|stream-end|gift-bomb|redemption-flood`。另一個 port 用 `--port <假 Twitch 的 port>`。
+  - API 呼叫統計：`stats [--reset] [--json]` 列出 app 對兩個假服務的每種呼叫（Helix 路徑、OBS 請求、WebSocket 連線）：次數、每分鐘平均、10 秒內最高、平均與最短間隔、處理時間、同時進行數；每種事件之後的呼叫數與反應時間；Helix 每分鐘用量占 800 點的比例與 `/validate` 的頻率；以及異常警告（1.5 秒內重複、連續 5 次不到 1 秒的迴圈、一個事件引發超過 10 次呼叫、同時超過 4 個請求、重連沒有退避、缺標頭或 token 不對、超過一小時沒有檢查 token）。警告只列出來，不讓任何東西失敗。`--reset` 列出後歸零。門檻是 `crates/fakes/src/metrics.rs` 的常數。
   - 只用假 OBS：`cargo run -p fakes`，在設定把 OBS 指向 `127.0.0.1:4466`；`--password <密碼>` 會要求驗證。
   - 開發版是靠 `TOOLKIT_FAKE_SERVICES=127.0.0.1:<port>` 改連假 Twitch（見 [architecture.md](architecture.md)「資料夾」）；`e2e_host` 用 `E2E_FAKE_SERVICES=127.0.0.1:<port>` 與 `E2E_FAKE_OBS_PORT=<port>`。
 

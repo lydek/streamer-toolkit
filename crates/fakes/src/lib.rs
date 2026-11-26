@@ -3,5 +3,6 @@
 
 pub mod control;
 pub mod events;
+pub mod metrics;
 pub mod obs;
 pub mod twitch;

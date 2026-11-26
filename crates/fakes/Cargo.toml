@@ -21,3 +21,5 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "s
 [dev-dependencies]
 integrations = { version = "0.1.0", path = "../integrations" }
 toolkit-core = { version = "0.1.0", path = "../core" }
+# A plain WebSocket client for the reconnect test; dev-only, so crates/arch-tests allows it.
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }

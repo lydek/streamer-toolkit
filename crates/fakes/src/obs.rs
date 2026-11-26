@@ -18,6 +18,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::{net::TcpListener, sync::broadcast};
 
+use crate::metrics::{self, Call, Recorder};
+
 /// obs-websocket close code for a missing or wrong password.
 const AUTHENTICATION_FAILED: u16 = 4009;
 const CHALLENGE: &str = "fake-challenge";
@@ -828,17 +830,53 @@ pub struct FakeObs {
     /// Closes every connection, like OBS exiting.
     close: broadcast::Sender<()>,
     password: Option<String>,
+    recorder: Recorder,
 }
 
 impl FakeObs {
     /// Without a password the fake asks for no authentication.
     pub fn new(password: Option<String>) -> Self {
+        Self::with_recorder(password, Recorder::default())
+    }
+
+    /// Logs requests and events into `recorder`, shared with the fake Twitch for one timeline.
+    pub fn with_recorder(password: Option<String>, recorder: Recorder) -> Self {
         Self {
             world: Arc::new(Mutex::new(World::sample())),
             events: broadcast::channel(1024).0,
             close: broadcast::channel(1).0,
             password,
+            recorder,
         }
+    }
+
+    pub fn recorder(&self) -> &Recorder {
+        &self.recorder
+    }
+
+    /// Adds inputs before a client connects, without events (e.g. a scene collection with many sources).
+    pub fn add_inputs(&self, names: &[&str], kind: &str) {
+        let mut w = self.world.lock().unwrap();
+        for name in names {
+            let uuid = w.uuid();
+            w.inputs.push(Input {
+                name: (*name).into(),
+                uuid,
+                kind: kind.into(),
+                settings: json!({}),
+                audio: kind.starts_with("wasapi_"),
+                volume_mul: 1.0,
+                muted: false,
+                monitor: "OBS_MONITORING_TYPE_NONE",
+            });
+        }
+    }
+
+    /// Sends an event to every connection and logs it.
+    fn emit(&self, event: Event) {
+        self.recorder.event("obs", event.0);
+        // No connection listening is fine.
+        let _ = self.events.send(event);
     }
 
     /// Closes every connection as OBS does when it exits; clients may connect again right away.
@@ -896,7 +934,7 @@ impl FakeObs {
             }
         }
         for event in events {
-            let _ = self.events.send(event);
+            self.emit(event);
         }
     }
 
@@ -904,8 +942,7 @@ impl FakeObs {
     fn request(&self, request: &str, data: &Value) -> Result<Value, Failure> {
         let (result, events) = self.world.lock().unwrap().handle(request, data);
         for event in events {
-            // No connection listening is fine.
-            let _ = self.events.send(event);
+            self.emit(event);
         }
         result
     }
@@ -918,7 +955,7 @@ async fn meters(fake: FakeObs) {
         every.tick().await;
         if fake.events.receiver_count() > 0 {
             let levels = fake.world.lock().unwrap().meters();
-            let _ = fake.events.send(("InputVolumeMeters", levels));
+            fake.emit(("InputVolumeMeters", levels));
         }
     }
 }
@@ -963,6 +1000,7 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
         if !send(&mut socket, json!({"op": 2, "d": {"negotiatedRpcVersion": 1}})).await {
             return;
         }
+        fake.recorder.connect("obs", "obs");
         let mut events = fake.events.subscribe();
         let mut close = fake.close.subscribe();
         loop {
@@ -1008,7 +1046,21 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
 fn reply(fake: &FakeObs, request: &Value) -> Value {
     let request_type = request["requestType"].as_str().unwrap_or_default();
     let data = request.get("requestData").cloned().unwrap_or(Value::Null);
-    let (status, response) = match fake.request(request_type, &data) {
+    let in_flight = fake.recorder.start("obs");
+    let started = Instant::now();
+    let answer = fake.request(request_type, &data);
+    let code = answer.as_ref().map_or_else(|(code, _)| *code, |_| SUCCESS);
+    fake.recorder.call(Call {
+        at: started,
+        service: "obs",
+        key: request_type.into(),
+        params: metrics::hash(&[data.to_string().as_bytes()]),
+        status: code,
+        handled: started.elapsed(),
+        in_flight: in_flight.count,
+        problem: None,
+    });
+    let (status, response) = match answer {
         Ok(response) => (json!({"result": true, "code": SUCCESS}), response),
         Err((code, comment)) => (
             json!({"result": false, "code": code, "comment": comment}),

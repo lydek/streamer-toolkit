@@ -6,6 +6,7 @@
 use fakes::{
     control::{self, SCENARIOS},
     events::KINDS,
+    metrics::{self, Recorder},
     obs::FakeObs,
     twitch::FakeTwitch,
 };
@@ -22,7 +23,8 @@ const USAGE: &str = "usage:
   fake-services [--port <twitch port>] obs drop | obs stats [--cpu <%>] [--dropped <%>] [--kbps <n>]
                 | obs stream on|off | obs record on|off
   fake-services [--port <twitch port>] eventsub drop
-  fake-services [--port <twitch port>] scenario <name>";
+  fake-services [--port <twitch port>] scenario <name>
+  fake-services [--port <twitch port>] stats [--reset] [--json]";
 
 /// Sends one control command to a running fake-services and exits.
 fn control_command(mut args: Vec<String>) -> ! {
@@ -51,7 +53,13 @@ fn control_command(mut args: Vec<String>) -> ! {
     });
     match control::call(port, path, &body) {
         Ok(answer) => {
-            println!("{answer}");
+            let report = (path == "/_control/stats" && body["json"] != true)
+                .then(|| serde_json::from_str(&answer).ok())
+                .flatten();
+            match report {
+                Some(report) => print!("{}", metrics::text(&report)),
+                None => println!("{answer}"),
+            }
             std::process::exit(0)
         }
         Err(e) => {
@@ -101,7 +109,7 @@ async fn main() {
     let is_command = raw
         .iter()
         .find(|a| !a.starts_with("--") && a.parse::<u16>().is_err())
-        .is_some_and(|a| ["send", "obs", "eventsub", "scenario"].contains(&a.as_str()));
+        .is_some_and(|a| ["send", "obs", "eventsub", "scenario", "stats"].contains(&a.as_str()));
     if is_command {
         control_command(raw);
     }
@@ -116,8 +124,10 @@ async fn main() {
         "fake Twitch on http://127.0.0.1:{0} (TOOLKIT_FAKE_SERVICES=127.0.0.1:{0})",
         args.twitch_port
     );
-    let fake_obs = FakeObs::new(args.password);
-    let fake_twitch = FakeTwitch::default();
+    // One timeline for both fakes, so `stats` sees OBS and Twitch calls together.
+    let recorder = Recorder::default();
+    let fake_obs = FakeObs::with_recorder(args.password, recorder.clone());
+    let fake_twitch = FakeTwitch::with_recorder(std::time::Duration::from_secs(10), recorder);
     let app = fake_twitch
         .router()
         .merge(control::router(fake_obs.clone(), fake_twitch.clone()));
