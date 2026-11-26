@@ -5,13 +5,13 @@ use std::{
     time::Duration,
 };
 
-use fakes::obs::FakeObs;
+use fakes::obs::{FakeObs, Stats};
 use integrations::{
     obs::{Obs, ObsControl, ObsState, ObsStatus},
     secrets::{SecretStore, SecretStoreError},
 };
 use tokio::{net::TcpListener, sync::watch};
-use toolkit_core::streaming::StreamingState;
+use toolkit_core::streaming::{ItemSize, Monitor, StreamingState, TransformChange};
 
 #[derive(Default)]
 struct Password(Mutex<Option<String>>);
@@ -37,9 +37,13 @@ struct Client {
 }
 
 async fn fake(password: Option<&str>) -> u16 {
+    start(FakeObs::new(password.map(str::to_owned))).await
+}
+
+async fn start(fake: FakeObs) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(FakeObs::new(password.map(str::to_owned)).serve(listener));
+    tokio::spawn(fake.serve(listener));
     port
 }
 
@@ -206,4 +210,145 @@ async fn a_password_must_match() {
     .await;
     let mut wrong = connect(port, Some("nope"));
     until(&mut wrong.status, "refused", |s| s.state == ObsState::Error).await;
+}
+
+fn input(state: &StreamingState, name: &str) -> Option<toolkit_core::streaming::Input> {
+    state.inputs.iter().find(|i| i.name == name).cloned()
+}
+
+#[tokio::test]
+async fn volume_mute_and_monitoring_are_kept_and_reported() {
+    let mut c = connect(fake(None).await, None);
+    until(&mut c.state, "the mixer", |s| input(s, "Mic").is_some()).await;
+    c.control.set_input_volume("Mic", -6.0).await.unwrap();
+    until(&mut c.state, "the volume", |s| {
+        input(s, "Mic").is_some_and(|m| (m.volume_db + 6.0).abs() < 0.01)
+    })
+    .await;
+    c.control.set_input_mute("Mic", true).await.unwrap();
+    until(&mut c.state, "the mute", |s| {
+        input(s, "Mic").is_some_and(|m| m.muted)
+    })
+    .await;
+    c.control
+        .set_input_monitor("Mic", Monitor::MonitorOnly)
+        .await
+        .unwrap();
+    until(&mut c.state, "the monitoring", |s| {
+        input(s, "Mic").is_some_and(|m| m.monitor == Monitor::MonitorOnly)
+    })
+    .await;
+    assert!(
+        c.control.set_input_mute("Logo", true).await.is_err(),
+        "no audio"
+    );
+}
+
+#[tokio::test]
+async fn sizes_transforms_and_settings_read_back_as_written() {
+    let mut c = connect(fake(None).await, None);
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    let camera = c.state.borrow().scenes[1].items.last().unwrap().id;
+
+    c.control
+        .set_item_size(
+            "Live",
+            camera,
+            ItemSize {
+                width: 960.0,
+                height: 540.0,
+            },
+        )
+        .await
+        .unwrap();
+    let (canvas, items) = c.control.placements("Live").await.unwrap();
+    assert_eq!((canvas.width, canvas.height), (1920, 1080));
+    let (_, _, size) = items.iter().find(|(id, ..)| *id == camera).unwrap();
+    assert_eq!((size.width.round(), size.height.round()), (960.0, 540.0));
+
+    let change = TransformChange {
+        rotation: Some(90.0),
+        ..Default::default()
+    };
+    c.control
+        .set_item_transform("Live", camera, change)
+        .await
+        .unwrap();
+    assert_eq!(
+        c.control
+            .item_transform("Live", camera)
+            .await
+            .unwrap()
+            .rotation,
+        90.0
+    );
+
+    let mut width = serde_json::Map::new();
+    width.insert("width".into(), 500.into());
+    c.control.set_input_settings("Chat", width).await.unwrap();
+    let (kind, settings) = c.control.input_settings("Chat").await.unwrap();
+    assert_eq!(kind, "browser_source");
+    assert_eq!(settings["width"], 500);
+    assert_eq!(
+        settings["url"], "http://127.0.0.1:47811/overlay/chat/",
+        "merged, not replaced"
+    );
+    assert_eq!(settings["css"], "", "defaults fill the rest");
+
+    let cameras = c
+        .control
+        .input_list_items("Camera", "video_device_id")
+        .await
+        .unwrap();
+    // The busy (disabled) camera is left out by the client.
+    assert_eq!(cameras.len(), 1);
+    assert_eq!(cameras[0].0, "Fake Camera");
+    c.control
+        .press_input_button("Chat", "refreshnocache")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn stats_follow_the_set_drop_share_and_bitrate() {
+    let obs = FakeObs::new(None);
+    let mut c = connect(start(obs.clone()).await, None);
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    obs.set_output(Some(true), None);
+    until(&mut c.state, "streaming", |s| s.streaming).await;
+    obs.set_stats(Stats {
+        cpu_percent: 40.0,
+        dropped_percent: 8.0,
+        bitrate_kbps: 4000,
+    });
+    let before = c.control.stats().await.unwrap();
+    let at = std::time::Instant::now();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let after = c.control.stats().await.unwrap();
+    let secs = at.elapsed().as_secs_f64();
+    assert_eq!(after.cpu_percent, 40.0);
+    let skipped = (after.render_skipped - before.render_skipped) as f64;
+    let total = (after.render_total - before.render_total) as f64;
+    assert!(
+        (skipped / total * 100.0 - 8.0).abs() < 1.5,
+        "{skipped}/{total}"
+    );
+    let kbps = (after.stream_bytes - before.stream_bytes) as f64 * 8.0 / 1000.0 / secs;
+    assert!((kbps - 4000.0).abs() < 400.0, "{kbps} kbps");
+}
+
+#[tokio::test]
+async fn audio_levels_arrive_like_obs_sends_them() {
+    let mut c = connect(fake(None).await, None);
+    until(&mut c.status, "connected", |s| {
+        s.state == ObsState::Connected
+    })
+    .await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !c.control.meters().iter().any(|m| m.name == "Mic") {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("meters for the microphone");
 }
