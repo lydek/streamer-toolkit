@@ -50,6 +50,10 @@ struct Fake {
     list_status: Arc<Mutex<u16>>,
     /// The dashboard reward is paused.
     dash_paused: Arc<Mutex<bool>>,
+    /// Redemption status changes: query, body.
+    redemptions: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
+    /// Status they answer with; 0: done.
+    redemption_status: Arc<Mutex<u16>>,
 }
 
 /// A Helix custom reward; `r-own` is the toolkit's, `r-dash` was made in the Twitch dashboard.
@@ -151,6 +155,31 @@ async fn fake_helix(fake: Fake) -> String {
                 },
             ),
         )
+        .route(
+            "/channel_points/custom_rewards/redemptions",
+            axum::routing::patch(
+                |AxumState(f): AxumState<Fake>,
+                 axum::extract::RawQuery(q): axum::extract::RawQuery,
+                 Json(body): Json<serde_json::Value>| async move {
+                    use axum::response::IntoResponse;
+                    let status = body["status"].clone();
+                    f.redemptions
+                        .lock()
+                        .unwrap()
+                        .push((q.unwrap_or_default(), body));
+                    match *f.redemption_status.lock().unwrap() {
+                        0 => Json(serde_json::json!({ "data": [{
+                            "broadcaster_id": "42", "id": "rd-1", "user_id": "7", "user_login": "fish",
+                            "user_name": "小魚", "user_input": "", "status": status,
+                            "redeemed_at": "2026-11-26T12:00:00Z",
+                            "reward": { "id": "r-own", "title": "每日打卡", "prompt": "", "cost": 100 }
+                        }] }))
+                        .into_response(),
+                        code => StatusCode::from_u16(code).unwrap().into_response(),
+                    }
+                },
+            ),
+        )
         .with_state(fake);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -187,6 +216,8 @@ async fn signed_in_prepared(
     })
     .unwrap();
     let mut config = test_config();
+    // A real database, so the records written through Twitch's answers can be read back.
+    config.db = db::open(&dir).await.unwrap();
     config.data_dir = dir;
     config.twitch_secrets = Arc::new(SignedIn(scopes));
     config.twitch.helix = fake_helix(fake.clone()).await;
@@ -625,4 +656,57 @@ async fn a_dashboard_reward_is_taken_over_and_what_used_it_moves_to_the_new_one(
         json(res).await["slots"],
         serde_json::json!({ "reward.r-new": "s1" })
     );
+}
+
+#[tokio::test]
+async fn a_redemption_of_an_own_reward_is_fulfilled_or_refunded_and_the_record_follows() {
+    let fake = Fake::default();
+    let app = signed_in_app("redemption-status", &fake).await;
+    let set = |status: &str| {
+        req(
+            Method::PUT,
+            "/api/admin/redemptions/rd-1/status",
+            Some(serde_json::json!({ "reward_id": "r-own", "status": status })),
+        )
+    };
+
+    let res = app.clone().oneshot(set("canceled")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        fake.redemptions.lock().unwrap().as_slice(),
+        [(
+            "id=rd-1&broadcaster_id=42&reward_id=r-own".to_owned(),
+            serde_json::json!({ "status": "CANCELED" })
+        )]
+    );
+    // The record follows Twitch's answer without waiting for EventSub.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let res = app
+            .clone()
+            .oneshot(req(Method::GET, "/api/admin/redemptions", None))
+            .await
+            .unwrap();
+        let page = json(res).await;
+        if page["total"] == 1 {
+            assert_eq!(page["items"][0]["twitch_id"], "rd-1");
+            assert_eq!(page["items"][0]["reward_id"], "r-own");
+            assert_eq!(page["items"][0]["status"], "canceled");
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the record did not follow: {page}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // Already handled on Twitch (or gone): said as such.
+    *fake.redemption_status.lock().unwrap() = 404;
+    let res = app.clone().oneshot(set("fulfilled")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    assert_eq!(json(res).await["code"], "redemptions.not_pending");
+    // Not a status Twitch takes from here.
+    let res = app.oneshot(set("unfulfilled")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }

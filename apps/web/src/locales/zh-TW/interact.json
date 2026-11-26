@@ -52,6 +52,14 @@
     }
   },
   "redemption": {
+    "fulfil": "標成完成",
+    "refund": "退還點數",
+    "grant": "授權後即可處理",
+    "notOurs": "這個獎勵在 Twitch 後台建立，兌換只能到 Twitch 處理（或先在獎勵頁接管）。",
+    "refundTitle": "退還 {name} 兌換「{reward}」的點數？",
+    "refundText": "Twitch 會把 {n} 點還給觀眾，兌換標成已退還，之後不能改回來。",
+    "fulfilled": "已把 {name} 的兌換標成完成。",
+    "refunded": "已退還 {name} 的點數。",
     "played": {
       "label": "播放：",
       "none": "—",

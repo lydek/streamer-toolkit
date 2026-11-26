@@ -1664,6 +1664,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/redemptions/{twitch_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Marks a redemption of one of the toolkit's rewards fulfilled or refunds it on Twitch, then hands Twitch's answer to
+         *     the redemption records as an update, so the record changes at once (the EventSub update that follows is a
+         *     repeat).
+         */
+        put: operations["set_redemption_status"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/rewards": {
         parameters: {
             query?: never;
@@ -4288,6 +4309,11 @@ export interface components {
         };
         /** @enum {string} */
         RedemptionChangedType: "redemption.changed";
+        /**
+         * @description What a redemption becomes: fulfilled, or refunded (Twitch gives the points back).
+         * @enum {string}
+         */
+        RedemptionOutcome: "fulfilled" | "canceled";
         /** @description `GET /api/admin/redemptions`: one page, newest first. */
         RedemptionPage: {
             /**
@@ -4317,14 +4343,21 @@ export interface components {
             redeemed_at: string;
             /** Format: int32 */
             reward_cost: number;
+            reward_id: string;
             reward_title: string;
             status: components["schemas"]["RedemptionStatusName"];
+            /** @description Twitch's redemption ID, for marking it fulfilled or refunding it. */
+            twitch_id: string;
             /** @description RFC 3339, UTC: when the record was created or last changed status. */
             updated_at: string;
             /** @description Empty when the reward asks for nothing. */
             user_input: string;
             user_login: string;
             user_name: string;
+        };
+        RedemptionStatusBody: {
+            reward_id: string;
+            status: components["schemas"]["RedemptionOutcome"];
         };
         /** @enum {string} */
         RedemptionStatusName: "unfulfilled" | "fulfilled" | "canceled" | "unknown";
@@ -9429,6 +9462,66 @@ export interface operations {
             };
             /** @description `redemption.storage_failed` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_redemption_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Twitch's redemption ID */
+                twitch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedemptionStatusBody"];
+            };
+        };
+        responses: {
+            /** @description Done on Twitch; the record follows */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `rewards.invalid`, or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` or `rewards.not_ours` (Twitch lets only the app that made a reward handle its redemptions) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `redemptions.not_pending`: not found, or already fulfilled or refunded */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -700,6 +700,84 @@ pub(super) async fn take_over_reward(
     .into_response()
 }
 
+/// What a redemption becomes: fulfilled, or refunded (Twitch gives the points back).
+#[derive(Deserialize, ToSchema, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RedemptionOutcome {
+    Fulfilled,
+    Canceled,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct RedemptionStatusBody {
+    reward_id: String,
+    status: RedemptionOutcome,
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/redemptions/{twitch_id}/status",
+    tag = "admin",
+    params(("twitch_id" = String, Path, description = "Twitch's redemption ID")),
+    request_body = RedemptionStatusBody,
+    responses(
+        (status = 204, description = "Done on Twitch; the record follows"),
+        (status = 400, description = "`rewards.invalid`, or not signed in", body = ErrorBody),
+        (status = 403, description = "`twitch.scope_required` or `rewards.not_ours` (Twitch lets only the app that made a reward handle its redemptions)", body = ErrorBody),
+        (status = 404, description = "`redemptions.not_pending`: not found, or already fulfilled or refunded", body = ErrorBody),
+        (status = 502, body = ErrorBody),
+    )
+)]
+/// Marks a redemption of one of the toolkit's rewards fulfilled or refunds it on Twitch, then hands Twitch's answer to
+/// the redemption records as an update, so the record changes at once (the EventSub update that follows is a
+/// repeat).
+pub(super) async fn set_redemption_status(
+    State(s): State<Arc<AdminState>>,
+    Path(redemption): Path<String>,
+    Json(body): Json<RedemptionStatusBody>,
+) -> Response {
+    if !valid_twitch_id(&redemption) || !valid_twitch_id(&body.reward_id) {
+        return error(StatusCode::BAD_REQUEST, "rewards.invalid");
+    }
+    let twitch = s.twitch.read().await.clone();
+    let id = match manager(&twitch) {
+        Ok(id) => id,
+        Err(denied) => return denied.response(),
+    };
+    let helix = Helix::new(&s.endpoints.helix, twitch, s.http.clone());
+    let status = match body.status {
+        RedemptionOutcome::Fulfilled => "FULFILLED",
+        RedemptionOutcome::Canceled => "CANCELED",
+    };
+    let path = format!(
+        "/channel_points/custom_rewards/redemptions?id={redemption}&broadcaster_id={id}&reward_id={}",
+        body.reward_id
+    );
+    match helix
+        .patch_json_read(&path, &serde_json::json!({ "status": status }))
+        .await
+    {
+        Ok(answer) => {
+            let updated = answer
+                .get("data")
+                .and_then(|d| d.get(0))
+                .cloned()
+                .and_then(integrations::twitch::eventsub::helix_redemption);
+            match updated {
+                Some(r) => s.redemption.receive(r, Source::Twitch),
+                // Done on Twitch all the same; the EventSub update brings the record along.
+                None => {
+                    tracing::warn!("could not read Twitch's answer to a redemption status change")
+                }
+            }
+            StatusCode::NO_CONTENT.into_response()
+        }
+        // Twitch answers 404 for a redemption that is no longer waiting, too.
+        Err(HelixError::Refused(404)) => error(StatusCode::NOT_FOUND, "redemptions.not_pending"),
+        Err(e) => rewards_error(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{RewardChange, valid_twitch_id};

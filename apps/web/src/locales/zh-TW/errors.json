@@ -150,6 +150,9 @@
       "limit": "頻道已經有 50 個獎勵，這是 Twitch 的上限；請先刪掉一個。",
       "duplicate_title": "頻道上已經有同名的獎勵，Twitch 不允許兩個同名（不分大小寫）。"
     },
+    "redemptions": {
+      "not_pending": "這筆兌換已經在 Twitch 處理過（完成或退還），或已經不在了。"
+    },
     "twitch": {
       "scope_required": "目前的 Twitch 登入沒有這個功能需要的權限，請重新登入並授權。",
       "client_id_required": "請先設定 Client ID。",

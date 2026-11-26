@@ -67,6 +67,18 @@ impl Helix {
         Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)
     }
 
+    /// Like `patch_json`, for the requests whose answer matters (e.g. Update Redemption Status returns the redemption).
+    pub async fn patch_json_read(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, HelixError> {
+        let body = self
+            .send(Method::PATCH, path, Some(Bytes::from(body.to_string())))
+            .await?;
+        Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)
+    }
+
     pub async fn patch_json(&self, path: &str, body: &serde_json::Value) -> Result<(), HelixError> {
         self.send(Method::PATCH, path, Some(Bytes::from(body.to_string())))
             .await

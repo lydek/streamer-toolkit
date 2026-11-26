@@ -5257,6 +5257,80 @@
         }
       }
     },
+    "/api/admin/redemptions/{twitch_id}/status": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Marks a redemption of one of the toolkit's rewards fulfilled or refunds it on Twitch, then hands Twitch's answer to\nthe redemption records as an update, so the record changes at once (the EventSub update that follows is a\nrepeat).",
+        "operationId": "set_redemption_status",
+        "parameters": [
+          {
+            "name": "twitch_id",
+            "in": "path",
+            "description": "Twitch's redemption ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedemptionStatusBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Done on Twitch; the record follows"
+          },
+          "400": {
+            "description": "`rewards.invalid`, or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` or `rewards.not_ours` (Twitch lets only the app that made a reward handle its redemptions)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`redemptions.not_pending`: not found, or already fulfilled or refunded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/rewards": {
       "get": {
         "tags": [
@@ -12985,6 +13059,14 @@
           "redemption.changed"
         ]
       },
+      "RedemptionOutcome": {
+        "type": "string",
+        "description": "What a redemption becomes: fulfilled, or refunded (Twitch gives the points back).",
+        "enum": [
+          "fulfilled",
+          "canceled"
+        ]
+      },
       "RedemptionPage": {
         "type": "object",
         "description": "`GET /api/admin/redemptions`: one page, newest first.",
@@ -13019,6 +13101,8 @@
         "description": "One redemption record. `user_name`, `reward_title` and `user_input` are raw viewer or Twitch text: escape them\nwhen rendering.",
         "required": [
           "id",
+          "twitch_id",
+          "reward_id",
           "user_login",
           "user_name",
           "reward_title",
@@ -13052,11 +13136,18 @@
             "format": "int32",
             "minimum": 0
           },
+          "reward_id": {
+            "type": "string"
+          },
           "reward_title": {
             "type": "string"
           },
           "status": {
             "$ref": "#/components/schemas/RedemptionStatusName"
+          },
+          "twitch_id": {
+            "type": "string",
+            "description": "Twitch's redemption ID, for marking it fulfilled or refunding it."
           },
           "updated_at": {
             "type": "string",
@@ -13071,6 +13162,21 @@
           },
           "user_name": {
             "type": "string"
+          }
+        }
+      },
+      "RedemptionStatusBody": {
+        "type": "object",
+        "required": [
+          "reward_id",
+          "status"
+        ],
+        "properties": {
+          "reward_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RedemptionOutcome"
           }
         }
       },

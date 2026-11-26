@@ -1,4 +1,4 @@
-<!-- source: docs/scope.md source-sha256: b42f854d8081ac1981af664e5c6eddd92cd34dd70817bf4e69c1e019d4324972 -->
+<!-- source: docs/scope.md source-sha256: fd50137aaaac7827ce7ac561954a67e64962bf8f6fe2d9489fe861b2c9c0d364 -->
 [繁體中文](scope.md) | **English**
 
 # Scope
@@ -7,7 +7,7 @@
 A local-first Twitch streaming toolkit that builds only what real streams need. The goal is to replace the third-party chat, alert and shoutout (SO) services currently in use.
 
 ## Responsibility boundaries
-- Twitch owns channel-point balances, deductions and refunds. This tool only receives redemption events, stores records and triggers local actions.
+- Twitch owns channel-point balances, deductions and the refunds themselves. This tool receives redemption events, stores records and triggers local actions, and can mark redemptions of the rewards it made fulfilled or refund them (Twitch lets only the app that made a reward handle its redemptions). Redemptions of rewards made in the Twitch dashboard can only be handled on Twitch, or after a takeover.
 - Local redemption records may be incomplete because of downtime or missed events. The tool never claims they match Twitch exactly.
 - Twitch and OBS remain required external services. "Local-first" does not mean fully offline.
 - Videos played in shoutouts still come from Twitch; if the source is gone, they cannot play.
