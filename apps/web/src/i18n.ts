@@ -1,5 +1,8 @@
-import { createI18n } from 'vue-i18n'
-import zhTW from './locales/zh-TW.json'
+import { createI18n, type LocaleMessageValue, type VueMessageType } from 'vue-i18n'
+
+// One file per feature group, merged by top-level key; src/locales.test.ts rejects a key in two files.
+type Messages = Record<string, LocaleMessageValue<VueMessageType>>
+const zhTW: Messages = Object.assign({}, ...Object.values(import.meta.glob<Messages>('./locales/zh-TW/*.json', { eager: true, import: 'default' })))
 
 // Messages are precompiled by @intlify/unplugin-vue-i18n, so the strict CSP needs no 'unsafe-eval'.
 export const i18n = createI18n({

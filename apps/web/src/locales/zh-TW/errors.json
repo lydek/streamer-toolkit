@@ -1,0 +1,215 @@
+{
+  "errors": {
+    "unknown": "發生錯誤（{code}）",
+    "commands": {
+      "taken": "已被{feature}的「{label}」使用。"
+    },
+    "admin": {
+      "invalid_client_id": "Client ID 格式不正確（只能是英文字母與數字）。",
+      "open_failed": "無法開啟瀏覽器。",
+      "invalid_login": "Twitch 帳號名稱不正確。"
+    },
+    "settings": {
+      "save_failed": "設定儲存失敗。"
+    },
+    "home": {
+      "invalid_tiles": "功能磚清單格式不正確。"
+    },
+    "chat_dock": {
+      "invalid": "聊天室的寬度不正確。"
+    },
+    "services": {
+      "invalid": "使用的服務設定格式不正確。"
+    },
+    "after_numbers": {
+      "invalid": "下播後數字的設定格式不正確。"
+    },
+    "mixer": {
+      "invalid_mic": "麥克風要選一個 OBS 的聲音來源。"
+    },
+    "tab_bar": {
+      "invalid": "分頁列設定的格式不正確。"
+    },
+    "text_size": {
+      "invalid": "文字大小不正確。"
+    },
+    "media": {
+      "unsupported_type": "只能匯入 GIF、WebM 或 MP4，而且副檔名要和檔案內容一致。",
+      "too_large": "檔案超過 50 MB。",
+      "not_found": "找不到這個檔案。",
+      "invalid": "名稱不能空白，長度要在 10 分鐘以內。",
+      "save_failed": "無法儲存影片或 GIF。"
+    },
+    "leaderboard": {
+      "storage_failed": "讀不到排行榜的資料。"
+    },
+    "image_sizes": {
+      "unsupported": "只能用 PNG、JPEG、GIF 或 WebP 圖片。",
+      "too_large": "圖片超過 10 MB 或每邊 4096 px。",
+      "failed": "無法轉換這張圖片。",
+      "invalid_crop": "選的範圍超出圖片。",
+      "invalid_bg": "底色的格式不正確。"
+    },
+    "rehearsal": {
+      "invalid": "劇本格式不正確。",
+      "too_large": "劇本超過 256 KB。",
+      "not_running": "沒有正在進行的演練。"
+    },
+    "card_pack": {
+      "invalid": "動畫包格式不正確：{detail}",
+      "script": "動畫包不能有程式碼：{detail}",
+      "too_large": "動畫包太大：{detail}",
+      "not_found": "找不到這個動畫包。",
+      "save_failed": "無法安裝或刪除動畫包。"
+    },
+    "overlays": {
+      "invalid": "畫面工具的設定不正確：文字最多 100 字，倒數 1 到 1440 分鐘或 24 小時內的時間。",
+      "storage_failed": "無法讀取或儲存畫面工具的設定。"
+    },
+    "activity": {
+      "invalid_retention": "保存天數要在 1 到 3650 之間。",
+      "storage_failed": "活動紀錄存取失敗。",
+      "retention_unreadable": "讀不到 settings.json，保存期限暫時無法顯示，也不會刪除任何紀錄。"
+    },
+    "stream": {
+      "storage_failed": "讀不到本場直播的資料。"
+    },
+    "alerts": {
+      "not_found": "最近事件裡已經沒有這則特效。"
+    },
+    "chat": {
+      "storage_failed": "讀不到聊天紀錄。"
+    },
+    "chat_log": {
+      "invalid_time": "時間格式不正確。"
+    },
+    "chat_display": {
+      "invalid": "聊天室顯示設定不正確。"
+    },
+    "viewers": {
+      "invalid_ids": "觀眾 ID 格式不正確。",
+      "storage_failed": "讀不到觀眾資料。"
+    },
+    "update": {
+      "invalid_version": "版本號格式不正確。"
+    },
+    "outbox": {
+      "storage_failed": "無法讀取或更新待處理的事件。",
+      "not_found": "這筆事件已經處理過了。"
+    },
+    "checkin": {
+      "invalid_query": "搜尋條件不正確。",
+      "import_invalid": "不是有效的打卡資料：需要一個以 Twitch user ID 為鍵的 JSON 物件。",
+      "import_too_large": "檔案超過 5 MB。",
+      "invalid_date": "日期不正確：只能登記今天或過去的營運日。",
+      "viewer_not_found": "找不到這位觀眾。",
+      "storage_failed": "無法讀取或寫入打卡紀錄。",
+      "invalid_settings": "打卡設定不正確：指令是一個詞（最多 25 字），集點卡 1 到 100 格。",
+      "invalid_deduction": "扣除的格數要大於 0，原因最多 100 字。",
+      "invalid_style": "卡片樣式不正確：每排 1 到 20 格，文字最多 100 字，圖片要先上傳。",
+      "unsupported_image": "只能上傳 PNG、JPG、GIF 或 WebP，而且副檔名要和檔案內容一致。",
+      "image_too_large": "圖片超過 5 MB。",
+      "not_enough_stamps": "可用印章不夠，沒有扣除。"
+    },
+    "redemption": {
+      "invalid_filter": "篩選條件不正確。",
+      "storage_failed": "無法讀取兌換紀錄。"
+    },
+    "modules": {
+      "unknown": "沒有這個模組。",
+      "save_failed": "模組設定儲存失敗。"
+    },
+    "simulate": {
+      "invalid_checkin": "模擬打卡的內容不正確。",
+      "invalid_stamps": "已蓋的格數要在 1 到集點卡的格數之間。",
+      "invalid_text": "請輸入 1 到 500 字的訊息。",
+      "invalid_name": "名稱最多 25 個字。",
+      "invalid_alert": "模擬特效的內容格式不正確。",
+      "invalid_amount": "數量超出範圍：送禮訂閱 1 到 100 份，其他 1 到 100000。",
+      "invalid_overlay": "沒有這個 Overlay 可以測試。",
+      "feature_off": "計數器功能已關閉。"
+    },
+    "template": {
+      "unknown": "沒有這款聊天室樣板。",
+      "missing": "找不到聊天室樣板 templates/chat/template.html，Overlay 暫時使用預設樣板。",
+      "unreadable": "無法讀取聊天室樣板（必須是 UTF-8 文字檔），Overlay 暫時使用預設樣板。",
+      "invalid": "聊天室樣板缺少 data-chat-list 或 data-chat-message，或檔案超過 1 MB，Overlay 暫時使用預設樣板。"
+    },
+    "twitch": {
+      "client_id_required": "請先設定 Client ID。",
+      "sign_in_required": "請重新登入 Twitch。",
+      "sign_in_expired": "驗證碼已過期，請重新登入。",
+      "sign_in_refused": "Twitch 拒絕了登入，請確認 Client ID 與 app 類別（Public）。",
+      "unreachable": "連不到 Twitch，請檢查網路。",
+      "request_refused": "Twitch 拒絕了這個要求（頻道可能沒有頻道點數）。",
+      "rate_limited": "Twitch 請求太頻繁，請稍後再試。",
+      "invalid_response": "Twitch 回應無法辨識，請稍後再試。",
+      "storage_failed": "無法更新 Windows 認證管理員裡的登入資料。",
+      "scopes_missing": "新版本需要多一項 Twitch 權限（小奇點），請重新登入 Twitch 一次。聊天室在重新登入前照常運作。"
+    },
+    "obs": {
+      "unreachable": "連不到 OBS，請確認 OBS 已開啟，並在「工具 → WebSocket 伺服器設定」啟用伺服器。",
+      "disconnected": "與 OBS 的連線中斷了。",
+      "unused": "設定成不使用 OBS，不會連線。",
+      "auth_failed": "OBS WebSocket 密碼錯誤。",
+      "password_required": "OBS WebSocket 需要密碼，請先設定密碼。",
+      "unsupported_version": "不支援這個版本的 OBS，請更新 OBS。",
+      "invalid_address": "OBS 位址格式不正確。",
+      "secret_store_failed": "無法存取 Windows 認證管理員中的 OBS 密碼。",
+      "handshake_failed": "OBS WebSocket 沒有正確回應，請確認位址與連接埠指向 OBS。",
+      "not_connected": "OBS 沒有連線。",
+      "not_found": "OBS 裡找不到這個場景或物件，可能剛被改名或刪除。",
+      "request_failed": "OBS 沒有完成這個動作。",
+      "nothing_to_change": "沒有要變更的項目。",
+      "invalid_size": "大小要在 1 到 100000 之間。",
+      "invalid_volume": "音量要在 -100 到 26 dB 之間。",
+      "invalid_placement": "位置要在 -100000 到 100000 之間。",
+      "invalid_transform": "旋轉要在 -360 到 360 度之間，裁切每邊最多 100000 px。",
+      "invalid_source": "這個來源設定的格式不正確，或網址不是本工具的 Overlay。",
+      "source_not_editable": "這種來源只能在 OBS 修改。",
+      "not_local": "OBS 在另一台電腦，本工具的 Overlay 網址在那台電腦打不開，所以不能從這裡加進場景。",
+      "invalid_source": "這個 Overlay 的資料不正確。"
+    },
+    "port": {
+      "invalid": "連接埠必須介於 1024 到 65535。",
+      "in_use": "這個連接埠也被佔用了，請換一個。",
+      "bind_failed": "無法使用這個連接埠，請檢視記錄檔。",
+      "start_failed": "無法啟動 Host，請檢視記錄檔。"
+    },
+    "sound": {
+      "unsupported_type": "只能匯入 MP3、WAV、OGG 檔。",
+      "too_large": "檔案超過 10 MB。",
+      "not_found": "找不到這個音效，可能已經刪除。",
+      "invalid": "名稱不能空白，音量是 0 到 100%。",
+      "save_failed": "無法儲存音效。",
+      "unknown_slot": "這裡不能選音效。"
+    },
+    "counter": {
+      "invalid": "名稱不能空白，聊天指令只能是一個詞（最多 25 字）。",
+      "not_found": "找不到這個計數器，可能已經刪除。",
+      "viewer_not_found": "觀眾目錄裡沒有這位觀眾。",
+      "storage_failed": "無法儲存計數器。"
+    },
+    "music": {
+      "unsupported_type": "只能匯入 MP3、WAV、OGG 檔，而且副檔名要和檔案內容相符。",
+      "too_large": "檔案超過 50 MB。",
+      "not_found": "找不到這首歌或歌單，可能已經刪除。",
+      "invalid": "名稱不能空白，音量是 0 到 100%。",
+      "nothing_to_play": "這個歌單沒有能播的歌：檔案不見了，或還沒量到長度。",
+      "off": "背景音樂功能已關閉。",
+      "playing": "背景音樂正在播，請先暫停或停止再測試。",
+      "save_failed": "無法儲存音樂庫。"
+    },
+    "backup": {
+      "too_large": "資料太多，超過備份檔的上限（解壓縮後 20 GB、100,000 個檔案）。目前的資料沒有變動；可以刪掉用不到的音樂、影片或音效後再試。",
+      "no_space": "磁碟空間不夠，需要 {needed} 的可用空間。目前的資料沒有變動。",
+      "upload_gone": "上傳已取消或被新的上傳取代，請重新選擇備份檔。",
+      "upload_offset": "上傳中斷，請重新選擇備份檔。",
+      "export_failed": "無法匯出備份，請檢視記錄檔。",
+      "invalid": "這不是備份檔，或檔案已損壞。目前的資料沒有變動。",
+      "newer_version": "這份備份是較新版本的程式做的，請先更新程式。目前的資料沒有變動。",
+      "nothing_staged": "請先選擇備份檔。",
+      "restore_failed": "無法還原備份，請檢視記錄檔。目前的資料沒有變動。"
+    }
+  }
+}
