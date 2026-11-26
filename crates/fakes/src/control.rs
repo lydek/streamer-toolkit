@@ -110,14 +110,14 @@ fn send_event(fakes: &Fakes, kind: &str, p: &Params, first: bool) -> Result<Valu
     let twitch_type =
         events::twitch_type(kind).ok_or_else(|| format!("unknown event kind {kind}"))?;
     let (mut sent, mut skipped) = (Vec::new(), Vec::new());
+    let id = fakes.twitch.id("fake");
     let mut out = |t: &str, event: Value| {
-        if fakes.twitch.notify(t, event) {
+        if fakes.twitch.notify(t, event, Some(&id)) {
             sent.push(t.to_owned());
         } else {
             skipped.push(t.to_owned());
         }
     };
-    let id = fakes.twitch.id("fake");
     match twitch_type {
         "stream.online" => fakes.twitch.set_live(true),
         "stream.offline" => fakes.twitch.set_live(false),

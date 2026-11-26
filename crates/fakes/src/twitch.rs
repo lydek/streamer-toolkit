@@ -28,6 +28,47 @@ pub const BROADCASTER_LOGIN: &str = "fake_streamer";
 pub const PRELOADED_TOKEN: &str = "fake-access";
 const BROADCASTER_NAME: &str = "Fake_Streamer";
 const TIMESTAMP: &str = "2026-11-26T12:00:00Z";
+/// The channel point rewards, as `(id, title, cost)`.
+pub const REWARDS: &[(&str, &str, u32)] = &[
+    ("fake-reward-check-in", "Check in", 100),
+    ("fake-reward-hydrate", "Hydrate", 500),
+    ("fake-reward-play-a-sound", "Play a sound", 1000),
+];
+
+/// What the fake Twitch looks like now, for the control panel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwitchSnapshot {
+    /// EventSub and IRC connections open right now.
+    pub eventsub_open: u32,
+    pub irc_open: u32,
+    pub live: bool,
+    /// The subscription types the app created.
+    pub subscriptions: Vec<String>,
+    pub irc_joins: Vec<String>,
+    /// The ID of the last redemption and the last chat message the app received.
+    pub last_redemption: Option<String>,
+    pub last_chat: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum Socket {
+    EventSub,
+    Irc,
+}
+
+/// Counts a connection as open until dropped.
+struct Open(FakeTwitch, Socket);
+
+impl Drop for Open {
+    fn drop(&mut self) {
+        let mut w = self.0.0.world.lock().unwrap();
+        let n = match self.1 {
+            Socket::EventSub => &mut w.eventsub_open,
+            Socket::Irc => &mut w.irc_open,
+        };
+        *n = n.saturating_sub(1);
+    }
+}
 
 struct World {
     /// Scopes asked for at the last device login; `/validate` grants them.
@@ -35,7 +76,11 @@ struct World {
     live: bool,
     subscriptions: Vec<Value>,
     eventsub_connects: u32,
+    eventsub_open: u32,
+    irc_open: u32,
     irc_joins: Vec<String>,
+    last_redemption: Option<String>,
+    last_chat: Option<String>,
     next_id: u64,
     /// Access tokens this fake issued; any other is an unknown token.
     tokens: HashSet<String>,
@@ -78,7 +123,11 @@ impl FakeTwitch {
                 live: false,
                 subscriptions: Vec::new(),
                 eventsub_connects: 0,
+                eventsub_open: 0,
+                irc_open: 0,
                 irc_joins: Vec::new(),
+                last_redemption: None,
+                last_chat: None,
                 next_id: 0,
                 tokens: HashSet::from([PRELOADED_TOKEN.to_owned()]),
             }),
@@ -134,27 +183,65 @@ impl FakeTwitch {
         self.0.world.lock().unwrap().irc_joins.clone()
     }
 
+    pub fn snapshot(&self) -> TwitchSnapshot {
+        let w = self.0.world.lock().unwrap();
+        TwitchSnapshot {
+            eventsub_open: w.eventsub_open,
+            irc_open: w.irc_open,
+            live: w.live,
+            subscriptions: w
+                .subscriptions
+                .iter()
+                .filter_map(|s| s["type"].as_str().map(str::to_owned))
+                .collect(),
+            irc_joins: w.irc_joins.clone(),
+            last_redemption: w.last_redemption.clone(),
+            last_chat: w.last_chat.clone(),
+        }
+    }
+
+    fn open(&self, socket: Socket) -> Open {
+        let mut w = self.0.world.lock().unwrap();
+        match socket {
+            Socket::EventSub => w.eventsub_open += 1,
+            Socket::Irc => w.irc_open += 1,
+        }
+        Open(self.clone(), socket)
+    }
+
     /// Whether `/helix/streams` reports the broadcaster live.
     pub fn set_live(&self, live: bool) {
         self.0.world.lock().unwrap().live = live;
     }
 
     /// Sends `event` as a notification of `kind` to every EventSub session, as Twitch does only for a type the app
-    /// subscribed to: `false` (nothing sent) when there is no such subscription.
-    pub fn notify(&self, kind: &str, event: Value) -> bool {
+    /// subscribed to: `false` (nothing sent, logged as undelivered) when there is no such subscription. `id` is the
+    /// message or redemption the event is about; the last delivered ones are kept for the panel.
+    pub fn notify(&self, kind: &str, event: Value, id: Option<&str>) -> bool {
         let Some(subscription) = self
             .subscriptions()
             .into_iter()
             .rev()
             .find(|s| s["type"] == kind)
         else {
+            self.0.recorder.event_with("twitch", kind, id, false);
             return false;
         };
+        if let Some(id) = id {
+            let mut w = self.0.world.lock().unwrap();
+            match kind {
+                "channel.channel_points_custom_reward_redemption.add" => {
+                    w.last_redemption = Some(id.into())
+                }
+                "channel.chat.message" => w.last_chat = Some(id.into()),
+                _ => {}
+            }
+        }
         let message = json!({"metadata": {"message_id": self.id("message"), "message_type": "notification",
                                           "message_timestamp": now(), "subscription_type": kind,
                                           "subscription_version": subscription["version"]},
                              "payload": {"subscription": subscription, "event": event}});
-        self.0.recorder.event("twitch", kind);
+        self.0.recorder.event_with("twitch", kind, id, true);
         let _ = self.0.eventsub.send(message.to_string());
         true
     }
@@ -312,12 +399,11 @@ async fn rewards() -> Response {
                "is_user_input_required": false, "is_paused": false, "is_in_stock": true,
                "should_redemptions_skip_request_queue": false})
     };
-    Json(json!({"data": [
-        reward("fake-reward-check-in", "Check in", 100),
-        reward("fake-reward-hydrate", "Hydrate", 500),
-        reward("fake-reward-play-a-sound", "Play a sound", 1000),
-    ]}))
-    .into_response()
+    let data: Vec<Value> = REWARDS
+        .iter()
+        .map(|(id, title, cost)| reward(id, title, *cost))
+        .collect();
+    Json(json!({ "data": data })).into_response()
 }
 
 /// Twitch's own badge images (public CDN); offline they simply do not load.
@@ -395,6 +481,7 @@ async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> 
     upgrade.on_upgrade(move |mut socket| async move {
         let session = fake.id("session");
         fake.0.world.lock().unwrap().eventsub_connects += 1;
+        let _open = fake.open(Socket::EventSub);
         let keepalive = fake.0.keepalive;
         let welcome = json!({"metadata": {"message_id": fake.id("message"), "message_type": "session_welcome",
                                           "message_timestamp": TIMESTAMP},
@@ -513,6 +600,7 @@ async fn irc(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Respo
         Err(refused) => return refused,
     };
     upgrade.on_upgrade(move |mut socket| async move {
+        let _open = fake.open(Socket::Irc);
         let mut nick = String::from("justinfan");
         let mut lines = fake.0.irc.subscribe();
         let mut close = fake.0.irc_close.subscribe();

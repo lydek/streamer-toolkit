@@ -67,6 +67,34 @@ pub struct Sent {
     pub at: Instant,
     pub service: &'static str,
     pub kind: String,
+    /// The message, redemption or stream an event is about, when it has one.
+    pub id: Option<String>,
+    /// `false` for an event the app had no subscription for, so it never went out.
+    pub delivered: bool,
+}
+
+/// Which way an activity entry went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    /// A request or connection from the app to a fake.
+    In,
+    /// An event from a fake to the app.
+    Out,
+}
+
+/// One line of the activity log: a call the app made or an event a fake sent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Entry {
+    pub at: Instant,
+    pub service: &'static str,
+    pub direction: Direction,
+    pub key: String,
+    /// The answer's status, for calls.
+    pub status: Option<u16>,
+    pub handled: Option<Duration>,
+    pub id: Option<String>,
+    /// `false` only for an event that never went out.
+    pub delivered: bool,
 }
 
 struct Log {
@@ -173,6 +201,11 @@ impl Recorder {
     }
 
     pub fn event(&self, service: &'static str, kind: &str) {
+        self.event_with(service, kind, None, true);
+    }
+
+    /// An event with the ID it is about; `delivered: false` for one the app had no subscription for.
+    pub fn event_with(&self, service: &'static str, kind: &str, id: Option<&str>, delivered: bool) {
         let mut log = self.0.lock().unwrap();
         if kind == "InputVolumeMeters" {
             log.meters += 1;
@@ -182,8 +215,58 @@ impl Recorder {
             at: Instant::now(),
             service,
             kind: kind.into(),
+            id: id.map(str::to_owned),
+            delivered,
         });
         trim(&mut log.events);
+    }
+
+    /// The latest `n` calls and events, oldest first.
+    pub fn recent(&self, n: usize) -> Vec<Entry> {
+        let log = self.0.lock().unwrap();
+        let calls = log.calls.iter().rev().take(n).map(|c| Entry {
+            at: c.at,
+            service: c.service,
+            direction: Direction::In,
+            key: c.key.clone(),
+            status: Some(c.status),
+            handled: Some(c.handled),
+            id: None,
+            delivered: true,
+        });
+        let events = log.events.iter().rev().take(n).map(|e| Entry {
+            at: e.at,
+            service: e.service,
+            direction: Direction::Out,
+            key: e.kind.clone(),
+            status: None,
+            handled: None,
+            id: e.id.clone(),
+            delivered: e.delivered,
+        });
+        let mut all: Vec<Entry> = calls.chain(events).collect();
+        all.sort_by_key(|e| e.at);
+        let skip = all.len().saturating_sub(n);
+        all.split_off(skip)
+    }
+
+    /// The faults that still last, with the time left.
+    pub fn faults(&self) -> Vec<(String, Fault, Duration)> {
+        let mut log = self.0.lock().unwrap();
+        let now = Instant::now();
+        log.faults.retain(|_, f| f.until > now);
+        let mut list: Vec<_> = log
+            .faults
+            .iter()
+            .map(|(k, f)| (k.clone(), *f, f.until - now))
+            .collect();
+        list.sort_by(|a, b| a.0.cmp(&b.0));
+        list
+    }
+
+    /// Ends the fault for `key`; `false` if there was none.
+    pub fn remove_fault(&self, key: &str) -> bool {
+        self.0.lock().unwrap().faults.remove(key).is_some()
     }
 
     /// Makes calls with this key fail, close or slow down until `fault.until`.
@@ -257,7 +340,8 @@ pub fn analyze(calls: &[Call], events: &[Sent], since: Instant, now: Instant) ->
     let per_minute = |n: usize| (n as f64 * 60.0 / elapsed.as_secs_f64() * 10.0).round() / 10.0;
     let mut calls: Vec<&Call> = calls.iter().collect();
     calls.sort_by_key(|c| c.at);
-    let mut events: Vec<&Sent> = events.iter().collect();
+    // Undelivered events never reached the app, so nothing follows them.
+    let mut events: Vec<&Sent> = events.iter().filter(|e| e.delivered).collect();
     events.sort_by_key(|e| e.at);
     let mut warnings = Vec::new();
 
@@ -682,12 +766,82 @@ mod tests {
     }
 
     #[test]
+    fn undelivered_events_set_off_nothing() {
+        let base = Instant::now();
+        let events = vec![Sent {
+            at: base,
+            service: "twitch",
+            kind: "channel.cheer".into(),
+            id: Some("fake-1".into()),
+            delivered: false,
+        }];
+        let calls: Vec<Call> = (1..=12)
+            .map(|i| call(base, i * 10, "GET /helix/users", i))
+            .collect();
+        let r = analyze(&calls, &events, base, at(base, 5000));
+        assert!(r["events"].as_array().unwrap().is_empty(), "{r}");
+    }
+
+    #[test]
+    fn recent_entries_are_merged_by_time_and_capped() {
+        let r = Recorder::default();
+        r.call(call(Instant::now(), 0, "GetStats", 1));
+        r.event_with("twitch", "channel.chat.message", Some("fake-7"), true);
+        r.event_with("twitch", "channel.cheer", None, false);
+        r.call(call(Instant::now(), 0, "GET /helix/users", 2));
+        let all = r.recent(10);
+        let keys: Vec<&str> = all.iter().map(|e| e.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "GetStats",
+                "channel.chat.message",
+                "channel.cheer",
+                "GET /helix/users"
+            ]
+        );
+        assert_eq!(
+            (all[1].direction, all[1].id.as_deref()),
+            (Direction::Out, Some("fake-7"))
+        );
+        assert!(!all[2].delivered);
+        assert_eq!(r.recent(2).len(), 2);
+        assert_eq!(r.recent(2)[1].key, "GET /helix/users", "the latest ones");
+    }
+
+    #[test]
+    fn faults_are_listed_with_time_left_and_removed_one_by_one() {
+        let r = Recorder::default();
+        let until = Instant::now() + Duration::from_secs(30);
+        for key in ["GET /helix/users", "GetStats"] {
+            r.set_fault(
+                key,
+                Fault {
+                    status: Some(500),
+                    close: false,
+                    delay: Duration::ZERO,
+                    until,
+                },
+            );
+        }
+        let list = r.faults();
+        assert_eq!(list.len(), 2);
+        assert!(list[0].2 <= Duration::from_secs(30) && list[0].2 > Duration::from_secs(25));
+        assert!(r.remove_fault("GetStats"));
+        assert!(!r.remove_fault("GetStats"));
+        assert_eq!(r.faults().len(), 1);
+        assert!(r.fault("GET /helix/users").is_some());
+    }
+
+    #[test]
     fn many_calls_after_each_event_are_amplification() {
         let base = Instant::now();
         let events = vec![Sent {
             at: base,
             service: "obs",
             kind: "SceneItemCreated".into(),
+            id: None,
+            delivered: true,
         }];
         let calls: Vec<Call> = (1..=12)
             .map(|i| call(base, i * 10, "GetSceneItemList", i))
