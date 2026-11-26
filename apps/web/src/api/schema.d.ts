@@ -299,6 +299,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chat/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["chat_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/checkin/card-style": {
         parameters: {
             query?: never;
@@ -2905,6 +2921,13 @@ export interface components {
             userLogin: string;
             /** @description Raw viewer text; overlays escape it when rendering. */
             userName: string;
+        };
+        ChatSendBody: {
+            text: string;
+        };
+        ChatSent: {
+            /** @description Twitch's ID of the message, as chat events carry it. */
+            message_id: string;
         };
         /**
          * @description How much room each chat line takes.
@@ -5618,6 +5641,64 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    chat_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatSendBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSent"];
+                };
+            };
+            /** @description `chat.send_invalid` (empty or over 500 characters), `chat.send_refused` (Twitch refused the message), or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required`: the sign-in lacks `user:write:chat` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `chat.send_dropped`: Twitch took the message but did not send it (e.g. a duplicate or AutoMod) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

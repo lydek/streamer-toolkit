@@ -55,6 +55,18 @@ impl Helix {
     }
 
     /// `path` includes its query; the response body is parsed as JSON.
+    /// Like `post_json`, for the requests whose answer matters (e.g. Send Chat Message says whether it went out).
+    pub async fn post_json_read(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, HelixError> {
+        let body = self
+            .send(Method::POST, path, Some(Bytes::from(body.to_string())))
+            .await?;
+        Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)
+    }
+
     pub async fn patch_json(&self, path: &str, body: &serde_json::Value) -> Result<(), HelixError> {
         self.send(Method::PATCH, path, Some(Bytes::from(body.to_string())))
             .await

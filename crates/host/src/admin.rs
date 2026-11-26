@@ -47,12 +47,14 @@ use utoipa::ToSchema;
 
 use crate::TwitchEndpoints;
 
+pub(super) mod chat_send;
 pub(super) mod checkin_admin;
 pub(super) mod general_settings;
 pub(super) mod simulate;
 pub(super) mod stream_info;
 pub(super) mod twitch_account;
 
+use chat_send::chat_send;
 use checkin_admin::{checkin_outbox, checkin_rewards, retry_dead_letter, skip_dead_letter};
 use general_settings::{first_run, general, list_modules, set_first_run, set_general, set_module};
 use simulate::{simulate_alert, simulate_chat, simulate_checkin};
@@ -288,6 +290,7 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
             get(stream_info).put(set_stream_info),
         )
         .route("/api/admin/stream-info/categories", get(search_categories))
+        .route("/api/admin/chat/send", post(chat_send))
         .route("/api/admin/checkin/outbox", get(checkin_outbox))
         .route(
             "/api/admin/checkin/outbox/{event_id}/retry",

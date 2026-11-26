@@ -7,8 +7,8 @@ mod chat_routes;
 mod feature_routes;
 mod guard;
 mod settings_routes;
-mod stream_info_routes;
 mod template_routes;
+mod twitch_write_routes;
 
 #[test]
 fn the_fake_twitch_must_be_on_this_machine() {

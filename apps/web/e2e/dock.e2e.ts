@@ -80,7 +80,7 @@ test('the saved state comes back after a restart, and the edge resizes from the 
   await expect.poll(() => puts.at(-1)).toEqual({ open: true, width: 416, side: 'right' })
 })
 
-test('filters and search narrow the messages; sending waits for a later phase', async ({ page }) => {
+test('filters and search narrow the messages; without the chat scope, sending offers to grant it', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await open(page, { open: true, width: 340 })
   await panel(page).getByRole('button', { name: zh.dock.filter.mentions }).click()
@@ -94,7 +94,9 @@ test('filters and search narrow the messages; sending waits for a later phase', 
   await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)
 
   await expect(panel(page).getByRole('button', { name: zh.dock.filter.mods })).toBeDisabled()
-  await expect(panel(page).getByRole('textbox', { name: zh.dock.send })).toBeDisabled()
+  // Signed in without user:write:chat: no box to type in, a button to grant the scope instead.
+  await expect(panel(page).getByRole('textbox', { name: zh.dock.send })).toHaveCount(0)
+  await expect(panel(page).getByRole('button', { name: zh.dock.grant })).toBeVisible()
 })
 
 test('"mentions me" follows signing in to another account without a reload', async ({ page }) => {

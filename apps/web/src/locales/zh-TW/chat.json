@@ -52,7 +52,9 @@
     },
     "modsLater": "需要觀眾身分資料，之後開放",
     "send": "發言",
-    "sendLater": "發言（之後開放）",
+    "sendPlaceholder": "在聊天室發言…",
+    "signInFirst": "登入 Twitch 後就能發言",
+    "grant": "授權後即可發言",
     "rewards": {
       "open": "頻道點數獎勵",
       "title": "頻道點數獎勵",
