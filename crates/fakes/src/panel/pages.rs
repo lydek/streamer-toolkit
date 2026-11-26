@@ -1,21 +1,22 @@
 //! The tab pages.
 
 use iced::{
-    Alignment, Element,
-    Length::{Fill, FillPortion},
+    Alignment, Element, Font,
+    Length::{Fill, FillPortion, Shrink},
     widget::{
-        button, checkbox, column, container, mouse_area, pick_list, progress_bar, row, scrollable,
-        slider, table, text, text_input,
+        button, checkbox, column, container, mouse_area, pick_list, progress_bar, row, slider,
+        table, text, text_input,
     },
 };
 
 use super::{
-    GREEN, MUTED, Message, Panel, RED, SMALL, TEXT, heading, kv,
+    AMBER, GREEN, MUTED, Message, Panel, RED, SMALL, TEXT, heading, kv, scrollable,
     send::{self, Field, Form, Kind, STATUSES, Status, TIERS},
     small_button,
 };
 use crate::metrics::Fault;
 use crate::twitch::{BROADCASTER_ID, BROADCASTER_LOGIN, REWARDS};
+use serde_json::Value;
 
 const SCENARIOS: [(&str, &str); 4] = [
     ("stream-start", "開播流程"),
@@ -509,6 +510,122 @@ impl Panel {
         .height(Fill)
         .into()
     }
+}
+
+impl Panel {
+    pub(super) fn stats_page(&self) -> Element<'_, Message> {
+        use super::stats::{CALL_COLUMNS, cell, sorted_calls};
+        let r = &self.report;
+        let summary = row![
+            text(format!(
+                "歸零後 {} 秒",
+                r["elapsed_s"].as_f64().unwrap_or(0.0) as u64
+            )),
+            text(format!(
+                "Helix 每分鐘最多 {} 次（{}%）",
+                cell(&r["helix"]["peak_per_minute"]),
+                cell(&r["helix"]["bucket_percent"])
+            )),
+            text(format!("token 檢查 {} 次", cell(&r["validate"]["total"]))),
+        ]
+        .spacing(24);
+        let warnings: Vec<Value> = r["warnings"].as_array().cloned().unwrap_or_default();
+        let warnings: Element<'_, Message> = if warnings.is_empty() {
+            text("沒有異常").color(MUTED).into()
+        } else {
+            column(warnings.iter().map(|w| {
+                text(format!(
+                    "{:.1} 秒  {}  {}",
+                    w["at_s"].as_f64().unwrap_or(0.0),
+                    cell(&w["key"]),
+                    cell(&w["detail"])
+                ))
+                .size(SMALL)
+                .color(AMBER)
+                .into()
+            }))
+            .spacing(2)
+            .into()
+        };
+        let sort = self.sort;
+        let calls =
+            table::table(
+                CALL_COLUMNS.iter().enumerate().map(|(i, (field, _))| {
+                    let head = button(text(sort.heading(i)).size(SMALL).color(MUTED))
+                        .style(button::text)
+                        .padding(0)
+                        .on_press(Message::Sort(i));
+                    table::column(head, move |row: Value| value_cell(&row[*field]))
+                        .width(if i == 0 { Fill } else { Shrink })
+                }),
+                sorted_calls(r, sort),
+            )
+            .padding_x(8)
+            .padding_y(2);
+        const EVENTS: [(&str, &str); 5] = [
+            ("kind", "事件"),
+            ("sent", "送出"),
+            ("calls_after", "之後的呼叫"),
+            ("calls_per_event", "每事件"),
+            ("avg_reaction_ms", "平均反應 ms"),
+        ];
+        const RETRIES: [(&str, &str); 4] = [
+            ("key", "呼叫"),
+            ("at_s", "秒"),
+            ("retries", "重試"),
+            ("gaps_ms", "間隔 ms"),
+        ];
+        let list = |key: &str| r[key].as_array().cloned().unwrap_or_default();
+        scrollable(
+            column![
+                summary,
+                heading("異常警告"),
+                warnings,
+                heading("呼叫（點欄位排序）"),
+                calls,
+                heading("事件之後"),
+                report_table(&EVENTS, list("events")),
+                heading("失敗後的重試"),
+                report_table(&RETRIES, list("retries")),
+            ]
+            .spacing(8)
+            .padding([10, 12]),
+        )
+        .height(Fill)
+        .into()
+    }
+}
+
+/// A report table as it is: one column per field, the first one wide; "沒有" when empty.
+fn report_table<'a>(
+    columns: &'static [(&'static str, &'static str)],
+    rows: Vec<Value>,
+) -> Element<'a, Message> {
+    if rows.is_empty() {
+        return text("沒有").color(MUTED).into();
+    }
+    table::table(
+        columns.iter().enumerate().map(|(i, (field, label))| {
+            table::column(heading(label), move |row: Value| value_cell(&row[*field]))
+                .width(if i == 0 { Fill } else { Shrink })
+        }),
+        rows,
+    )
+    .padding_x(8)
+    .padding_y(2)
+    .into()
+}
+
+/// A report value; monospace only for plain ASCII (no Chinese glyphs there).
+fn value_cell<'a>(value: &Value) -> Element<'a, Message> {
+    let line = super::stats::cell(value);
+    let cell = text(line.clone()).size(SMALL);
+    if line.is_ascii() {
+        cell.font(Font::MONOSPACE)
+    } else {
+        cell
+    }
+    .into()
 }
 
 /// A control command run in the panel, the same words as on the command line.
