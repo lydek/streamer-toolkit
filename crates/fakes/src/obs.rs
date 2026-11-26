@@ -825,6 +825,8 @@ impl World {
 pub struct FakeObs {
     world: Arc<Mutex<World>>,
     events: broadcast::Sender<Event>,
+    /// Closes every connection, like OBS exiting.
+    close: broadcast::Sender<()>,
     password: Option<String>,
 }
 
@@ -834,8 +836,14 @@ impl FakeObs {
         Self {
             world: Arc::new(Mutex::new(World::sample())),
             events: broadcast::channel(1024).0,
+            close: broadcast::channel(1).0,
             password,
         }
+    }
+
+    /// Closes every connection as OBS does when it exits; clients may connect again right away.
+    pub fn drop_connections(&self) {
+        let _ = self.close.send(());
     }
 
     pub fn router(&self) -> Router {
@@ -956,8 +964,14 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
             return;
         }
         let mut events = fake.events.subscribe();
+        let mut close = fake.close.subscribe();
         loop {
             tokio::select! {
+                _ = close.recv() => {
+                    let frame = ws::CloseFrame { code: 1001, reason: "OBS is exiting".into() };
+                    let _ = socket.send(ws::Message::Close(Some(frame))).await;
+                    return;
+                }
                 message = socket.recv() => match message {
                     Some(Ok(ws::Message::Text(text))) => {
                         let message: Value = serde_json::from_str(text.as_str()).unwrap_or_default();

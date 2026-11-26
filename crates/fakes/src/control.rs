@@ -1,0 +1,328 @@
+//! The control API under `/_control/…` on the fake Twitch's port, and the `fake-services send|obs|eventsub|scenario`
+//! commands that call it. Only `127.0.0.1` ever serves it.
+
+use std::{
+    io::{Read, Write},
+    net::TcpStream,
+    time::Duration,
+};
+
+use axum::{
+    Json, Router,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::post,
+};
+use serde_json::{Value, json};
+
+use crate::{
+    events::{self, Params},
+    obs::{FakeObs, Stats},
+    twitch::FakeTwitch,
+};
+
+#[derive(Clone)]
+struct Fakes {
+    obs: FakeObs,
+    twitch: FakeTwitch,
+}
+
+/// The control routes; merge them into the fake Twitch's router.
+pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
+    Router::new()
+        .route("/_control/send", post(send))
+        .route("/_control/obs", post(obs_control))
+        .route("/_control/eventsub/drop", post(eventsub_drop))
+        .route("/_control/scenario", post(scenario))
+        .with_state(Fakes { obs, twitch })
+}
+
+fn bad(message: String) -> Response {
+    (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
+}
+
+/// Sends one event (and what Twitch sends with it). Returns which Twitch types went out and which the app has no
+/// subscription for.
+fn send_event(fakes: &Fakes, kind: &str, p: &Params, first: bool) -> Result<Value, String> {
+    let twitch_type =
+        events::twitch_type(kind).ok_or_else(|| format!("unknown event kind {kind}"))?;
+    let (mut sent, mut skipped) = (Vec::new(), Vec::new());
+    let mut out = |t: &str, event: Value| {
+        if fakes.twitch.notify(t, event) {
+            sent.push(t.to_owned());
+        } else {
+            skipped.push(t.to_owned());
+        }
+    };
+    let id = fakes.twitch.id("fake");
+    match twitch_type {
+        "stream.online" => fakes.twitch.set_live(true),
+        "stream.offline" => fakes.twitch.set_live(false),
+        _ => {}
+    }
+    out(
+        twitch_type,
+        events::event(twitch_type, p, &id).expect("every kind has an event"),
+    );
+    // A gift also sends one `channel.subscribe` per recipient, as Twitch does.
+    if twitch_type == "channel.subscription.gift" {
+        for n in 1..=p.count {
+            let recipient = Params {
+                user: format!("gift_recipient_{n}"),
+                ..p.clone()
+            };
+            let mut event =
+                events::event("channel.subscribe", &recipient, &id).expect("subscribe event");
+            event["is_gift"] = json!(true);
+            out("channel.subscribe", event);
+        }
+    }
+    if twitch_type == "channel.chat.message" && first {
+        fakes.twitch.first_chat(&id, &p.user, &p.message);
+    }
+    Ok(json!({"sent": sent, "skipped": skipped, "id": id}))
+}
+
+async fn send(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    let kind = body["kind"].as_str().unwrap_or_default();
+    let first = body["first"].as_bool().unwrap_or(false);
+    match send_event(&fakes, kind, &Params::from_json(&body), first) {
+        Ok(result) => Json(result).into_response(),
+        Err(e) => bad(e),
+    }
+}
+
+/// A number sent as JSON or as text (the commands send text).
+fn number(value: &Value) -> Option<f64> {
+    value.as_f64().or_else(|| value.as_str()?.parse().ok())
+}
+
+/// `{"action": "drop" | "stats" | "output", …}`.
+async fn obs_control(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    match body["action"].as_str() {
+        Some("drop") => fakes.obs.drop_connections(),
+        Some("stats") => {
+            let current = fakes.obs.stats();
+            fakes.obs.set_stats(Stats {
+                cpu_percent: number(&body["cpu"]).unwrap_or(current.cpu_percent),
+                dropped_percent: number(&body["dropped"])
+                    .map_or(current.dropped_percent, |d| d.clamp(0.0, 100.0)),
+                bitrate_kbps: number(&body["kbps"])
+                    .map_or(current.bitrate_kbps, |k| k.max(0.0) as u64),
+            });
+        }
+        Some("output") => fakes
+            .obs
+            .set_output(body["streaming"].as_bool(), body["recording"].as_bool()),
+        other => return bad(format!("unknown OBS action {other:?}")),
+    }
+    let s = fakes.obs.stats();
+    Json(json!({"cpu": s.cpu_percent, "dropped": s.dropped_percent, "kbps": s.bitrate_kbps}))
+        .into_response()
+}
+
+async fn eventsub_drop(State(fakes): State<Fakes>) -> Response {
+    fakes.twitch.drop_eventsub();
+    Json(json!({})).into_response()
+}
+
+pub const SCENARIOS: &[(&str, &str)] = &[
+    (
+        "stream-start",
+        "OBS starts streaming and Twitch reports the stream online",
+    ),
+    (
+        "stream-end",
+        "OBS stops streaming and Twitch reports the stream offline",
+    ),
+    ("gift-bomb", "one viewer gifts 20 subs at once"),
+    (
+        "redemption-flood",
+        "30 viewers redeem Check in, 100 ms apart",
+    ),
+];
+
+async fn scenario(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    let name = body["name"].as_str().unwrap_or_default();
+    let p = Params::default();
+    let result = match name {
+        "stream-start" => {
+            fakes.obs.set_output(Some(true), None);
+            send_event(&fakes, "online", &p, false)
+        }
+        "stream-end" => {
+            fakes.obs.set_output(Some(false), None);
+            send_event(&fakes, "offline", &p, false)
+        }
+        "gift-bomb" => send_event(
+            &fakes,
+            "gift",
+            &Params {
+                user: "generous_viewer".into(),
+                count: 20,
+                ..p
+            },
+            false,
+        ),
+        "redemption-flood" => {
+            tokio::spawn(async move {
+                for n in 1..=30 {
+                    let viewer = Params {
+                        user: format!("viewer_{n}"),
+                        ..Params::default()
+                    };
+                    let _ = send_event(&fakes, "redeem", &viewer, false);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            });
+            Ok(json!({"started": "redemption-flood"}))
+        }
+        _ => Err(format!("unknown scenario {name}")),
+    };
+    match result {
+        Ok(result) => Json(result).into_response(),
+        Err(e) => bad(e),
+    }
+}
+
+/// The JSON body and path for a control command (the words after `fake-services`), or a usage error.
+pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
+    let (word, rest) = args.split_first().ok_or("missing command")?;
+    let mut body = json!({});
+    let mut flags = |rest: &[String]| -> Result<(), String> {
+        let mut it = rest.iter();
+        while let Some(flag) = it.next() {
+            let key = flag
+                .strip_prefix("--")
+                .ok_or_else(|| format!("unexpected argument {flag}"))?;
+            if key == "first" {
+                body["first"] = json!(true);
+                continue;
+            }
+            let value = it.next().ok_or_else(|| format!("{flag} needs a value"))?;
+            // Sent as text; the fake reads numbers from text too (a tier like "2000" stays text).
+            body[key] = json!(value);
+        }
+        Ok(())
+    };
+    match word.as_str() {
+        "send" => {
+            let (kind, rest) = rest.split_first().ok_or("send needs an event kind")?;
+            events::twitch_type(kind).ok_or_else(|| format!("unknown event kind {kind}"))?;
+            flags(rest)?;
+            body["kind"] = json!(kind);
+            Ok(("/_control/send", body))
+        }
+        "obs" => {
+            let (action, rest) = rest
+                .split_first()
+                .ok_or("obs needs drop, stats, stream or record")?;
+            match action.as_str() {
+                "drop" => body["action"] = json!("drop"),
+                "stats" => {
+                    flags(rest)?;
+                    body["action"] = json!("stats");
+                }
+                "stream" | "record" => {
+                    let on = match rest.first().map(String::as_str) {
+                        Some("on") => true,
+                        Some("off") => false,
+                        _ => return Err(format!("obs {action} needs on or off")),
+                    };
+                    body["action"] = json!("output");
+                    body[if action == "stream" {
+                        "streaming"
+                    } else {
+                        "recording"
+                    }] = json!(on);
+                }
+                _ => return Err(format!("unknown obs action {action}")),
+            }
+            Ok(("/_control/obs", body))
+        }
+        "eventsub" if rest.first().map(String::as_str) == Some("drop") => {
+            Ok(("/_control/eventsub/drop", body))
+        }
+        "scenario" => {
+            let name = rest.first().ok_or("scenario needs a name")?;
+            if !SCENARIOS.iter().any(|(n, _)| n == name) {
+                return Err(format!("unknown scenario {name}"));
+            }
+            body["name"] = json!(name);
+            Ok(("/_control/scenario", body))
+        }
+        _ => Err(format!("unknown command {word}")),
+    }
+}
+
+/// POSTs a control command to the fake on `127.0.0.1:<port>` and returns the response body.
+pub fn call(port: u16, path: &str, body: &Value) -> Result<String, String> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .map_err(|e| format!("no fake-services on 127.0.0.1:{port}: {e}"))?;
+    let body = body.to_string();
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\n\
+         Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .map_err(|e| e.to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
+    let (head, body) = response.split_once("\r\n\r\n").ok_or("no HTTP response")?;
+    match head.split(' ').nth(1) {
+        Some(status) if status.starts_with('2') => Ok(body.to_owned()),
+        status => Err(format!("{} {body}", status.unwrap_or("?"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cmd(list: &[&str]) -> Result<(&'static str, Value), String> {
+        command(&list.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn commands_become_control_requests() {
+        let (path, body) = cmd(&["send", "gift", "--count", "20", "--user", "bob"]).unwrap();
+        assert_eq!(path, "/_control/send");
+        assert_eq!(body, json!({"kind": "gift", "count": "20", "user": "bob"}));
+        let (_, body) = cmd(&["send", "chat", "--first"]).unwrap();
+        assert_eq!(body["first"], true);
+        let (path, body) = cmd(&["obs", "stats", "--dropped", "8"]).unwrap();
+        assert_eq!(
+            (path, number(&body["dropped"])),
+            ("/_control/obs", Some(8.0))
+        );
+        assert_eq!(cmd(&["obs", "stream", "on"]).unwrap().1["streaming"], true);
+        assert_eq!(
+            cmd(&["eventsub", "drop"]).unwrap().0,
+            "/_control/eventsub/drop"
+        );
+        assert_eq!(
+            cmd(&["scenario", "gift-bomb"]).unwrap().1["name"],
+            "gift-bomb"
+        );
+    }
+
+    #[test]
+    fn bad_commands_say_why() {
+        for bad in [
+            &["send"][..],
+            &["send", "nope"],
+            &["send", "chat", "--user"],
+            &["send", "chat", "stray"],
+            &["obs", "stream"],
+            &["obs", "fly"],
+            &["scenario", "nope"],
+            &["nope"],
+        ] {
+            assert!(cmd(bad).is_err(), "{bad:?}");
+        }
+    }
+}
