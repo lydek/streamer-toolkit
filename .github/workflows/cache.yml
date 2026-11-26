@@ -40,3 +40,5 @@ jobs:
       - run: cargo clippy --workspace --all-targets
       - run: cargo clippy --workspace --all-targets --features tauri/custom-protocol
       - run: cargo test --workspace --no-run
+      # pnpm api:gen builds only host's graph, which resolves some shared crates with different features than --workspace.
+      - run: cargo build -p host --example openapi
