@@ -294,7 +294,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 
 啟動順序：
 1. 決定資料夾並確認可寫入；`tauri-plugin-single-instance` 依 identifier 命名它的鎖，因此啟動時把 identifier 加上 `instance-id`，讓鎖依資料夾區分。先註冊這個 plugin，第二份程式在交棒前不會去搶 port。
-2. 有已確認的還原就先套用（見「備份檔」），再開資料庫並套用 migration；兩者都在單一實例鎖之後，第二份程式不會動到同一個資料夾。
+2. 有已確認的還原就先套用（見「備份檔」），再開資料庫並套用 migration；兩者都在單一實例鎖之後，第二份程式不會動到同一個資料夾。套用還原時還沒有任何視窗，資料多時要等一陣子，所以先顯示原生的「還原中」提示，完成後自動關閉。
 3. Host 綁 port；失敗時開啟 port 修改小頁面，使用者儲存後重試。
 4. 正式版：為目前的 port 建立 remote capability，再建立管理視窗並載入 Host 網址。dev 模式：管理視窗載入 Vite dev server，使用 capability 2。
 5. 建立任何視窗前先確認有 WebView2 Runtime（Windows 11 內建，少數 Windows 10 沒有）。缺少時顯示說明並開啟微軟的下載頁，Host、Overlay 與系統匣照常運作；安裝後在系統匣選「開啟」就會建立視窗，不必重新啟動。

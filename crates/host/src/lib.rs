@@ -29,7 +29,7 @@ mod templates;
 mod text_size;
 mod update;
 
-pub use backup::{BackupError, apply_pending};
+pub use backup::{BackupError, apply_pending, restore_pending};
 pub use openapi::openapi;
 
 pub use alerts::Timing as AlertTiming;

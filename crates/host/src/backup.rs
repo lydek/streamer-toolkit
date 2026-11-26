@@ -886,6 +886,11 @@ fn preview(m: &Manifest) -> RestorePreview {
     }
 }
 
+/// A confirmed restore waits for the next start (`apply_pending` will back up the current data and swap it in).
+pub fn restore_pending(data_dir: &Path) -> bool {
+    data_dir.join(PENDING).exists()
+}
+
 /// Applies a restore confirmed in the admin UI. Call it on start, after the single-instance lock and before the
 /// database opens (docs/architecture.md §6). Returns whether a restore was applied. On any failure the data from
 /// before is back in place, except for [`BackupError::PutBack`].

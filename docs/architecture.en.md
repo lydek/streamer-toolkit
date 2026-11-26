@@ -1,4 +1,4 @@
-<!-- source: docs/architecture.md source-sha256: b7c5ba96b2f6d247008df311d5d69fc6debdfd4b5870c36fe4d4cd971e8d0a6d -->
+<!-- source: docs/architecture.md source-sha256: 0a44c3e9ffd56ee40e77bebdb12c795832442119bd43135f552225bbaa7435f1 -->
 [繁體中文](architecture.md) | **English**
 
 # Architecture
@@ -295,7 +295,7 @@ Backup files (`.stbackup`, "Backup and restore" on the settings page):
 
 Startup order:
 1. Resolve the data directory and check that it is writable. `tauri-plugin-single-instance` names its lock after the identifier, so at startup the identifier gets the `instance-id` appended and the lock is per data directory. Register this plugin first, so a second copy never tries to take the port before handing off.
-2. Apply a confirmed restore first (see "Backup files"), then open the database and apply migrations; both come after the single-instance lock, so a second copy never touches the same data directory.
+2. Apply a confirmed restore first (see "Backup files"), then open the database and apply migrations; both come after the single-instance lock, so a second copy never touches the same data directory. No window exists yet while a restore is applied, and a large folder takes a while, so a native "restoring" notice shows first and closes by itself when done.
 3. The Host binds the port; on failure, open the small port-change page and retry after the user saves.
 4. Release build: create the remote capability for the current port, then create the admin window and load the Host URL. Dev mode: the admin window loads the Vite dev server and uses capability 2.
 5. Before creating any window, check that the WebView2 Runtime is present (built into Windows 11; missing on a few Windows 10 PCs). If it is missing, show an explanation and open Microsoft's download page; the Host, overlays and tray keep running, and after installing it, choosing Open in the tray creates the window without a restart.
