@@ -3,22 +3,29 @@
 //! Users have no avatar, so the app's Twitch image check stays as it is.
 
 use std::{
+    collections::HashSet,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use axum::{
     Form, Json, Router,
-    extract::{RawQuery, State, WebSocketUpgrade, ws},
+    body::{Body, to_bytes},
+    extract::{RawQuery, Request, State, WebSocketUpgrade, ws},
     http::{HeaderMap, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{any, get, post},
 };
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, sync::broadcast};
 
+use crate::metrics::{self, Call, Recorder};
+
 pub const BROADCASTER_ID: &str = "1000";
 pub const BROADCASTER_LOGIN: &str = "fake_streamer";
+/// The access token of `integrations::twitch::auth::fake_stored_token` (a fakes test checks they match).
+pub const PRELOADED_TOKEN: &str = "fake-access";
 const BROADCASTER_NAME: &str = "Fake_Streamer";
 const TIMESTAMP: &str = "2026-11-26T12:00:00Z";
 
@@ -30,6 +37,8 @@ struct World {
     eventsub_connects: u32,
     irc_joins: Vec<String>,
     next_id: u64,
+    /// Access tokens this fake issued; any other is an unknown token.
+    tokens: HashSet<String>,
 }
 
 struct Inner {
@@ -41,6 +50,7 @@ struct Inner {
     /// IRC lines for every chat connection.
     irc: broadcast::Sender<String>,
     keepalive: Duration,
+    recorder: Recorder,
 }
 
 #[derive(Clone)]
@@ -55,6 +65,11 @@ impl Default for FakeTwitch {
 impl FakeTwitch {
     /// `keepalive` is the EventSub session's keepalive timeout; the fake sends a keepalive every half of it.
     pub fn new(keepalive: Duration) -> Self {
+        Self::with_recorder(keepalive, Recorder::default())
+    }
+
+    /// Logs requests and events into `recorder`, shared with the fake OBS for one timeline.
+    pub fn with_recorder(keepalive: Duration, recorder: Recorder) -> Self {
         Self(Arc::new(Inner {
             world: Mutex::new(World {
                 scopes: Vec::new(),
@@ -63,12 +78,18 @@ impl FakeTwitch {
                 eventsub_connects: 0,
                 irc_joins: Vec::new(),
                 next_id: 0,
+                tokens: HashSet::from([PRELOADED_TOKEN.to_owned()]),
             }),
             eventsub: broadcast::channel(1024).0,
             close: broadcast::channel(1).0,
             irc: broadcast::channel(1024).0,
             keepalive,
+            recorder,
         }))
+    }
+
+    pub fn recorder(&self) -> &Recorder {
+        &self.0.recorder
     }
 
     pub fn router(&self) -> Router {
@@ -87,6 +108,7 @@ impl FakeTwitch {
             )
             .route("/eventsub", any(eventsub))
             .route("/irc", any(irc))
+            .layer(middleware::from_fn_with_state(self.clone(), record))
             .with_state(self.clone())
     }
 
@@ -129,6 +151,7 @@ impl FakeTwitch {
                                           "message_timestamp": now(), "subscription_type": kind,
                                           "subscription_version": subscription["version"]},
                              "payload": {"subscription": subscription, "event": event}});
+        self.0.recorder.event("twitch", kind);
         let _ = self.0.eventsub.send(message.to_string());
         true
     }
@@ -215,8 +238,10 @@ async fn device(
 /// Every device code is approved at once; refresh tokens always work.
 async fn token(State(fake): State<FakeTwitch>) -> Response {
     let scopes = fake.0.world.lock().unwrap().scopes.clone();
+    let access = fake.id("access");
+    fake.0.world.lock().unwrap().tokens.insert(access.clone());
     Json(
-        json!({"access_token": fake.id("access"), "refresh_token": fake.id("refresh"),
+        json!({"access_token": access, "refresh_token": fake.id("refresh"),
                 "expires_in": 14400, "scope": scopes, "token_type": "bearer"}),
     )
     .into_response()
@@ -333,6 +358,7 @@ async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> 
     upgrade.on_upgrade(move |mut socket| async move {
         let session = fake.id("session");
         fake.0.world.lock().unwrap().eventsub_connects += 1;
+        fake.0.recorder.connect("twitch", "eventsub");
         let keepalive = fake.0.keepalive;
         let welcome = json!({"metadata": {"message_id": fake.id("message"), "message_type": "session_welcome",
                                           "message_timestamp": TIMESTAMP},
@@ -373,9 +399,70 @@ async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> 
     })
 }
 
+/// What is wrong with a request's headers for its endpoint, if anything.
+fn header_problem(path: &str, headers: &HeaderMap, tokens: &HashSet<String>) -> Option<String> {
+    let header = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+    };
+    let token = |scheme: &str| -> Option<String> {
+        let Some(token) = header("Authorization").strip_prefix(scheme) else {
+            return Some(format!("missing Authorization: {}…", scheme));
+        };
+        (!tokens.contains(token)).then(|| "unknown access token".to_owned())
+    };
+    if path.starts_with("/helix/") {
+        if header("Client-Id").is_empty() {
+            return Some("missing Client-Id".into());
+        }
+        return token("Bearer ");
+    }
+    if path == "/oauth2/validate" {
+        return token("OAuth ");
+    }
+    // `/oauth2/device` and `/oauth2/token` carry `client_id` in the form body.
+    None
+}
+
+/// Logs every `/oauth2` and `/helix` request: its key, parameters, status, handling time and header problems.
+async fn record(State(fake): State<FakeTwitch>, request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    if !path.starts_with("/oauth2/") && !path.starts_with("/helix/") {
+        return next.run(request).await;
+    }
+    let key = format!("{} {path}", request.method());
+    let query = request.uri().query().unwrap_or_default().to_owned();
+    let problem = {
+        let tokens = &fake.0.world.lock().unwrap().tokens;
+        header_problem(&path, request.headers(), tokens)
+    };
+    let (parts, body) = request.into_parts();
+    let Ok(body) = to_bytes(body, 1 << 20).await else {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    };
+    let params = metrics::hash(&[query.as_bytes(), &body]);
+    let in_flight = fake.0.recorder.start("twitch");
+    let started = Instant::now();
+    let response = next.run(Request::from_parts(parts, Body::from(body))).await;
+    fake.0.recorder.call(Call {
+        at: started,
+        service: "twitch",
+        key,
+        params,
+        status: response.status().as_u16(),
+        handled: started.elapsed(),
+        in_flight: in_flight.count,
+        problem,
+    });
+    response
+}
+
 /// Anonymous IRC: acknowledges the capabilities, confirms the join and pings now and then.
 async fn irc(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Response {
     upgrade.on_upgrade(move |mut socket| async move {
+        fake.0.recorder.connect("twitch", "irc");
         let mut nick = String::from("justinfan");
         let mut lines = fake.0.irc.subscribe();
         let mut every = tokio::time::interval(fake.0.keepalive / 2);
