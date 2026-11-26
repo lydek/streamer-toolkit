@@ -1,0 +1,323 @@
+{
+  "drawer": {
+    "close": "關閉",
+    "now": "現在",
+    "settings": "常改的設定",
+    "fullPage": "開啟完整頁"
+  },
+  "stage": {
+    "manual": "手動選的",
+    "backToAuto": "改回自動",
+    "title": "直播階段",
+    "before": "開播前",
+    "live": "直播中",
+    "after": "下播後",
+    "notLive": "還沒開播。",
+    "waiting": "正在讀取本場直播…",
+    "noStream": "還沒有直播紀錄。",
+    "peak": "最高 {n} 位觀眾",
+    "checks": {
+      "fold": "收起",
+      "unfold": "全部",
+      "ready": "{ok} / {all} 好了",
+      "fix": "修正",
+      "twitch": { "ok": "Twitch 已登入", "bad": "Twitch 還沒登入" },
+      "eventsub": { "ok": "EventSub 已連線", "bad": "EventSub 還沒連上，收不到聊天、特效與兌換" },
+      "obs": { "ok": "OBS 已連線", "bad": "OBS 還沒連上" },
+      "overlay": {
+        "chat": { "ok": "聊天室已放進 OBS", "bad": "聊天室還沒放進 OBS" },
+        "alerts": { "ok": "特效已放進 OBS", "bad": "特效還沒放進 OBS" },
+        "checkin": { "ok": "打卡卡片已放進 OBS", "bad": "打卡卡片還沒放進 OBS" },
+        "sound": { "ok": "兌換音效已放進 OBS", "bad": "兌換音效還沒放進 OBS" },
+        "bgm": { "ok": "背景音樂已放進 OBS", "bad": "背景音樂還沒放進 OBS" }
+      }
+    },
+    "stats": {
+      "follows": "追隨",
+      "subs": "訂閱",
+      "bits": "小奇點",
+      "raids": "揪團",
+      "redemptions": "兌換",
+      "chatMessages": "聊天訊息",
+      "firstChats": "第一次聊天",
+      "peak": "最高觀眾數"
+    }
+  },
+  "queue": {
+    "title": "呈現佇列",
+    "summary": "排隊 {waiting} 個 · 約 {seconds} 秒",
+    "summaryIdle": "排隊 {waiting} 個",
+    "clear": "清空排隊",
+    "playing": "播放中",
+    "anonymous": "匿名觀眾",
+    "item": {
+      "alert": "特效：{viewer} {action}",
+      "card": "打卡卡片：{viewer} {stamps}/{slots}",
+      "sound": "音效：{sound}（{viewer}兌換）",
+      "media": "影片：{media}（{viewer}兌換）"
+    },
+    "action": {
+      "follow": "追隨了",
+      "subscribe": "訂閱了",
+      "resubscribe": "續訂了",
+      "gift": "送出訂閱",
+      "cheer": "送出小奇點",
+      "raid": "揪團來了"
+    },
+    "problem": {
+      "sound_missing": "音效：檔案不見了"
+    },
+    "offAir": "Overlay 沒開，不會播",
+    "skip": "跳過",
+    "nothingPlaying": "沒有正在播的效果。",
+    "cleared": "已清空 {cancelled} 個排隊中的效果，正在播的會播完。",
+    "nothingWaiting": "沒有排隊中的效果。",
+    "stop": "緊急停止：停掉正在播的並取消排隊中的呈現",
+    "stopped": "已停止正在播的 {stopped} 個、取消排隊中的 {cancelled} 個；已記錄的資料不受影響。"
+  },
+  "home": {
+    "numbers": {
+      "label": "下播後的數字",
+      "show": "顯示數字",
+      "mask": "遮起來",
+      "hide": "整頁不顯示",
+      "masked": "數字遮起來了",
+      "reveal": "顯示數字",
+      "folded": "下播後的數字收起來了，想看的時候再看。",
+      "peek": "這次看一下"
+    },
+    "skip": "跳到功能磚",
+    "tiles": "功能磚",
+    "attention": "需要注意",
+    "loadFailed": "載入失敗",
+    "empty": "首頁沒有功能磚",
+    "arrange": "編輯首頁",
+    "connections": "連線與 OBS 來源",
+    "chatEmpty": "還沒有訊息",
+    "latest": "最新：{text}",
+    "unbuilt": "還沒有這個功能",
+    "collapse": "收合",
+    "statsLine": "{redemptions} 兌換 · {subs} 訂閱",
+    "queueIdle": "沒有正在播的",
+    "blocks": {
+      "pending": "待處理",
+      "checklist": "開播前檢查",
+      "stats": "本場直播",
+      "summary": "本場摘要",
+      "queue": "呈現佇列"
+    },
+    "sceneCount": "{n} 個場景",
+    "units": {
+      "checkin": "人今天打卡",
+      "sound": "個音效",
+      "feed": "件",
+      "redemption": "筆最近兌換",
+      "queue": "個排隊中"
+    },
+    "status": {
+      "connected": "已連線",
+      "failed": "無法取得狀態",
+      "twitch": {
+        "setup": "尚未設定",
+        "pending": "等待登入",
+        "signedOut": "未登入",
+        "failed": "登入失敗",
+        "relogin": "需要重新登入"
+      },
+      "obs": {
+        "reconnecting": "重新連線中",
+        "error": "連線失敗"
+      }
+    }
+  },
+  "arrange": {
+    "done": "完成",
+    "restore": "還原預設",
+    "earlier": "往前移",
+    "later": "往後移",
+    "remove": "隱藏",
+    "add": "加回",
+    "for": "{action}：{name}",
+    "available": "隱藏的磚",
+    "notEnabled": "未啟用 · 到設定開啟",
+    "moved": "{name}移到第 {position} 個",
+    "removed": "已隱藏{name}",
+    "added": "{name}已加回第 {position} 個",
+    "restored": "已還原預設功能磚"
+  },
+  "feed": {
+    "empty": "還沒有事件",
+    "loadFailed": "無法載入事件流。",
+    "redemption": "{name} 兌換了「{reward}」",
+    "checkin": "{name} 打卡",
+    "card": "{name} 的集點卡",
+    "test": "測試",
+    "result": "{what}：{outcome}",
+    "triggered": {
+      "alert": "特效",
+      "sound": "音效「{sound}」",
+      "card": "集點卡",
+      "media": "影片或 GIF「{media}」"
+    },
+    "because": "{outcome}（{reason}）",
+    "reason": {
+      "file_missing": "檔案不見了"
+    },
+    "outcome": {
+      "queued": "排隊中",
+      "played": "已播",
+      "sound_missing": "已播，但音效檔案不見了",
+      "off_air": "Overlay 沒開，沒有播",
+      "declined": "被模組拒絕",
+      "skipped": "已跳過",
+      "cleared": "已清空排隊",
+      "stopped": "緊急停止"
+    }
+  },
+  "leaderboard": {
+    "summary": "每個榜可以分別放到直播畫面",
+    "inObs": "在 OBS：{periods}",
+    "copyFor": "複製「{board}」的 OBS 網址",
+    "period": "期間",
+    "periods": {
+      "stream": "本場",
+      "month": "本月",
+      "all": "全部"
+    },
+    "board": "排名",
+    "empty": "還沒有紀錄。",
+    "allKept": "「全部」只算保存期限內的紀錄。",
+    "allCheckins": "打卡的「全部」是打卡頁的累計次數（含匯入的次數）。"
+  },
+  "rehearsal": {
+    "summary": "照劇本送一串測試事件，不寫任何紀錄",
+    "banner": "演練中的事件都標成測試（source=simulation），不會進兌換、打卡等正式紀錄，也不算進統計與計數器。",
+    "speed": "速度",
+    "speeds": {
+      "normal": "正常",
+      "double": "2 倍",
+      "burst": "一次全送"
+    },
+    "builtIn": "內建劇本",
+    "scripts": {
+      "checkins": "多人打卡",
+      "raid": "揪團湧入",
+      "opening": "開場高峰",
+      "stop": "測試緊急停止"
+    },
+    "descriptions": {
+      "checkins": "10 位觀眾每秒一位打卡，最後一位剛好集滿；集點卡格數照「打卡規則」",
+      "raid": "揪團 120 人，接著 12 位觀眾在聊天室打招呼，最後一個追隨",
+      "opening": "8 則聊天，再來追隨、訂閱、小奇點、送禮訂閱，最後一張滿卡",
+      "stop": "連續 3 個特效與 1 張集點卡，第 3 秒自動按下緊急停止"
+    },
+    "start": "開始",
+    "own": "自己的劇本",
+    "file": "匯入劇本",
+    "fileHint": "JSON，最多 256 KB",
+    "stop": "停止演練",
+    "running": "演練中",
+    "tile": "用模擬事件試畫面與音效",
+    "badLine": "劇本格式不正確：第 {line} 行。",
+    "badStep": "劇本的第 {step} 個步驟不正確（種類不認得、缺少欄位或時間超過 30 分鐘）。"
+  },
+  "simulate": {
+    "dialog": {
+      "title": "模擬事件",
+      "rows": {
+        "chat": "聊天室",
+        "alerts": "特效",
+        "sound": "音效",
+        "checkin": "打卡卡片",
+        "counter": "計數器",
+        "marathon": "訂閱馬拉松計時器",
+        "bgm": "背景音樂"
+      },
+      "sendMessage": "送一則訊息",
+      "chatText": "這是一則測試訊息",
+      "pickSound": "選一個音效",
+      "play": "播放",
+      "checkin": "一般打卡",
+      "fullCard": "集滿",
+      "showTest": "顯示測試值",
+      "playTest": "播 5 秒",
+      "bgmPlaying": "背景音樂正在播",
+      "noPlaylist": "還沒選過歌單",
+      "nothingToPlay": "歌單裡沒有能播的歌",
+      "sent": "已送出測試：{row} · {button}",
+      "connected": "OBS 已連上",
+      "notInObs": "還沒放進 OBS",
+      "unknown": "無法確認",
+      "featureOff": "功能已關閉"
+    },
+    "heading": "事件模擬器",
+    "hint": "送出的事件標記為模擬（source=simulation），只顯示在 Overlay，不寫入任何正式紀錄。",
+    "userName": "名稱",
+    "text": "聊天訊息",
+    "send": "送出模擬聊天",
+    "sent": "已送出模擬聊天。",
+    "kind": "事件",
+    "message": "留言",
+    "sendAlert": "送出模擬特效",
+    "alertSent": "已送出模擬特效。",
+    "stamps": "集點卡格數（已蓋）",
+    "sendCheckin": "送出模擬打卡",
+    "checkinSent": "已送出模擬打卡。"
+  },
+  "streamInfo": {
+    "summary": "觀眾在 Twitch 看到的標題、分類與標籤",
+    "now": "現在",
+    "title": "標題",
+    "category": "分類",
+    "tags": "標籤",
+    "addTag": "加標籤（最多 10 個）",
+    "language": "直播語言",
+    "update": "更新到 Twitch",
+    "templates": {
+      "heading": "每個模式的範本",
+      "empty": "還沒有模式；建立模式後，可以為每個模式設定切換時套用的標題與分類。"
+    },
+    "scope": "需要 Twitch 權限 channel:manage:broadcast。"
+  },
+  "credits": {
+    "playThanks": "播感謝名單",
+    "playEnd": "播片尾名單",
+    "kinds": {
+      "raids": "揪團",
+      "subs": "訂閱",
+      "bits": "小奇點",
+      "follows": "新追隨",
+      "redemptions": "兌換",
+      "songs": "點歌",
+      "chatters": "最活躍"
+    },
+    "none": "這場還沒有。",
+    "backgrounds": "背景圖：放幾張圖片，每次隨機挑一張。",
+    "manageBackgrounds": "管理背景圖"
+  },
+  "viewers": {
+    "history": "異動紀錄",
+    "sync": "從 Twitch 同步",
+    "search": "搜尋觀眾",
+    "viewer": "觀眾",
+    "viewerHint": "名稱或帳號",
+    "role": "身分",
+    "roles": {
+      "all": "全部",
+      "subscriber": "訂閱者",
+      "moderator": "管理員",
+      "vip": "VIP"
+    },
+    "searchButton": "搜尋",
+    "empty": "還沒有觀眾資料；從 Twitch 同步後會列在這裡。",
+    "groups": {
+      "empty": "還沒有自訂身分組。",
+      "note": "在觀眾詳細資料裡加入或移除",
+      "add": "新增身分組"
+    }
+  },
+  "goals": {
+    "summary": "用 Twitch 的目標，或自己設定",
+    "empty": "還沒有目標。"
+  }
+}

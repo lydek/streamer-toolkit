@@ -1,0 +1,255 @@
+{
+  "chatLog": {
+    "period": "看哪一段",
+    "live": "即時",
+    "stream": "{day} 的直播",
+    "offline": "{day}（沒有直播）",
+    "search": "搜尋訊息",
+    "count": "{n} 則",
+    "hideBots": "隱藏機器人",
+    "openTwitch": "在 Twitch 開啟",
+    "filters": "篩選",
+    "filter": {
+      "all": "全部",
+      "mentions": "提到我",
+      "commands": "!指令",
+      "first": "第一次聊天",
+      "mods": "管理員和 VIP",
+      "subscribers": "訂閱者",
+      "highlights": "醒目訊息和小奇點",
+      "redemptions": "兌換",
+      "alerts": "訂閱、揪團和追隨"
+    },
+    "lines": "訊息與事件",
+    "empty": "沒有符合的訊息。",
+    "truncated": "這段的紀錄太多，只顯示最新的一部分。",
+    "event": {
+      "follow": "{name} 追隨了",
+      "subscribe": "{name} 訂閱了",
+      "resubscribe": "{name} 續訂了 {months} 個月",
+      "gift": "{name} 送出 {count} 份訂閱",
+      "cheer": "{name} 送出 {bits} 小奇點",
+      "raid": "{name} 帶著 {viewers} 人揪團來了",
+      "redemption": "{name} 兌換了「{reward}」"
+    }
+  },
+  "dock": {
+    "title": "聊天室",
+    "close": "收合聊天室",
+    "openFullPage": "開啟聊天室完整頁",
+    "pauseScroll": "暫停捲動",
+    "resumeScroll": "繼續捲動",
+    "newMessages": "{n} 則新訊息 ↓",
+    "jumpLatest": "跳到最新 ↓",
+    "resize": "調整聊天室寬度",
+    "filters": "篩選訊息",
+    "search": "搜尋訊息",
+    "filter": {
+      "all": "全部",
+      "mentions": "提到我",
+      "events": "事件",
+      "mods": "管理員和 VIP"
+    },
+    "modsLater": "需要觀眾身分資料，之後開放",
+    "send": "發言",
+    "sendLater": "發言（之後開放）",
+    "rewards": {
+      "open": "頻道點數獎勵",
+      "title": "頻道點數獎勵",
+      "play": "播放效果",
+      "playLabel": "播放效果：{title}",
+      "played": "已播放「{title}」的效果。",
+      "none": "「{title}」沒有設定可播放的效果。",
+      "empty": "還沒有頻道點數獎勵。",
+      "loadFailed": "讀不到獎勵清單。",
+      "viewer": "給哪位觀眾",
+      "viewerHint": "觀眾名稱（不填就用測試觀眾）",
+      "simulate": "模擬兌換",
+      "simulateLabel": "模擬兌換：{title}",
+      "simulated": "已模擬「{title}」的兌換（測試，不留紀錄）。"
+    }
+  },
+  "chat": {
+    "missedWrites": "本次啟動已有 {n} 筆聊天操作因佇列已滿而未儲存，歷史訊息或刪除狀態可能不完整。",
+    "writeDelayed": "聊天紀錄暫時無法寫入，正在重試。請保持程式開啟。",
+    "historyRetry": "暫時無法載入先前的聊天紀錄，正在重試。",
+    "log": "聊天紀錄",
+    "pause": "暫停",
+    "jump": "跳到最新",
+    "paused": "已暫停 · {n} 則新訊息",
+    "disconnected": "已斷線，正在重新連線……",
+    "broadcaster": "實況主",
+    "deleted": "這則訊息已被管理員刪除",
+    "firstChat": "第一次聊天",
+    "shared": "共享聊天中：{channels}",
+    "ownOnly": "只看本頻道",
+    "sharedFrom": "來自 {channel}",
+    "replyTo": "回覆 {name}",
+    "bits": "{bits} 小奇點",
+    "display": {
+      "title": "顯示",
+      "style": "聊天室風格",
+      "styles": {
+        "compact": "精簡",
+        "standard": "標準",
+        "comfortable": "寬鬆"
+      },
+      "avatars": "頭像",
+      "badges": "徽章",
+      "time": "時間",
+      "textSize": "字級",
+      "side": "聊天室位置",
+      "sides": {
+        "left": "左側",
+        "right": "右側"
+      }
+    },
+    "copyObsUrl": "複製 OBS 網址",
+    "copied": "已複製 OBS 網址。",
+    "copyFailed": "無法複製到剪貼簿。"
+  },
+  "bot": {
+    "summary": "用你的帳號在聊天室發言",
+    "commands": {
+      "empty": "還沒有聊天指令。",
+      "note": "可用的變數：{'{'}觀眾{'}'} {'{'}計數:名稱{'}'} {'{'}直播時長{'}'}；只有固定替換，沒有條件判斷",
+      "add": "新增指令"
+    },
+    "timers": {
+      "empty": "還沒有定時訊息。",
+      "note": "只在直播中送出；聊天室太安靜時（不到「至少間隔聊天」的則數）就跳過",
+      "add": "新增定時訊息"
+    },
+    "greetings": {
+      "follow": {
+        "name": "歡迎新追隨者",
+        "example": "謝謝 {'{'}觀眾{'}'} 的追隨，歡迎！"
+      },
+      "firstChat": {
+        "name": "第一次聊天",
+        "example": "歡迎 {'{'}觀眾{'}'} 第一次來聊天！"
+      },
+      "returning": {
+        "name": "回訪歡迎",
+        "hint": "老觀眾今天第一次發言",
+        "example": "{'{'}觀眾{'}'} 歡迎回來！你已經來了 {'{'}次數{'}'} 次",
+        "how": "回訪歡迎的方式",
+        "modes": {
+          "mark": "只提示我（聊天室標「回訪」）",
+          "say": "在聊天室發訊息"
+        },
+        "after": "多久沒來算「回訪」",
+        "days": "天"
+      },
+      "sub": {
+        "name": "訂閱、續訂",
+        "example": "感謝 {'{'}觀眾{'}'} 的訂閱！"
+      },
+      "bits": {
+        "name": "感謝小奇點",
+        "tiers": {
+          "small": "1–99",
+          "mid": "100–999",
+          "big": "1000 以上"
+        },
+        "examples": {
+          "small": "謝謝 {'{'}觀眾{'}'} 的 {'{'}數量{'}'} 小奇點！",
+          "mid": "哇！{'{'}觀眾{'}'} 送了 {'{'}數量{'}'} 小奇點，太感謝了！",
+          "big": "{'{'}觀眾{'}'} 你是大老闆！{'{'}數量{'}'} 小奇點！"
+        }
+      },
+      "raid": {
+        "name": "揪團",
+        "example": "感謝 {'{'}觀眾{'}'} 帶著 {'{'}數量{'}'} 人揪團！"
+      },
+      "enabled": "啟用：{name}"
+    }
+  },
+  "chatFilter": {
+    "rules": "規則",
+    "rule": {
+      "terms": {
+        "name": "封鎖字詞",
+        "hint": "封鎖字詞清單裡的字詞"
+      },
+      "links": {
+        "name": "連結",
+        "hint": "不在「允許的網址」裡的連結"
+      },
+      "repeats": {
+        "name": "重複訊息",
+        "hint": "同一句 {seconds} 秒內出現 {times} 次"
+      },
+      "emotes": {
+        "name": "表情太多",
+        "hint": "一則超過 {count} 個表情"
+      },
+      "caps": {
+        "name": "全大寫",
+        "hint": "至少 {count} 個英文字母都是大寫"
+      },
+      "chars": {
+        "name": "同一字元洗版",
+        "hint": "同一個字元連續 {count} 次以上"
+      }
+    },
+    "actions": {
+      "delete": "刪除這則訊息",
+      "timeout": "禁言",
+      "ban": "封鎖（永久）"
+    },
+    "enabled": "啟用：{name}",
+    "duration": "{name}的禁言長度",
+    "unit": "{name}的禁言單位",
+    "units": { "s": "秒", "m": "分鐘", "h": "小時", "d": "天" },
+    "limits": {
+      "repeats": { "seconds": "重複訊息的秒數", "times": "重複訊息的次數" },
+      "emotes": { "count": "表情數量" },
+      "caps": { "count": "全大寫的字母數" },
+      "chars": { "count": "連續字元數" }
+    },
+    "exempt": "不受影響的人",
+    "exemptWho": "管理員、VIP、訂閱者",
+    "change": "修改",
+    "automod": "Twitch AutoMod",
+    "automodWhere": "在 Twitch 後台設定",
+    "open": "開啟",
+    "terms": "封鎖字詞",
+    "add": "新增",
+    "noTerms": "還沒有封鎖字詞。",
+    "urls": "允許的網址",
+    "noUrls": "還沒有允許的網址。",
+    "urlHint": "例如 instagram.com",
+    "addUrl": "新增允許的網址",
+    "addUrlButton": "加入",
+    "urlNote": "網域底下的網址都算，例如 youtube.com 也包含 m.youtube.com。",
+    "recent": "最近處理的",
+    "noRecent": "還沒有處理過的訊息。",
+    "scopes": "需要 Twitch 權限 moderator:manage:chat_messages、moderator:manage:banned_users、moderator:manage:blocked_terms。"
+  },
+  "captions": {
+    "summary": "把你說的話變成畫面上的字幕",
+    "on": "即時字幕",
+    "onHint": "用 Windows 內建的語音辨識在本機處理，準確度和 CPU 用量要實測",
+    "mic": "麥克風",
+    "noMic": "還沒有麥克風",
+    "language": "語言",
+    "offWhenSinging": "唱歌模式時自動關閉"
+  },
+  "chatWindow": {
+    "open": "開啟視窗",
+    "opacity": "不透明度",
+    "zoom": "縮放",
+    "clickThrough": "滑鼠穿透",
+    "clickThroughHint": "點擊會穿過視窗，按快捷鍵暫時解鎖",
+    "unlock": "解鎖快捷鍵",
+    "rebind": "重新設定",
+    "show": "顯示",
+    "items": {
+      "time": "時間",
+      "firstChat": "第一次聊天",
+      "redemptions": "兌換",
+      "support": "訂閱、小奇點、揪團"
+    }
+  }
+}

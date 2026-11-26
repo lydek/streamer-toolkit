@@ -1,0 +1,178 @@
+{
+  "retention": {
+    "title": "紀錄保存",
+    "records": "聊天與活動紀錄",
+    "keep": "保存",
+    "days": "保存天數",
+    "daysUnit": "天",
+    "forever": "永久",
+    "hint": "聊天訊息與活動紀錄（追隨、訂閱、小奇點、揪團等）超過期限會自動刪除，並且會進備份。",
+    "foreverNote": "選永久時，資料和備份檔會一直變大。",
+    "outOfRange": "天數要在 1 到 {max} 之間。",
+    "confirmTitle": "改成保存 {days} 天？",
+    "confirmText": "超過 {days} 天的紀錄（{count} 筆）會立刻刪除，不能復原。要留一份的話，先匯出備份。",
+    "confirmOk": "刪除並改成 {days} 天",
+    "saved": "紀錄保存 {days} 天。",
+    "savedForever": "紀錄改成永久保存。",
+    "deleted": "已刪除超過 {days} 天的紀錄，之後保存 {days} 天。"
+  },
+  "record": {
+    "export": "匯出本場紀錄",
+    "exported": "已匯出本場紀錄。",
+    "at": "時間",
+    "kind": "事件種類",
+    "viewer": "觀眾",
+    "detail": "數量或內容",
+    "kinds": {
+      "follow": "追隨",
+      "subscribe": "訂閱",
+      "resubscribe": "續訂",
+      "cheer": "小奇點",
+      "raid": "揪團",
+      "redemption": "兌換"
+    },
+    "tier": "Tier {tier}",
+    "gifted": "送禮訂閱 · Tier {tier}",
+    "months": "{n} 個月",
+    "bits": "{n} 小奇點",
+    "raiders": "{n} 人",
+    "withText": "{head}：{text}"
+  },
+  "twitch": {
+    "firstChat": {
+      "irc": "第一次聊天：讀取 Twitch 的標記。",
+      "fallback": "第一次聊天：讀不到 Twitch 的標記，改用本工具第一次看到這位觀眾。"
+    },
+    "heading": "Twitch 連線",
+    "guide": "請先到 Twitch Developer Console 註冊一個 app：類別選「Public」，OAuth Redirect URL 填 {url}，再把產生的 Client ID 貼到這裡。",
+    "clientId": "Client ID",
+    "save": "儲存",
+    "cancel": "取消",
+    "signedIn": "已登入：",
+    "logout": "登出",
+    "enterCode": "請在 Twitch 驗證頁輸入以下代碼：",
+    "openActivate": "開啟 Twitch 驗證頁",
+    "login": "登入 Twitch",
+    "changeClientId": "變更 Client ID"
+  },
+  "settings": {
+    "streamingSoftware": "直播軟體",
+    "twitch": {
+      "scopes": "權限",
+      "bot": "機器人帳號"
+    },
+    "title": "設定",
+    "textSize": "文字大小",
+    "textSizePreview": "預覽：今天唱什麼？放開後套用到整個視窗。",
+    "sections": "設定分區",
+    "menu": {
+      "general": "一般",
+      "connections": "連線",
+      "features": "功能",
+      "profiles": "設定檔",
+      "hotkeys": "快捷鍵",
+      "debug": "問題排解",
+      "backup": "資料與備份",
+      "about": "關於"
+    },
+    "soon": {
+      "profiles": "把一組設定存起來，依直播類型快速切換。",
+      "hotkeys": "用鍵盤快捷鍵播放音效、切換場景和執行常用動作。",
+      "debug": "查看連線狀態與紀錄檔，匯出診斷資訊。"
+    },
+    "general": "一般",
+    "askBeforeClose": "關閉視窗前先詢問",
+    "unreadable": "資料夾裡的 settings.json 讀不到或格式不正確，目前使用預設值。修好或刪掉這個檔案之前，設定都不會儲存；改壞的版本已另存成 settings.json.<時間>.bak。",
+    "obs": {
+      "host": "主機",
+      "port": "連接埠",
+      "password": "密碼",
+      "passwordSet": "已儲存密碼；輸入新密碼即可取代。",
+      "passwordNone": "尚未設定密碼。",
+      "removePassword": "移除密碼",
+      "edit": "編輯",
+      "done": "完成"
+    },
+    "features": "功能",
+    "checkin": {
+      "command": "打卡指令",
+      "reward": "打卡用的頻道點數獎勵",
+      "noReward": "不使用（只用聊天指令）",
+      "timeZone": "時區",
+      "resetHour": "換日時間",
+      "cardSlots": "集點卡格數",
+      "advanced": "進階"
+    },
+    "backup": "備份與還原",
+    "about": "關於",
+    "license": "以 MIT 授權釋出。",
+    "licenseLabel": "授權",
+    "version": "版本",
+    "thirdParty": "第三方授權"
+  },
+  "backup": {
+    "export": "匯出備份",
+    "exported": "已匯出備份：{file}",
+    "choiceSize": "{choice} {size}",
+    "restoreFile": "從備份檔還原",
+    "drop": "把 .stbackup 拖到這裡",
+    "createdAt": "備份時間：",
+    "appVersion": "程式版本：{version}",
+    "records": "兌換紀錄 {redemptions} 筆、打卡紀錄 {checkins} 筆",
+    "files": "樣板 {templates} 個、音效 {sounds} 個、背景音樂 {music} 首、影片與 GIF {media} 個",
+    "restoreNote": "目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
+    "restoreOnly": {
+      "data": "只會取代資料（設定與紀錄），媒體不動。目前的資料會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。",
+      "media": "只會取代媒體，設定與紀錄不動；播放清單與獎勵的連結不會回來。目前的媒體會先備份到資料夾的 backups 裡，再重新啟動並換成這份備份。"
+    },
+    "choice": "匯出內容",
+    "choices": {
+      "all": "全部",
+      "data": "資料",
+      "media": "媒體"
+    },
+    "contains": "包含：{kinds}",
+    "restore": "還原並重新啟動",
+    "restarting": "正在重新啟動……",
+    "uploading": "上傳中 {sent} / {total}",
+    "checking": "檢查中",
+    "cancel": "取消"
+  },
+  "performance": {
+    "heading": "效能",
+    "warning": "最近 60 秒掉幀 {n}%，超過 5%。",
+    "cpu": "CPU",
+    "memory": "記憶體",
+    "memoryOf": "{used} / {total} MB",
+    "app": "本工具",
+    "mb": "{n} MB",
+    "obsCpu": "OBS CPU",
+    "dropped": "OBS 掉幀",
+    "droppedWindow": "最近 60 秒",
+    "bitrate": "OBS 串流位元率",
+    "kbps": "{n} kbps"
+  },
+  "troubleshoot": {
+    "fix": "去設定",
+    "connections": "連線檢查",
+    "check": "重新檢查",
+    "twitchApi": "Twitch API",
+    "signedOut": "沒有登入",
+    "failed": "連不上",
+    "latency": "{ms} 毫秒",
+    "connected": "已連線",
+    "disconnected": "沒有連線",
+    "subscriptions": "{n} 個訂閱",
+    "log": "最近的記錄",
+    "level": "等級",
+    "levels": {
+      "error": "只看錯誤",
+      "warn": "警告以上",
+      "info": "全部"
+    },
+    "noLines": "沒有符合的記錄。",
+    "openFolder": "開啟記錄檔資料夾",
+    "export": "匯出診斷報告",
+    "exported": "已匯出診斷報告（不含 token、密碼、聊天內容與觀眾資料）。"
+  }
+}

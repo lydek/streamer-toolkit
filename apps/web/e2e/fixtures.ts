@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import type { Locator, Page, Route } from '@playwright/test'
 import type { components } from '../src/api/schema'
 
 type Schemas = components['schemas']
 
 /** UI strings, so tests find controls by the text users see. */
-export const zh = JSON.parse(readFileSync(new URL('../src/locales/zh-TW.json', import.meta.url), 'utf8'))
+const zhDir = new URL('../src/locales/zh-TW/', import.meta.url)
+export const zh = Object.assign({}, ...readdirSync(zhDir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(new URL(f, zhDir), 'utf8'))))
 
 /** What the mocked admin API answers; tests change it to change later answers. */
 export interface AdminState {

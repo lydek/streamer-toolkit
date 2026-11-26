@@ -1,0 +1,557 @@
+{
+  "app": {
+    "name": "Streamer Toolkit",
+    "loading": "載入中……",
+    "notFound": "找不到這個頁面。",
+    "home": "回首頁",
+    "close": "關閉"
+  },
+  "closeHint": {
+    "message": "程式會在系統匣繼續執行，Overlay 不受影響；要結束請在系統匣選「結束」。",
+    "dontAskAgain": "不再提示",
+    "ok": "知道了"
+  },
+  "nav": {
+    "label": "功能分頁",
+    "sub": "子分頁",
+    "more": "更多",
+    "edit": "編輯分頁",
+    "streaming": "串流中",
+    "live": "直播中",
+    "offline": "已下播",
+    "viewers": "{n} 位觀眾",
+    "recording": "錄影中",
+    "editor": {
+      "title": "編輯分頁",
+      "pinned": "放在分頁列的群組",
+      "position": "分頁列位置",
+      "top": "上方",
+      "bottom": "下方",
+      "save": "儲存",
+      "restore": "還原預設",
+      "cancel": "取消",
+      "phoneNote": "視窗窄於 600px 時，一律用底部分頁列，只放前 4 個。"
+    },
+    "connections": "連線",
+    "problem": "連線有問題：{names}",
+    "groups": {
+      "home": "首頁",
+      "song": "點歌",
+      "chat": "聊天",
+      "interact": "互動",
+      "media": "畫面與聲音",
+      "viewers": "觀眾"
+    },
+    "categories": {
+      "chatroom": "聊天室",
+      "bot": "聊天機器人",
+      "alerts": "特效",
+      "checkin": "打卡",
+      "points": "頻道點數",
+      "counters": "計數器",
+      "polls": "投票與預測",
+      "obs": "OBS",
+      "music": "背景音樂",
+      "sound": "音效",
+      "widgets": "畫面小工具",
+      "pictures": "影片與圖片",
+      "avatar": "虛擬形象",
+      "viewers": "觀眾",
+      "leaderboard": "排行榜",
+      "raids": "揪團與 SO"
+    },
+    "pageTabs": {
+      "musicPlayer": "播放",
+      "breakCard": "休息卡片",
+      "alertTemplates": "樣板",
+      "checkin": "打卡名單",
+      "rewards": "獎勵",
+      "avatar3d": "3D 形象"
+    }
+  },
+  "features": {
+    "search": "搜尋功能",
+    "count": "已開啟 {on} / {all}",
+    "groupCount": "{on} / {all} 開啟",
+    "empty": "找不到符合的功能。",
+    "alwaysOn": "一定開著",
+    "rules": "規則",
+    "open": "頁面",
+    "cancel": "取消",
+    "needs": {
+      "obs": "需要 OBS",
+      "program": "需要外部程式",
+      "scopes": "需要 Twitch 權限"
+    },
+    "confirm": {
+      "onTitle": "{name}需要先開啟其他功能",
+      "onText": "要一起開啟這些功能嗎？",
+      "onOk": "一起開啟",
+      "offTitle": "關閉{name}？",
+      "offDependents": "這些功能需要它，會一起關閉：",
+      "offAffected": "關閉後：",
+      "offOk": "關閉"
+    },
+    "bulk": {
+      "on": "全部開啟",
+      "off": "全部關閉",
+      "onLabel": "全部開啟：{group}",
+      "offLabel": "全部關閉：{group}",
+      "onTitle": "開啟「{group}」的全部功能？",
+      "onText": "這些功能會一起開啟，包含其他群組裡需要的功能：",
+      "offTitle": "關閉「{group}」的全部功能？",
+      "offText": "這些功能會一起關閉，包含其他群組裡需要它們的功能；分頁和功能磚會收起來："
+    },
+    "home": {
+      "name": "首頁",
+      "desc": "功能磚與待處理"
+    },
+    "streamInfo": {
+      "name": "直播資訊",
+      "desc": "改標題、分類與標籤"
+    },
+    "rehearsal": {
+      "name": "演練",
+      "desc": "開播前用模擬事件確認畫面"
+    },
+    "songs": {
+      "name": "點歌",
+      "desc": "!點歌、歌單與點歌規則"
+    },
+    "singingBooth": {
+      "name": "練唱台",
+      "desc": "串接雷虎練唱台"
+    },
+    "chat": {
+      "name": "聊天室",
+      "desc": "聊天紀錄、Overlay 樣板、桌面置頂視窗"
+    },
+    "chatFilter": {
+      "name": "聊天過濾",
+      "desc": "擋關鍵字與連結、防洗版"
+    },
+    "bot": {
+      "name": "聊天機器人",
+      "desc": "聊天指令、定時訊息、自動感謝與歡迎"
+    },
+    "alerts": {
+      "name": "特效",
+      "desc": "追隨、訂閱、小奇點、揪團的動畫與音效"
+    },
+    "polls": {
+      "name": "投票與預測",
+      "desc": "發起投票與預測，畫面顯示結果"
+    },
+    "checkin": {
+      "name": "打卡",
+      "desc": "打卡、集點卡與卡片樣式"
+    },
+    "rewards": {
+      "name": "頻道點數獎勵管理",
+      "desc": "新增、暫停獎勵，退還點數",
+      "affects": "點歌不唱的歌不會自動退還點數"
+    },
+    "redemption": {
+      "name": "兌換紀錄",
+      "desc": "查詢頻道點數兌換"
+    },
+    "counters": {
+      "name": "計數器",
+      "desc": "死亡次數等計數，聊天指令可加減"
+    },
+    "scenes": {
+      "name": "場景與模式",
+      "desc": "切換場景、顯示／隱藏物件、直播模式",
+      "affects": "背景音樂不會再依場景自動切換"
+    },
+    "music": {
+      "name": "背景音樂",
+      "desc": "依場景自動播放的歌單"
+    },
+    "sound": {
+      "name": "音效",
+      "desc": "音效庫與各功能的音效"
+    },
+    "goals": {
+      "name": "目標條",
+      "desc": "訂閱與小奇點目標"
+    },
+    "captions": {
+      "name": "字幕",
+      "desc": "把你說的話顯示在畫面上"
+    },
+    "musicRequests": {
+      "name": "觀眾點播",
+      "desc": "觀眾用指令點播 YouTube 影片或歌曲"
+    },
+    "screenTools": {
+      "name": "休息卡片",
+      "desc": "休息中、準備中的卡片與倒數"
+    },
+    "mixer": {
+      "name": "音訊混音",
+      "desc": "麥克風、桌面音訊這些聲音來源的電平、音量、靜音和監聽"
+    },
+    "warnings": {
+      "name": "警語",
+      "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒"
+    },
+    "media": {
+      "name": "影片與 GIF",
+      "desc": "兌換時在特效 Overlay 播放影片或 GIF"
+    },
+    "marathon": {
+      "name": "訂閱馬拉松",
+      "desc": "訂閱、小奇點會延長的倒數計時"
+    },
+    "avatar": {
+      "name": "3D 形象",
+      "desc": "VTuber Plus、VSeeFace 的表情與互動"
+    },
+    "micAvatar": {
+      "name": "跳跳",
+      "desc": "麥克風形象：講話、待機、AFK 自動換圖"
+    },
+    "outfits": {
+      "name": "換裝",
+      "desc": "veadotube mini 換裝"
+    },
+    "shoutouts": {
+      "name": "SO",
+      "desc": "SO 時播放對方的 Clip"
+    },
+    "imageSizes": {
+      "name": "圖片尺寸",
+      "desc": "在本機轉成徽章與點數圖示的尺寸"
+    },
+    "viewers": {
+      "name": "觀眾清單",
+      "desc": "觀眾的身分、紀錄與備註"
+    },
+    "roles": {
+      "name": "自訂身分組",
+      "desc": "自己定義的觀眾分組"
+    },
+    "leaderboard": {
+      "name": "排行榜",
+      "desc": "打卡、小奇點、兌換排行"
+    },
+    "credits": {
+      "name": "感謝名單",
+      "desc": "下播前的片尾名單"
+    },
+    "raids": {
+      "name": "揪團",
+      "desc": "發起揪團，出發前播放名單"
+    },
+    "overlayLook": {
+      "name": "Overlay 外觀",
+      "desc": "所有內建 Overlay 共用的主題與文字大小"
+    },
+    "obsSources": {
+      "name": "OBS 來源",
+      "desc": "集中看所有內建 Overlay 在 OBS 的狀態"
+    }
+  },
+  "pages": {
+    "soon": "尚未開放",
+    "streamInfo": {
+      "name": "直播資訊",
+      "desc": "修改直播的標題、分類與標籤。"
+    },
+    "rehearsal": {
+      "name": "演練",
+      "desc": "開播前用模擬事件確認畫面和音效。"
+    },
+    "songs": {
+      "name": "點歌",
+      "desc": "觀眾用聊天指令或頻道點數點歌，依序排隊。"
+    },
+    "songList": {
+      "name": "歌單",
+      "desc": "管理可以點的歌和它們的 YouTube 連結。"
+    },
+    "songRules": {
+      "name": "點歌規則",
+      "desc": "誰能點、多久能點一次、怎麼比對歌名。"
+    },
+    "singingBooth": {
+      "name": "練唱台",
+      "desc": "串接雷虎練唱台。"
+    },
+    "chatLog": {
+      "name": "聊天紀錄",
+      "desc": "完整的聊天紀錄，可以搜尋和篩選。"
+    },
+    "chatFilter": {
+      "name": "聊天過濾",
+      "desc": "擋下關鍵字、連結和洗版訊息。"
+    },
+    "chatTemplates": {
+      "name": "Overlay 樣板",
+      "desc": "選擇聊天室在 OBS 顯示的樣式。"
+    },
+    "chatWindow": {
+      "name": "桌面置頂視窗",
+      "desc": "把聊天室放在其他視窗上方。"
+    },
+    "commands": {
+      "name": "聊天指令",
+      "desc": "自訂聊天指令和回覆。"
+    },
+    "timers": {
+      "name": "定時訊息",
+      "desc": "每隔一段時間在聊天室發送訊息。"
+    },
+    "greetings": {
+      "name": "自動感謝與歡迎",
+      "desc": "自動感謝追隨與訂閱，並歡迎第一次聊天的觀眾。"
+    },
+    "polls": {
+      "name": "投票與預測",
+      "desc": "發起投票與預測，畫面顯示結果。"
+    },
+    "cardStyle": {
+      "name": "卡片樣式",
+      "desc": "觀眾打卡時在 OBS 顯示的集點卡樣式。"
+    },
+    "rewards": {
+      "name": "頻道點數",
+      "desc": "新增或暫停頻道點數獎勵，退還點數。"
+    },
+    "screenTools": {
+      "name": "畫面工具",
+      "desc": "休息卡片、目標條和跑馬燈。"
+    },
+    "avatar": {
+      "name": "虛擬形象",
+      "desc": "控制 VTuber Plus、VSeeFace 的表情與互動。"
+    },
+    "micAvatar": {
+      "name": "跳跳",
+      "desc": "麥克風形象：講話、待機、AFK 自動換圖。"
+    },
+    "outfits": {
+      "name": "換裝",
+      "desc": "觀眾用頻道點數兌換後選衣服，幾分鐘後換回預設。"
+    },
+    "shoutouts": {
+      "name": "SO",
+      "desc": "SO 時播放對方的 Clip。"
+    },
+    "imageSizes": {
+      "name": "圖片尺寸",
+      "desc": "在本機把圖片轉成徽章和頻道點數圖示的尺寸。"
+    },
+    "viewers": {
+      "name": "觀眾清單",
+      "desc": "觀眾的身分、紀錄和備註。"
+    },
+    "roles": {
+      "name": "自訂身分組",
+      "desc": "自己定義的觀眾分組。"
+    },
+    "leaderboard": {
+      "name": "排行榜",
+      "desc": "打卡、小奇點和兌換的排行。"
+    },
+    "credits": {
+      "name": "感謝名單",
+      "desc": "下播前播放的片尾名單。"
+    },
+    "raids": {
+      "name": "揪團",
+      "desc": "發起揪團，出發前播放感謝名單。"
+    },
+    "modes": {
+      "name": "模式",
+      "desc": "一鍵切換場景、音訊與要顯示的東西。"
+    },
+    "musicPlaylists": {
+      "name": "音樂歌單",
+      "desc": "背景音樂的歌單。"
+    },
+    "musicLibrary": {
+      "name": "音樂庫",
+      "desc": "匯入的背景音樂。"
+    },
+    "musicRequests": {
+      "name": "觀眾點播",
+      "desc": "觀眾用指令點播 YouTube 影片或歌曲。"
+    },
+    "rewardPlayback": {
+      "name": "兌換時播放",
+      "desc": "每個獎勵兌換時播的音效、影片或 GIF。"
+    },
+    "warnings": {
+      "name": "警語",
+      "desc": "聊天室沒連上、麥克風靜音、Twitch 中斷時在畫面上提醒。"
+    },
+    "media": {
+      "name": "影片與 GIF",
+      "desc": "兌換時播放的影片與 GIF 檔案。"
+    },
+    "goals": {
+      "name": "目標條",
+      "desc": "訂閱與小奇點目標。"
+    },
+    "captions": {
+      "name": "字幕",
+      "desc": "把你說的話顯示在畫面上。"
+    },
+    "marathon": {
+      "name": "訂閱馬拉松",
+      "desc": "訂閱、小奇點會延長的倒數計時。"
+    },
+    "checkinRules": {
+      "name": "打卡規則",
+      "desc": "打卡指令、獎勵、格數、音效、時區與換日時間。"
+    },
+    "alertEvents": {
+      "name": "每種事件",
+      "desc": "每種事件的音效與試播。"
+    },
+    "alertLog": {
+      "name": "最近事件",
+      "desc": "這次開啟後的特效與結果。"
+    },
+    "overlayLook": {
+      "name": "Overlay 外觀",
+      "desc": "所有內建 Overlay 共用的主題與文字大小。"
+    },
+    "mixer": {
+      "name": "音訊混音",
+      "desc": "OBS 聲音來源的音量、靜音和監聽。"
+    },
+    "obsSources": {
+      "name": "OBS 來源",
+      "desc": "所有內建 Overlay 在 OBS 的哪些場景，一頁看完。"
+    }
+  },
+  "services": {
+    "use": "使用 {service}",
+    "useDesc": "關掉後，需要 {service} 的功能和它們的分頁、功能磚都收起來；改回使用就恢復原本的開關。",
+    "unused": "不使用 {service}",
+    "offTitle": "不使用 {service}？",
+    "offText": "這些開著的功能會關閉並鎖住，分頁和功能磚會收起來；改回使用時會再打開：",
+    "offNone": "目前沒有開著的功能需要它。",
+    "offOk": "不使用",
+    "down": "{service} 沒連上",
+    "banner": "{service} 沒連上，這一頁的功能暫時不能用。",
+    "connect": "去連線"
+  },
+  "preview": {
+    "heading": "樣板",
+    "applied": "使用中",
+    "loadFailed": "無法取得目前使用的樣板，重新選一次會再試。",
+    "templates": {
+      "default": "預設",
+      "compact": "精簡單行",
+      "bubble": "泡泡"
+    },
+    "sample": {
+      "first": "哈囉！這是預覽用的範例訊息。",
+      "second": "沒有設定名稱顏色的觀眾",
+      "third": "OBS 裡的聊天室會長這樣。"
+    }
+  },
+  "modules": {
+    "names": {
+      "chat": "聊天室",
+      "alerts": "特效",
+      "redemption": "兌換紀錄",
+      "checkin": "打卡",
+      "sound": "音效",
+      "scene": "場景",
+      "bgm": "背景音樂",
+      "counter": "計數器",
+      "screen-tools": "休息卡片",
+      "warnings": "警語",
+      "media": "影片與 GIF",
+      "marathon": "訂閱馬拉松",
+      "mixer": "音訊混音",
+      "feed": "事件流"
+    }
+  },
+  "update": {
+    "available": "有新版 {version}",
+    "current": "目前版本 {version}",
+    "download": "下載新版",
+    "dismiss": "這版先不要",
+    "check": "檢查新版"
+  },
+  "filePick": { "choose": "選擇檔案" },
+  "port": {
+    "heading": "連接埠被佔用",
+    "explain": "Host 無法使用目前的連接埠。請輸入新的連接埠，OBS 裡的網址也要一起更新。",
+    "label": "連接埠",
+    "retry": "儲存並重試"
+  },
+  "commands": {
+    "allowed": {
+      "label": "誰能用",
+      "everyone": "所有人",
+      "subscriber": "訂閱者",
+      "vip": "VIP",
+      "moderator": "管理員"
+    }
+  },
+  "modes": {
+    "fromObs": "從目前 OBS 畫面建立",
+    "empty": "還沒有模式；可以從目前的 OBS 畫面建立一個。"
+  },
+  "profiles": {
+    "empty": "還沒有其他設定檔；目前只有一組設定。",
+    "note": "設定檔包含：啟用的功能、首頁磚、背景音樂的場景對應、頻道點數獎勵的暫停狀態、快捷鍵。Twitch、OBS 連線與紀錄資料所有設定檔共用。",
+    "add": "新增設定檔"
+  },
+  "hotkeys": {
+    "global": "全域快捷鍵",
+    "globalHint": "在其他視窗（例如遊戲）裡也有效",
+    "list": "快捷鍵",
+    "empty": "還沒有快捷鍵。",
+    "conflicts": "跟其他程式衝突的組合會提示",
+    "add": "新增快捷鍵"
+  },
+  "setup": {
+    "title": "首次設定",
+    "steps": "設定步驟",
+    "step": {
+      "register": "註冊 Twitch app",
+      "clientId": "Client ID",
+      "signIn": "登入",
+      "obs": "OBS",
+      "overlays": "加到 OBS"
+    },
+    "heading": {
+      "register": "註冊 Twitch app",
+      "clientId": "貼上 Client ID",
+      "signIn": "登入 Twitch",
+      "obs": "連線 OBS",
+      "overlays": "加到 OBS"
+    },
+    "register": {
+      "1": "開啟 Twitch Developer Console（下面的網址），按「Register Your Application」。",
+      "2": "類別選「Public」，OAuth Redirect URL 填 http://localhost。",
+      "3": "建立後複製 Client ID，下一步貼上。"
+    },
+    "copy": {
+      "redirect": "複製 Redirect URL",
+      "console": "複製 Console 網址",
+      "overlay": "複製{name}網址"
+    },
+    "copied": "已複製。",
+    "clientIdSaved": "Client ID 已儲存，下一步登入。之後可以在「設定 › 連線」修改。",
+    "clientIdFirst": "還沒有 Client ID，請回上一步貼上。",
+    "obs": {
+      "where": "OBS 的「工具 › WebSocket 伺服器設定」裡可以找到這些值。"
+    },
+    "overlays": {
+      "how": "在 OBS 新增「瀏覽器」來源，網址貼上下面的網址。之後要加其他的，到「畫面與聲音 › OBS 來源」。"
+    },
+    "back": "上一步",
+    "skip": "略過設定",
+    "next": "下一步",
+    "finish": "完成"
+  }
+}

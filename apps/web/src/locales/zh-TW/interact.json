@@ -1,0 +1,351 @@
+{
+  "alerts": {
+    "test": "試播",
+    "testKind": "試播「{kind}」",
+    "tested": "已送出測試特效。",
+    "empty": "還沒有特效",
+    "recent": {
+      "title": "最近事件",
+      "empty": "這次啟動後還沒有特效。",
+      "simulated": "模擬",
+      "replay": "重播",
+      "replayed": "已加入呈現佇列（重播）。",
+      "outcome": {
+        "pending": "排隊中",
+        "played": "已播",
+        "sound_missing": "已播，音效檔不見了",
+        "off_air": "特效 Overlay 沒開，沒有播",
+        "declined": "特效已關閉，沒有播",
+        "skipped": "已跳過",
+        "cleared": "已清空，沒有播",
+        "stopped": "已緊急停止"
+      }
+    },
+    "anonymous": "匿名觀眾",
+    "sample": "這是預覽用的範例留言",
+    "templates": {
+      "default": "預設",
+      "banner": "橫幅",
+      "text": "純文字"
+    },
+    "kinds": {
+      "follow": "追隨",
+      "subscribe": "新訂閱",
+      "resubscribe": "續訂",
+      "gift": "送禮訂閱",
+      "cheer": "小奇點",
+      "raid": "揪團"
+    },
+    "amount": {
+      "resubscribe": "訂閱月數",
+      "gift": "訂閱份數",
+      "cheer": "小奇點數量",
+      "raid": "揪團人數"
+    },
+    "text": {
+      "follow": "{name} 追隨了！",
+      "subscribe": "{name} 訂閱了！",
+      "resubscribe": "{name} 續訂了 {months} 個月！",
+      "gift": "{name} 送了 {count} 份訂閱！",
+      "cheer": "{name} 送出 {bits} 小奇點！",
+      "raid": "{name} 帶著 {viewers} 人揪團來了！"
+    }
+  },
+  "redemption": {
+    "played": {
+      "label": "播放：",
+      "none": "—",
+      "untracked": "沒有紀錄",
+      "entry": "{what}{result}",
+      "what": { "card": "集點卡", "sound": "音效", "media": "影片或 GIF" },
+      "result": {
+        "played": "已播",
+        "sound_missing": "已播，但音效檔案不見了",
+        "file_missing": "：檔案不見了",
+        "off_air": "：Overlay 沒開，沒有播",
+        "declined": "：沒有播",
+        "skipped": "：已跳過",
+        "cleared": "：清空排隊，沒有播",
+        "stopped": "：緊急停止"
+      }
+    },
+    "empty": "還沒有兌換紀錄",
+    "noMatch": "沒有符合條件的紀錄",
+    "writeFailed": "有 {n} 筆兌換重試後仍無法寫入紀錄，不在清單裡。",
+    "cost": "{n} 點",
+    "status": {
+      "unfulfilled": "未完成",
+      "fulfilled": "已完成",
+      "canceled": "已退還",
+      "unknown": "不明"
+    },
+    "filters": "篩選",
+    "filtersToggle": "篩選條件",
+    "filtersActive": "篩選條件（使用中）",
+    "from": "開始日期",
+    "to": "結束日期",
+    "viewer": "觀眾",
+    "reward": "獎勵",
+    "statusLabel": "狀態",
+    "allStatuses": "全部",
+    "apply": "篩選",
+    "clear": "清除篩選",
+    "total": "共 {n} 筆",
+    "pages": "分頁",
+    "page": "第 {page} / {pages} 頁",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "loadFailed": "無法載入兌換紀錄。"
+  },
+  "checkin": {
+    "today": "今天 {n} 人打卡",
+    "page": {
+      "filters": "搜尋觀眾",
+      "search": "觀眾",
+      "date": "登記日期",
+      "total": "共 {n} 位觀眾",
+      "empty": "還沒有人打卡。",
+      "loadFailed": "無法讀取打卡紀錄。",
+      "totalOf": "累計 {n} 次",
+      "card": "集點卡 {stamps}/{slots}",
+      "last": "最後打卡 {date}",
+      "never": "沒有打卡紀錄",
+      "registerToday": "登記今天",
+      "registerDay": "補登 {date}",
+      "registered": "已登記 {name}（{date}）。",
+      "already": "{name} 在 {date} 已經打過卡了，沒有重複計算。"
+    },
+    "push": {
+      "show": "把集點卡推到畫面",
+      "hide": "隱藏畫面卡片",
+      "queued": "{name} 的集點卡已排進呈現佇列。"
+    },
+    "deduct": {
+      "available": "可用印章 {n}",
+      "open": "扣印章",
+      "for": "扣 {name} 的印章",
+      "amount": "扣幾格",
+      "reason": "原因（選填）",
+      "confirm": "確定扣除",
+      "cancel": "取消",
+      "done": "已扣 {name} {n} 格，還有 {left} 格可用。",
+      "log": "異動紀錄",
+      "logEmpty": "還沒有扣過印章。",
+      "logLine": "{name} 扣 {n} 格"
+    },
+    "import": {
+      "heading": "匯入舊打卡資料",
+      "file": "選擇 JSON 檔",
+      "drop": "把 JSON 檔拖到這裡",
+      "summary": "會新增 {added} 位、更新 {updated} 位，略過 {skipped} 筆。",
+      "confirm": "確認匯入",
+      "close": "關閉",
+      "done": "已匯入：新增 {added} 位、更新 {updated} 位。",
+      "reasons": {
+        "invalid_id": "不是數字的 Twitch user ID",
+        "owner": "實況主本人（isOwner）",
+        "excluded": "標為排除（excluded）",
+        "invalid_total": "totalCheckIns 缺少，或不是 0 到 1,000,000,000 的整數",
+        "invalid_date": "lastCheckInDate 不是 YYYY-MM-DD"
+      }
+    },
+    "disable": {
+      "title": "停用打卡",
+      "pause": "暫停：保留期間的兌換，重新啟用後依序補打卡。",
+      "closeWarning": "關閉：打卡模組會略過停用期間的頻道點數兌換，重新啟用後也不會補打卡。",
+      "pendingSkipped": "目前累積的 {n} 筆兌換也會一起略過。",
+      "pauseButton": "暫停",
+      "closeButton": "關閉"
+    },
+    "outbox": {
+      "paused": "已暫停：累積 {n} 筆兌換，重新啟用後補打卡。",
+      "oldest": "最舊的是 ",
+      "closed": "已關閉：停用期間的兌換不會補打卡。",
+      "switchToClose": "改為關閉",
+      "deadLetters": "一直無法處理的兌換",
+      "retry": "重試",
+      "skip": "略過"
+    }
+  },
+  "counter": {
+    "heading": "全域計數",
+    "name": "名稱",
+    "command": "聊天指令",
+    "perStream": "每場歸零",
+    "keepAcrossStreams": "不歸零",
+    "add": "新增計數器",
+    "empty": "還沒有計數器",
+    "line": "{name}：{value}",
+    "plusOne": "加一",
+    "minusOne": "減一",
+    "minusOneFor": "減一：{name}",
+    "editFor": "編輯：{name}",
+    "reset": "歸零",
+    "more": "更多：{name}",
+    "delete": "刪除",
+    "confirmDelete": "確定刪除",
+    "cancel": "取消",
+    "deleteNote": "這個計數和它的聊天指令都會移除。",
+    "deleted": "已刪除「{name}」。",
+    "loadFailed": "無法載入計數器。",
+    "marathon": {
+      "heading": "訂閱馬拉松計時器",
+      "sub": "每個訂閱",
+      "bits": "每 100 小奇點",
+      "max": "最長",
+      "minutesUnit": "分鐘",
+      "hoursUnit": "小時",
+      "subMinutes": "每個訂閱加幾分鐘",
+      "bitsMinutes": "每 100 小奇點加幾分鐘",
+      "maxHours": "最長幾小時",
+      "pause": "暫停",
+      "resume": "繼續",
+      "addMinutes": "手動加時（分鐘）",
+      "add": "手動加時",
+      "running": "倒數中",
+      "paused": "已暫停",
+      "waiting": "等開播才倒數",
+      "done": "時間到了"
+    },
+    "viewers": {
+      "heading": "每位觀眾各自的計數",
+      "hint": "例如「猜中死亡次數」",
+      "add": "新增每人計數",
+      "addShort": "新增",
+      "column": "計數",
+      "totalCol": "總和",
+      "total": "總和 {n}",
+      "top": "前三名",
+      "none": "還沒有人",
+      "search": "搜尋觀眾",
+      "noMatch": "找不到觀眾",
+      "entry": "{name}（{login}）",
+      "showAll": "看每個人",
+      "hideAll": "收起",
+      "deleteNote": "這個計數和每位觀眾的數字都會移除。"
+    }
+  },
+  "cardStyle": {
+    "summary": "不用寫程式；改了右邊馬上看到",
+    "preset": "樣式",
+    "presets": {
+      "simple": "內建：簡約",
+      "journal": "內建：手帳"
+    },
+    "background": "背景",
+    "backgroundImage": "背景圖",
+    "backgroundColor": "背景顏色",
+    "solidColor": "目前：純色",
+    "stamp": "印章",
+    "stampImage": "印章圖案",
+    "stampColor": "印章顏色",
+    "defaultStamp": "目前：預設",
+    "color": "顏色",
+    "image": "選擇圖片",
+    "imageHint": "PNG、JPG、GIF、WebP，最多 5 MB",
+    "removeImage": "移除圖片",
+    "perRow": "每排幾格",
+    "title": "標題文字",
+    "description": "說明文字",
+    "variables": "可用 #觀眾# #章數# #次數# #格數#",
+    "animation": "進場動畫",
+    "animations": {
+      "slide": "滑入",
+      "fade": "淡入",
+      "pop": "彈出",
+      "none": "沒有動畫"
+    },
+    "showRepeat": "今天已經打過卡也顯示卡片",
+    "repeatHeading": "今天已打過卡時",
+    "repeatShow": "顯示「今天已打卡」",
+    "repeatHide": "不顯示",
+    "test": "在 OBS 試播",
+    "save": "儲存",
+    "saved": "已儲存卡片樣式。",
+    "uploadFailed": "{file}：{reason}",
+    "packs": {
+      "heading": "動畫包",
+      "sandboxNote": "只在 OBS 和隔離的預覽框裡執行",
+      "upload": "上傳動畫包",
+      "uploadHint": "zip，最多 10 MB",
+      "inUse": "使用中",
+      "delete": "刪除動畫包「{name}」",
+      "installed": "已安裝動畫包「{name}」。"
+    },
+    "preview": "預覽",
+    "previewMode": "預覽情境",
+    "previews": {
+      "stamped": "打卡成功 +1",
+      "repeat": "今天已打過"
+    }
+  },
+  "rewardPlayback": {
+    "summary": "音效、影片與 GIF 和特效一起依序播",
+    "soundOverlay": "音效：",
+    "mediaOverlay": "影片與 GIF：",
+    "sound": "音效",
+    "videoVolume": "影片音量",
+    "gifNoAudio": "GIF 沒有聲音",
+    "checkinManaged": "打卡的音效與集點卡在「互動 › 打卡」設定",
+    "filesHint": "檔案在「畫面與聲音」的音效庫、影片與 GIF"
+  },
+  "rewards": {
+    "heading": "獎勵",
+    "empty": "還沒有頻道點數獎勵。",
+    "note": "Twitch 只允許修改由本工具建立的獎勵，兌換也只有這些能從這裡標成完成或退還。在 Twitch 後台建立的獎勵可以「接管」：本工具建立一份一樣的，原本那個請到 Twitch 後台停用。",
+    "add": "新增獎勵"
+  },
+  "polls": {
+    "summary": "Twitch 原生的投票、預測，結果可以顯示在畫面上",
+    "kinds": {
+      "poll": "投票",
+      "prediction": "預測"
+    },
+    "none": {
+      "poll": "沒有進行中的投票。",
+      "prediction": "沒有進行中的預測。"
+    },
+    "new": "開新的",
+    "kind": "種類",
+    "question": "題目",
+    "questionHint": "例如：下一首唱什麼？",
+    "options": "選項",
+    "option": "選項 {n}",
+    "addOption": "加選項（最多 5 個）",
+    "duration": "時間",
+    "minutes": "{n} 分鐘",
+    "saveHint": "也可以存成常用題目，直播中一鍵開",
+    "start": "開始"
+  },
+  "shoutouts": {
+    "summary": "SO 時在畫面播對方的 Clip",
+    "player": "正在播",
+    "nothingPlaying": "沒有正在播的 Clip。",
+    "session": "本場 SO",
+    "none": "這場還沒有 SO。",
+    "settings": "設定",
+    "onRaid": "有人揪團時自動 SO",
+    "longest": "Clip 最長",
+    "seconds": "秒",
+    "recent": "從最近幾天的 Clip 挑",
+    "days": "天",
+    "commands": "管理員指令：!so 帳號、!replay、!stop"
+  },
+  "raids": {
+    "summary": "直接從工具發起揪團",
+    "to": "揪團到",
+    "channel": "頻道",
+    "channelHint": "帳號",
+    "before": "出發前",
+    "beforeItems": {
+      "credits": "先播片尾名單",
+      "announce": "聊天室說一聲"
+    },
+    "cancel": "取消揪團",
+    "start": "開始揪團",
+    "random": "隨機挑一台",
+    "pick": "抽一台",
+    "randomHint": "從你追隨的頻道裡正在直播的挑；可以排除最近揪過的。",
+    "scopes": "需要 Twitch 權限 channel:manage:raids；追隨中正在直播的頻道要 user:read:follows。"
+  }
+}
