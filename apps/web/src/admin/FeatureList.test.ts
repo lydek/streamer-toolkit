@@ -5,7 +5,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
-import { FEATURES } from './features'
 import { twitchOverview } from './home'
 import { useServices } from './services'
 import { testRouter } from './testRouter'
@@ -43,11 +42,11 @@ describe('FeatureList', () => {
   })
 
   it("links a feature not built yet to its page in dev mode only", () => {
-    const link = () => list().findAll('li.feat').find((li) => li.get('.name').text() === name('polls'))!.find('a.open')
+    const link = () => list().findAll('li.feat').find((li) => li.get('.name').text() === name('shoutouts'))!.find('a.open')
     expect(link().exists()).toBe(false)
     vi.stubEnv('MODE', 'development')
     try {
-      expect(link().attributes('href')).toBe('/polls')
+      expect(link().attributes('href')).toBe('/shoutouts')
       // Twitch not used: its pages are closed, so there is nothing to open.
       useServices().unused = ['twitch']
       expect(link().exists()).toBe(false)
@@ -100,7 +99,7 @@ describe('FeatureList group switches', () => {
       this.dispatchEvent(new Event('close'))
     }
   })
-  const interact = ['alerts', 'checkin', 'redemption', 'counter', 'marathon']
+  const interact = ['alerts', 'checkin', 'redemption', 'counter', 'marathon', 'polls', 'rewards']
   const mounted = (on: string[]) =>
     mount(FeatureList, {
       props: { modules: interact.map((id) => ({ id, enabled: on.includes(id), closed: false })), busy: false, loadText: '' },
@@ -154,16 +153,14 @@ describe('FeatureList group switches', () => {
   })
 
   it('turning a group on leaves the features still needing Twitch scopes off, and says so', async () => {
-    // No built group mixes them yet: 兌換獎勵 stands in as a built feature with scopes.
-    const rewards = FEATURES.find((f) => f.id === 'rewards')!
-    rewards.module = 'rewards'
     twitchOverview.value = { client_id: 'cid', eventsub_connected: true, irc_connected: false, scopes: [], status: { state: 'signed_in', user_id: '1', login: 'me' } }
     try {
+      // 投票與預測 and 頻道點數獎勵管理 need scopes the sign-in lacks.
       const wrapper = mounted(['alerts', 'checkin', 'redemption', 'marathon'])
-      await wrapper.setProps({ modules: [...wrapper.props('modules')!, { id: 'rewards', enabled: false, closed: false }] })
       await bulk(wrapper, 'interact', 'on')!.trigger('click')
       expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual([
         name('counters'),
+        t('features.scopes.skipped', { name: name('polls') }),
         t('features.scopes.skipped', { name: name('rewards') }),
       ])
       ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.bulk.on')))!.click()
@@ -171,7 +168,6 @@ describe('FeatureList group switches', () => {
       expect(wrapper.emitted('bulk')![0][0]).toEqual([{ id: 'counter', enabled: true }])
       wrapper.unmount()
     } finally {
-      delete rewards.module
       twitchOverview.value = undefined
     }
   })

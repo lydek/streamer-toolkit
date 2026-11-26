@@ -447,6 +447,12 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="polls" :title="moduleName('polls')" full-page="/polls">
+      <template #now>
+        <p>{{ t('polls.tile') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <ObsStatusLink overlay="/overlay/bgm/" />
@@ -743,6 +749,7 @@ const lines = computed<Record<string, Line>>(() => {
     'image-sizes': { state: 'ready', text: t('imageSizes.tile') },
     'stream-info': { state: 'ready', text: t('streamInfo.tile') },
     rewards: { state: 'ready', text: t('rewards.tile') },
+    polls: { state: 'ready', text: t('polls.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }

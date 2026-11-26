@@ -4959,6 +4959,248 @@
         }
       }
     },
+    "/api/admin/polls": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "current_polls",
+        "responses": {
+          "200": {
+            "description": "What is on, read from Twitch (and announced as `twitch.contest`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContestPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` or `polls.unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "start_poll",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPoll"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What is on, with the new poll",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContestPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`polls.invalid` (over Twitch's limits), `polls.refused` (e.g. a poll is already running), or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` or `polls.unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/polls/templates": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "poll_templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PollTemplate"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_poll_templates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PollTemplate"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The saved polls as kept (trimmed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PollTemplate"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`polls.invalid`: one is over Twitch's limits, or more than 20",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/polls/{id}/end": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "end_poll",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Twitch's poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What is on, with the poll ended (its result still shows on Twitch)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContestPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`polls.invalid`, `polls.refused` (e.g. it already ended), or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/queue/clear": {
       "post": {
         "tags": [
@@ -10168,6 +10410,71 @@
           "media"
         ]
       },
+      "ContestEvent": {
+        "type": "object",
+        "description": "A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll changes.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ContestPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ContestType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ContestPayload": {
+        "type": "object",
+        "description": "What is on: the latest poll, `None` before any or once it was archived.",
+        "required": [
+          "poll"
+        ],
+        "properties": {
+          "poll": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PollView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ContestType": {
+        "type": "string",
+        "enum": [
+          "twitch.contest"
+        ]
+      },
       "CounterBody": {
         "type": "object",
         "description": "A counter with its command. `name` is broadcaster text: render it as text.",
@@ -11815,6 +12122,33 @@
           }
         }
       },
+      "NewPoll": {
+        "type": "object",
+        "required": [
+          "title",
+          "choices",
+          "seconds"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "2–5, each up to 25 characters."
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "15–1800.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "description": "Up to 60 characters."
+          }
+        }
+      },
       "NotEnoughStamps": {
         "type": "object",
         "description": "More than is available; nothing was deducted.",
@@ -12639,6 +12973,93 @@
           "name": {
             "type": "string",
             "description": "1–100 characters after trimming."
+          }
+        }
+      },
+      "PollChoiceView": {
+        "type": "object",
+        "description": "A choice and its votes so far (channel points votes included). `title` is raw Twitch text.",
+        "required": [
+          "id",
+          "title",
+          "votes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "votes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "PollStatusName": {
+        "type": "string",
+        "enum": [
+          "active",
+          "completed",
+          "terminated"
+        ]
+      },
+      "PollTemplate": {
+        "type": "object",
+        "description": "A poll saved to start again: its question, choices and how long voting lasts.",
+        "required": [
+          "title",
+          "choices",
+          "seconds"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "PollView": {
+        "type": "object",
+        "description": "`title` is raw Twitch text.",
+        "required": [
+          "id",
+          "title",
+          "choices",
+          "status",
+          "endsAt"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PollChoiceView"
+            }
+          },
+          "endsAt": {
+            "type": "string",
+            "description": "RFC 3339: when voting ends, or ended."
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PollStatusName"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -13849,7 +14270,8 @@
           "screen.warnings",
           "screen.appearance",
           "leaderboard.update",
-          "chat.text_size"
+          "chat.text_size",
+          "twitch.contest"
         ],
         "properties": {
           "bgm.player": {
@@ -13948,6 +14370,13 @@
               "$ref": "#/components/schemas/StreamStatusEvent"
             },
             "description": "At most one: the latest live state."
+          },
+          "twitch.contest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContestEvent"
+            },
+            "description": "At most one: the latest poll."
           }
         }
       },

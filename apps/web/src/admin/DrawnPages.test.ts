@@ -8,7 +8,6 @@ import { i18n } from '../i18n'
 import BotCommandsPage from './BotCommandsPage.vue'
 import BotGreetingsPage from './BotGreetingsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
-import PollsPage from './PollsPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
@@ -43,18 +42,6 @@ async function page(component: Component, path: string) {
 }
 
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
-
-describe('投票與預測', () => {
-  it('shows nothing running, and a new poll form that adds up to 5 options but cannot start', async () => {
-    const w = await page(PollsPage, '/polls')
-    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('polls.none.poll'), t('polls.none.prediction')])
-    const add = button(w, t('polls.addOption'))
-    for (let i = 0; i < 4; i++) await add.trigger('click')
-    expect(w.findAll('[role="group"] input')).toHaveLength(5)
-    expect(add.attributes('disabled')).toBeDefined()
-    expect(button(w, t('polls.start')).attributes('disabled')).toBeDefined()
-  })
-})
 
 describe('聊天機器人', () => {
   it('shows no commands or timers, with adding them disabled', async () => {

@@ -1,6 +1,7 @@
 //! Twitch adapter. Types are hand-written serde structs covering only the fields we use.
 
 pub mod auth;
+pub mod contests;
 pub mod eventsub;
 pub mod helix;
 pub mod irc;

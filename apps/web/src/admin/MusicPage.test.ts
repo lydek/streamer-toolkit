@@ -174,7 +174,7 @@ describe('MusicPage player', () => {
     type: 'snapshot',
     version: 1,
     seq: 1,
-    payload: { 'chat.message': [], 'chat.removed': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [event], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] },
+    payload: { 'chat.message': [], 'chat.removed': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [event], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] },
   })
   const receive = async (msg: unknown) => {
     socket.onmessage!({ data: JSON.stringify(msg) })
@@ -291,7 +291,7 @@ describe('MusicPage scene rules', () => {
       'screen.break': [],
       'screen.warnings': [],
       'screen.appearance': [],
-      'leaderboard.update': [],
+      'leaderboard.update': [], 'twitch.contest': [],
       'chat.text_size': [],
     },
   })

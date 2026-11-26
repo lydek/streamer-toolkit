@@ -10,7 +10,8 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{Connector, MaybeTlsStream, WebSocketStream, tungstenite};
 use toolkit_core::events::{
     Alert, AlertKind, ChannelPointsRedemption, ChatBadge, ChatMessage, ChatRemoval, ChatReply,
-    Fragment, RedemptionChange, RedemptionStatus, SharedChannel, StreamChange, TwitchBadge,
+    Contest, Fragment, RedemptionChange, RedemptionStatus, SharedChannel, StreamChange,
+    TwitchBadge,
 };
 
 use super::{
@@ -32,6 +33,9 @@ const CHAT_DELETE: &str = "channel.chat.message_delete";
 const CHAT_CLEAR_USER: &str = "channel.chat.clear_user_messages";
 const CHAT_CLEAR: &str = "channel.chat.clear";
 const STREAM_OFFLINE: &str = "stream.offline";
+const POLL_BEGIN: &str = "channel.poll.begin";
+const POLL_PROGRESS: &str = "channel.poll.progress";
+const POLL_END: &str = "channel.poll.end";
 
 /// Subscriptions besides chat: type, version and the scope it needs. Raids and the stream's start and end need
 /// none, so they cost 1 each of the `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
@@ -58,6 +62,10 @@ const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     (CHAT_DELETE, "1", Some("user:read:chat")),
     (CHAT_CLEAR_USER, "1", Some("user:read:chat")),
     (CHAT_CLEAR, "1", Some("user:read:chat")),
+    // Only once 投票與預測 asked for it (a feature scope).
+    (POLL_BEGIN, "1", Some("channel:manage:polls")),
+    (POLL_PROGRESS, "1", Some("channel:manage:polls")),
+    (POLL_END, "1", Some("channel:manage:polls")),
 ];
 
 pub(super) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -91,6 +99,8 @@ pub struct EventSub {
     pub deliver_alert: Arc<dyn Fn(Alert) + Send + Sync>,
     pub deliver_redemption: Arc<dyn Fn(ChannelPointsRedemption) + Send + Sync>,
     pub deliver_stream: Arc<dyn Fn(StreamChange) + Send + Sync>,
+    /// A poll (or prediction) starting, changing or ending.
+    pub deliver_contest: Arc<dyn Fn(Contest) + Send + Sync>,
     /// A message, a viewer's messages or the whole chat taken down by a moderator, with the channel (broadcaster
     /// user ID) it happened in.
     pub deliver_removal: Arc<dyn Fn(String, ChatRemoval) -> RemovalDelivery + Send + Sync>,
@@ -246,6 +256,13 @@ impl EventSub {
             match stream_change(&kind, event) {
                 Some(change) => (self.deliver_stream)(change),
                 None => tracing::debug!(subscription = %kind, "stream notification skipped"),
+            }
+            return;
+        }
+        if matches!(kind.as_str(), POLL_BEGIN | POLL_PROGRESS | POLL_END) {
+            match super::contests::poll_from_json(event) {
+                Some(poll) => (self.deliver_contest)(Contest::Poll(poll)),
+                None => tracing::warn!(subscription = %kind, "unreadable poll notification"),
             }
             return;
         }

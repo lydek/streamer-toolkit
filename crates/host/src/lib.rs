@@ -7,6 +7,7 @@ mod card_packs;
 mod chat_display;
 mod chat_dock;
 mod chat_log;
+mod contests;
 pub mod db;
 mod diagnostics;
 mod event_feed;
@@ -582,6 +583,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         viewers,
         outbox,
         modules.clone(),
+        Arc::new(contests::Contests::new(bus.clone())),
     ));
     watch_warnings(&screen_tools, &overlays, &admin, obs.states(), &modules);
     let services = services::routes(services::ServicesState {

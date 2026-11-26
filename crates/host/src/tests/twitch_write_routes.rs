@@ -54,6 +54,20 @@ struct Fake {
     redemptions: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
     /// Status they answer with; 0: done.
     redemption_status: Arc<Mutex<u16>>,
+    /// Poll requests: method, body.
+    polls: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
+}
+
+/// A Helix poll; `status` as Helix spells it.
+fn helix_poll(status: &str) -> serde_json::Value {
+    serde_json::json!({
+        "id": "p1", "broadcaster_id": "42", "title": "下一首？", "status": status, "duration": 120,
+        "choices": [
+            { "id": "c1", "title": "晴天", "votes": 3, "channel_points_votes": 0, "bits_votes": 0 },
+            { "id": "c2", "title": "小幸運", "votes": 1, "channel_points_votes": 0, "bits_votes": 0 }
+        ],
+        "started_at": "2026-11-27T10:00:00Z", "ended_at": null
+    })
 }
 
 /// A Helix custom reward; `r-own` is the toolkit's, `r-dash` was made in the Twitch dashboard.
@@ -177,6 +191,19 @@ async fn fake_helix(fake: Fake) -> String {
                         .into_response(),
                         code => StatusCode::from_u16(code).unwrap().into_response(),
                     }
+                },
+            ),
+        )
+        .route(
+            "/polls",
+            axum::routing::any(
+                |AxumState(f): AxumState<Fake>,
+                 method: Method,
+                 body: Option<Json<serde_json::Value>>| async move {
+                    let body = body.map(|Json(b)| b).unwrap_or_default();
+                    let status = if body["status"] == "TERMINATED" { "TERMINATED" } else { "ACTIVE" };
+                    f.polls.lock().unwrap().push((method.to_string(), body));
+                    Json(serde_json::json!({ "data": [helix_poll(status)] }))
                 },
             ),
         )
@@ -709,4 +736,111 @@ async fn a_redemption_of_an_own_reward_is_fulfilled_or_refunded_and_the_record_f
     // Not a status Twitch takes from here.
     let res = app.oneshot(set("unfulfilled")).await.unwrap();
     assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn a_poll_is_started_within_twitch_limits_and_ended_early() {
+    let fake = Fake::default();
+    let app = signed_in_with("polls", &fake, &["channel:manage:polls"]).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/admin/polls",
+            Some(serde_json::json!({ "title": " 下一首？ ", "choices": ["晴天", "小幸運"], "seconds": 120 })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let on = json(res).await;
+    assert_eq!(on["poll"]["status"], "active");
+    assert_eq!(on["poll"]["endsAt"], "2026-11-27T10:02:00.000Z");
+    assert_eq!(on["poll"]["choices"][0]["votes"], 3);
+    assert_eq!(
+        fake.polls.lock().unwrap()[0],
+        (
+            "POST".to_owned(),
+            serde_json::json!({
+                "broadcaster_id": "42", "title": "下一首？", "duration": 120,
+                "choices": [{ "title": "晴天" }, { "title": "小幸運" }]
+            })
+        )
+    );
+
+    // One choice is not a poll: refused here.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/admin/polls",
+            Some(serde_json::json!({ "title": "x", "choices": ["a"], "seconds": 120 })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["code"], "polls.invalid");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::POST, "/api/admin/polls/p1/end", None))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["poll"]["status"], "terminated");
+    assert_eq!(
+        fake.polls.lock().unwrap()[1],
+        (
+            "PATCH".to_owned(),
+            serde_json::json!({ "broadcaster_id": "42", "id": "p1", "status": "TERMINATED" })
+        )
+    );
+    assert_eq!(fake.polls.lock().unwrap().len(), 2);
+
+    // Reading asks Twitch for the latest poll.
+    let res = app
+        .oneshot(req(Method::GET, "/api/admin/polls", None))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["poll"]["status"], "active");
+    assert_eq!(fake.polls.lock().unwrap()[2].0, "GET");
+}
+
+#[tokio::test]
+async fn polls_need_the_scope_and_saved_ones_keep_to_the_limits() {
+    let fake = Fake::default();
+    let app = signed_in_with("polls-no-scope", &fake, &["channel:manage:broadcast"]).await;
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/admin/polls", None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(res).await["code"], "twitch.scope_required");
+    assert!(fake.polls.lock().unwrap().is_empty());
+
+    let saved = serde_json::json!([{ "title": " 下一首？ ", "choices": ["晴天", "小幸運"], "seconds": 60 }]);
+    let res = app
+        .clone()
+        .oneshot(req(Method::PUT, "/api/admin/polls/templates", Some(saved)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/admin/polls/templates", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        json(res).await,
+        serde_json::json!([{ "title": "下一首？", "choices": ["晴天", "小幸運"], "seconds": 60 }])
+    );
+    let too_short = serde_json::json!([{ "title": "t", "choices": ["a", "b"], "seconds": 5 }]);
+    let res = app
+        .oneshot(req(
+            Method::PUT,
+            "/api/admin/polls/templates",
+            Some(too_short),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["code"], "polls.invalid");
 }

@@ -50,6 +50,7 @@ use crate::TwitchEndpoints;
 pub(super) mod chat_send;
 pub(super) mod checkin_admin;
 pub(super) mod general_settings;
+pub(super) mod polls;
 pub(super) mod rewards;
 pub(super) mod simulate;
 pub(super) mod stream_info;
@@ -58,6 +59,7 @@ pub(super) mod twitch_account;
 use chat_send::chat_send;
 use checkin_admin::{checkin_outbox, checkin_rewards, retry_dead_letter, skip_dead_letter};
 use general_settings::{first_run, general, list_modules, set_first_run, set_general, set_module};
+use polls::{current_polls, end_poll, poll_templates, set_poll_templates, start_poll};
 use rewards::{
     create_reward, delete_reward, list_rewards, set_redemption_status, take_over_reward,
     update_reward,
@@ -95,6 +97,8 @@ pub(crate) struct AdminState {
     eventsub_connected: Arc<Mutex<(u64, bool)>>,
     /// The same for the anonymous IRC connection that reads Twitch's first-chat mark.
     irc_connected: Arc<Mutex<(u64, bool)>>,
+    /// 投票與預測: the latest poll, from EventSub and Helix answers.
+    contests: Arc<crate::contests::Contests>,
 }
 
 impl AdminState {
@@ -120,6 +124,7 @@ impl AdminState {
         viewers: Arc<ViewerService>,
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
+        contests: Arc<crate::contests::Contests>,
     ) -> Self {
         let current = twitch.try_read().expect("not locked yet").clone();
         let state = Self {
@@ -145,6 +150,7 @@ impl AdminState {
             eventsub: Mutex::new(None),
             eventsub_connected: Arc::new(Mutex::new((0, false))),
             irc_connected: Arc::new(Mutex::new((0, false))),
+            contests,
         };
         state.start_eventsub(current);
         state
@@ -195,6 +201,7 @@ impl AdminState {
             self.viewers.clone(),
         );
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
+        let contests = self.contests.clone();
         // A replaced task may still report before it is aborted; only the newest one counts.
         let reporter = |state: &Arc<Mutex<(u64, bool)>>| -> Arc<dyn Fn(bool) + Send + Sync> {
             let state = state.clone();
@@ -251,6 +258,7 @@ impl AdminState {
                 redemption.receive(r, Source::Twitch)
             }),
             deliver_stream: Arc::new(move |c| stream.receive(c)),
+            deliver_contest: Arc::new(move |c| contests.receive(c)),
             deliver_removal: Arc::new(move |channel, r| {
                 let chat = removals.clone();
                 // Let a removal already received finish even if this EventSub session gets replaced.
@@ -302,6 +310,12 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
             patch(update_reward).delete(delete_reward),
         )
         .route("/api/admin/rewards/{id}/takeover", post(take_over_reward))
+        .route("/api/admin/polls", get(current_polls).post(start_poll))
+        .route("/api/admin/polls/{id}/end", post(end_poll))
+        .route(
+            "/api/admin/polls/templates",
+            get(poll_templates).put(set_poll_templates),
+        )
         .route(
             "/api/admin/redemptions/{twitch_id}/status",
             put(set_redemption_status),

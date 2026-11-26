@@ -150,6 +150,11 @@
       "limit": "頻道已經有 50 個獎勵，這是 Twitch 的上限；請先刪掉一個。",
       "duplicate_title": "頻道上已經有同名的獎勵，Twitch 不允許兩個同名（不分大小寫）。"
     },
+    "polls": {
+      "invalid": "題目最多 60 字、選項 2–5 個（每個最多 25 字）、時間 15 秒到 30 分鐘；常用題目最多 20 個。",
+      "refused": "Twitch 不接受這個投票，例如已經有一個投票在進行中。",
+      "unavailable": "Twitch 只開放投票給實況夥伴與聯盟實況主。"
+    },
     "redemptions": {
       "not_pending": "這筆兌換已經在 Twitch 處理過（完成或退還），或已經不在了。"
     },

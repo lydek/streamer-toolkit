@@ -75,6 +75,7 @@ async fn start() -> Running {
             deliver_alert: Arc::new(move |_| alert()),
             deliver_redemption: Arc::new(move |_| redemption()),
             deliver_stream: Arc::new(move |_| stream()),
+            deliver_contest: Arc::new(|_| {}),
             deliver_removal: Arc::new(move |_, _| {
                 removal();
                 Box::pin(async {})

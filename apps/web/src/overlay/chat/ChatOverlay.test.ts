@@ -26,7 +26,7 @@ const snapshot = (...ns: number[]): Incoming => ({
   type: 'snapshot',
   version: 1,
   seq: 0,
-  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'chat.text_size': [] },
+  payload: { 'chat.removed': [], 'chat.message': ns.map(chat), 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] },
 })
 const post = (data: Incoming, init: MessageEventInit = {}) =>
   window.dispatchEvent(new MessageEvent('message', { data, source: window.parent, origin: location.origin, ...init }))

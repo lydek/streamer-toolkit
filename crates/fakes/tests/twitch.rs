@@ -119,6 +119,7 @@ async fn eventsub_subscribes_and_keepalives_hold_the_session() {
             deliver_alert: Arc::new(|_| {}),
             deliver_redemption: Arc::new(|_| {}),
             deliver_stream: Arc::new(|_| {}),
+            deliver_contest: Arc::new(|_| {}),
             deliver_removal: Arc::new(|_, _| Box::pin(async {})),
             connected: Arc::new(move |up| {
                 let _ = up_tx.send(up);

@@ -296,6 +296,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'image-sizes', icon: 'pi pi-image', tint: 'green', always: true },
   { id: 'stream-info', icon: 'pi pi-pencil', tint: 'red' },
   { id: 'rewards', icon: 'pi pi-star', tint: 'yellow' },
+  { id: 'polls', icon: 'pi pi-chart-bar', tint: 'blue' },
 ]
 
 /**

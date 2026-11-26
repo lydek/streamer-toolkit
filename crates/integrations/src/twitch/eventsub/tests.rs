@@ -14,6 +14,7 @@ use axum::{
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::sync::mpsc;
+use toolkit_core::events::PollStatus;
 
 /// Client-Id header and JSON body of one subscription request.
 type Subscription = (Option<String>, Value);
@@ -161,6 +162,32 @@ fn redemption_notifications() -> Vec<String> {
     ]
 }
 
+/// Poll notifications as Twitch sends them: the start, a vote, and the end.
+fn poll_notifications() -> Vec<String> {
+    let choices = |votes: u64| json!([{"id":"c1","title":"晴天","votes":votes}, {"id":"c2","title":"小幸運","votes":0}]);
+    vec![
+        notification(
+            "v1",
+            POLL_BEGIN,
+            json!({"id":"p1","broadcaster_user_id":"42","title":"下一首？",
+                   "choices":[{"id":"c1","title":"晴天"},{"id":"c2","title":"小幸運"}],
+                   "started_at":"2026-11-27T10:00:00Z","ends_at":"2026-11-27T10:02:00Z"}),
+        ),
+        notification(
+            "v2",
+            POLL_PROGRESS,
+            json!({"id":"p1","title":"下一首？","choices":choices(1),
+                   "started_at":"2026-11-27T10:00:00Z","ends_at":"2026-11-27T10:02:00Z"}),
+        ),
+        notification(
+            "v3",
+            POLL_END,
+            json!({"id":"p1","title":"下一首？","choices":choices(1),"status":"completed",
+                   "started_at":"2026-11-27T10:00:00Z","ended_at":"2026-11-27T10:02:00Z"}),
+        ),
+    ]
+}
+
 async fn second(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(|mut socket| async move {
         send(&mut socket, welcome("s2")).await;
@@ -168,6 +195,7 @@ async fn second(ws: WebSocketUpgrade) -> Response {
         for n in alert_notifications()
             .into_iter()
             .chain(redemption_notifications())
+            .chain(poll_notifications())
         {
             send(&mut socket, n).await;
         }
@@ -272,6 +300,7 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (alert_tx, mut alerts) = mpsc::unbounded_channel();
     let (redemption_tx, mut redemptions) = mpsc::unbounded_channel();
+    let (contest_tx, mut contests) = mpsc::unbounded_channel();
     let task = tokio::spawn(
         EventSub {
             url: format!("{}/ws", base.replace("http://", "ws://")),
@@ -281,6 +310,7 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
             deliver_alert: Arc::new(move |a| alert_tx.send(a).unwrap()),
             deliver_redemption: Arc::new(move |r| redemption_tx.send(r).unwrap()),
             deliver_stream: Arc::new(|_| {}),
+            deliver_contest: Arc::new(move |c| contest_tx.send(c).unwrap()),
             deliver_removal: Arc::new(|_, _| Box::pin(async {})),
             connected: Arc::new(|_| {}),
         }
@@ -416,6 +446,20 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
             .await
             .is_err(),
         "the broken redemption is not delivered"
+    );
+    // A poll: each notification carries all of it.
+    let mut polls = Vec::new();
+    for _ in 0..3 {
+        let Contest::Poll(p) = next(&mut contests).await;
+        polls.push((p.status, p.choices[0].votes, p.ends_at));
+    }
+    assert_eq!(
+        polls,
+        [
+            (PollStatus::Active, 0, "2026-11-27T10:02:00Z".into()),
+            (PollStatus::Active, 1, "2026-11-27T10:02:00Z".into()),
+            (PollStatus::Completed, 1, "2026-11-27T10:02:00Z".into()),
+        ]
     );
 
     let subs = fake.subscriptions.lock().unwrap().clone();
@@ -584,6 +628,7 @@ async fn run_scripted(
             deliver_alert: Arc::new(|_| {}),
             deliver_redemption: Arc::new(|_| {}),
             deliver_stream: Arc::new(|_| {}),
+            deliver_contest: Arc::new(|_| {}),
             deliver_removal: Arc::new(|_, _| Box::pin(async {})),
             connected: Arc::new(move |c| log.lock().unwrap().push(c)),
         }

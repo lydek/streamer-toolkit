@@ -138,11 +138,16 @@ impl Denied {
 
 /// The signed-in broadcaster, when the sign-in has `channel:manage:redemptions`.
 pub(super) fn manager(twitch: &TwitchAuth) -> Result<String, Denied> {
+    broadcaster_with(twitch, MANAGE_SCOPE)
+}
+
+/// The signed-in broadcaster, when the sign-in has `scope`; checked before anything is sent to Twitch.
+pub(super) fn broadcaster_with(twitch: &TwitchAuth, scope: &str) -> Result<String, Denied> {
     let token = twitch.token().ok_or(Denied::SignedOut)?;
     if token.user_id.is_empty() || !token.user_id.bytes().all(|b| b.is_ascii_digit()) {
         return Err(Denied::SignedOut);
     }
-    if !token.scopes.iter().any(|s| s == MANAGE_SCOPE) {
+    if !token.scopes.iter().any(|s| s == scope) {
         return Err(Denied::NoScope);
     }
     Ok(token.user_id)
