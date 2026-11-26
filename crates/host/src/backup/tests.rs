@@ -31,6 +31,15 @@ fn output_limit_rejects_writes_before_the_file_grows() {
     assert_eq!(file.metadata().unwrap().len(), 4);
 }
 
+#[test]
+fn a_confirmed_restore_is_pending_until_applied() {
+    let dir = temp_dir("pending");
+    assert!(!restore_pending(&dir));
+    fs::write(dir.join(PENDING), b"id").unwrap();
+    assert!(restore_pending(&dir));
+    let _ = fs::remove_dir_all(dir);
+}
+
 pub(super) fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("st-backup-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

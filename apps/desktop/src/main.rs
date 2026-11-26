@@ -88,7 +88,12 @@ fn main() {
             // After the single-instance lock, so a second copy on this folder never migrates under the first;
             // a confirmed restore goes in before the database opens.
             let version = app.package_info().version.to_string();
-            match tauri::async_runtime::block_on(host::apply_pending(&data_dir, &version)) {
+            let notice = host::restore_pending(&data_dir).then(restore_notice);
+            let applied = tauri::async_runtime::block_on(host::apply_pending(&data_dir, &version));
+            if let Some(close) = notice {
+                close();
+            }
+            match applied {
                 Ok(false) => {}
                 Ok(true) => message_box(text::RESTORED, false),
                 Err(e @ host::BackupError::PutBack(_)) => {
@@ -217,7 +222,6 @@ fn message_box(message: &str, is_error: bool) {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MessageBoxW,
         };
-        let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
         let (body, title) = (wide(message), wide(text::APP_NAME));
         // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
         unsafe {
@@ -234,6 +238,89 @@ fn message_box(message: &str, is_error: bool) {
             )
         };
     }
+}
+
+/// While a confirmed restore backs up the current data and swaps it in, which takes a while for a large folder and
+/// runs before any window exists, a native notice says so. Returns what closes it; its OK button only hides it early.
+#[cfg(windows)]
+fn restore_notice() -> impl FnOnce() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::time::{Duration, Instant};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowExW, GetWindowThreadProcessId, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
+        MessageBoxW, PostMessageW, WM_CLOSE,
+    };
+    let done = Arc::new(AtomicBool::new(false));
+    let shown = std::thread::spawn({
+        let done = done.clone();
+        move || {
+            // A restore that ends this soon needs no notice: skipping it avoids a flash before the result box. Closing
+            // wakes this wait early; parking may also wake by itself, hence the loop.
+            let until = Instant::now() + Duration::from_millis(150);
+            while !done.load(Ordering::SeqCst) && Instant::now() < until {
+                std::thread::park_timeout(until.saturating_duration_since(Instant::now()));
+            }
+            if done.load(Ordering::SeqCst) {
+                return;
+            }
+            let (body, title) = (wide(text::RESTORING), wide(text::RESTORING_TITLE));
+            // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
+            unsafe {
+                MessageBoxW(
+                    std::ptr::null_mut(),
+                    body.as_ptr(),
+                    title.as_ptr(),
+                    MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
+                )
+            };
+        }
+    });
+    move || {
+        done.store(true, Ordering::SeqCst);
+        shown.thread().unpark();
+        // Message boxes are dialogs (#32770); only this process's one with that title is closed, never another copy's
+        // notice or another program's window.
+        let (class, title) = (wide("#32770"), wide(text::RESTORING_TITLE));
+        let me = std::process::id();
+        // The box may still be opening: look for it until its thread ends (WM_CLOSE answers it like OK). Startup never
+        // waits on it for long: past the limit the box stays until its OK, and starting goes on.
+        let give_up = Instant::now() + Duration::from_secs(2);
+        while !shown.is_finished() && Instant::now() < give_up {
+            let mut window = std::ptr::null_mut();
+            loop {
+                // SAFETY: class and title are NUL-terminated UTF-16 buffers; `window` is null or a handle this
+                // search returned, as FindWindowExW expects for its "after" argument.
+                window = unsafe {
+                    FindWindowExW(std::ptr::null_mut(), window, class.as_ptr(), title.as_ptr())
+                };
+                if window.is_null() {
+                    break;
+                }
+                let mut pid = 0;
+                // SAFETY: `window` is a handle FindWindowExW just returned; `pid` is a valid out pointer.
+                unsafe { GetWindowThreadProcessId(window, &mut pid) };
+                if pid == me {
+                    // SAFETY: posting WM_CLOSE to a window of this process found above.
+                    unsafe { PostMessageW(window, WM_CLOSE, 0, 0) };
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+}
+
+/// A NUL-terminated UTF-16 copy of `s`, for Win32 calls.
+#[cfg(windows)]
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(Some(0)).collect()
+}
+
+#[cfg(not(windows))]
+fn restore_notice() -> impl FnOnce() {
+    || {}
 }
 
 /// Windows 11 ships WebView2; some Windows 10 PCs lack it. Without it no window can open, but the Host, overlays
