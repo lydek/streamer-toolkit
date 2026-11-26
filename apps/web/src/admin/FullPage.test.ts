@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
 import { i18n } from '../i18n'
 import FullPage from './FullPage.vue'
-import { servicesDown } from './home'
+import { client } from './api'
+import { servicesDown, twitchOverview } from './home'
 import { navOpened } from './page'
 import { testRouter } from './testRouter'
 
@@ -175,5 +176,43 @@ describe('FullPage service notice', () => {
     expect((await at('/scenes')).find('.service-warn').exists()).toBe(false)
     servicesDown.obs = true
     expect((await at('/counters')).find('.service-warn').exists()).toBe(false)
+  })
+})
+
+describe('Twitch scopes a page needs', () => {
+  const signedIn = (scopes: string[]) => ({
+    client_id: 'cid',
+    eventsub_connected: true,
+    irc_connected: false,
+    scopes,
+    status: { state: 'signed_in' as const, user_id: '1', login: 'me' },
+  })
+  afterEach(() => {
+    twitchOverview.value = undefined
+    vi.restoreAllMocks()
+  })
+  const at = async (path: string) => {
+    const router = testRouter([{ path: '/settings/:section', component: { render: () => null } }])
+    await router.push(path)
+    return { wrapper: mount(FullPage, { props: { title: 'x' }, global: { plugins: [router, i18n, PrimeVue] } }), router }
+  }
+
+  it('says which scopes are missing while signed in, and signs in again for them', async () => {
+    twitchOverview.value = signedIn(['user:read:chat'])
+    const post = vi.spyOn(client, 'POST').mockResolvedValue({ data: {}, response: new Response(null, { status: 200 }) } as never)
+    const { wrapper, router } = await at('/stream-info')
+    const banner = wrapper.get('.service-warn')
+    expect(banner.text()).toContain(t('features.scopes.missing', { scopes: 'channel:manage:broadcast' }))
+    await banner.get('button').trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/twitch/login', { body: { add_scopes: ['channel:manage:broadcast'] } })
+    expect(router.currentRoute.value.fullPath).toBe('/settings/connections#twitch')
+  })
+
+  it('says nothing once granted, or while signed out', async () => {
+    twitchOverview.value = signedIn(['channel:manage:broadcast'])
+    expect((await at('/stream-info')).wrapper.find('.service-warn').exists()).toBe(false)
+    twitchOverview.value = { ...signedIn([]), status: { state: 'signed_out' } as never }
+    expect((await at('/stream-info')).wrapper.find('.service-warn').exists()).toBe(false)
   })
 })

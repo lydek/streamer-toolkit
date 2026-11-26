@@ -296,6 +296,121 @@ async fn ask_before_close_is_the_inverse_of_skip_close_hint() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Fake id.twitch.tv: the device code is approved at the first poll and the sign-in grants `granted`.
+async fn fake_oauth(granted: &'static [&'static str]) -> String {
+    use axum::{Json, routing::post};
+    let app = Router::new()
+        .route(
+            "/device",
+            post(|| async {
+                Json(serde_json::json!({"device_code":"dev","user_code":"ABCD-EFGH",
+                    "verification_uri":"https://www.twitch.tv/activate","expires_in":30,"interval":0}))
+            }),
+        )
+        .route(
+            "/token",
+            post(|| async { Json(serde_json::json!({"access_token":"a","refresh_token":"r"})) }),
+        )
+        .route(
+            "/validate",
+            axum::routing::get(move || async move {
+                let scopes: Vec<&str> = integrations::twitch::MVP_SCOPES.iter().chain(granted).copied().collect();
+                Json(serde_json::json!({"user_id":"42","login":"me","scopes":scopes}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    url
+}
+
+fn login_req(body: &'static str) -> Request {
+    get_req("/api/admin/twitch/login", "127.0.0.1:47810")
+        .method(Method::POST)
+        .header(header::ORIGIN, "http://127.0.0.1:47810")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn feature_scopes_are_kept_only_once_granted_and_unknown_ones_refused() {
+    let dir = std::env::temp_dir().join(format!("st-host-scopes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = test_config();
+    config.data_dir = dir.clone();
+    let app = router(config).unwrap();
+    let code = |res: axum::response::Response| async {
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default()["code"].clone()
+    };
+
+    // Not a feature scope: refused before anything is saved or sent.
+    let res = app
+        .clone()
+        .oneshot(login_req(r#"{"add_scopes":["channel:manage:everything"]}"#))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(code(res).await, "twitch.unknown_scope");
+
+    // A feature scope asked for but never granted (no Twitch here) is not kept.
+    let res = app
+        .clone()
+        .oneshot(login_req(r#"{"add_scopes":["channel:manage:broadcast"]}"#))
+        .await
+        .unwrap();
+    assert_ne!(code(res).await, "twitch.unknown_scope");
+    assert!(settings::load(&dir).twitch_scopes.is_empty());
+
+    // Signed out: no granted scopes in the overview.
+    let overview = get_req("/api/admin/twitch", "127.0.0.1:47810")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::empty())
+        .unwrap();
+    let body = axum::body::to_bytes(app.oneshot(overview).await.unwrap().into_body(), 4096)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["scopes"],
+        serde_json::json!([])
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_finished_sign_in_keeps_the_feature_scopes_it_granted() {
+    let dir = std::env::temp_dir().join(format!("st-host-scopes-granted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    settings::update(&dir, |s| s.twitch_client_id = "cid".into()).unwrap();
+    let mut config = test_config();
+    config.data_dir = dir.clone();
+    // Twitch grants one of the two asked for.
+    config.twitch.oauth = fake_oauth(&["channel:manage:broadcast"]).await;
+    let app = router(config).unwrap();
+    let res = app
+        .oneshot(login_req(
+            r#"{"add_scopes":["channel:manage:broadcast","user:write:chat"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while settings::load(&dir).twitch_scopes.is_empty() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "granted scopes were not kept"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        settings::load(&dir).twitch_scopes,
+        ["channel:manage:broadcast"]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[tokio::test]
 async fn first_run_setup_is_done_once_finished_or_for_an_upgraded_folder() {
     let dir = std::env::temp_dir().join(format!("st-host-first-run-{}", std::process::id()));

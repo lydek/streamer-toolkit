@@ -122,6 +122,7 @@ import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
 import { FEATURES, type Feature, type Service, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan, unusedBy } from './features'
 import { servicesDown } from './home'
+import { missingScopes } from './scopes'
 import { useServices } from './services'
 import { GROUPS, SOON_PAGES, showUnbuilt } from './tabs'
 
@@ -132,6 +133,9 @@ const emit = defineEmits<{
   toggle: [module: Schemas['ModuleState']]
   bulk: [changes: { id: string; enabled: boolean }[]]
   service: [service: Service, use: boolean, off: string[]]
+  /** Turned on with Twitch scopes it still needs: the page signs in again asking for them and applies `changes`
+   * once they are granted. */
+  scopes: [scopes: string[], changes: { id: string; enabled: boolean }[]]
 }>()
 const { t } = useI18n()
 
@@ -228,16 +232,21 @@ function switchService(s: Service, use: boolean) {
 const bulkable = (fs: Feature[]) => fs.filter((f) => f.module && !f.fixed && !blockedBy(f).length)
 const unique = (fs: Feature[]) => [...new Map(fs.map((f) => [f.id, f])).values()]
 const changes = (fs: Feature[], enabled: boolean) => fs.map((f) => ({ id: f.module!, enabled }))
+// Twitch scopes a feature, or what it needs turned on with it, still waits for.
+const scopesFor = (f: Feature) => [...new Set([...turnOnPlan(f, on, new Set()).requires, f].flatMap(missingScopes))]
 
 /** Everything off in the group, and what it needs elsewhere, after one confirmation listing it all. */
 function bulkOn(g: { id: string; all: Feature[] }) {
-  const targets = bulkable(g.all).filter((f) => !on(f))
+  // Features still needing Twitch scopes are left off and listed: each asks for its sign-in on its own switch.
+  const off = bulkable(g.all).filter((f) => !on(f))
+  const grant = off.filter((f) => scopesFor(f).length)
+  const targets = off.filter((f) => !grant.includes(f))
   const outside = unique(targets.flatMap((f) => turnOnPlan(f, on, new Set()).requires)).filter((d) => !targets.includes(d))
   const group = t(`nav.groups.${g.id}`)
   ask({
     title: t('features.bulk.onTitle', { group }),
     text: t('features.bulk.onText'),
-    lines: [...outside, ...targets].map(name),
+    lines: [...[...outside, ...targets].map(name), ...grant.map((f) => t('features.scopes.skipped', { name: name(f) }))],
     ok: t('features.bulk.on'),
     then: () => emit('bulk', changes([...outside, ...targets], true)),
   })
@@ -261,9 +270,18 @@ function toggle(f: Feature) {
   if (!f.module) return
   lastSwitched.value = f.module
   if (!on(f)) {
-    // shortcut: scopes are not requested here yet; no built feature adds any. Wire the re-sign-in for
-    // `turnOnPlan().scopes` when the first one that does is built (docs/decisions.md Twitch scope).
     const { requires } = turnOnPlan(f, on, new Set())
+    // Scopes it still needs: say which, then sign in again for them (docs/decisions.md Twitch scope).
+    // It turns on only once they are granted.
+    const scopes = scopesFor(f)
+    if (scopes.length)
+      return ask({
+        title: t('features.scopes.title', { name: name(f) }),
+        text: t('features.scopes.text'),
+        lines: [...requires.map(name), ...scopes],
+        ok: t('features.scopes.ok'),
+        then: () => emit('scopes', scopes, changes([...requires, f].filter((x) => x.module), true)),
+      })
     if (!requires.length) return flip([f])
     return ask({
       title: t('features.confirm.onTitle', { name: name(f) }),

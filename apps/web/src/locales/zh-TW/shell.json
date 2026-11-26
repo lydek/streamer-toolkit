@@ -75,6 +75,14 @@
     "groupCount": "{on} / {all} 開啟",
     "empty": "找不到符合的功能。",
     "alwaysOn": "一定開著",
+    "scopes": {
+      "title": "{name}需要新的 Twitch 權限",
+      "text": "會重新登入 Twitch 要求下面的權限，同意並完成登入後才開啟；其他設定不受影響。登入的代碼在「設定 › 連線」。",
+      "ok": "重新登入",
+      "skipped": "{name}（需要 Twitch 權限，請單獨開啟）",
+      "missing": "這一頁需要 Twitch 權限：{scopes}",
+      "grant": "重新登入並授權"
+    },
     "rules": "規則",
     "open": "頁面",
     "cancel": "取消",

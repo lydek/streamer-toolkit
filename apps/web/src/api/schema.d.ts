@@ -3509,6 +3509,10 @@ export interface components {
             level: string;
             message: string;
         };
+        LoginBody: {
+            /** @description Scopes a feature needs, kept for every later sign-in too; each must be in `FEATURE_SCOPES`. */
+            add_scopes?: string[];
+        };
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
         };
@@ -3874,6 +3878,8 @@ export interface components {
              *     sighting of the viewer.
              */
             irc_connected: boolean;
+            /** @description The scopes the current sign-in granted; empty while signed out. Features check theirs against it. */
+            scopes: string[];
             status: components["schemas"]["AuthStatus"];
         };
         /** @description Why a zip was refused; `detail` names the file (and the line and column in `index.html`). */
@@ -10671,7 +10677,12 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Absent: sign in with the base and the saved feature scopes. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LoginBody"] | null;
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -10681,6 +10692,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeviceLogin"];
                 };
             };
+            /** @description `twitch.unknown_scope`, or a sign-in error */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10690,6 +10702,15 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

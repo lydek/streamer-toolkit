@@ -33,6 +33,13 @@
       <span>{{ t('services.banner', { service: SERVICE_NAMES[s] }) }}</span>
       <RouterLink :to="{ path: '/settings/connections', hash: `#${s}` }">{{ t('services.connect') }}</RouterLink>
     </p>
+    <!-- Signed in, but without the Twitch scopes this page's feature needs: say which, with a way to grant them. -->
+    <p v-if="missing.length" role="status" class="service-warn">
+      <i class="pi pi-lock" aria-hidden="true"></i>
+      <span>{{ t('features.scopes.missing', { scopes: missing.join('、') }) }}</span>
+      <span v-if="grantFailed" role="alert">{{ grantFailed }}</span>
+      <Button :label="t('features.scopes.grant')" size="small" text @click="grant" />
+    </p>
     <!-- Sticky, so a failed setting further down the page still shows its error. -->
     <p v-if="error" role="alert" class="page-error">{{ error }}</p>
     <slot />
@@ -40,12 +47,16 @@
 </template>
 
 <script setup lang="ts">
+import Button from 'primevue/button'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { errorMessage } from '../i18n'
+import { ApiError } from './api'
 import { useDrawer } from './drawer'
 import { featureOfPage, servicesOf, useModules } from './features'
-import { TILES, servicesDown } from './home'
+import { TILES, servicesDown, twitchOverview } from './home'
+import { missingScopes, requestScopes } from './scopes'
 import ObsStatusLink from './ObsStatusLink.vue'
 import { navOpened } from './page'
 import { categoryOf, isGrey, tabPage } from './tabs'
@@ -80,6 +91,21 @@ const down = computed(() => {
   const f = featureOfPage(route.path)
   return f ? servicesOf(f.id).filter((s) => servicesDown[s]) : []
 })
+// Only while signed in: signed out, the Twitch notice above already covers it.
+const missing = computed(() => {
+  const f = featureOfPage(route.path)
+  return f && twitchOverview.value?.status.state === 'signed_in' ? missingScopes(f) : []
+})
+const router = useRouter()
+const grantFailed = ref('')
+async function grant() {
+  grantFailed.value = ''
+  try {
+    await requestScopes(missing.value, router)
+  } catch (e) {
+    grantFailed.value = e instanceof ApiError ? errorMessage(e.code, e.params) : String(e)
+  }
+}
 
 // The pinned block's height (0 when the window is too small to pin it) is --page-top-h, so the error bar, focused
 // elements and anchor targets land below it instead of under it.
@@ -226,7 +252,8 @@ onMounted(() => {
   background: color-mix(in srgb, var(--p-red-400) 14%, var(--p-surface-900));
 }
 
-.service-warn a {
+.service-warn a,
+.service-warn .p-button {
   margin-left: auto;
 }
 

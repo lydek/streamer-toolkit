@@ -15,3 +15,17 @@ pub const MVP_SCOPES: &[&str] = &[
     "channel:read:redemptions",
     "bits:read",
 ];
+
+/// Scopes a feature may add when it is first turned on (docs/decisions.md Twitch scope); anything else is refused.
+pub const FEATURE_SCOPES: &[&str] = &[
+    "channel:manage:broadcast",
+    "channel:manage:redemptions",
+    "channel:manage:polls",
+    "channel:manage:predictions",
+    "user:write:chat",
+    "moderator:manage:chat_messages",
+    "moderation:read",
+    "channel:read:vips",
+    "moderator:manage:shoutouts",
+    "channel:manage:raids",
+];

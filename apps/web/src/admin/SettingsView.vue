@@ -71,9 +71,16 @@
           </div>
           <div class="card-body">
             <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
+            <!-- What the sign-in granted: the base scopes and those features asked for. -->
+            <div v-if="overview?.scopes?.length" class="granted">
+              <span id="twitch-scopes" class="label">{{ t('settings.twitch.scopes') }}</span>
+              <ul aria-labelledby="twitch-scopes">
+                <li v-for="s in overview.scopes" :key="s"><code>{{ s }}</code></li>
+              </ul>
+            </div>
             <!-- Not built yet: grey. -->
-            <p v-for="s in ['scopes', 'bot']" :key="s" class="off">
-              {{ t(`settings.twitch.${s}`) }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+            <p class="off">
+              {{ t('settings.twitch.bot') }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
             </p>
           </div>
         </section>
@@ -155,6 +162,7 @@
             @toggle="toggleModule"
             @bulk="bulkModules"
             @service="switchService"
+            @scopes="grantThenEnable"
           >
             <!-- Check-in's held redemptions belong to its switch; its rules have their own page (打卡規則). -->
             <template #settings>
@@ -230,6 +238,7 @@ import { FEATURES, type Service, isOn, shareModules, unusedBy } from './features
 import { saveServices, useServices } from './services'
 import SettingsHotkeys from './SettingsHotkeys.vue'
 import SettingsProfiles from './SettingsProfiles.vue'
+import { requestScopes } from './scopes'
 import { GROUPS, showUnbuilt } from './tabs'
 import { errorToast, useLiveEvents } from './home'
 import TwitchSignIn from './TwitchSignIn.vue'
@@ -568,6 +577,21 @@ const restoreService = (service: Service) =>
 // A whole group at once (FeatureList, already confirmed): check-in going off asks pause or close first, and nothing
 // is sent if that is cancelled. Applied one by one; a failure shows its reason and the real state is read again.
 const pendingBulk = ref<{ id: string; enabled: boolean }[]>()
+// A feature that needs Twitch scopes (FeatureList, already confirmed) turns on once a sign-in grants them; a sign-in
+// that is declined or never finished leaves it off.
+const pendingGrant = ref<{ scopes: string[]; changes: { id: string; enabled: boolean }[] }>()
+const grantThenEnable = (scopes: string[], changes: { id: string; enabled: boolean }[]) =>
+  run(async () => {
+    await requestScopes(scopes, router)
+    pendingGrant.value = { scopes, changes }
+  })
+watch(overview, (o) => {
+  const p = pendingGrant.value
+  if (!p || !p.scopes.every((s) => o?.scopes?.includes(s))) return
+  pendingGrant.value = undefined
+  void applyBulk(p.changes, false)
+})
+
 function bulkModules(changes: { id: string; enabled: boolean }[]) {
   const offCheckin = changes.some((c) => c.id === 'checkin' && !c.enabled) && checkinState.value?.enabled
   if (!offCheckin) return applyBulk(changes, false)
@@ -869,5 +893,28 @@ p + .form-panel {
 
 .off {
   color: var(--p-text-muted-color);
+}
+
+.granted {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.granted .label {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.granted ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.granted code {
+  overflow-wrap: anywhere;
 }
 </style>
