@@ -974,6 +974,10 @@ async fn send(socket: &mut ws::WebSocket, value: Value) -> bool {
 }
 
 async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Response {
+    let upgrade = match crate::twitch::refused(&fake.recorder, "obs", "obs", upgrade).await {
+        Ok(upgrade) => upgrade,
+        Err(refused) => return refused,
+    };
     upgrade.on_upgrade(move |mut socket| async move {
         let auth = fake
             .password
@@ -1000,9 +1004,11 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
         if !send(&mut socket, json!({"op": 2, "d": {"negotiatedRpcVersion": 1}})).await {
             return;
         }
-        fake.recorder.connect("obs", "obs");
         let mut events = fake.events.subscribe();
         let mut close = fake.close.subscribe();
+        // Requests are answered in their own tasks, as OBS does: a slow one holds up neither the next requests,
+        // nor events, nor closing.
+        let (replies_tx, mut replies) = tokio::sync::mpsc::unbounded_channel::<Value>();
         loop {
             tokio::select! {
                 _ = close.recv() => {
@@ -1013,19 +1019,27 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
                 message = socket.recv() => match message {
                     Some(Ok(ws::Message::Text(text))) => {
                         let message: Value = serde_json::from_str(text.as_str()).unwrap_or_default();
-                        let reply = match message["op"].as_u64() {
+                        match message["op"].as_u64() {
                             // Reidentify.
-                            Some(3) => json!({"op": 2, "d": {"negotiatedRpcVersion": 1}}),
-                            Some(6) => reply(&fake, &message["d"]),
-                            _ => continue,
-                        };
-                        if !send(&mut socket, reply).await {
-                            return;
+                            Some(3) => {
+                                let identified = json!({"op": 2, "d": {"negotiatedRpcVersion": 1}});
+                                if !send(&mut socket, identified).await {
+                                    return;
+                                }
+                            }
+                            Some(6) => {
+                                let (fake, tx) = (fake.clone(), replies_tx.clone());
+                                tokio::spawn(async move {
+                                    let _ = tx.send(reply(&fake, &message["d"]).await);
+                                });
+                            }
+                            _ => {}
                         }
                     }
                     Some(Ok(_)) => {}
                     _ => return,
                 },
+                Some(reply) = replies.recv() => if !send(&mut socket, reply).await { return },
                 event = events.recv() => match event {
                     Ok((kind, data)) => {
                         let event = json!({"op": 5, "d": {"eventType": kind, "eventIntent": 1, "eventData": data}});
@@ -1043,12 +1057,19 @@ async fn session(upgrade: WebSocketUpgrade, State(fake): State<FakeObs>) -> Resp
 }
 
 /// The `RequestResponse` (op 7) for a `Request` (op 6).
-fn reply(fake: &FakeObs, request: &Value) -> Value {
+async fn reply(fake: &FakeObs, request: &Value) -> Value {
     let request_type = request["requestType"].as_str().unwrap_or_default();
     let data = request.get("requestData").cloned().unwrap_or(Value::Null);
     let in_flight = fake.recorder.start("obs");
     let started = Instant::now();
-    let answer = fake.request(request_type, &data);
+    let fault = fake.recorder.fault(request_type);
+    if let Some(f) = fault {
+        tokio::time::sleep(f.delay).await;
+    }
+    let answer = match fault.and_then(|f| f.status) {
+        Some(code) => Err((code, "fake fault".to_owned())),
+        None => fake.request(request_type, &data),
+    };
     let code = answer.as_ref().map_or_else(|(code, _)| *code, |_| SUCCESS);
     fake.recorder.call(Call {
         at: started,

@@ -24,7 +24,9 @@ const USAGE: &str = "usage:
                 | obs stream on|off | obs record on|off
   fake-services [--port <twitch port>] eventsub drop
   fake-services [--port <twitch port>] scenario <name>
-  fake-services [--port <twitch port>] stats [--reset] [--json]";
+  fake-services [--port <twitch port>] stats [--reset] [--json]
+  fake-services [--port <twitch port>] fault <call key> [--status <code>] [--delay <time>] [--for <time>] [--close]
+                | fault --clear     (keys: 'GET /helix/users', an OBS request type, 'ws-connect eventsub|irc|obs')";
 
 /// Sends one control command to a running fake-services and exits.
 fn control_command(mut args: Vec<String>) -> ! {
@@ -109,7 +111,9 @@ async fn main() {
     let is_command = raw
         .iter()
         .find(|a| !a.starts_with("--") && a.parse::<u16>().is_err())
-        .is_some_and(|a| ["send", "obs", "eventsub", "scenario", "stats"].contains(&a.as_str()));
+        .is_some_and(|a| {
+            ["send", "obs", "eventsub", "scenario", "stats", "fault"].contains(&a.as_str())
+        });
     if is_command {
         control_command(raw);
     }
