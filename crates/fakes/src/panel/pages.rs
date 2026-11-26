@@ -4,15 +4,17 @@ use iced::{
     Alignment, Element,
     Length::{Fill, FillPortion},
     widget::{
-        button, checkbox, column, container, pick_list, row, scrollable, table, text, text_input,
+        button, checkbox, column, container, mouse_area, pick_list, progress_bar, row, scrollable,
+        slider, table, text, text_input,
     },
 };
 
 use super::{
-    AMBER, GREEN, MUTED, Message, Panel, SMALL, TEXT, heading, kv,
+    GREEN, MUTED, Message, Panel, RED, SMALL, TEXT, heading, kv,
     send::{self, Field, Form, Kind, STATUSES, Status, TIERS},
     small_button,
 };
+use crate::metrics::Fault;
 use crate::twitch::{BROADCASTER_ID, BROADCASTER_LOGIN, REWARDS};
 
 const SCENARIOS: [(&str, &str); 4] = [
@@ -155,12 +157,6 @@ impl Panel {
             .iter()
             .map(|(name, label)| small_button(label, Message::Scenario(name)).into()))
         .spacing(6);
-        let notice = self.notice.as_ref().map(|(line, warn)| {
-            text(line.clone())
-                .size(SMALL)
-                .color(if *warn { AMBER } else { GREEN })
-        });
-
         scrollable(
             column![
                 heading("快速送出"),
@@ -172,7 +168,6 @@ impl Panel {
                 heading("情境"),
                 scenarios,
             ]
-            .push(notice)
             .spacing(8)
             .padding([10, 12]),
         )
@@ -242,6 +237,283 @@ impl Panel {
         .padding([10, 12])
         .into()
     }
+}
+
+impl Panel {
+    pub(super) fn obs_page(&self) -> Element<'_, Message> {
+        let o = &self.obs_view;
+        let selected = self.scene.as_deref().unwrap_or(&o.program);
+        let scenes = column(o.scenes.iter().map(|scene| {
+            let mark = if scene.name == o.program {
+                text("節目").size(SMALL).color(GREEN)
+            } else if o.preview.as_deref() == Some(scene.name.as_str()) {
+                text("預覽").size(SMALL).color(MUTED)
+            } else {
+                text("")
+            };
+            let line = container(row![text(scene.name.clone()).width(Fill), mark].spacing(6))
+                .padding([3, 6])
+                .width(Fill);
+            let line = if scene.name == selected {
+                line.style(container::rounded_box)
+            } else {
+                line
+            };
+            mouse_area(line)
+                .on_press(Message::Scene(scene.name.clone()))
+                .on_double_click(Message::Program(scene.name.clone()))
+                .into()
+        }))
+        .spacing(2);
+        let items = o
+            .scenes
+            .iter()
+            .find(|s| s.name == selected)
+            .map(|s| s.items.clone())
+            .unwrap_or_default();
+        let yes = |b: bool| if b { "✓" } else { "—" };
+        let sources = table::table(
+            [
+                table::column(heading("來源"), |i: crate::obs::ItemView| text(i.source))
+                    .width(Fill),
+                table::column(heading("顯示"), move |i: crate::obs::ItemView| {
+                    text(yes(i.enabled))
+                }),
+                table::column(heading("鎖定"), move |i: crate::obs::ItemView| {
+                    text(yes(i.locked))
+                }),
+            ],
+            items,
+        )
+        .padding_x(6)
+        .padding_y(2);
+
+        let output = |label: &'static str, on: bool, action: &'static str| {
+            checkbox(on)
+                .label(label)
+                .text_size(TEXT)
+                .on_toggle(move |on| command(&["obs", action, if on { "on" } else { "off" }]))
+        };
+        let toggles = row![
+            output("開播", o.streaming, "stream"),
+            output("錄影", o.recording, "record"),
+            checkbox(o.studio_mode)
+                .label("工作室模式")
+                .text_size(TEXT)
+                .on_toggle(Message::StudioMode),
+        ]
+        .spacing(12);
+        let count = self.burst.trim().to_owned();
+        let burst = |label: &'static str, kind: &'static str| {
+            small_button(label, command(&["obs", "burst", kind, "--count", &count]))
+        };
+        let changes = row![
+            small_button("斷線", command(&["obs", "drop"])),
+            text("突發").size(SMALL).color(MUTED),
+            text_input("", &self.burst)
+                .on_input(Message::BurstCount)
+                .size(SMALL)
+                .width(48),
+            burst("切場景", "scenes"),
+            burst("增減來源", "items"),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center);
+
+        let s = &o.stats;
+        let stat = |label: String,
+                    warn: bool,
+                    bar: Element<'static, Message>|
+         -> Element<'static, Message> {
+            column![
+                text(label)
+                    .size(SMALL)
+                    .color(if warn { RED } else { MUTED }),
+                bar
+            ]
+            .spacing(1)
+            .into()
+        };
+        let set =
+            |flag: &'static str| move |v: f64| command(&["obs", "stats", flag, &format!("{v:.0}")]);
+        let dropped = |v: f64| command(&["obs", "stats", "--dropped", &format!("{v:.1}")]);
+        let meters = |extra: f64, every: f64| {
+            command(&[
+                "obs",
+                "meters",
+                "--inputs",
+                &format!("{extra:.0}"),
+                "--interval",
+                &format!("{every:.0}"),
+            ])
+        };
+        let (extra, every) = (o.meter_extra as f64, o.meter_interval.as_millis() as f64);
+        let controls = column![
+            toggles,
+            changes,
+            stat(
+                format!("CPU {:.0}%", s.cpu_percent),
+                false,
+                slider(0.0..=100.0, s.cpu_percent, set("--cpu")).into()
+            ),
+            stat(
+                format!("掉幀 {:.1}%", s.dropped_percent),
+                s.dropped_percent > 5.0,
+                slider(0.0..=20.0, s.dropped_percent, dropped)
+                    .step(0.1)
+                    .into()
+            ),
+            stat(
+                format!("位元率 {} kbps", s.bitrate_kbps),
+                false,
+                slider(0.0..=10_000.0, s.bitrate_kbps as f64, set("--kbps"))
+                    .step(100.0)
+                    .into()
+            ),
+            stat(
+                format!("音量條額外來源 {extra:.0}"),
+                false,
+                slider(0.0..=50.0, extra, move |v| meters(v, every)).into()
+            ),
+            stat(
+                format!("音量條間隔 {every:.0} ms"),
+                false,
+                slider(10.0..=1000.0, every, move |v| meters(extra, v))
+                    .step(10.0)
+                    .into()
+            ),
+            column(o.audio.iter().map(|a| {
+                let db = if a.muted {
+                    "靜音".to_owned()
+                } else {
+                    format!("{:.0} dB", a.volume_db)
+                };
+                row![
+                    text(a.name.clone()).size(SMALL).width(90),
+                    progress_bar(0.0..=1.0, a.level as f32).girth(8),
+                    text(db).size(SMALL).width(52),
+                ]
+                .spacing(6)
+                .align_y(Alignment::Center)
+                .into()
+            }))
+            .spacing(3),
+        ]
+        .spacing(8);
+
+        row![
+            column![
+                heading("場景（按兩下切成節目）"),
+                scrollable(scenes).height(Fill)
+            ]
+            .spacing(4)
+            .width(170),
+            column![scrollable(sources).height(Fill)].width(Fill),
+            scrollable(controls).width(300).height(Fill),
+        ]
+        .spacing(12)
+        .padding([10, 12])
+        .into()
+    }
+
+    pub(super) fn faults_page(&self) -> Element<'_, Message> {
+        let f = &self.fault_form;
+        let input = |value: &str, on: fn(String) -> Message, width: f32| {
+            text_input("", value).on_input(on).size(TEXT).width(width)
+        };
+        let form = row![
+            labeled(
+                "呼叫",
+                text_input("GET /helix/users", &f.key)
+                    .on_input(Message::FaultKey)
+                    .size(TEXT)
+                    .into()
+            ),
+            labeled(
+                "狀態碼",
+                input(&f.status, Message::FaultStatus, 60.0).into()
+            ),
+            labeled(
+                "延遲 ms",
+                input(&f.delay_ms, Message::FaultDelay, 70.0).into()
+            ),
+            labeled("持續秒", input(&f.for_s, Message::FaultFor, 60.0).into()),
+            checkbox(f.close)
+                .label("斷開")
+                .text_size(SMALL)
+                .on_toggle(Message::FaultClose),
+            button(text("設定").size(TEXT))
+                .padding([5, 14])
+                .style(button::primary)
+                .on_press(Message::Run(f.words())),
+        ]
+        .spacing(8)
+        .align_y(Alignment::End);
+        let suggestions = row(super::faults::suggestions(&self.report)
+            .into_iter()
+            .map(|key| {
+                button(text(key.clone()).size(SMALL))
+                    .padding([2, 6])
+                    .style(button::text)
+                    .on_press(Message::FaultKey(key))
+                    .into()
+            }))
+        .spacing(4)
+        .wrap();
+        let active: Element<'_, Message> = if self.faults.is_empty() {
+            text("沒有").color(MUTED).into()
+        } else {
+            type Row = (String, Fault, std::time::Duration);
+            table::table(
+                [
+                    table::column(heading("呼叫"), |r: Row| text(r.0)).width(Fill),
+                    table::column(heading("狀態碼"), |r: Row| {
+                        text(r.1.status.map(|s| s.to_string()).unwrap_or_default())
+                    }),
+                    table::column(heading("延遲"), |r: Row| {
+                        text(if r.1.delay.is_zero() {
+                            String::new()
+                        } else {
+                            format!("{} ms", r.1.delay.as_millis())
+                        })
+                    }),
+                    table::column(heading("斷開"), |r: Row| {
+                        text(if r.1.close { "是" } else { "" })
+                    }),
+                    table::column(heading("剩餘"), |r: Row| {
+                        text(format!("{} 秒", r.2.as_secs()))
+                    }),
+                    table::column(text(""), |r: Row| {
+                        small_button("移除", Message::RemoveFault(r.0))
+                    }),
+                ],
+                self.faults.clone(),
+            )
+            .padding_x(8)
+            .padding_y(2)
+            .into()
+        };
+        scrollable(
+            column![
+                heading("新增故障"),
+                form,
+                suggestions,
+                text(format!("進行中（{}）", self.faults.len()))
+                    .size(SMALL)
+                    .color(MUTED),
+                active,
+            ]
+            .spacing(8)
+            .padding([10, 12]),
+        )
+        .height(Fill)
+        .into()
+    }
+}
+
+/// A control command run in the panel, the same words as on the command line.
+fn command(words: &[&str]) -> Message {
+    Message::Run(words.iter().map(|w| (*w).to_owned()).collect())
 }
 
 fn labeled<'a>(label: &'static str, input: Element<'a, Message>) -> Element<'a, Message> {
