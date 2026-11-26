@@ -36,6 +36,10 @@ struct Inner {
     world: Mutex<World>,
     /// Notification messages for every EventSub session.
     eventsub: broadcast::Sender<String>,
+    /// Ends every EventSub session, as a dropped connection would.
+    close: broadcast::Sender<()>,
+    /// IRC lines for every chat connection.
+    irc: broadcast::Sender<String>,
     keepalive: Duration,
 }
 
@@ -61,6 +65,8 @@ impl FakeTwitch {
                 next_id: 0,
             }),
             eventsub: broadcast::channel(1024).0,
+            close: broadcast::channel(1).0,
+            irc: broadcast::channel(1024).0,
             keepalive,
         }))
     }
@@ -108,11 +114,71 @@ impl FakeTwitch {
         self.0.world.lock().unwrap().live = live;
     }
 
-    fn id(&self, prefix: &str) -> String {
+    /// Sends `event` as a notification of `kind` to every EventSub session, as Twitch does only for a type the app
+    /// subscribed to: `false` (nothing sent) when there is no such subscription.
+    pub fn notify(&self, kind: &str, event: Value) -> bool {
+        let Some(subscription) = self
+            .subscriptions()
+            .into_iter()
+            .rev()
+            .find(|s| s["type"] == kind)
+        else {
+            return false;
+        };
+        let message = json!({"metadata": {"message_id": self.id("message"), "message_type": "notification",
+                                          "message_timestamp": now(), "subscription_type": kind,
+                                          "subscription_version": subscription["version"]},
+                             "payload": {"subscription": subscription, "event": event}});
+        let _ = self.0.eventsub.send(message.to_string());
+        true
+    }
+
+    /// Twitch's first-chat mark over IRC for the chat message `id`.
+    pub fn first_chat(&self, id: &str, login: &str, text: &str) {
+        let line = format!(
+            "@first-msg=1;id={id} :{login}!{login}@{login}.tmi.twitch.tv PRIVMSG #{BROADCASTER_LOGIN} :{text}\r\n"
+        );
+        let _ = self.0.irc.send(line);
+    }
+
+    /// Ends every EventSub session; the app connects again on its own.
+    pub fn drop_eventsub(&self) {
+        let _ = self.0.close.send(());
+    }
+
+    pub(crate) fn id(&self, prefix: &str) -> String {
         let mut w = self.0.world.lock().unwrap();
         w.next_id += 1;
         format!("{prefix}-{}", w.next_id)
     }
+}
+
+/// The current UTC time as RFC 3339, as Twitch stamps messages.
+pub(crate) fn now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    rfc3339(secs)
+}
+
+fn rfc3339(secs: u64) -> String {
+    let (days, rest) = ((secs / 86_400) as i64, secs % 86_400);
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rest / 3600,
+        rest % 3600 / 60,
+        rest % 60
+    )
 }
 
 fn user(id: &str, login: &str) -> Value {
@@ -121,7 +187,7 @@ fn user(id: &str, login: &str) -> Value {
 }
 
 /// A stable digit ID for a login, so the same viewer keeps one ID.
-fn id_for(login: &str) -> String {
+pub(crate) fn id_for(login: &str) -> String {
     if login == BROADCASTER_LOGIN {
         return BROADCASTER_ID.into();
     }
@@ -214,9 +280,9 @@ async fn rewards() -> Response {
                "should_redemptions_skip_request_queue": false})
     };
     Json(json!({"data": [
-        reward("fake-reward-checkin", "Check in", 100),
+        reward("fake-reward-check-in", "Check in", 100),
         reward("fake-reward-hydrate", "Hydrate", 500),
-        reward("fake-reward-sound", "Play a sound", 1000),
+        reward("fake-reward-play-a-sound", "Play a sound", 1000),
     ]}))
     .into_response()
 }
@@ -277,10 +343,15 @@ async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> 
             return;
         }
         let mut notifications = fake.0.eventsub.subscribe();
+        let mut close = fake.0.close.subscribe();
         let mut every = tokio::time::interval(keepalive / 2);
         every.tick().await;
         loop {
             tokio::select! {
+                _ = close.recv() => {
+                    let _ = socket.send(ws::Message::Close(None)).await;
+                    return;
+                }
                 _ = every.tick() => {
                     let message = json!({"metadata": {"message_id": fake.id("message"),
                         "message_type": "session_keepalive", "message_timestamp": TIMESTAMP}, "payload": {}});
@@ -306,11 +377,17 @@ async fn eventsub(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> 
 async fn irc(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Response {
     upgrade.on_upgrade(move |mut socket| async move {
         let mut nick = String::from("justinfan");
+        let mut lines = fake.0.irc.subscribe();
         let mut every = tokio::time::interval(fake.0.keepalive / 2);
         every.tick().await;
         loop {
             tokio::select! {
                 _ = every.tick() => if !send(&mut socket, "PING :tmi.twitch.tv\r\n".into()).await { return },
+                line = lines.recv() => match line {
+                    Ok(line) => if !send(&mut socket, line).await { return },
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => return,
+                },
                 message = socket.recv() => {
                     let Some(Ok(ws::Message::Text(text))) = message else {
                         if matches!(message, Some(Ok(_))) { continue }
@@ -341,6 +418,14 @@ async fn irc(upgrade: WebSocketUpgrade, State(fake): State<FakeTwitch>) -> Respo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timestamps_are_rfc3339_utc() {
+        assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
+        assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
+        assert_eq!(rfc3339(1_795_700_000), "2026-11-26T13:33:20Z");
+        assert_eq!(now().len(), 20);
+    }
 
     #[test]
     fn viewer_ids_are_digits_and_stable() {
