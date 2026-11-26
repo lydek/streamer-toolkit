@@ -5,6 +5,7 @@
 mod faults;
 mod pages;
 mod send;
+mod stats;
 
 use std::time::{Duration, Instant};
 
@@ -12,9 +13,7 @@ use iced::{
     Alignment, Color, Element, Font,
     Length::Fill,
     Size, Subscription, Task, keyboard, mouse, time,
-    widget::{
-        button, checkbox, column, container, mouse_area, row, rule, scrollable, space, table, text,
-    },
+    widget::{button, checkbox, column, container, mouse_area, row, rule, space, table, text},
     window,
 };
 use serde_json::Value;
@@ -102,6 +101,8 @@ pub enum Message {
     FaultFor(String),
     FaultClose(bool),
     RemoveFault(String),
+    /// A calls-table heading clicked in the stats tab.
+    Sort(usize),
 }
 
 /// One activity-log line, and what clicking its event fills in.
@@ -137,6 +138,7 @@ pub struct Panel {
     scene: Option<String>,
     burst: String,
     fault_form: faults::FaultForm,
+    sort: stats::Sort,
 }
 
 /// Opens the panel and blocks until it is closed. The fakes keep running on their own runtime meanwhile.
@@ -185,6 +187,7 @@ impl Panel {
             scene: None,
             burst: "10".into(),
             fault_form: faults::FaultForm::default(),
+            sort: stats::Sort::default(),
         };
         panel.refresh();
         panel
@@ -293,6 +296,7 @@ impl Panel {
                 self.twitch.recorder().remove_fault(&key);
                 self.refresh();
             }
+            Message::Sort(column) => self.sort = self.sort.clicked(column),
         }
         Task::none()
     }
@@ -405,7 +409,7 @@ impl Panel {
             Tab::Twitch => self.twitch_page(),
             Tab::Obs => self.obs_page(),
             Tab::Faults => self.faults_page(),
-            _ => container(text("")).width(Fill).height(Fill).into(),
+            Tab::Stats => self.stats_page(),
         };
         let notice = self.notice.as_ref().map(|(line, warn)| {
             container(
@@ -601,6 +605,13 @@ fn status_row(label: &str, open: u32) -> Element<'_, Message> {
     .into()
 }
 
+/// A scrollable whose scrollbar sits beside the content instead of covering its edge.
+fn scrollable<'a>(
+    content: impl Into<Element<'a, Message>>,
+) -> iced::widget::Scrollable<'a, Message> {
+    iced::widget::scrollable(content).spacing(4)
+}
+
 fn small_button(label: &str, message: Message) -> button::Button<'_, Message> {
     button(text(label).size(SMALL))
         .padding([3, 8])
@@ -774,5 +785,34 @@ mod tests {
             p.notice.as_ref().unwrap().1,
             "a fault without a key is refused"
         );
+    }
+
+    #[test]
+    fn the_stats_tab_shows_the_report_until_reset() {
+        let mut p = panel();
+        p.twitch.recorder().call(crate::metrics::Call {
+            at: Instant::now(),
+            service: "twitch",
+            key: "GET /helix/users".into(),
+            params: 0,
+            status: 401,
+            handled: Duration::from_millis(2),
+            in_flight: 1,
+            problem: Some("no Client-Id header".into()),
+        });
+        p.ticks = 0;
+        let _ = p.update(Message::Tick);
+        let rows = stats::sorted_calls(&p.report, p.sort);
+        assert_eq!(
+            rows,
+            p.report["calls"].as_array().unwrap().clone(),
+            "the report's rows as they are"
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(p.report["warnings"][0]["kind"], "headers");
+        let _ = p.update(Message::ResetStats);
+        let rows = stats::sorted_calls(&p.report, p.sort);
+        assert!(rows.is_empty());
+        assert_eq!(p.report["warnings"], serde_json::json!([]));
     }
 }
