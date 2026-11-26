@@ -1601,6 +1601,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/predictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start_prediction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/predictions/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["end_prediction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/queue/clear": {
         parameters: {
             query?: never;
@@ -3350,7 +3382,7 @@ export interface components {
          * @enum {string}
          */
         Content: "data" | "media";
-        /** @description A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll changes. */
+        /** @description A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll or the prediction changes. */
         ContestEvent: {
             id: string;
             occurredAt: string;
@@ -3362,9 +3394,10 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
-        /** @description What is on: the latest poll, `None` before any or once it was archived. */
+        /** @description What is on: the latest poll (`None` before any or once it was archived) and the latest prediction. */
         ContestPayload: {
             poll: components["schemas"]["PollView"] | null;
+            prediction: components["schemas"]["PredictionView"] | null;
         };
         /** @enum {string} */
         ContestType: "twitch.contest";
@@ -3977,6 +4010,17 @@ export interface components {
             /** @description Up to 60 characters. */
             title: string;
         };
+        NewPrediction: {
+            /** @description 2–10, each up to 25 characters. */
+            outcomes: string[];
+            /**
+             * Format: int32
+             * @description How long predicting stays open: 30–1800.
+             */
+            seconds: number;
+            /** @description Up to 45 characters. */
+            title: string;
+        };
         /** @description More than is available; nothing was deducted. */
         NotEnoughStamps: {
             /** Format: int64 */
@@ -4268,6 +4312,45 @@ export interface components {
             id: string;
             status: components["schemas"]["PollStatusName"];
             title: string;
+        };
+        /** @description What happens to a prediction: no more predictions, a winner (Twitch pays out), or canceled (Twitch refunds). */
+        PredictionEnd: {
+            /** @enum {string} */
+            action: "lock";
+        } | {
+            /** @enum {string} */
+            action: "resolve";
+            winning_outcome_id: string;
+        } | {
+            /** @enum {string} */
+            action: "cancel";
+        };
+        /** @description An outcome with the viewers and channel points on it so far. `title` is raw Twitch text. */
+        PredictionOutcomeView: {
+            id: string;
+            /** Format: int64 */
+            points: number;
+            title: string;
+            /** Format: int64 */
+            users: number;
+        };
+        /** @enum {string} */
+        PredictionStatusName: "active" | "locked" | "resolved" | "canceled";
+        /** @description `title` is raw Twitch text. */
+        PredictionView: {
+            /**
+             * @description RFC 3339: when it was resolved or canceled; empty while it runs (or when Twitch did not say). The overlay
+             *     shows a result only shortly after this, so one read from an earlier stream never comes back on screen.
+             */
+            endedAt: string;
+            id: string;
+            /** @description RFC 3339: when predicting closes, or closed; empty when Twitch did not say. */
+            locksAt: string;
+            outcomes: components["schemas"]["PredictionOutcomeView"][];
+            status: components["schemas"]["PredictionStatusName"];
+            title: string;
+            /** @description Set once resolved. */
+            winningOutcomeId: string | null;
         };
         /** @description A `presentation.queue` event exactly as `/ws/overlay` sends it; the snapshot keeps only the latest one. */
         PresentationQueueEvent: {
@@ -9367,7 +9450,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description What is on, read from Twitch (and announced as `twitch.contest`) */
+            /** @description What is on (the latest poll and prediction), read from Twitch and announced as `twitch.contest` */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9385,7 +9468,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description `twitch.scope_required` or `polls.unavailable` */
+            /** @description `twitch.scope_required` (both scopes are needed) or `polls.unavailable` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9537,6 +9620,109 @@ export interface operations {
                 };
             };
             /** @description `polls.invalid`, `polls.refused` (e.g. it already ended), or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    start_prediction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPrediction"];
+            };
+        };
+        responses: {
+            /** @description What is on, with the new prediction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestPayload"];
+                };
+            };
+            /** @description `predictions.invalid` (over Twitch's limits), `predictions.refused` (e.g. one is already running), or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` or `polls.unavailable` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    end_prediction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Twitch's prediction ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PredictionEnd"];
+            };
+        };
+        responses: {
+            /** @description What is on, with the prediction locked, resolved or canceled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestPayload"];
+                };
+            };
+            /** @description `predictions.invalid`, `predictions.refused` (e.g. already resolved), or not signed in */
             400: {
                 headers: {
                     [name: string]: unknown;

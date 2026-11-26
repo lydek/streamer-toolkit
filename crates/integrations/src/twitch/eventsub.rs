@@ -36,6 +36,10 @@ const STREAM_OFFLINE: &str = "stream.offline";
 const POLL_BEGIN: &str = "channel.poll.begin";
 const POLL_PROGRESS: &str = "channel.poll.progress";
 const POLL_END: &str = "channel.poll.end";
+const PREDICTION_BEGIN: &str = "channel.prediction.begin";
+const PREDICTION_PROGRESS: &str = "channel.prediction.progress";
+const PREDICTION_LOCK: &str = "channel.prediction.lock";
+const PREDICTION_END: &str = "channel.prediction.end";
 
 /// Subscriptions besides chat: type, version and the scope it needs. Raids and the stream's start and end need
 /// none, so they cost 1 each of the `max_total_cost` of 10; the others are authorized by the broadcaster and cost 0.
@@ -66,6 +70,10 @@ const OTHER_SUBSCRIPTIONS: &[(&str, &str, Option<&str>)] = &[
     (POLL_BEGIN, "1", Some("channel:manage:polls")),
     (POLL_PROGRESS, "1", Some("channel:manage:polls")),
     (POLL_END, "1", Some("channel:manage:polls")),
+    (PREDICTION_BEGIN, "1", Some("channel:manage:predictions")),
+    (PREDICTION_PROGRESS, "1", Some("channel:manage:predictions")),
+    (PREDICTION_LOCK, "1", Some("channel:manage:predictions")),
+    (PREDICTION_END, "1", Some("channel:manage:predictions")),
 ];
 
 pub(super) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -263,6 +271,16 @@ impl EventSub {
             match super::contests::poll_from_json(event) {
                 Some(poll) => (self.deliver_contest)(Contest::Poll(poll)),
                 None => tracing::warn!(subscription = %kind, "unreadable poll notification"),
+            }
+            return;
+        }
+        if matches!(
+            kind.as_str(),
+            PREDICTION_BEGIN | PREDICTION_PROGRESS | PREDICTION_LOCK | PREDICTION_END
+        ) {
+            match super::contests::prediction_from_json(event, kind == PREDICTION_LOCK) {
+                Some(p) => (self.deliver_contest)(Contest::Prediction(p)),
+                None => tracing::warn!(subscription = %kind, "unreadable prediction notification"),
             }
             return;
         }

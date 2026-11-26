@@ -4967,7 +4967,7 @@
         "operationId": "current_polls",
         "responses": {
           "200": {
-            "description": "What is on, read from Twitch (and announced as `twitch.contest`)",
+            "description": "What is on (the latest poll and prediction), read from Twitch and announced as `twitch.contest`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4987,7 +4987,7 @@
             }
           },
           "403": {
-            "description": "`twitch.scope_required` or `polls.unavailable`",
+            "description": "`twitch.scope_required` (both scopes are needed) or `polls.unavailable`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5171,6 +5171,135 @@
           },
           "400": {
             "description": "`polls.invalid`, `polls.refused` (e.g. it already ended), or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/predictions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "start_prediction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPrediction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What is on, with the new prediction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContestPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`predictions.invalid` (over Twitch's limits), `predictions.refused` (e.g. one is already running), or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` or `polls.unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/predictions/{id}/end": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "end_prediction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Twitch's prediction ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionEnd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What is on, with the prediction locked, resolved or canceled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContestPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`predictions.invalid`, `predictions.refused` (e.g. already resolved), or not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -10412,7 +10541,7 @@
       },
       "ContestEvent": {
         "type": "object",
-        "description": "A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll changes.",
+        "description": "A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll or the prediction changes.",
         "required": [
           "id",
           "type",
@@ -10452,15 +10581,26 @@
       },
       "ContestPayload": {
         "type": "object",
-        "description": "What is on: the latest poll, `None` before any or once it was archived.",
+        "description": "What is on: the latest poll (`None` before any or once it was archived) and the latest prediction.",
         "required": [
-          "poll"
+          "poll",
+          "prediction"
         ],
         "properties": {
           "poll": {
             "oneOf": [
               {
                 "$ref": "#/components/schemas/PollView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prediction": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PredictionView"
               },
               {
                 "type": "null"
@@ -12149,6 +12289,33 @@
           }
         }
       },
+      "NewPrediction": {
+        "type": "object",
+        "required": [
+          "title",
+          "outcomes",
+          "seconds"
+        ],
+        "properties": {
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "2–10, each up to 25 characters."
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How long predicting stays open: 30–1800.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "description": "Up to 45 characters."
+          }
+        }
+      },
       "NotEnoughStamps": {
         "type": "object",
         "description": "More than is available; nothing was deducted.",
@@ -13060,6 +13227,139 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "PredictionEnd": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "lock"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "winning_outcome_id",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "resolve"
+                ]
+              },
+              "winning_outcome_id": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "cancel"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "What happens to a prediction: no more predictions, a winner (Twitch pays out), or canceled (Twitch refunds)."
+      },
+      "PredictionOutcomeView": {
+        "type": "object",
+        "description": "An outcome with the viewers and channel points on it so far. `title` is raw Twitch text.",
+        "required": [
+          "id",
+          "title",
+          "users",
+          "points"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "points": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "users": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "PredictionStatusName": {
+        "type": "string",
+        "enum": [
+          "active",
+          "locked",
+          "resolved",
+          "canceled"
+        ]
+      },
+      "PredictionView": {
+        "type": "object",
+        "description": "`title` is raw Twitch text.",
+        "required": [
+          "id",
+          "title",
+          "outcomes",
+          "status",
+          "winningOutcomeId",
+          "locksAt",
+          "endedAt"
+        ],
+        "properties": {
+          "endedAt": {
+            "type": "string",
+            "description": "RFC 3339: when it was resolved or canceled; empty while it runs (or when Twitch did not say). The overlay\nshows a result only shortly after this, so one read from an earlier stream never comes back on screen."
+          },
+          "id": {
+            "type": "string"
+          },
+          "locksAt": {
+            "type": "string",
+            "description": "RFC 3339: when predicting closes, or closed; empty when Twitch did not say."
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PredictionOutcomeView"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/PredictionStatusName"
+          },
+          "title": {
+            "type": "string"
+          },
+          "winningOutcomeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set once resolved."
           }
         }
       },

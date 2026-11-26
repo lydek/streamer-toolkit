@@ -14,7 +14,7 @@ use axum::{
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::sync::mpsc;
-use toolkit_core::events::PollStatus;
+use toolkit_core::events::{PollStatus, PredictionStatus};
 
 /// Client-Id header and JSON body of one subscription request.
 type Subscription = (Option<String>, Value);
@@ -188,6 +188,31 @@ fn poll_notifications() -> Vec<String> {
     ]
 }
 
+/// Prediction notifications as Twitch sends them: the start, the lock (no status field) and the end.
+fn prediction_notifications() -> Vec<String> {
+    let outcomes = json!([{"id":"o1","title":"能","users":2,"channel_points":200,"color":"blue"},
+                          {"id":"o2","title":"不能","users":1,"channel_points":50,"color":"pink"}]);
+    vec![
+        notification(
+            "d1",
+            PREDICTION_BEGIN,
+            json!({"id":"pr1","title":"吃雞？","outcomes":[{"id":"o1","title":"能","color":"blue"},
+                   {"id":"o2","title":"不能","color":"pink"}],"locks_at":"2026-11-27T10:02:00Z"}),
+        ),
+        notification(
+            "d2",
+            PREDICTION_LOCK,
+            json!({"id":"pr1","title":"吃雞？","outcomes":outcomes.clone(),"locked_at":"2026-11-27T10:01:00Z"}),
+        ),
+        notification(
+            "d3",
+            PREDICTION_END,
+            json!({"id":"pr1","title":"吃雞？","outcomes":outcomes,"status":"resolved",
+                   "winning_outcome_id":"o1","ended_at":"2026-11-27T10:05:00Z"}),
+        ),
+    ]
+}
+
 async fn second(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(|mut socket| async move {
         send(&mut socket, welcome("s2")).await;
@@ -196,6 +221,7 @@ async fn second(ws: WebSocketUpgrade) -> Response {
             .into_iter()
             .chain(redemption_notifications())
             .chain(poll_notifications())
+            .chain(prediction_notifications())
         {
             send(&mut socket, n).await;
         }
@@ -450,7 +476,9 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
     // A poll: each notification carries all of it.
     let mut polls = Vec::new();
     for _ in 0..3 {
-        let Contest::Poll(p) = next(&mut contests).await;
+        let Contest::Poll(p) = next(&mut contests).await else {
+            panic!("a poll notification delivers a poll");
+        };
         polls.push((p.status, p.choices[0].votes, p.ends_at));
     }
     assert_eq!(
@@ -459,6 +487,21 @@ async fn delivers_chat_and_alerts_once_and_follows_reconnect() {
             (PollStatus::Active, 0, "2026-11-27T10:02:00Z".into()),
             (PollStatus::Active, 1, "2026-11-27T10:02:00Z".into()),
             (PollStatus::Completed, 1, "2026-11-27T10:02:00Z".into()),
+        ]
+    );
+    let mut predictions = Vec::new();
+    for _ in 0..3 {
+        let Contest::Prediction(p) = next(&mut contests).await else {
+            panic!("a prediction notification delivers a prediction");
+        };
+        predictions.push((p.status, p.outcomes[0].points, p.winning_outcome_id));
+    }
+    assert_eq!(
+        predictions,
+        [
+            (PredictionStatus::Active, 0, None),
+            (PredictionStatus::Locked, 200, None),
+            (PredictionStatus::Resolved, 200, Some("o1".into())),
         ]
     );
 

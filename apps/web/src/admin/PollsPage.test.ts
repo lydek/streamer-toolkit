@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
 import PollsPage from './PollsPage.vue'
@@ -132,4 +132,83 @@ it('keeps saved polls to start in one click, and says why Twitch refused one', a
   await w.get(`[aria-label="${t('polls.deleteSaved', { name: '吃什麼？' })}"]`).trigger('click')
   await flushPromises()
   expect(put).toHaveBeenLastCalledWith('/api/admin/polls/templates', { body: [{ title: '喝什麼？', choices: ['拉麵', '咖哩'], seconds: 60 }] })
+})
+
+const prediction = (status: string, winner: string | null = null) => ({
+  id: 'd1',
+  title: '吃雞？',
+  status,
+  winningOutcomeId: winner,
+  locksAt: new Date(Date.now() + 50_000).toISOString(),
+  outcomes: [
+    { id: 'o1', title: '能', users: 18, points: 12400 },
+    { id: 'o2', title: '不能', users: 11, points: 8900 },
+  ],
+})
+
+describe('predictions', () => {
+  beforeAll(() => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement, value?: string) {
+      if (value !== undefined) this.returnValue = value
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  })
+  const dialogButton = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('dialog button')].find((b) => b.textContent === label)!
+
+  it('locks a running prediction, then resolves it only after confirming the winner', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      ok(path === '/api/admin/polls' ? { poll: null, prediction: prediction('active') } : [])) as never)
+    const post = vi.fn((_: string, init: { body: { action: string } }) =>
+      ok({ poll: null, prediction: init.body.action === 'lock' ? prediction('locked') : prediction('resolved', 'o1') }))
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const w = await open()
+    expect(w.get('[data-outcome="o1"]').text()).toContain(t('polls.stake', { points: '12,400', users: 18 }))
+    expect(w.get('[data-prediction-state]').text()).toMatch(/0:[45]\d/)
+
+    await button(w, t('polls.lock')).trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/predictions/{id}/end', { params: { path: { id: 'd1' } }, body: { action: 'lock' } })
+    expect(w.get('[data-prediction-state]').text()).toBe(t('polls.predictionStatus.locked'))
+
+    await button(w, t('polls.wins', { name: '能' })).trigger('click')
+    expect(document.querySelector('#polls-confirm-title')?.textContent).toBe(t('polls.resolveTitle', { name: '能' }))
+    dialogButton(t('features.cancel')).click()
+    await flushPromises()
+    expect(post).toHaveBeenCalledTimes(1)
+    await button(w, t('polls.wins', { name: '能' })).trigger('click')
+    dialogButton(t('polls.wins', { name: '能' })).click()
+    await flushPromises()
+    expect(post).toHaveBeenLastCalledWith('/api/admin/predictions/{id}/end', {
+      params: { path: { id: 'd1' } },
+      body: { action: 'resolve', winning_outcome_id: 'o1' },
+    })
+    expect(w.get('[data-prediction-state]').text()).toBe(t('polls.predictionStatus.resolved', { name: '能' }))
+    expect(button(w, t('polls.cancel'))).toBeUndefined()
+  })
+
+  it('starts a prediction with up to ten outcomes and its own betting time', async () => {
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) => ok(path === '/api/admin/polls' ? { poll: null, prediction: null } : [])) as never)
+    const post = vi.fn(() => ok({ poll: null, prediction: prediction('active') }))
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const w = await open()
+    await w.findAll('.p-togglebutton').find((b) => b.text() === t('polls.kinds.prediction'))!.trigger('click')
+    expect(w.text()).not.toContain(t('polls.save'))
+    await w.get('#polls-question').setValue('吃雞？')
+    const inputs = () => w.findAll('[role="group"] input')
+    await inputs()[0]!.setValue('能')
+    await inputs()[1]!.setValue('不能')
+    const add = button(w, t('polls.addOutcome'))
+    for (let i = 0; i < 8; i++) await add.trigger('click')
+    expect(inputs()).toHaveLength(10)
+    expect(add.attributes('disabled')).toBeDefined()
+    await button(w, t('polls.start')).trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/predictions', { body: { title: '吃雞？', outcomes: ['能', '不能'], seconds: 120 } })
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success', summary: t('polls.predictionStarted') }))
+  })
 })

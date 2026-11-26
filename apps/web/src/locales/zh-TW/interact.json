@@ -406,7 +406,26 @@
       "completed": "已結束",
       "terminated": "已提早結束"
     },
-    "tile": "開投票、看即時結果"
+    "predictionHint": "例如：這把能不能吃雞？",
+    "outcomes": "結果",
+    "addOutcome": "加結果（最多 10 個）",
+    "window": "下注時間",
+    "lock": "鎖定",
+    "stake": "{points} 點 · {users} 人",
+    "wins": "「{name}」贏",
+    "cancel": "取消並退還",
+    "locksIn": "開放下注 · 剩 {time}",
+    "predictionStatus": {
+      "locked": "已鎖定 · 等你結算",
+      "resolved": "已結算：「{name}」贏",
+      "canceled": "已取消，點數已退還"
+    },
+    "resolveTitle": "「{name}」贏？",
+    "resolveText": "Twitch 會把點數發給押中的觀眾，結算後不能改。",
+    "cancelTitle": "取消這個預測？",
+    "cancelText": "Twitch 會把所有點數退還給觀眾，取消後不能改。",
+    "predictionStarted": "已在 Twitch 開始預測。",
+    "tile": "開投票、預測，看即時結果"
   },
   "shoutouts": {
     "summary": "SO 時在畫面播對方的 Clip",

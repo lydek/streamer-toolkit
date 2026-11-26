@@ -1,6 +1,6 @@
-//! 投票與預測: the channel's latest poll as Twitch reports it (EventSub, or a Helix answer), announced as
-//! `twitch.contest` for the overlay and the admin page; the snapshot keeps the latest one. Kept in memory only:
-//! Twitch keeps the polls themselves.
+//! 投票與預測: the channel's latest poll and prediction as Twitch reports them (EventSub, or a Helix answer),
+//! announced together as `twitch.contest` for the overlay and the admin page; the snapshot keeps the latest one.
+//! Kept in memory only: Twitch keeps the polls and predictions themselves.
 
 use std::sync::{Arc, Mutex};
 
@@ -8,7 +8,7 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use toolkit_core::{
     bus::{Event, EventBus},
-    events::{Contest, Poll, PollStatus, Source},
+    events::{Contest, Poll, PollStatus, Prediction, PredictionStatus, Source},
 };
 use utoipa::ToSchema;
 
@@ -46,15 +46,56 @@ pub(crate) struct PollView {
     ends_at: String,
 }
 
-/// What is on: the latest poll, `None` before any or once it was archived.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PredictionStatusName {
+    Active,
+    /// No more predictions; waiting to be resolved or canceled.
+    Locked,
+    Resolved,
+    /// Canceled; Twitch gave the points back.
+    Canceled,
+}
+
+/// An outcome with the viewers and channel points on it so far. `title` is raw Twitch text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PredictionOutcomeView {
+    id: String,
+    title: String,
+    users: u64,
+    points: u64,
+}
+
+/// `title` is raw Twitch text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PredictionView {
+    id: String,
+    title: String,
+    outcomes: Vec<PredictionOutcomeView>,
+    status: PredictionStatusName,
+    /// Set once resolved.
+    #[schema(required)]
+    winning_outcome_id: Option<String>,
+    /// RFC 3339: when predicting closes, or closed; empty when Twitch did not say.
+    locks_at: String,
+    /// RFC 3339: when it was resolved or canceled; empty while it runs (or when Twitch did not say). The overlay
+    /// shows a result only shortly after this, so one read from an earlier stream never comes back on screen.
+    ended_at: String,
+}
+
+/// What is on: the latest poll (`None` before any or once it was archived) and the latest prediction.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ContestPayload {
     #[schema(required)]
     poll: Option<PollView>,
+    #[schema(required)]
+    prediction: Option<PredictionView>,
 }
 
-/// A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll changes.
+/// A `twitch.contest` event exactly as `/ws/overlay` sends it whenever the poll or the prediction changes.
 // The bus serializes its own envelope; a test keeps this type in step with it.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +140,32 @@ fn view(p: Poll) -> Option<PollView> {
     })
 }
 
+fn prediction_view(p: Prediction) -> PredictionView {
+    PredictionView {
+        id: p.id,
+        title: p.title,
+        outcomes: p
+            .outcomes
+            .into_iter()
+            .map(|o| PredictionOutcomeView {
+                id: o.id,
+                title: o.title,
+                users: o.users,
+                points: o.points,
+            })
+            .collect(),
+        status: match p.status {
+            PredictionStatus::Active => PredictionStatusName::Active,
+            PredictionStatus::Locked => PredictionStatusName::Locked,
+            PredictionStatus::Resolved => PredictionStatusName::Resolved,
+            PredictionStatus::Canceled => PredictionStatusName::Canceled,
+        },
+        winning_outcome_id: p.winning_outcome_id,
+        locks_at: p.locks_at,
+        ended_at: p.ended_at,
+    }
+}
+
 pub(crate) struct Contests {
     bus: Arc<EventBus>,
     current: Mutex<ContestPayload>,
@@ -117,12 +184,15 @@ impl Contests {
         self.current.lock().unwrap().clone()
     }
 
-    /// Takes the latest state of a poll (each report carries all of it) and announces it when it changed.
+    /// Takes the latest state of a poll or prediction (each report carries all of it) and announces both when it
+    /// changed.
     pub(crate) fn receive(&self, contest: Contest) {
         let mut current = self.current.lock().unwrap();
-        let next = match contest {
-            Contest::Poll(p) => ContestPayload { poll: view(p) },
-        };
+        let mut next = current.clone();
+        match contest {
+            Contest::Poll(p) => next.poll = view(p),
+            Contest::Prediction(p) => next.prediction = Some(prediction_view(p)),
+        }
         if *current == next {
             return;
         }
@@ -174,7 +244,22 @@ mod tests {
         let wire = serde_json::to_value(contests.current()).unwrap();
         assert_eq!(wire["poll"]["choices"][0]["votes"], 3);
         assert_eq!(wire["poll"]["endsAt"], "2026-11-27T10:02:00Z");
+        // A prediction sits beside the poll.
+        contests.receive(Contest::Prediction(Prediction {
+            id: "d1".into(),
+            title: "吃雞？".into(),
+            outcomes: vec![],
+            status: PredictionStatus::Locked,
+            winning_outcome_id: None,
+            locks_at: "2026-11-27T10:01:00Z".into(),
+            ended_at: String::new(),
+        }));
+        let wire = serde_json::to_value(contests.current()).unwrap();
+        assert_eq!(
+            (&wire["poll"]["id"], &wire["prediction"]["status"]),
+            (&"p1".into(), &"locked".into())
+        );
         contests.receive(poll(PollStatus::Archived, 3));
-        assert_eq!(contests.current(), ContestPayload::default());
+        assert_eq!(contests.current().poll, None);
     }
 }

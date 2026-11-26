@@ -43,6 +43,8 @@ use crate::{
         admin::polls::current_polls,
         admin::polls::start_poll,
         admin::polls::end_poll,
+        admin::polls::start_prediction,
+        admin::polls::end_prediction,
         admin::polls::poll_templates,
         admin::polls::set_poll_templates,
         admin::checkin_admin::checkin_outbox,
