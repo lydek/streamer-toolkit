@@ -99,7 +99,7 @@ apps/
 - HTTP 做指令與查詢；WebSocket 推事件。用戶端每次連上 WebSocket，第一則訊息就是快照（Host 先訂閱事件再取快照，兩者之間不漏也不重複），之後的事件依 `seq` 遞增；重連後重新拿到快照。快照的 `payload` 依事件類型列出保留在記憶體的最近事件（例如 `chat.message` 最近 50 則）；特效事件 `alert` 不保留，Overlay 重新載入不會重播；特效一收到就另外發布 `alert.received`（同樣不保留），不論 OBS 裡有沒有特效 Overlay 會播，管理視窗的聊天室「事件」依它列出。連線狀態也是事件：`obs.status` 只保留最新一則；OBS 的場景與輸出狀態 `obs.state` 也只保留最新一則。狀態不含任何秘密，所以放在公開的 `/ws/overlay`：管理 UI 與 Overlay 一連上就從快照拿到目前狀態，管理 UI 也可以用 `GET /api/admin/obs` 讀取。兌換紀錄新增、狀態改變或存下播放結果時發布 `redemption.changed`：只帶紀錄 ID，觀眾的文字不經過 `/ws/overlay`，也不放進快照；管理 UI 收到它或新的快照時，重新讀取 `GET /api/admin/redemptions`。打卡紀錄新增時發布 `checkin.changed`，同樣只帶觀眾 ID、不放進快照；管理 UI 收到它或新的快照時重新讀取打卡資料。Overlay 頁面連線時帶 `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard`，Host 依種類計算開著的連線數（管理 API `GET /api/admin/overlays`），用來知道 OBS 裡有沒有放這個 Overlay；沒帶或不認得的種類（管理視窗、舊頁面）照樣連線，算在 `other`。
 - WebSocket 事件首版就用固定 envelope：`id`、`type`、`version`、`seq`、`occurredAt`、`source`。內部 domain event 不直接外洩，在 `infrastructure` 轉成對外事件。
 - API 契約 code-first：從 Rust 產生 OpenAPI 與前端 TS 型別，CI 檢查產物是否最新。
-- **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
+- **Port**：固定預設 port `47810`，存在資料夾的 `settings.json`；dev 建置的新資料夾預設 `47811`，避免佔用 OBS 瀏覽器來源指向的 port。被佔用時不自動換 port，避免 OBS 網址悄悄失效；唯一例外是資料夾第一次啟動（還沒有 `settings.json`，也還沒有 OBS 網址）時，預設 port 被佔用就自動挑一個空的 port 並存下來，之後固定使用。此時 Host 沒有啟動，設定頁也打不開，因此改開 port 修改小頁面（由 Tauri 直接提供，見下方「前端檔案」）：顯示錯誤、讓使用者輸入並驗證新 port、儲存後重試綁定。這個頁面的字串同樣走資源鍵。
 - **前端檔案**：
   - `apps/web` 有三類 entry：管理 UI、各 Overlay、port 修改小頁面。
   - 管理 UI 與 Overlay 的建置產物用 `rust-embed` 內嵌進執行檔，由 Host 提供。
@@ -111,12 +111,12 @@ apps/
   - 使用者自訂的 HTML／CSS 樣板（`custom`）存在資料夾的 `templates/`，由使用者自己放入（見下方「本機 API 安全」的「使用者樣板」）。
 - **開發模式**：前端用 Vite dev server 熱更新，`/api`、`/ws`、`/templates`、`/sounds`、`/music`、`/media` 與 `/checkin` proxy 到 Host：
   - proxy 目標寫 `http://127.0.0.1:<port>`，不寫 `localhost`（Node 可能解析成 IPv6 `::1`，但 Host 只綁 IPv4）。
-  - `<port>` 每個請求都重新讀 dev 資料夾（`target\debug\data\`，由 `pnpm tauri dev` 使用，不看 `--data-dir`；有設 `CARGO_TARGET_DIR` 時以它為準，須為絕對路徑）的 `settings.json`，沒有檔案或內容不合法時用預設 port：Vite 比 app 先啟動，資料夾第一次啟動時可能自動換 port，port 修改小頁面也可能存下新的 port。
+  - `<port>` 每個請求都重新讀 dev 資料夾（有設 `DEV_DATA_DIR` 時用它，給加了 `--data-dir` 的 dev 建置；否則是 `pnpm tauri dev` 使用的 `target\debug\data\`，有設 `CARGO_TARGET_DIR` 時以它為準；兩者都須為絕對路徑）的 `settings.json`，沒有檔案或內容不合法時用 dev 建置的預設 port `47811`：Vite 比 app 先啟動，資料夾第一次啟動時可能自動換 port，port 修改小頁面也可能存下新的 port。
   - proxy 設 `changeOrigin: true`（只改寫 Host 標頭，不改 Origin）與 `ws: true`。
   - Tauri 的 `build.devUrl` 設成 Vite 網址，開發時管理視窗與 port 修改小頁面都由 Vite 提供，並被當成本機 origin；Vite 設 `server.strictPort: true`，避免 port 漂移而對不上白名單。
   - Vite 送出和 Host 相同的 CSP：`/overlay/` 下的頁面送 Overlay CSP，其他送 `/admin` 的 CSP（`frame-src` 依請求的 Host 標頭，放行同一 origin 下的聊天室、特效與集點卡 Overlay 頁；標頭不是單純的主機名稱與 port 時為 `'none'`），讓違規在開發時就出現。CSP 由下一條的 middleware 設定，不用 `server.headers`：Vite 最後才套用它，會蓋掉 Overlay CSP。
   - dev 模式下，Vite 除了 proxy 的 `/api`、`/ws`、`/templates`、`/sounds`、`/music`、`/media`、`/checkin` 以外的回應都允許 `null` origin（`server.cors: false` 加一個 `configureServer` middleware），因為預覽 iframe 要從 `/@vite/client`、`/src/...` 等路徑載入模組。
-  - 任何網站的 sandbox iframe 都是 `null` origin，所以依上一條，任何網站都讀得到 Vite 提供的檔案。因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 資料）在裡面，不能經由 Vite 讀到。
+  - 任何網站的 sandbox iframe 都是 `null` origin，所以依上一條，任何網站都讀得到 Vite 提供的檔案。因此 Vite 的 `server.fs.deny` 在預設清單之外加上 Cargo 的 `target` 資料夾：dev 資料夾（設定、記錄檔、WebView2 資料）在裡面，不能經由 Vite 讀到；有設 `DEV_DATA_DIR` 時，那個資料夾也加進清單。
 
 ### 本機 API 安全
 只綁 `127.0.0.1` 擋不住瀏覽器裡的惡意網頁（跨站請求、DNS rebinding、WebSocket 劫持），因此另外做：
