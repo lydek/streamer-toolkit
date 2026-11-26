@@ -728,10 +728,19 @@ struct RedemptionReward {
     cost: u32,
 }
 
+/// A redemption as Helix returns it (Update Redemption Status), which has the EventSub fields with uppercase
+/// statuses; `None` when it does not parse.
+pub fn helix_redemption(value: serde_json::Value) -> Option<ChannelPointsRedemption> {
+    serde_json::from_value::<RedemptionEvent>(value)
+        .ok()
+        .map(|r| r.into_redemption(RedemptionChange::Updated))
+}
+
 impl RedemptionEvent {
     fn into_redemption(self, change: RedemptionChange) -> ChannelPointsRedemption {
-        // EventSub statuses are lowercase; "cancelled" appears in Twitch's own docs, so both spellings count.
-        let status = match self.status.as_str() {
+        // EventSub statuses are lowercase and Helix's uppercase; "cancelled" appears in Twitch's own docs, so both
+        // spellings count.
+        let status = match self.status.to_ascii_lowercase().as_str() {
             "unfulfilled" => RedemptionStatus::Unfulfilled,
             "fulfilled" => RedemptionStatus::Fulfilled,
             "canceled" | "cancelled" => RedemptionStatus::Canceled,

@@ -63,6 +63,9 @@ impl From<RedemptionStatusName> for Status {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RedemptionRecord {
     pub id: String,
+    /// Twitch's redemption ID, for marking it fulfilled or refunding it.
+    pub twitch_id: String,
+    pub reward_id: String,
     pub user_login: String,
     pub user_name: String,
     pub reward_title: String,
@@ -91,6 +94,8 @@ impl From<Redemption> for RedemptionRecord {
         let time = |t: DateTime<Utc>| t.to_rfc3339_opts(SecondsFormat::Millis, true);
         Self {
             id: r.id.0.to_string(),
+            twitch_id: r.twitch_id.0,
+            reward_id: r.reward.id,
             user_login: r.viewer.login,
             user_name: r.viewer.name,
             reward_title: r.reward.title,
