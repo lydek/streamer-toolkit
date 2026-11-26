@@ -127,8 +127,9 @@ async fn steady_retries_are_flagged_and_doubling_ones_are_not() {
         assert_eq!(get(f.port, "/helix/streams").await, 503);
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
-    // Waiting twice as long each time.
-    for wait in [100, 200, 400, 800, 0] {
+    // Waiting twice as long each time. Each gap also holds the request's round trip, so the waits must stay above it
+    // for a gap to grow over 1.5x: starting at 300 ms keeps this true on machines whose loopback adds ~200 ms.
+    for wait in [300, 600, 1200, 2400, 0] {
         assert_eq!(get(f.port, "/helix/users").await, 503);
         tokio::time::sleep(Duration::from_millis(wait)).await;
     }
