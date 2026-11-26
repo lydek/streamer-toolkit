@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../i18n'
 import { client } from './api'
 import RewardsPage from './RewardsPage.vue'
@@ -92,4 +92,73 @@ it('pauses or resumes one of its own rewards on Twitch, and says why Twitch refu
   await flushPromises()
   expect(patch).toHaveBeenLastCalledWith('/api/admin/rewards/{id}', { params: { path: { id: 'r-own' } }, body: { is_enabled: false } })
   expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', summary: t('errors.twitch.scope_required') }))
+})
+
+describe('adding, editing and deleting', () => {
+  beforeAll(() => {
+    // jsdom has no modal dialogs.
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  })
+  const button = (w: Awaited<ReturnType<typeof open>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
+
+  it('adds a reward, refusing a title already on the channel before sending', async () => {
+    const post = vi.fn(() => ok({ id: 'r-new' }))
+    vi.spyOn(client, 'POST').mockImplementation(post as never)
+    const w = await open()
+    await button(w, t('rewards.add')).trigger('click')
+    await w.get('#rwd-name').setValue('hydrate!')
+    await w.get('#rwd-cost').setValue('200')
+    await w.get('#rwd-cost').trigger('blur')
+    expect(w.text()).toContain(t('rewards.dialog.titleTaken'))
+    await w.get('#rwd-form').trigger('submit')
+    expect(post).not.toHaveBeenCalled()
+
+    await w.get('#rwd-name').setValue('丟枕頭')
+    await w.get('#rwd-form').trigger('submit')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/admin/rewards', {
+      body: {
+        title: '丟枕頭', prompt: '', cost: 200, background_color: '#9146FF', is_user_input_required: false,
+        skip_queue: false, cooldown_seconds: 0, max_per_stream: 0, max_per_user_per_stream: 0,
+      },
+    })
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success', summary: t('rewards.dialog.added') }))
+  })
+
+  it('edits one of its own rewards, and deletes it after saying what uses it', async () => {
+    const del = vi.fn(() => ok())
+    vi.spyOn(client, 'DELETE').mockImplementation(del as never)
+    const w = await open()
+    expect(w.find(`[aria-label="${t('rewards.editLabel', { name: 'Hydrate!' })}"]`).exists()).toBe(false)
+    await w.get(`[aria-label="${t('rewards.editLabel', { name: '喝水提醒' })}"]`).trigger('click')
+    expect((w.get('#rwd-name').element as HTMLInputElement).value).toBe('喝水提醒')
+    await w.get('#rwd-prompt').setValue('提醒主播喝水')
+    await w.get('#rwd-form').trigger('submit')
+    await flushPromises()
+    expect(patch).toHaveBeenCalledWith('/api/admin/rewards/{id}', {
+      params: { path: { id: 'r-own' } },
+      body: expect.objectContaining({ title: '喝水提醒', prompt: '提醒主播喝水', cooldown_seconds: 600, max_per_user_per_stream: 3 }),
+    })
+
+    await w.get(`[aria-label="${t('rewards.editLabel', { name: '喝水提醒' })}"]`).trigger('click')
+    await button(w, t('rewards.dialog.delete')).trigger('click')
+    expect(w.get('.reward-dialog ul').text()).toContain(t('rewards.used.checkin'))
+    await button(w, t('rewards.dialog.delete')).trigger('click')
+    await flushPromises()
+    expect(del).toHaveBeenCalledWith('/api/admin/rewards/{id}', { params: { path: { id: 'r-own' } } })
+  })
+
+  it('cannot add one past Twitch’s 50 rewards', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => reward(`r-${i}`, `獎勵 ${i}`, false))
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) => ok(path === '/api/admin/rewards' ? many : GETS[path])) as never)
+    const w = await open()
+    expect(button(w, t('rewards.add')).attributes('disabled')).toBeDefined()
+    expect(w.text()).toContain(t('rewards.full', { max: 50 }))
+  })
 })

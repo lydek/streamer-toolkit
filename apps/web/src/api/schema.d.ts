@@ -1673,7 +1673,7 @@ export interface paths {
         };
         get: operations["list_rewards"];
         put?: never;
-        post?: never;
+        post: operations["create_reward"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1690,7 +1690,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["delete_reward"];
         options?: never;
         head?: never;
         patch: operations["update_reward"];
@@ -3341,6 +3341,9 @@ export interface components {
         };
         /** @enum {string} */
         CounterValuesType: "counter.values";
+        CreatedReward: {
+            id: string;
+        };
         DeductBody: {
             /**
              * Format: int32
@@ -4337,10 +4340,41 @@ export interface components {
             id: string;
             title: string;
         };
-        /** @description What changes; fields left out stay as they are. */
+        /**
+         * @description A reward's settings; fields left out stay as they are (when editing) or take Twitch's defaults (when adding,
+         *     which needs `title` and `cost`).
+         */
         RewardChange: {
+            /** @description `#RRGGBB`. */
+            background_color?: string | null;
+            /**
+             * Format: int64
+             * @description 0: no cooldown; at most 7 days.
+             */
+            cooldown_seconds?: number | null;
+            /**
+             * Format: int64
+             * @description At least 1.
+             */
+            cost?: number | null;
             is_enabled?: boolean | null;
             is_paused?: boolean | null;
+            is_user_input_required?: boolean | null;
+            /**
+             * Format: int64
+             * @description 0: no limit.
+             */
+            max_per_stream?: number | null;
+            /**
+             * Format: int64
+             * @description 0: no limit.
+             */
+            max_per_user_per_stream?: number | null;
+            /** @description Up to 200 characters. */
+            prompt?: string | null;
+            skip_queue?: boolean | null;
+            /** @description Up to 45 characters; unique in the channel (Twitch ignores case). */
+            title?: string | null;
         };
         RunScript: {
             /** @description The script file's text: `{"steps": [{"type": "chat" | "alert" | "checkin" | "stop", "at": <ms>, …}]}`. */
@@ -9402,6 +9436,118 @@ export interface operations {
             };
         };
     };
+    create_reward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RewardChange"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedReward"];
+                };
+            };
+            /** @description `rewards.invalid` (no title or cost, or over Twitch's limits), `rewards.refused`, or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.limit` (the channel has 50 rewards) or `rewards.duplicate_title` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_reward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `rewards.invalid`, or not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required` or `rewards.not_ours` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     update_reward: {
         parameters: {
             query?: never;
@@ -9423,7 +9569,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `rewards.invalid`, `rewards.refused`, or not signed in */
+            /** @description `rewards.invalid` (nothing to change, or over Twitch's limits), `rewards.refused`, or not signed in */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9443,6 +9589,15 @@ export interface operations {
             };
             /** @description `rewards.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `rewards.duplicate_title` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

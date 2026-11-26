@@ -73,6 +73,10 @@ impl Helix {
             .map(|_| ())
     }
 
+    pub async fn delete(&self, path: &str) -> Result<(), HelixError> {
+        self.send(Method::DELETE, path, None).await.map(|_| ())
+    }
+
     pub async fn get_json(&self, path: &str) -> Result<serde_json::Value, HelixError> {
         let body = self.send(Method::GET, path, None).await?;
         Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)

@@ -42,6 +42,8 @@ struct Fake {
     rewards: Arc<Mutex<Vec<(String, String, serde_json::Value)>>>,
     /// Status reward changes answer with; 0: done.
     reward_status: Arc<Mutex<u16>>,
+    /// More rewards on the channel besides the two (made in the dashboard).
+    extra_rewards: Arc<Mutex<usize>>,
 }
 
 /// A Helix custom reward; `r-own` is the toolkit's, `r-dash` was made in the Twitch dashboard.
@@ -69,17 +71,22 @@ async fn reward_request(
         let mut data = vec![helix_reward("r-own", "每日打卡")];
         if !query.contains("only_manageable_rewards=true") {
             data.push(helix_reward("r-dash", "Hydrate!"));
+            for n in 0..*f.extra_rewards.lock().unwrap() {
+                data.push(helix_reward(&format!("r-{n}"), &format!("extra {n}")));
+            }
         }
         return Json(serde_json::json!({ "data": data })).into_response();
     }
+    let body = body.unwrap_or_default();
+    let made = (method == Method::POST)
+        .then(|| helix_reward("r-new", body["title"].as_str().unwrap_or_default()));
     f.rewards
         .lock()
         .unwrap()
-        .push((method.to_string(), query, body.unwrap_or_default()));
+        .push((method.to_string(), query, body));
     match *f.reward_status.lock().unwrap() {
-        0 => {
-            Json(serde_json::json!({ "data": [helix_reward("r-own", "每日打卡")] })).into_response()
-        }
+        0 => Json(serde_json::json!({ "data": [made.unwrap_or_else(|| helix_reward("r-own", "每日打卡"))] }))
+            .into_response(),
         status => StatusCode::from_u16(status).unwrap().into_response(),
     }
 }
@@ -381,4 +388,111 @@ async fn a_reward_is_enabled_or_paused_only_with_the_scope_and_when_it_is_ours()
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
     assert_eq!(json(res).await["code"], "twitch.scope_required");
     assert!(fake.rewards.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_reward_is_added_unless_the_title_is_taken_or_the_channel_is_full() {
+    let fake = Fake::default();
+    let app = signed_in_app("rewards-create", &fake).await;
+    let create = |body: serde_json::Value| req(Method::POST, "/api/admin/rewards", Some(body));
+
+    let res = app
+        .clone()
+        .oneshot(create(
+            serde_json::json!({ "title": "喝水提醒", "cost": 200, "cooldown_seconds": 600 }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json(res).await, serde_json::json!({ "id": "r-new" }));
+    assert_eq!(
+        fake.rewards.lock().unwrap().as_slice(),
+        [(
+            "POST".to_owned(),
+            "broadcaster_id=42".to_owned(),
+            serde_json::json!({
+                "title": "喝水提醒", "cost": 200,
+                "is_global_cooldown_enabled": true, "global_cooldown_seconds": 600
+            })
+        )]
+    );
+
+    // Twitch ignores case when it refuses a second reward with the same title: told here, nothing sent.
+    let res = app
+        .clone()
+        .oneshot(create(
+            serde_json::json!({ "title": "HYDRATE!", "cost": 1 }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    assert_eq!(json(res).await["code"], "rewards.duplicate_title");
+    // No cost: not a reward.
+    let res = app
+        .clone()
+        .oneshot(create(serde_json::json!({ "title": "x" })))
+        .await
+        .unwrap();
+    assert_eq!(json(res).await["code"], "rewards.invalid");
+    // 50 rewards already.
+    *fake.extra_rewards.lock().unwrap() = 48;
+    let res = app
+        .oneshot(create(serde_json::json!({ "title": "新的", "cost": 1 })))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    assert_eq!(json(res).await["code"], "rewards.limit");
+    assert_eq!(fake.rewards.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_reward_is_edited_or_deleted_on_twitch() {
+    let fake = Fake::default();
+    let app = signed_in_app("rewards-edit", &fake).await;
+    let edit = |body: serde_json::Value| req(Method::PATCH, "/api/admin/rewards/r-own", Some(body));
+
+    // Its own title again is fine; another reward's is not.
+    let res = app
+        .clone()
+        .oneshot(edit(
+            serde_json::json!({ "title": "每日打卡", "max_per_stream": 0 }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = app
+        .clone()
+        .oneshot(edit(serde_json::json!({ "title": "hydrate!" })))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    assert_eq!(json(res).await["code"], "rewards.duplicate_title");
+
+    let res = app
+        .oneshot(req(Method::DELETE, "/api/admin/rewards/r-own", None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let sent: Vec<_> = fake
+        .rewards
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(m, q, b)| (m.clone(), q.clone(), b.clone()))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            (
+                "PATCH".to_owned(),
+                "broadcaster_id=42&id=r-own".to_owned(),
+                serde_json::json!({ "title": "每日打卡", "is_max_per_stream_enabled": false })
+            ),
+            (
+                "DELETE".to_owned(),
+                "broadcaster_id=42&id=r-own".to_owned(),
+                serde_json::Value::Null
+            ),
+        ]
+    );
 }
