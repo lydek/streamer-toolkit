@@ -2,18 +2,24 @@
 //! default. It runs in the same process as the fakes and reads and drives them directly. Layout: the app's
 //! connections on the left, tabs on the right, the activity log at the bottom. Text stays at 14 px or more.
 
+mod pages;
+mod send;
+
 use std::time::{Duration, Instant};
 
 use iced::{
     Alignment, Color, Element, Font,
     Length::Fill,
-    Size, Subscription, Task, keyboard, time,
-    widget::{button, checkbox, column, container, row, rule, scrollable, space, table, text},
+    Size, Subscription, Task, keyboard, mouse, time,
+    widget::{
+        button, checkbox, column, container, mouse_area, row, rule, scrollable, space, table, text,
+    },
     window,
 };
 use serde_json::Value;
 
 use crate::{
+    control,
     metrics::{Direction, Entry},
     obs::{FakeObs, ObsSnapshot},
     twitch::{FakeTwitch, TwitchSnapshot},
@@ -29,6 +35,7 @@ const GREEN: Color = Color::from_rgb(0.10, 0.50, 0.22);
 const RED: Color = Color::from_rgb(0.71, 0.14, 0.09);
 const AMBER: Color = Color::from_rgb(0.60, 0.40, 0.0);
 const MUTED: Color = Color::from_rgb(0.27, 0.30, 0.35);
+const LINK: Color = Color::from_rgb(0.10, 0.36, 0.75);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -67,6 +74,27 @@ pub enum Message {
     Pause(bool),
     ClearLog,
     Key(keyboard::Event),
+    /// A control body, as the `send` command posts it.
+    Send(Value),
+    Done(Result<Value, String>),
+    Scenario(&'static str),
+    Edit(send::Field, String),
+    Kind(send::Kind),
+    Tier(&'static str),
+    Reward(&'static str),
+    Status(send::Status),
+    First(bool),
+    /// A delivered redemption or chat message clicked in the log: the form kind and the ID.
+    Pick(&'static str, String),
+    DropEventSub,
+    DropIrc,
+}
+
+/// One activity-log line, and what clicking its event fills in.
+#[derive(Debug, Clone)]
+struct Line {
+    cells: [String; 6],
+    pick: Option<(&'static str, String)>,
 }
 
 pub struct Panel {
@@ -88,6 +116,9 @@ pub struct Panel {
     report: Value,
     faults: usize,
     ticks: u64,
+    form: send::Form,
+    /// The last send or scenario result, and whether it needs attention.
+    notice: Option<(String, bool)>,
 }
 
 /// Opens the panel and blocks until it is closed. The fakes keep running on their own runtime meanwhile.
@@ -131,6 +162,8 @@ impl Panel {
             log: Vec::new(),
             faults: 0,
             ticks: 0,
+            form: send::Form::default(),
+            notice: None,
         };
         panel.refresh();
         panel
@@ -181,6 +214,37 @@ impl Panel {
                 }
             }
             Message::Key(_) => {}
+            Message::Send(body) => {
+                self.notice = Some(send::notice(&control::send_body(&self.twitch, &body)))
+            }
+            Message::Done(result) => self.notice = Some(send::notice(&result)),
+            Message::Scenario(name) => {
+                self.notice = Some((format!("{name} 執行中"), false));
+                let (obs, twitch) = (self.obs.clone(), self.twitch.clone());
+                return Task::perform(
+                    async move { control::run_scenario(&obs, &twitch, name).await },
+                    Message::Done,
+                );
+            }
+            Message::Edit(field, value) => self.form.set(field, value),
+            Message::Kind(kind) => self.form.kind = kind.0,
+            Message::Tier(tier) => self.form.tier = tier,
+            Message::Reward(reward) => self.form.reward = reward,
+            Message::Status(status) => self.form.status = status.0,
+            Message::First(first) => self.form.first = first,
+            Message::Pick(kind, id) => {
+                self.form.kind = kind;
+                self.form.id = id;
+                self.tab = Tab::Send;
+            }
+            Message::DropEventSub => {
+                self.twitch.drop_eventsub();
+                self.notice = Some(("已中斷 EventSub".to_owned(), false));
+            }
+            Message::DropIrc => {
+                self.twitch.drop_irc();
+                self.notice = Some(("已中斷 IRC".to_owned(), false));
+            }
         }
         Task::none()
     }
@@ -288,7 +352,11 @@ impl Panel {
         }))
         .spacing(2)
         .padding([6, 10]);
-        let page: Element<'_, Message> = container(text("")).width(Fill).height(Fill).into();
+        let page: Element<'_, Message> = match self.tab {
+            Tab::Send => self.send_page(),
+            Tab::Twitch => self.twitch_page(),
+            _ => container(text("")).width(Fill).height(Fill).into(),
+        };
         column![tabs, rule::horizontal(1), page].width(Fill).into()
     }
 
@@ -328,25 +396,37 @@ impl Panel {
         if !self.dock_open {
             return head.into();
         }
-        let lines: Vec<[String; 6]> = visible(&self.log, self.filter, self.cleared)
+        let lines: Vec<Line> = visible(&self.log, self.filter, self.cleared)
             .rev()
-            .map(|e| cells(e, self.started))
+            .map(|e| Line {
+                cells: cells(e, self.started),
+                pick: pick(e),
+            })
             .collect();
         let col = |title: &'static str, i: usize| {
             table::column(
                 text(title).size(SMALL).color(MUTED),
-                move |line: [String; 6]| {
+                move |line: Line| -> Element<'_, Message> {
+                    let c = &line.cells;
                     // Monospace only for plain ASCII: it has no Chinese glyphs, and the fallback renders blurry.
-                    let cell = text(line[i].clone()).size(SMALL);
-                    let cell = if line[i].is_ascii() {
+                    let cell = text(c[i].clone()).size(SMALL);
+                    let cell = if c[i].is_ascii() {
                         cell.font(Font::MONOSPACE)
                     } else {
                         cell
                     };
-                    match (i, line[2].as_str(), line[4].as_str()) {
+                    let cell = match (i, c[2].as_str(), c[4].as_str()) {
                         (2, "OUT", _) => cell.color(Color::from_rgb(0.36, 0.29, 0.86)),
                         (4, _, s) if s.starts_with('5') || s == "未送出" => cell.color(RED),
                         _ => cell,
+                    };
+                    match line.pick {
+                        // Clicking a redemption or chat message fills its update or deletion in the send tab.
+                        Some((kind, id)) if i == 3 => mouse_area(cell.color(LINK))
+                            .interaction(mouse::Interaction::Pointer)
+                            .on_press(Message::Pick(kind, id))
+                            .into(),
+                        _ => cell.into(),
                     }
                 },
             )
@@ -401,6 +481,14 @@ pub fn visible(
                 }
             }
     })
+}
+
+/// What clicking a log line fills in: only a delivered redemption or chat message that has an ID.
+fn pick(e: &Entry) -> Option<(&'static str, String)> {
+    let id =
+        e.id.as_ref()
+            .filter(|_| e.delivered && e.direction == Direction::Out)?;
+    Some((send::pick_kind(&e.key)?, id.clone()))
 }
 
 /// One log line: seconds since the panel opened, service, direction, key (with the ID), status, ms.
