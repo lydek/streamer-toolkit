@@ -253,10 +253,11 @@ test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home',
   const song = greyTab(page, 'song')
   await expect(song).toHaveAttribute('title', zh.home.unbuilt)
   await expect(tabs(page).getByRole('link', { name: zh.nav.groups.song })).toHaveCount(0)
-  // Sub-tabs of a page not built yet are grey too.
+  // A category whose only page is not built yet is grey in the second row too.
+  await tab(page, 'interact').click()
   const sub = page.getByRole('navigation', { name: zh.nav.sub })
-  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.pages.streamInfo.name })).toBeVisible()
-  await expect(sub.getByRole('link', { name: zh.pages.streamInfo.name })).toHaveCount(0)
+  await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.nav.categories.polls })).toBeVisible()
+  await expect(sub.getByRole('link', { name: zh.nav.categories.polls })).toHaveCount(0)
   await page.goto('/admin/songs')
   await expect(page).toHaveURL(/\/admin\/$/)
 })

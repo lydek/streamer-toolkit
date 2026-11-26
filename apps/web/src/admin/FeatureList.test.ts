@@ -5,6 +5,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
+import { FEATURES } from './features'
+import { twitchOverview } from './home'
 import { useServices } from './services'
 import { testRouter } from './testRouter'
 
@@ -41,11 +43,11 @@ describe('FeatureList', () => {
   })
 
   it("links a feature not built yet to its page in dev mode only", () => {
-    const link = () => list().findAll('li.feat').find((li) => li.get('.name').text() === name('streamInfo'))!.find('a.open')
+    const link = () => list().findAll('li.feat').find((li) => li.get('.name').text() === name('polls'))!.find('a.open')
     expect(link().exists()).toBe(false)
     vi.stubEnv('MODE', 'development')
     try {
-      expect(link().attributes('href')).toBe('/stream-info')
+      expect(link().attributes('href')).toBe('/polls')
       // Twitch not used: its pages are closed, so there is nothing to open.
       useServices().unused = ['twitch']
       expect(link().exists()).toBe(false)
@@ -124,6 +126,54 @@ describe('FeatureList group switches', () => {
     await nextTick()
     expect(wrapper.emitted('bulk')![1][0]).toEqual(['counters', 'marathon'].map((f) => ({ id: f === 'counters' ? 'counter' : f, enabled: true })))
     wrapper.unmount()
+  })
+
+  it('turning on a feature without its Twitch scopes says which, then asks to sign in again for them', async () => {
+    twitchOverview.value = { client_id: 'cid', eventsub_connected: true, irc_connected: false, scopes: ['user:read:chat'], status: { state: 'signed_in', user_id: '1', login: 'me' } }
+    const wrapper = mount(FeatureList, {
+      props: { modules: [{ id: 'stream-info', enabled: false, closed: false }], busy: false, loadText: '' },
+      global: { plugins: [testRouter(), i18n, PrimeVue] },
+      attachTo: document.body,
+    })
+    await wrapper.get('#module-stream-info').trigger('change')
+    expect(document.querySelector('.confirm h2')?.textContent).toBe(t('features.scopes.title', { name: name('streamInfo') }))
+    expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual(['channel:manage:broadcast'])
+    expect(wrapper.emitted('toggle')).toBeUndefined()
+    ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.scopes.ok')))!.click()
+    await nextTick()
+    // Not turned on yet: the page does that once the sign-in grants the scope.
+    expect(wrapper.emitted('toggle')).toBeUndefined()
+    expect(wrapper.emitted('scopes')![0]).toEqual([['channel:manage:broadcast'], [{ id: 'stream-info', enabled: true }]])
+    // Already granted: it just turns on.
+    twitchOverview.value = { ...twitchOverview.value, scopes: ['channel:manage:broadcast'] }
+    await wrapper.get('#module-stream-info').trigger('change')
+    expect(wrapper.emitted('toggle')).toHaveLength(1)
+    expect(wrapper.emitted('scopes')).toHaveLength(1)
+    twitchOverview.value = undefined
+    wrapper.unmount()
+  })
+
+  it('turning a group on leaves the features still needing Twitch scopes off, and says so', async () => {
+    // No built group mixes them yet: 兌換獎勵 stands in as a built feature with scopes.
+    const rewards = FEATURES.find((f) => f.id === 'rewards')!
+    rewards.module = 'rewards'
+    twitchOverview.value = { client_id: 'cid', eventsub_connected: true, irc_connected: false, scopes: [], status: { state: 'signed_in', user_id: '1', login: 'me' } }
+    try {
+      const wrapper = mounted(['alerts', 'checkin', 'redemption', 'marathon'])
+      await wrapper.setProps({ modules: [...wrapper.props('modules')!, { id: 'rewards', enabled: false, closed: false }] })
+      await bulk(wrapper, 'interact', 'on')!.trigger('click')
+      expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual([
+        name('counters'),
+        t('features.scopes.skipped', { name: name('rewards') }),
+      ])
+      ;[...document.querySelectorAll<HTMLButtonElement>('.confirm button')].find((b) => b.textContent?.includes(t('features.bulk.on')))!.click()
+      await nextTick()
+      expect(wrapper.emitted('bulk')![0][0]).toEqual([{ id: 'counter', enabled: true }])
+      wrapper.unmount()
+    } finally {
+      delete rewards.module
+      twitchOverview.value = undefined
+    }
   })
 
   it('sends nothing when the confirmation is cancelled, and disables a switch with nothing to do', async () => {

@@ -435,6 +435,12 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="stream-info" :title="moduleName('stream-info')" full-page="/stream-info">
+      <template #now>
+        <p>{{ t('streamInfo.tile') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <ObsStatusLink overlay="/overlay/bgm/" />
@@ -729,6 +735,7 @@ const lines = computed<Record<string, Line>>(() => {
           : { state: 'loading' },
     rehearsal: { state: 'ready', text: t('rehearsal.tile') },
     'image-sizes': { state: 'ready', text: t('imageSizes.tile') },
+    'stream-info': { state: 'ready', text: t('streamInfo.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }

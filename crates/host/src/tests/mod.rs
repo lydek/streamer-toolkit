@@ -7,6 +7,7 @@ mod chat_routes;
 mod feature_routes;
 mod guard;
 mod settings_routes;
+mod stream_info_routes;
 mod template_routes;
 
 #[test]

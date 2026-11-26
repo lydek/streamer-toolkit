@@ -55,6 +55,12 @@ impl Helix {
     }
 
     /// `path` includes its query; the response body is parsed as JSON.
+    pub async fn patch_json(&self, path: &str, body: &serde_json::Value) -> Result<(), HelixError> {
+        self.send(Method::PATCH, path, Some(Bytes::from(body.to_string())))
+            .await
+            .map(|_| ())
+    }
+
     pub async fn get_json(&self, path: &str) -> Result<serde_json::Value, HelixError> {
         let body = self.send(Method::GET, path, None).await?;
         Ok(serde_json::from_slice(&body).map_err(|_| AuthError::InvalidResponse)?)

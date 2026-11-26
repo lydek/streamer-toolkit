@@ -10,7 +10,6 @@ import BotGreetingsPage from './BotGreetingsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
 import PollsPage from './PollsPage.vue'
 import RewardsPage from './RewardsPage.vue'
-import StreamInfoPage from './StreamInfoPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
@@ -45,16 +44,6 @@ async function page(component: Component, path: string) {
 }
 
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
-
-describe('直播資訊', () => {
-  it('shows the form with the update disabled and no templates', async () => {
-    const w = await page(StreamInfoPage, '/stream-info')
-    expect(w.get('h1').text()).toBe(t('pages.streamInfo.name'))
-    expect(w.find('#si-title').exists()).toBe(true)
-    expect(button(w, t('streamInfo.update')).attributes('disabled')).toBeDefined()
-    expect(w.get('.empty-cell').text()).toBe(t('streamInfo.templates.empty'))
-  })
-})
 
 describe('頻道點數 › 獎勵', () => {
   it('shows no rewards, with adding one disabled', async () => {

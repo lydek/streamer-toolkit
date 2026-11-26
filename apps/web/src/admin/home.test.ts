@@ -298,7 +298,9 @@ describe('unbuilt tiles', () => {
     expect(ids.length).toBeGreaterThan(0)
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]{1,32}$/)
     expect(new Set([...ids, ...built]).size).toBe(ids.length + built.length)
-    expect(ids).toContain('stream-info')
+    expect(ids).toContain('polls')
+    // A feature keeps its tile ID once built.
+    expect(built).toContain('stream-info')
     // Grey tiles are never in a default home.
     for (const order of Object.values(STAGE_DEFAULTS)) expect(order.filter((id) => ids.includes(id))).toEqual([])
   })

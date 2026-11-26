@@ -56,7 +56,7 @@ export const GROUPS: TabGroup[] = [
     icon: 'pi pi-home',
     pages: [
       { path: '/', label: 'nav.groups.home' },
-      soon('/stream-info', 'streamInfo', 'pi pi-pencil', true),
+      { path: '/stream-info', label: 'pages.streamInfo.name', icon: 'pi pi-pencil' },
       { path: '/rehearsal', label: 'pages.rehearsal.name', icon: 'pi pi-play-circle' },
     ],
   },
