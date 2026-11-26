@@ -272,6 +272,7 @@ Host 與 Tauri 同程序。關閉管理視窗只隱藏到系統匣，Overlay 繼
 - 內容：`settings.json`、`logs/`（JSON，按日輪替，保留 14 天）、`cache/`、`templates/`（聊天室的 `custom` 樣板由使用者放入；集點卡動畫包由 Host 匯入時建立）、`sounds/`（匯入的音效）、`music/`（匯入的背景音樂）、`media/`（兌換時播的影片與 GIF）、`checkin/`（集點卡樣式的圖片）、`WebView2/`、`instance-id`、`toolkit.db`（資料庫）、`backups/`（升級前與還原前的備份）；還原時另有暫時的 `restore-staging/`、`restore-pending` 與 `restore-previous/`（見下方「備份檔」）。
 - 一個資料夾同時只跑一份；不同資料夾可以同時執行（例如測試新版）。`instance-id` 是資料夾裡的隨機 ID，搬移資料夾後不變；複製出來的資料夾被視為同一份，不能和原本的同時執行。只有 `instance-id` 不存在時才產生新的（`create_new`，同時啟動的兩份拿到同一個 ID）；其他讀取錯誤會顯示錯誤並結束，不會換成新 ID。
 - Twitch 登入與 OBS 密碼依資料夾分開：Credential Manager 的項目名稱是 `<instance-id>/twitch` 與 `<instance-id>/obs`。
+- 假服務（`crates/fakes`）：dev 建置設了 `TOOLKIT_FAKE_SERVICES=<host>:<port>`（host 只能剛好是 `127.0.0.1` 或 `localhost`）時，Twitch 的位址改指向假 Twitch（`/oauth2`、`/helix`、`/eventsub`、`/irc`），Twitch 與 OBS 的 secret 改放記憶體，Twitch 那份先放一組假 token（假 Twitch 的實況主、所有需要的 scope），不進 Credential Manager。正式版不讀這個環境變數。
 - 資料夾無法寫入時顯示錯誤並結束，不改用其他位置。
 - dev 建置只開自己建立的資料夾：在執行檔旁的 `data`（`target\debug\data\`）與不存在或空的資料夾寫入 `dev-folder` 標記；`--data-dir` 指向不是空的、又沒有標記的資料夾時，在寫入任何檔案（含 `logs/`）之前顯示錯誤並結束，加 `--allow-release-data` 才開（不寫標記）。資料夾讀不到時照「無法寫入」處理，不當成空資料夾。正式版不讀也不寫這個標記。
 - 多份並存：解壓縮成多份，或用 `--data-dir` 指定不同資料夾。不出安裝檔（見 decisions.md「散布」）。

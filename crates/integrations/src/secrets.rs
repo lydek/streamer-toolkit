@@ -13,6 +13,30 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self) -> Result<(), SecretStoreError>;
 }
 
+/// A slot kept in memory only, for fake-services runs and test hosts: nothing reaches the Credential Manager.
+#[derive(Default)]
+pub struct InMemory(std::sync::Mutex<Option<String>>);
+
+impl InMemory {
+    pub fn with(value: String) -> Self {
+        Self(std::sync::Mutex::new(Some(value)))
+    }
+}
+
+impl SecretStore for InMemory {
+    fn read(&self) -> Result<Option<String>, SecretStoreError> {
+        Ok(self.0.lock().unwrap().clone())
+    }
+    fn write(&self, value: &str) -> Result<(), SecretStoreError> {
+        *self.0.lock().unwrap() = Some(value.into());
+        Ok(())
+    }
+    fn delete(&self) -> Result<(), SecretStoreError> {
+        *self.0.lock().unwrap() = None;
+        Ok(())
+    }
+}
+
 const SERVICE: &str = "streamer-toolkit";
 
 /// Windows Credential Manager entry `streamer-toolkit` / `<key>`.

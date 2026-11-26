@@ -132,6 +132,25 @@ impl Default for TwitchEndpoints {
     }
 }
 
+impl TwitchEndpoints {
+    /// The fake Twitch of `crates/fakes` at `<host>:<port>`; only this machine (the host exactly `127.0.0.1` or
+    /// `localhost`), so a setting can never send a signed-in app elsewhere.
+    pub fn fake(addr: &str) -> Option<Self> {
+        let (host, port) = addr.trim().rsplit_once(':')?;
+        let port = port.parse::<u16>().ok().filter(|p| *p != 0)?;
+        if host != "127.0.0.1" && host != "localhost" {
+            return None;
+        }
+        let base = format!("{host}:{port}");
+        Some(Self {
+            oauth: format!("http://{base}/oauth2"),
+            helix: format!("http://{base}/helix"),
+            eventsub: format!("ws://{base}/eventsub"),
+            irc: format!("ws://{base}/irc"),
+        })
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
     #[error("port {0} is already in use")]
