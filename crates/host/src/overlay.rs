@@ -433,7 +433,7 @@ mod tests {
             payload: serde_json::json!({ "poll": {
                 "id": "p1", "title": "下一首？", "status": "active", "endsAt": "2026-11-27T10:02:00Z",
                 "choices": [{ "id": "c1", "title": "晴天", "votes": 3 }]
-            }}),
+            }, "prediction": null }),
         });
         bus.publish(toolkit_core::bus::Event {
             id: "l".into(),

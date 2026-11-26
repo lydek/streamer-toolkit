@@ -59,7 +59,10 @@ pub(super) mod twitch_account;
 use chat_send::chat_send;
 use checkin_admin::{checkin_outbox, checkin_rewards, retry_dead_letter, skip_dead_letter};
 use general_settings::{first_run, general, list_modules, set_first_run, set_general, set_module};
-use polls::{current_polls, end_poll, poll_templates, set_poll_templates, start_poll};
+use polls::{
+    current_polls, end_poll, end_prediction, poll_templates, set_poll_templates, start_poll,
+    start_prediction,
+};
 use rewards::{
     create_reward, delete_reward, list_rewards, set_redemption_status, take_over_reward,
     update_reward,
@@ -312,6 +315,8 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         .route("/api/admin/rewards/{id}/takeover", post(take_over_reward))
         .route("/api/admin/polls", get(current_polls).post(start_poll))
         .route("/api/admin/polls/{id}/end", post(end_poll))
+        .route("/api/admin/predictions", post(start_prediction))
+        .route("/api/admin/predictions/{id}/end", post(end_prediction))
         .route(
             "/api/admin/polls/templates",
             get(poll_templates).put(set_poll_templates),

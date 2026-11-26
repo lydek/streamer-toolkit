@@ -237,8 +237,44 @@ pub enum PollStatus {
     Archived,
 }
 
+/// A prediction on the broadcaster's channel, whole, as its latest notification or Helix answer reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prediction {
+    pub id: String,
+    pub title: String,
+    pub outcomes: Vec<PredictionOutcome>,
+    pub status: PredictionStatus,
+    /// Set once resolved.
+    pub winning_outcome_id: Option<String>,
+    /// RFC 3339: when predicting closes, or closed; empty once it ended without Twitch saying.
+    pub locks_at: String,
+    /// RFC 3339: when it was resolved or canceled; empty while it runs (or when Twitch did not say).
+    pub ended_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PredictionOutcome {
+    pub id: String,
+    pub title: String,
+    /// Viewers who predicted it.
+    pub users: u64,
+    /// Channel points put on it.
+    pub points: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PredictionStatus {
+    Active,
+    /// No more predictions; waiting to be resolved or canceled.
+    Locked,
+    Resolved,
+    /// Canceled; Twitch gave the points back.
+    Canceled,
+}
+
 /// A poll or prediction starting, changing or ending on Twitch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Contest {
     Poll(Poll),
+    Prediction(Prediction),
 }
