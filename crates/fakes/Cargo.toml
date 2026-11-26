@@ -6,6 +6,9 @@ license.workspace = true
 publish.workspace = true
 description = "Fake OBS and Twitch services for testing without either; never shipped (docs/dev.md)."
 
+[features]
+ui = ["dep:iced"]
+
 [[bin]]
 name = "fake-services"
 path = "src/main.rs"
@@ -17,6 +20,9 @@ base64 = "0.22.1"
 serde_json = "1.0.154"
 sha2 = "0.10.9"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
+# The control panel (`fake-services --ui`), only with `--features ui`: software rendering, no bundled font;
+# `crisp` snaps text and lines to whole pixels, which small Chinese text needs to stay sharp.
+iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "advanced-shaping", "crisp"], optional = true }
 
 [dev-dependencies]
 integrations = { version = "0.1.0", path = "../integrations" }

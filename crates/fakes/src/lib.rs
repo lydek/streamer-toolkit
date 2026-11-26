@@ -5,4 +5,6 @@ pub mod control;
 pub mod events;
 pub mod metrics;
 pub mod obs;
+#[cfg(feature = "ui")]
+pub mod panel;
 pub mod twitch;

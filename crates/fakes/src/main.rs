@@ -2,6 +2,7 @@
 //! fake Twitch on `127.0.0.1` until stopped. Point the app's OBS settings at the OBS port, and a dev build at the
 //! Twitch port with `TOOLKIT_FAKE_SERVICES=127.0.0.1:<port>`. Without `--password` the fake OBS asks for none.
 //! `fake-services [--port <twitch port>] send|obs|eventsub|scenario …` controls a running one (see `USAGE`).
+//! `--ui` also opens the control panel (built with `--features ui`); closing it stops the fakes.
 
 use fakes::{
     control::{self, SCENARIOS},
@@ -16,7 +17,7 @@ use tokio::net::TcpListener;
 const DEFAULT_OBS_PORT: u16 = 4466;
 const DEFAULT_TWITCH_PORT: u16 = 4467;
 const USAGE: &str = "usage:
-  fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>]
+  fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>] [--ui]
   fake-services [--port <twitch port>] send <kind> [--user <login>] [--count <n>] [--message <text>]
                 [--reward <title>] [--bits <n>] [--tier 1000|2000|3000] [--months <n>] [--id <id>]
                 [--status fulfilled|canceled] [--first]
@@ -76,6 +77,7 @@ struct Args {
     obs_port: u16,
     twitch_port: u16,
     password: Option<String>,
+    ui: bool,
 }
 
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -83,6 +85,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
         obs_port: DEFAULT_OBS_PORT,
         twitch_port: DEFAULT_TWITCH_PORT,
         password: None,
+        ui: false,
     };
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or(format!("{arg} needs a value"));
@@ -91,6 +94,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--obs-port" => parsed.obs_port = port(value()?)?,
             "--twitch-port" => parsed.twitch_port = port(value()?)?,
             "--password" => parsed.password = Some(value()?),
+            "--ui" => parsed.ui = true,
             _ => return Err(format!("unknown argument {arg}")),
         }
     }
@@ -106,8 +110,46 @@ async fn listen(port: u16) -> TcpListener {
         })
 }
 
-#[tokio::main]
-async fn main() {
+type Stopped = (&'static str, std::io::Result<()>);
+
+fn stopped((which, result): Stopped) -> ! {
+    if let Err(e) = result {
+        eprintln!("fake {which} stopped: {e}");
+    }
+    std::process::exit(1)
+}
+
+/// The fakes on their runtime's threads, the panel on this one (windows need the main thread).
+#[cfg(feature = "ui")]
+fn open_panel(
+    runtime: tokio::runtime::Runtime,
+    serve: impl Future<Output = Stopped> + Send + 'static,
+    obs: FakeObs,
+    twitch: FakeTwitch,
+    ports: (u16, u16),
+) -> ! {
+    runtime.spawn(async move { stopped(serve.await) });
+    if let Err(e) = fakes::panel::run(obs, twitch, ports) {
+        eprintln!("the panel failed: {e}");
+        std::process::exit(1)
+    }
+    // Closing the panel stops the fakes too: nothing is left running in the background.
+    std::process::exit(0)
+}
+
+#[cfg(not(feature = "ui"))]
+fn open_panel(
+    _: tokio::runtime::Runtime,
+    _: impl Future<Output = Stopped>,
+    _: FakeObs,
+    _: FakeTwitch,
+    _: (u16, u16),
+) -> ! {
+    eprintln!("--ui needs the panel built in: cargo run -p fakes --features ui -- --ui");
+    std::process::exit(2)
+}
+
+fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let is_command = raw
         .iter()
@@ -122,8 +164,9 @@ async fn main() {
         eprintln!("{e}\n{USAGE}");
         std::process::exit(2)
     });
-    let obs = listen(args.obs_port).await;
-    let twitch = listen(args.twitch_port).await;
+    let runtime = tokio::runtime::Runtime::new().expect("a tokio runtime");
+    let (obs, twitch) =
+        runtime.block_on(async { (listen(args.obs_port).await, listen(args.twitch_port).await) });
     println!("fake OBS on ws://127.0.0.1:{}", args.obs_port);
     println!(
         "fake Twitch on http://127.0.0.1:{0} (TOOLKIT_FAKE_SERVICES=127.0.0.1:{0})",
@@ -136,14 +179,25 @@ async fn main() {
     let app = fake_twitch
         .router()
         .merge(control::router(fake_obs.clone(), fake_twitch.clone()));
-    let stopped = tokio::select! {
-        r = fake_obs.serve(obs) => ("OBS", r),
-        r = axum::serve(twitch, app) => ("Twitch", r),
+    let serve = {
+        let fake_obs = fake_obs.clone();
+        async move {
+            tokio::select! {
+                r = fake_obs.serve(obs) => ("OBS", r),
+                r = axum::serve(twitch, app).into_future() => ("Twitch", r),
+            }
+        }
     };
-    if let (which, Err(e)) = stopped {
-        eprintln!("fake {which} stopped: {e}");
+    if args.ui {
+        open_panel(
+            runtime,
+            serve,
+            fake_obs,
+            fake_twitch,
+            (args.obs_port, args.twitch_port),
+        );
     }
-    std::process::exit(1)
+    stopped(runtime.block_on(serve))
 }
 
 #[cfg(test)]
@@ -158,9 +212,10 @@ mod tests {
     fn arguments_have_defaults_and_reject_unknown_ones() {
         let a = args(&[]).unwrap();
         assert_eq!(
-            (a.obs_port, a.twitch_port, a.password),
-            (DEFAULT_OBS_PORT, DEFAULT_TWITCH_PORT, None)
+            (a.obs_port, a.twitch_port, a.password, a.ui),
+            (DEFAULT_OBS_PORT, DEFAULT_TWITCH_PORT, None, false)
         );
+        assert!(args(&["--ui"]).unwrap().ui);
         let a = args(&[
             "--obs-port",
             "5000",

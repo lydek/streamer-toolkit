@@ -91,6 +91,9 @@ pre-push:
         - "prototype/**"
         - ".agents/**"
         - ".claude/**"
+    - name: fakes-panel
+      run: cargo clippy -p fakes --all-targets --features ui -- -D warnings && cargo test -p fakes --features ui --lib --bins
+      exclude: *docs-and-web
     - name: cargo-deny
       run: cargo deny check
       exclude: *docs-and-web

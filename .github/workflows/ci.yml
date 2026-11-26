@@ -105,6 +105,11 @@ jobs:
       - name: Tests (includes architecture tests)
         if: steps.changes.outputs.code == 'true'
         run: cargo test --workspace
+      - name: Fake services control panel (fakes `ui` feature; a dev tool, never shipped)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          cargo clippy -p fakes --all-targets --features ui -- -D warnings
+          cargo test -p fakes --features ui --lib --bins
 
       - name: Licenses and advisories
         if: steps.changes.outputs.code == 'true'
