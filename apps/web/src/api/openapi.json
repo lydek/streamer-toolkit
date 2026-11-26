@@ -5297,9 +5297,133 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_reward",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewardChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedReward"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`rewards.invalid` (no title or cost, or over Twitch's limits), `rewards.refused`, or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`rewards.limit` (the channel has 50 rewards) or `rewards.duplicate_title`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/admin/rewards/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_reward",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "`rewards.invalid`, or not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`twitch.scope_required` or `rewards.not_ours`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`rewards.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "admin"
@@ -5328,7 +5452,7 @@
         "responses": {
           "204": {},
           "400": {
-            "description": "`rewards.invalid`, `rewards.refused`, or not signed in",
+            "description": "`rewards.invalid` (nothing to change, or over Twitch's limits), `rewards.refused`, or not signed in",
             "content": {
               "application/json": {
                 "schema": {
@@ -5349,6 +5473,16 @@
           },
           "404": {
             "description": "`rewards.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`rewards.duplicate_title`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10084,6 +10218,17 @@
           "counter.values"
         ]
       },
+      "CreatedReward": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
       "DeductBody": {
         "type": "object",
         "required": [
@@ -12956,8 +13101,33 @@
       },
       "RewardChange": {
         "type": "object",
-        "description": "What changes; fields left out stay as they are.",
+        "description": "A reward's settings; fields left out stay as they are (when editing) or take Twitch's defaults (when adding,\nwhich needs `title` and `cost`).",
         "properties": {
+          "background_color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`#RRGGBB`."
+          },
+          "cooldown_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0: no cooldown; at most 7 days.",
+            "minimum": 0
+          },
+          "cost": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "At least 1.",
+            "minimum": 0
+          },
           "is_enabled": {
             "type": [
               "boolean",
@@ -12969,6 +13139,50 @@
               "boolean",
               "null"
             ]
+          },
+          "is_user_input_required": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "max_per_stream": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0: no limit.",
+            "minimum": 0
+          },
+          "max_per_user_per_stream": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0: no limit.",
+            "minimum": 0
+          },
+          "prompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Up to 200 characters."
+          },
+          "skip_queue": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Up to 45 characters; unique in the channel (Twitch ignores case)."
           }
         }
       },

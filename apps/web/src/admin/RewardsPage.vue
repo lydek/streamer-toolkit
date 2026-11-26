@@ -10,6 +10,8 @@
             <h3 id="rw-heading" class="tbl-head">{{ t('rewards.heading') }}</h3>
             <span v-if="rewards" class="sub">{{ t('rewards.count', { count: rewards.length, max: MAX_REWARDS, own: own.length }) }}</span>
           </div>
+          <span v-if="full" class="sub">{{ t('rewards.full', { max: MAX_REWARDS }) }}</span>
+          <Button :label="t('rewards.add')" icon="pi pi-plus" :disabled="!rewards || full" @click="edit()" />
         </div>
         <p v-if="!rewards && !loadFailed" class="empty-cell">{{ t('app.loading') }}</p>
         <p v-else-if="rewards && !rewards.length" class="empty-cell">{{ t('rewards.empty') }}</p>
@@ -22,6 +24,7 @@
               <th scope="col">{{ t('rewards.usedBy') }}</th>
               <th scope="col" class="num">{{ t('rewards.enabled') }}</th>
               <th scope="col" class="num">{{ t('rewards.paused') }}</th>
+              <th scope="col"><span class="sr-only">{{ t('rewards.actions') }}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -60,18 +63,26 @@
                     @update:model-value="change(r, { is_paused: $event })"
                   />
                 </td>
+                <td class="num">
+                  <Button icon="pi pi-pencil" text :aria-label="t('rewards.editLabel', { name: r.title })" @click="edit(r)" />
+                </td>
               </template>
-              <td v-else class="num muted" colspan="2">{{ t('rewards.dashboardOnly') }}</td>
+              <template v-else>
+                <td class="num muted" colspan="2">{{ t('rewards.dashboardOnly') }}</td>
+                <td></td>
+              </template>
             </tr>
           </tbody>
         </table>
       </section>
       <p class="note">{{ t('rewards.note') }}</p>
     </div>
+    <RewardDialog ref="dialog" @saved="reload" />
   </FullPage>
 </template>
 
 <script setup lang="ts">
+import Button from 'primevue/button'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, shallowRef } from 'vue'
@@ -80,6 +91,7 @@ import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
 import { errorToast } from './home'
+import RewardDialog from './RewardDialog.vue'
 
 type Reward = Schemas['ChannelReward']
 // Twitch's limit of custom rewards per channel.
@@ -97,6 +109,8 @@ const media = shallowRef<Schemas['MediaItem'][]>([])
 const rules = shallowRef<Schemas['MediaRuleBody'][]>([])
 
 const own = computed(() => rewards.value?.filter((r) => r.manageable) ?? [])
+const full = computed(() => (rewards.value?.length ?? 0) >= MAX_REWARDS)
+const dialog = ref<InstanceType<typeof RewardDialog>>()
 const status = computed(() => {
   if (!rewards.value) return ''
   const on = rewards.value.filter((r) => r.is_enabled)
@@ -132,6 +146,14 @@ function usedBy(id: string) {
 
 async function load() {
   rewards.value = await api(client.GET('/api/admin/rewards'))
+}
+
+function edit(r?: Reward) {
+  dialog.value?.open(r, rewards.value?.map((x) => x.title) ?? [], r ? usedBy(r.id) : [])
+}
+
+function reload() {
+  load().catch((e: unknown) => toast.add(errorToast(message(e))))
 }
 
 async function change(r: Reward, body: { is_enabled?: boolean; is_paused?: boolean }) {

@@ -58,7 +58,7 @@ pub(super) mod twitch_account;
 use chat_send::chat_send;
 use checkin_admin::{checkin_outbox, checkin_rewards, retry_dead_letter, skip_dead_letter};
 use general_settings::{first_run, general, list_modules, set_first_run, set_general, set_module};
-use rewards::{list_rewards, update_reward};
+use rewards::{create_reward, delete_reward, list_rewards, update_reward};
 use simulate::{simulate_alert, simulate_chat, simulate_checkin};
 use stream_info::{search_categories, set_stream_info, stream_info};
 use twitch_account::{login, logout, set_client_id, twitch_overview};
@@ -293,8 +293,11 @@ pub(crate) fn routes(state: Arc<AdminState>) -> Router {
         )
         .route("/api/admin/stream-info/categories", get(search_categories))
         .route("/api/admin/chat/send", post(chat_send))
-        .route("/api/admin/rewards", get(list_rewards))
-        .route("/api/admin/rewards/{id}", patch(update_reward))
+        .route("/api/admin/rewards", get(list_rewards).post(create_reward))
+        .route(
+            "/api/admin/rewards/{id}",
+            patch(update_reward).delete(delete_reward),
+        )
         .route("/api/admin/checkin/outbox", get(checkin_outbox))
         .route(
             "/api/admin/checkin/outbox/{event_id}/retry",

@@ -146,7 +146,9 @@
       "invalid": "獎勵的資料不完整或格式不對。",
       "not_ours": "這個獎勵不是本工具建立的，只能到 Twitch 後台修改。",
       "not_found": "Twitch 上已經沒有這個獎勵，可能在 Twitch 後台刪掉了。",
-      "refused": "Twitch 不接受這個獎勵的設定。"
+      "refused": "Twitch 不接受這個獎勵的設定。",
+      "limit": "頻道已經有 50 個獎勵，這是 Twitch 的上限；請先刪掉一個。",
+      "duplicate_title": "頻道上已經有同名的獎勵，Twitch 不允許兩個同名（不分大小寫）。"
     },
     "twitch": {
       "scope_required": "目前的 Twitch 登入沒有這個功能需要的權限，請重新登入並授權。",
