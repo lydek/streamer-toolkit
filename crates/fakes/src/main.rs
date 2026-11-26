@@ -22,6 +22,7 @@ const USAGE: &str = "usage:
                 [--status fulfilled|canceled] [--first]
   fake-services [--port <twitch port>] obs drop | obs stats [--cpu <%>] [--dropped <%>] [--kbps <n>]
                 | obs stream on|off | obs record on|off
+                | obs meters [--inputs <extra inputs>] [--interval <ms>] | obs burst scenes|items [--count <n>]
   fake-services [--port <twitch port>] eventsub drop
   fake-services [--port <twitch port>] scenario <name>
   fake-services [--port <twitch port>] stats [--reset] [--json]

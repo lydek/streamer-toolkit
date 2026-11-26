@@ -86,6 +86,9 @@ struct World {
     next_uuid: u64,
     stats: Stats,
     counters: Counters,
+    meter_interval: Duration,
+    /// Extra inputs in the audio meters only, for load runs.
+    meter_extra: usize,
 }
 
 /// What `GetStats` and `GetStreamStatus` report; the frame and byte counters grow with time from these.
@@ -147,6 +150,8 @@ impl World {
             next_id: 1,
             next_uuid: 1,
             stats: Stats::default(),
+            meter_interval: Duration::from_millis(50),
+            meter_extra: 0,
             counters: Counters {
                 render_total: 0.0,
                 render_skipped: 0.0,
@@ -269,17 +274,22 @@ impl World {
     }
 
     fn meters(&self) -> Value {
-        let inputs: Vec<Value> = self
+        let level = |muted: bool, mul: f64| {
+            let level = if muted { 0.0 } else { 0.25 * mul };
+            let peak = (level * 1.2).min(1.0);
+            json!([[level, peak, peak], [level, peak, peak]])
+        };
+        let mut inputs: Vec<Value> = self
             .inputs
             .iter()
             .filter(|i| i.audio)
-            .map(|i| {
-                let level = if i.muted { 0.0 } else { 0.25 * i.volume_mul };
-                let peak = (level * 1.2).min(1.0);
-                json!({"inputName": i.name, "inputUuid": i.uuid,
-                       "inputLevelsMul": [[level, peak, peak], [level, peak, peak]]})
-            })
+            .map(|i| json!({"inputName": i.name, "inputUuid": i.uuid, "inputLevelsMul": level(i.muted, i.volume_mul)}))
             .collect();
+        // Load-run inputs: in the meters only, as levels for sources the app has not read.
+        inputs.extend((1..=self.meter_extra).map(|n| {
+            json!({"inputName": format!("Bench Input {n}"), "inputUuid": uuid(1_000_000 + n as u64),
+                   "inputLevelsMul": level(false, 1.0)})
+        }));
         json!({ "inputs": inputs })
     }
 
@@ -897,6 +907,47 @@ impl FakeObs {
         axum::serve(listener, self.router()).await
     }
 
+    /// Audio meters every `interval` (at least 10 ms) with `extra` more inputs than the scene collection has.
+    pub fn set_meters(&self, extra: usize, interval: Duration) {
+        let mut w = self.world.lock().unwrap();
+        w.meter_extra = extra.min(1000);
+        w.meter_interval = interval.max(Duration::from_millis(10));
+    }
+
+    /// Changes OBS makes on its own, `count` times, with the events each sends: `scenes` switches the program scene
+    /// back and forth; `items` adds a logo to "Live" and removes it again. The app re-reads its state after each.
+    pub fn burst(&self, kind: &str, count: usize) -> Result<(), String> {
+        let names: Vec<String> = self
+            .world
+            .lock()
+            .unwrap()
+            .scenes
+            .iter()
+            .map(|s| s.name.clone())
+            .collect();
+        for n in 0..count.min(1000) {
+            match kind {
+                "scenes" => {
+                    let scene = &names[n % names.len()];
+                    self.request("SetCurrentProgramScene", &json!({ "sceneName": scene }))
+                        .map_err(|(_, e)| e)?;
+                }
+                "items" => {
+                    let created = self
+                        .request(
+                            "CreateSceneItem",
+                            &json!({"sceneName": "Live", "sourceName": "Logo"}),
+                        )
+                        .map_err(|(_, e)| e)?;
+                    let data = json!({"sceneName": "Live", "sceneItemId": created["sceneItemId"]});
+                    self.request("RemoveSceneItem", &data).map_err(|(_, e)| e)?;
+                }
+                _ => return Err(format!("unknown burst {kind}: scenes or items")),
+            }
+        }
+        Ok(())
+    }
+
     /// What `GetStats` and `GetStreamStatus` report from now on.
     pub fn set_stats(&self, stats: Stats) {
         let mut w = self.world.lock().unwrap();
@@ -948,11 +999,12 @@ impl FakeObs {
     }
 }
 
-/// `InputVolumeMeters` at OBS's 50 ms, from the inputs' volume and mute (fixed levels, no real audio).
+/// `InputVolumeMeters` at OBS's 50 ms (or the load run's interval), from the inputs' volume and mute (fixed levels,
+/// no real audio).
 async fn meters(fake: FakeObs) {
-    let mut every = tokio::time::interval(Duration::from_millis(50));
     loop {
-        every.tick().await;
+        let every = fake.world.lock().unwrap().meter_interval;
+        tokio::time::sleep(every).await;
         if fake.events.receiver_count() > 0 {
             let levels = fake.world.lock().unwrap().meters();
             fake.emit(("InputVolumeMeters", levels));

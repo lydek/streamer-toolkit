@@ -177,6 +177,20 @@ async fn obs_control(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Res
         Some("output") => fakes
             .obs
             .set_output(body["streaming"].as_bool(), body["recording"].as_bool()),
+        Some("meters") => {
+            let extra = number(&body["inputs"]).unwrap_or(0.0).max(0.0) as usize;
+            let every = number(&body["interval"]).unwrap_or(50.0).max(0.0) as u64;
+            fakes.obs.set_meters(extra, Duration::from_millis(every));
+        }
+        Some("burst") => {
+            let count = number(&body["count"]).unwrap_or(10.0).max(0.0) as usize;
+            if let Err(e) = fakes
+                .obs
+                .burst(body["kind"].as_str().unwrap_or_default(), count)
+            {
+                return bad(e);
+            }
+        }
         other => return bad(format!("unknown OBS action {other:?}")),
     }
     let s = fakes.obs.stats();
@@ -289,7 +303,7 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
         "obs" => {
             let (action, rest) = rest
                 .split_first()
-                .ok_or("obs needs drop, stats, stream or record")?;
+                .ok_or("obs needs drop, stats, stream, record, meters or burst")?;
             match action.as_str() {
                 "drop" => body["action"] = json!("drop"),
                 "stats" => {
@@ -308,6 +322,21 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
                     } else {
                         "recording"
                     }] = json!(on);
+                }
+                "meters" => {
+                    flags(rest)?;
+                    body["action"] = json!("meters");
+                }
+                "burst" => {
+                    let (kind, rest) = rest
+                        .split_first()
+                        .ok_or("obs burst needs scenes or items")?;
+                    if kind != "scenes" && kind != "items" {
+                        return Err(format!("obs burst needs scenes or items, not {kind}"));
+                    }
+                    flags(rest)?;
+                    body["action"] = json!("burst");
+                    body["kind"] = json!(kind);
                 }
                 _ => return Err(format!("unknown obs action {action}")),
             }
@@ -440,6 +469,16 @@ mod tests {
             cmd(&["fault", "--clear"]).unwrap().1,
             json!({"clear": true})
         );
+        let (_, body) = cmd(&["obs", "meters", "--inputs", "30", "--interval", "50"]).unwrap();
+        assert_eq!(
+            body,
+            json!({"action": "meters", "inputs": "30", "interval": "50"})
+        );
+        let (_, body) = cmd(&["obs", "burst", "items", "--count", "20"]).unwrap();
+        assert_eq!(
+            body,
+            json!({"action": "burst", "kind": "items", "count": "20"})
+        );
         let (path, body) = cmd(&["stats", "--reset", "--json"]).unwrap();
         assert_eq!(
             (path, body),
@@ -459,6 +498,8 @@ mod tests {
             &["scenario", "nope"],
             &["stats", "--nope"],
             &["fault"],
+            &["obs", "burst"],
+            &["obs", "burst", "fireworks"],
             &["fault", "GET /helix/users", "--for", "soon"],
             &["fault", "GET /helix/users", "--status"],
             &["nope"],
