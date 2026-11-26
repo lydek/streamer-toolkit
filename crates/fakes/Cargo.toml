@@ -1,0 +1,23 @@
+[package]
+name = "fakes"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Fake OBS and Twitch services for testing without either; never shipped (docs/dev.md)."
+
+[[bin]]
+name = "fake-services"
+path = "src/main.rs"
+
+# No obws or tokio-tungstenite here: crates/arch-tests keeps those SDKs in `integrations`. axum serves the WebSockets.
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+base64 = "0.22.1"
+serde_json = "1.0.154"
+sha2 = "0.10.9"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
+
+[dev-dependencies]
+integrations = { version = "0.1.0", path = "../integrations" }
+toolkit-core = { version = "0.1.0", path = "../core" }
