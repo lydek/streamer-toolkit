@@ -2069,6 +2069,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/stream-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["stream_info"];
+        put: operations["set_stream_info"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/stream-info/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search_categories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/stream/record": {
         parameters: {
             query?: never;
@@ -2703,6 +2735,10 @@ export interface components {
             stamp_image?: string | null;
             /** @description At most 100 characters after trimming. */
             title: string;
+        };
+        Category: {
+            id: string;
+            name: string;
         };
         /**
          * @description A role shown by a chat badge (a founder counts as a subscriber).
@@ -4547,6 +4583,20 @@ export interface components {
             payload: components["schemas"]["ChatMessagePayload"];
             /** @description RFC 3339. */
             sentAt: string;
+        };
+        StreamInfo: {
+            category?: components["schemas"]["Category"] | null;
+            /** @description ISO 639-1, e.g. `zh`; `other` when Twitch has none for it. */
+            language: string;
+            tags: string[];
+            title: string;
+        };
+        StreamInfoBody: {
+            /** @description Empty: no category. */
+            category_id: string;
+            language: string;
+            tags: string[];
+            title: string;
         };
         /** @description The latest stream session and what its stats count, row by row, to export. */
         StreamRecord: {
@@ -10327,6 +10377,127 @@ export interface operations {
             };
             /** @description `sound.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    stream_info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamInfo"];
+                };
+            };
+            /** @description Not signed in */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_stream_info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StreamInfoBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `stream_info.invalid` (over Twitch's limits, checked here) or `stream_info.refused` (Twitch refused the content) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `twitch.scope_required`: the sign-in lacks `channel:manage:broadcast` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    search_categories: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 categories matching the query */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

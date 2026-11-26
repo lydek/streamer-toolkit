@@ -26,6 +26,10 @@ pub struct Settings {
     /// The warnings, media and marathon switches were split out of screen tools and counters (once, on the first
     /// start that has them).
     pub modules_split: bool,
+    /// Modules that start off (`modules::OFF_BY_DEFAULT`) already put in `disabled_modules` once, so turning one
+    /// on later sticks.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub modules_defaulted: Vec<String>,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -427,6 +431,7 @@ impl Default for Settings {
             disabled_modules: Vec::new(),
             closed_modules: Vec::new(),
             modules_split: false,
+            modules_defaulted: Vec::new(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
             setup_done: false,

@@ -294,6 +294,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'screen-tools', icon: 'pi pi-desktop', tint: 'yellow' },
   { id: 'rehearsal', icon: 'pi pi-play-circle', tint: 'blue', always: true },
   { id: 'image-sizes', icon: 'pi pi-image', tint: 'green', always: true },
+  { id: 'stream-info', icon: 'pi pi-pencil', tint: 'red' },
 ]
 
 /**

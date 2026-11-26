@@ -7,7 +7,8 @@ use serde::Serialize;
 
 use crate::settings;
 
-/// Modules that exist in this build. A module is enabled unless the broadcaster turned it off.
+/// Modules that exist in this build. A module is enabled unless the broadcaster turned it off (or it starts off,
+/// `OFF_BY_DEFAULT`, and was not turned on yet).
 pub const CHAT: &str = "chat";
 pub const ALERTS: &str = "alerts";
 pub const REDEMPTION: &str = "redemption";
@@ -31,6 +32,8 @@ pub const MEDIA: &str = "media";
 /// 音訊混音: OBS's audio inputs, through the streaming-software port; the switch only shows or hides its page and
 /// tile.
 pub const MIXER: &str = "mixer";
+/// 直播資訊: the title, category and tags on Twitch; the switch only shows or hides its page and tile.
+pub const STREAM_INFO: &str = "stream-info";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -45,7 +48,11 @@ pub const ALL: &[&str] = &[
     WARNINGS,
     MEDIA,
     MIXER,
+    STREAM_INFO,
 ];
+
+/// Modules that start off: each needs a Twitch scope the base sign-in lacks, so turning it on asks for that first.
+pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO];
 
 /// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).
 const SPLIT: &[(&str, &str)] = &[
@@ -82,6 +89,22 @@ pub struct Modules {
     switches: RwLock<Switches>,
 }
 
+/// Turns off each module that starts off and was never put off before, and notes it; `true` when anything changed.
+fn default_off(s: &mut settings::Settings) -> bool {
+    let mut changed = false;
+    for id in OFF_BY_DEFAULT {
+        if !s.modules_defaulted.iter().any(|m| m == id) {
+            s.modules_defaulted.push((*id).to_owned());
+            if !s.disabled_modules.iter().any(|m| m == id) {
+                s.disabled_modules.push((*id).to_owned());
+            }
+            changed = true;
+        }
+    }
+    s.disabled_modules.sort();
+    changed
+}
+
 /// Gives each split-out module the state of the module it came from.
 fn split(s: &mut settings::Settings) {
     for (new, old) in SPLIT {
@@ -104,15 +127,19 @@ fn sorted(set: &HashSet<String>) -> Vec<String> {
 impl Modules {
     pub fn load(data_dir: PathBuf) -> Self {
         let mut s = settings::load(&data_dir);
-        if !s.modules_split {
+        let split_now = !s.modules_split;
+        if split_now {
             split(&mut s);
+        }
+        if default_off(&mut s) || split_now {
             // Saved so it happens once; a failed save tries again next start, which gives the same states.
             if let Err(e) = settings::update(&data_dir, |saved| {
                 saved.disabled_modules = s.disabled_modules.clone();
                 saved.closed_modules = s.closed_modules.clone();
                 saved.modules_split = true;
+                saved.modules_defaulted = s.modules_defaulted.clone();
             }) {
-                tracing::warn!(error = %e, "split module switches not saved");
+                tracing::warn!(error = %e, "split or default-off module switches not saved");
             }
         }
         let disabled: HashSet<String> = s.disabled_modules.into_iter().collect();
@@ -209,6 +236,20 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn modules_needing_a_scope_start_off_once() {
+        let dir =
+            std::env::temp_dir().join(format!("st-modules-default-off-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let m = Modules::load(dir.clone());
+        assert!(!m.is_enabled(STREAM_INFO) && !m.is_closed(STREAM_INFO));
+        assert!(m.is_enabled(CHAT));
+        // Turned on, it stays on after a restart.
+        m.set_enabled(STREAM_INFO, true).unwrap();
+        assert!(Modules::load(dir.clone()).is_enabled(STREAM_INFO));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn switch_persists_and_rejects_unknown_modules() {
