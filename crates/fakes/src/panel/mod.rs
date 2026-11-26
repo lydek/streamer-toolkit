@@ -2,6 +2,7 @@
 //! default. It runs in the same process as the fakes and reads and drives them directly. Layout: the app's
 //! connections on the left, tabs on the right, the activity log at the bottom. Text stays at 14 px or more.
 
+mod faults;
 mod pages;
 mod send;
 
@@ -20,7 +21,7 @@ use serde_json::Value;
 
 use crate::{
     control,
-    metrics::{Direction, Entry},
+    metrics::{Direction, Entry, Fault},
     obs::{FakeObs, ObsSnapshot},
     twitch::{FakeTwitch, TwitchSnapshot},
 };
@@ -88,6 +89,19 @@ pub enum Message {
     Pick(&'static str, String),
     DropEventSub,
     DropIrc,
+    /// A control command, as `fake-services <words>` would post it.
+    Run(Vec<String>),
+    /// A scene clicked in the OBS tab (its sources show), or double-clicked (it becomes the program scene).
+    Scene(String),
+    Program(String),
+    StudioMode(bool),
+    BurstCount(String),
+    FaultKey(String),
+    FaultStatus(String),
+    FaultDelay(String),
+    FaultFor(String),
+    FaultClose(bool),
+    RemoveFault(String),
 }
 
 /// One activity-log line, and what clicking its event fills in.
@@ -114,11 +128,15 @@ pub struct Panel {
     obs_view: ObsSnapshot,
     twitch_view: TwitchSnapshot,
     report: Value,
-    faults: usize,
+    faults: Vec<(String, Fault, Duration)>,
     ticks: u64,
     form: send::Form,
     /// The last send or scenario result, and whether it needs attention.
     notice: Option<(String, bool)>,
+    /// The scene whose sources the OBS tab shows; the program scene when none is picked.
+    scene: Option<String>,
+    burst: String,
+    fault_form: faults::FaultForm,
 }
 
 /// Opens the panel and blocks until it is closed. The fakes keep running on their own runtime meanwhile.
@@ -160,10 +178,13 @@ impl Panel {
             paused: false,
             cleared: None,
             log: Vec::new(),
-            faults: 0,
+            faults: Vec::new(),
             ticks: 0,
             form: send::Form::default(),
             notice: None,
+            scene: None,
+            burst: "10".into(),
+            fault_form: faults::FaultForm::default(),
         };
         panel.refresh();
         panel
@@ -173,7 +194,7 @@ impl Panel {
         self.obs_view = self.obs.snapshot();
         self.twitch_view = self.twitch.snapshot();
         let recorder = self.twitch.recorder();
-        self.faults = recorder.faults().len();
+        self.faults = recorder.faults();
         if self.ticks.is_multiple_of(4) {
             self.report = recorder.report();
         }
@@ -244,6 +265,33 @@ impl Panel {
             Message::DropIrc => {
                 self.twitch.drop_irc();
                 self.notice = Some(("已中斷 IRC".to_owned(), false));
+            }
+            Message::Run(words) => {
+                let result = control::run_command(&self.obs, &self.twitch, &words);
+                self.notice = Some(send::notice(&result));
+                // At once, so a dragged slider does not jump back until the next tick.
+                self.refresh();
+            }
+            Message::Scene(scene) => self.scene = Some(scene),
+            Message::Program(scene) => {
+                let result = self.obs.set_program(&scene).map(|()| Value::Null);
+                self.notice = Some(send::notice(&result));
+                self.scene = Some(scene);
+                self.refresh();
+            }
+            Message::StudioMode(on) => {
+                self.obs.set_studio_mode(on);
+                self.refresh();
+            }
+            Message::BurstCount(count) => self.burst = count,
+            Message::FaultKey(key) => self.fault_form.key = key,
+            Message::FaultStatus(status) => self.fault_form.status = status,
+            Message::FaultDelay(delay) => self.fault_form.delay_ms = delay,
+            Message::FaultFor(lasts) => self.fault_form.for_s = lasts,
+            Message::FaultClose(close) => self.fault_form.close = close,
+            Message::RemoveFault(key) => {
+                self.twitch.recorder().remove_fault(&key);
+                self.refresh();
             }
         }
         Task::none()
@@ -323,7 +371,7 @@ impl Panel {
                 space::horizontal(),
                 text(warnings.to_string()).color_maybe((warnings > 0).then_some(AMBER))
             ],
-            kv("故障中", self.faults.to_string()),
+            kv("故障中", self.faults.len().to_string()),
         ]
         .spacing(3);
         container(column![connections, state, attention].spacing(12))
@@ -355,9 +403,22 @@ impl Panel {
         let page: Element<'_, Message> = match self.tab {
             Tab::Send => self.send_page(),
             Tab::Twitch => self.twitch_page(),
+            Tab::Obs => self.obs_page(),
+            Tab::Faults => self.faults_page(),
             _ => container(text("")).width(Fill).height(Fill).into(),
         };
-        column![tabs, rule::horizontal(1), page].width(Fill).into()
+        let notice = self.notice.as_ref().map(|(line, warn)| {
+            container(
+                text(line.clone())
+                    .size(SMALL)
+                    .color(if *warn { AMBER } else { GREEN }),
+            )
+            .padding([2, 12])
+        });
+        column![tabs, rule::horizontal(1), page]
+            .push(notice)
+            .width(Fill)
+            .into()
     }
 
     fn dock(&self) -> Element<'_, Message> {
@@ -645,6 +706,73 @@ mod tests {
         assert_eq!(
             (c[2].as_str(), c[3].as_str(), c[4].as_str()),
             ("OUT", "k fake-3", "未送出")
+        );
+    }
+
+    fn panel() -> Panel {
+        Panel::new(
+            FakeObs::new(None),
+            FakeTwitch::new(Duration::from_secs(10)),
+            (0, 0),
+        )
+    }
+
+    fn run(p: &mut Panel, words: &[&str]) {
+        let _ = p.update(Message::Run(
+            words.iter().map(|w| (*w).to_owned()).collect(),
+        ));
+    }
+
+    #[test]
+    fn obs_controls_drive_the_fake_obs() {
+        let mut p = panel();
+        let other = p
+            .obs_view
+            .scenes
+            .iter()
+            .find(|s| s.name != p.obs_view.program)
+            .unwrap()
+            .name
+            .clone();
+        let _ = p.update(Message::Program(other.clone()));
+        assert_eq!(p.obs_view.program, other);
+        let _ = p.update(Message::Program("no such scene".into()));
+        assert!(p.notice.as_ref().unwrap().1, "a failed switch is flagged");
+        let _ = p.update(Message::StudioMode(true));
+        assert!(p.obs_view.studio_mode);
+        run(&mut p, &["obs", "stream", "on"]);
+        assert!(p.obs_view.streaming);
+        run(&mut p, &["obs", "stats", "--cpu", "42", "--dropped", "6.5"]);
+        assert_eq!(
+            (
+                p.obs_view.stats.cpu_percent,
+                p.obs_view.stats.dropped_percent
+            ),
+            (42.0, 6.5)
+        );
+        run(&mut p, &["obs", "drop"]);
+        assert!(!p.notice.as_ref().unwrap().1);
+    }
+
+    #[test]
+    fn faults_are_set_and_removed_one_by_one() {
+        let mut p = panel();
+        for key in ["GET /helix/users", "ws-connect obs"] {
+            let _ = p.update(Message::FaultKey(key.into()));
+            let words = p.fault_form.words();
+            let _ = p.update(Message::Run(words));
+        }
+        assert_eq!(p.faults.len(), 2);
+        assert!(p.faults.iter().all(|(_, f, _)| f.status == Some(503)));
+        let _ = p.update(Message::RemoveFault("ws-connect obs".into()));
+        assert_eq!(p.faults.len(), 1);
+        assert_eq!(p.faults[0].0, "GET /helix/users");
+        let _ = p.update(Message::FaultKey(String::new()));
+        let words = p.fault_form.words();
+        let _ = p.update(Message::Run(words));
+        assert!(
+            p.notice.as_ref().unwrap().1,
+            "a fault without a key is refused"
         );
     }
 }

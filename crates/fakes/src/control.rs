@@ -44,23 +44,28 @@ pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
 /// `{"key", "status"?, "delay_ms"?, "for_ms"?, "close"?}` sets a fault for a call key (`GET /helix/users`, an OBS
 /// request type, or `ws-connect eventsub|irc|obs`); `{"clear": true}` removes them all.
 async fn fault(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
-    let recorder = fakes.twitch.recorder();
+    reply(fault_body(&fakes.obs, &fakes.twitch, &body))
+}
+
+/// Sets or clears faults as a `fault` command body describes (command or panel).
+pub fn fault_body(obs: &FakeObs, twitch: &FakeTwitch, body: &Value) -> Result<Value, String> {
+    let recorder = twitch.recorder();
     if body["clear"].as_bool() == Some(true) {
         recorder.clear_faults();
-        return Json(json!({ "cleared": true })).into_response();
+        return Ok(json!({ "cleared": true }));
     }
     let Some(key) = body["key"].as_str().filter(|k| !k.is_empty()) else {
-        return bad("a fault needs a call key".into());
+        return Err("a fault needs a call key".into());
     };
     let status = number(&body["status"]).map(|s| s as u16);
     if status.is_some_and(|s| !(100..=999).contains(&s)) {
-        return bad("the status must be 100–999".into());
+        return Err("the status must be 100–999".into());
     }
     let delay = Duration::from_millis(number(&body["delay_ms"]).unwrap_or(0.0).max(0.0) as u64);
     let lasts = Duration::from_millis(number(&body["for_ms"]).unwrap_or(60_000.0).max(0.0) as u64);
     let close = body["close"].as_bool() == Some(true);
     if status.is_none() && !close && delay.is_zero() {
-        return bad("a fault needs --status, --delay or --close".into());
+        return Err("a fault needs --status, --delay or --close".into());
     }
     let until = std::time::Instant::now() + lasts;
     recorder.set_fault(
@@ -75,17 +80,39 @@ async fn fault(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response 
     // Closing also ends the connections that are open now.
     if close {
         match key {
-            "ws-connect eventsub" => fakes.twitch.drop_eventsub(),
-            "ws-connect irc" => fakes.twitch.drop_irc(),
-            "ws-connect obs" => fakes.obs.drop_connections(),
+            "ws-connect eventsub" => twitch.drop_eventsub(),
+            "ws-connect irc" => twitch.drop_irc(),
+            "ws-connect obs" => obs.drop_connections(),
             _ => {}
         }
     }
-    Json(
+    Ok(
         json!({"key": key, "status": status, "close": close, "delay_ms": delay.as_millis() as u64,
                 "for_ms": lasts.as_millis() as u64}),
     )
-    .into_response()
+}
+
+fn reply(result: Result<Value, String>) -> Response {
+    match result {
+        Ok(result) => Json(result).into_response(),
+        Err(e) => bad(e),
+    }
+}
+
+/// Runs a control command (the words after `fake-services`) in this process, as the panel does: the same body the
+/// command would post. Stats and scenarios are not run here (the panel reads the report and awaits scenarios).
+pub fn run_command(obs: &FakeObs, twitch: &FakeTwitch, words: &[String]) -> Result<Value, String> {
+    let (path, body) = command(words)?;
+    match path {
+        "/_control/send" => send_body(twitch, &body),
+        "/_control/obs" => obs_body(obs, &body),
+        "/_control/fault" => fault_body(obs, twitch, &body),
+        "/_control/eventsub/drop" => {
+            twitch.drop_eventsub();
+            Ok(json!({}))
+        }
+        _ => Err(format!("{path} is not run in the panel")),
+    }
 }
 
 /// `500ms`, `3s` or `2m` in milliseconds.
@@ -159,10 +186,7 @@ pub fn send_event(
 }
 
 async fn send(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
-    match send_body(&fakes.twitch, &body) {
-        Ok(result) => Json(result).into_response(),
-        Err(e) => bad(e),
-    }
+    reply(send_body(&fakes.twitch, &body))
 }
 
 /// A number sent as JSON or as text (the commands send text).
@@ -172,11 +196,16 @@ fn number(value: &Value) -> Option<f64> {
 
 /// `{"action": "drop" | "stats" | "output", …}`.
 async fn obs_control(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    reply(obs_body(&fakes.obs, &body))
+}
+
+/// Drives the fake OBS as an `obs` command body describes (command or panel).
+pub fn obs_body(obs: &FakeObs, body: &Value) -> Result<Value, String> {
     match body["action"].as_str() {
-        Some("drop") => fakes.obs.drop_connections(),
+        Some("drop") => obs.drop_connections(),
         Some("stats") => {
-            let current = fakes.obs.stats();
-            fakes.obs.set_stats(Stats {
+            let current = obs.stats();
+            obs.set_stats(Stats {
                 cpu_percent: number(&body["cpu"]).unwrap_or(current.cpu_percent),
                 dropped_percent: number(&body["dropped"])
                     .map_or(current.dropped_percent, |d| d.clamp(0.0, 100.0)),
@@ -184,28 +213,20 @@ async fn obs_control(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Res
                     .map_or(current.bitrate_kbps, |k| k.max(0.0) as u64),
             });
         }
-        Some("output") => fakes
-            .obs
-            .set_output(body["streaming"].as_bool(), body["recording"].as_bool()),
+        Some("output") => obs.set_output(body["streaming"].as_bool(), body["recording"].as_bool()),
         Some("meters") => {
             let extra = number(&body["inputs"]).unwrap_or(0.0).max(0.0) as usize;
             let every = number(&body["interval"]).unwrap_or(50.0).max(0.0) as u64;
-            fakes.obs.set_meters(extra, Duration::from_millis(every));
+            obs.set_meters(extra, Duration::from_millis(every));
         }
         Some("burst") => {
             let count = number(&body["count"]).unwrap_or(10.0).max(0.0) as usize;
-            if let Err(e) = fakes
-                .obs
-                .burst(body["kind"].as_str().unwrap_or_default(), count)
-            {
-                return bad(e);
-            }
+            obs.burst(body["kind"].as_str().unwrap_or_default(), count)?;
         }
-        other => return bad(format!("unknown OBS action {other:?}")),
+        other => return Err(format!("unknown OBS action {other:?}")),
     }
-    let s = fakes.obs.stats();
-    Json(json!({"cpu": s.cpu_percent, "dropped": s.dropped_percent, "kbps": s.bitrate_kbps}))
-        .into_response()
+    let s = obs.stats();
+    Ok(json!({"cpu": s.cpu_percent, "dropped": s.dropped_percent, "kbps": s.bitrate_kbps}))
 }
 
 async fn eventsub_drop(State(fakes): State<Fakes>) -> Response {
