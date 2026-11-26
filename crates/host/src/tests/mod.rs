@@ -9,6 +9,28 @@ mod guard;
 mod settings_routes;
 mod template_routes;
 
+#[test]
+fn the_fake_twitch_must_be_on_this_machine() {
+    let fake = TwitchEndpoints::fake("127.0.0.1:4467").expect("this machine");
+    assert_eq!(fake.oauth, "http://127.0.0.1:4467/oauth2");
+    assert_eq!(fake.helix, "http://127.0.0.1:4467/helix");
+    assert_eq!(fake.eventsub, "ws://127.0.0.1:4467/eventsub");
+    assert_eq!(fake.irc, "ws://127.0.0.1:4467/irc");
+    assert!(TwitchEndpoints::fake("localhost:4467").is_some());
+    for bad in [
+        "localhost.evil.com:4467",
+        "evil.com:4467",
+        "10.0.0.2:4467",
+        "127.0.0.1",
+        "127.0.0.1:0",
+        "127.0.0.1:x",
+        "http://127.0.0.1:4467",
+        "",
+    ] {
+        assert!(TwitchEndpoints::fake(bad).is_none(), "{bad}");
+    }
+}
+
 const TOKEN: &str = "test-admin-token";
 
 struct NoSecrets;

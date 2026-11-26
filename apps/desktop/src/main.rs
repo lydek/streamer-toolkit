@@ -17,7 +17,10 @@ use host::{
     AlertTiming, BoundHost, ChatService, CheckinTiming, HostConfig, HostError, PRESENTATION_GAP,
     TwitchEndpoints, settings,
 };
-use integrations::secrets::{CredentialManager, SecretStore};
+use integrations::{
+    secrets::{CredentialManager, InMemory, SecretStore},
+    twitch::auth::fake_stored_token,
+};
 use secrecy::{ExposeSecret, SecretString};
 use tauri::{
     AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
@@ -48,6 +51,8 @@ struct AppState {
     data_dir: PathBuf,
     twitch_secrets: Arc<dyn SecretStore>,
     obs_secrets: Arc<dyn SecretStore>,
+    /// Twitch's own addresses, or the fake Twitch's in a dev build with `TOOLKIT_FAKE_SERVICES`.
+    twitch: TwitchEndpoints,
     /// Set once the Host listens; lets the tray open the admin window later (e.g. after WebView2 is installed).
     host_port: Mutex<Option<u16>>,
     chat: Mutex<Option<Arc<ChatService>>>,
@@ -129,11 +134,34 @@ fn main() {
                     &e.to_string(),
                 )),
             };
+            // Release builds never read the variable.
+            let fake = cfg!(dev)
+                .then(|| std::env::var(FAKE_SERVICES).ok())
+                .flatten();
+            let twitch = fake_services(cfg!(dev), fake.as_deref());
+            if fake.is_some() && twitch.is_none() {
+                tracing::warn!(code = "dev.fake_services_ignored", "{FAKE_SERVICES} must be 127.0.0.1:<port> or localhost:<port>");
+            }
+            // The fake Twitch's tokens and the fake OBS password stay in memory, never in the Credential Manager.
+            let (twitch_secrets, obs_secrets): (Arc<dyn SecretStore>, Arc<dyn SecretStore>) =
+                if twitch.is_some() {
+                    tracing::warn!(code = "dev.fake_services", "using the fake Twitch; secrets stay in memory");
+                    (
+                        Arc::new(InMemory::with(fake_stored_token())),
+                        Arc::new(InMemory::default()),
+                    )
+                } else {
+                    (
+                        CredentialManager::new(&format!("{instance}/twitch"))?,
+                        CredentialManager::new(&format!("{instance}/obs"))?,
+                    )
+                };
             app.manage(AppState {
                 admin_token: random_token()?,
                 data_dir: data_dir.clone(),
-                twitch_secrets: CredentialManager::new(&format!("{instance}/twitch"))?,
-                obs_secrets: CredentialManager::new(&format!("{instance}/obs"))?,
+                twitch_secrets,
+                obs_secrets,
+                twitch: twitch.unwrap_or_default(),
                 host_port: Mutex::new(None),
                 chat: Mutex::default(),
                 exiting: AtomicBool::default(),
@@ -198,6 +226,14 @@ fn main() {
         RunEvent::Exit => drop(log_guard.take()),
         _ => {}
     });
+}
+
+/// The fake Twitch of `crates/fakes` (`pnpm dev:fake`), as `<host>:<port>`; read by dev builds only.
+const FAKE_SERVICES: &str = "TOOLKIT_FAKE_SERVICES";
+
+/// The fake Twitch's addresses for `TOOLKIT_FAKE_SERVICES`: dev builds only, and only on this machine.
+fn fake_services(is_dev: bool, value: Option<&str>) -> Option<TwitchEndpoints> {
+    value.filter(|_| is_dev).and_then(TwitchEndpoints::fake)
 }
 
 /// The port the first try binds. A new folder of a dev build starts on `DEV_DEFAULT_PORT`, so a dev build never
@@ -522,7 +558,7 @@ fn host_config(app: &AppHandle, port: u16) -> HostConfig {
         admin_token: state.admin_token.expose_secret().to_owned().into(),
         data_dir: state.data_dir.clone(),
         twitch_secrets: state.twitch_secrets.clone(),
-        twitch: TwitchEndpoints::default(),
+        twitch: state.twitch.clone(),
         obs_secrets: state.obs_secrets.clone(),
         alert_timing: AlertTiming::default(),
         checkin_timing: CheckinTiming::default(),
@@ -704,6 +740,23 @@ fn show_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fake_services_need_a_dev_build() {
+        use super::fake_services;
+        let fake =
+            fake_services(true, Some("127.0.0.1:4467")).expect("a dev build on this machine");
+        assert_eq!(fake.helix, "http://127.0.0.1:4467/helix");
+        assert!(
+            fake_services(false, Some("127.0.0.1:4467")).is_none(),
+            "release builds ignore it"
+        );
+        assert!(
+            fake_services(true, Some("localhost.evil.com:4467")).is_none(),
+            "this machine only"
+        );
+        assert!(fake_services(true, None).is_none());
+    }
+
     #[test]
     fn only_a_new_folder_of_a_dev_build_starts_on_the_dev_port() {
         use super::{DEV_DEFAULT_PORT, start_port};

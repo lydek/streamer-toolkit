@@ -549,9 +549,41 @@ fn parse<T: DeserializeOwned>(body: &[u8]) -> Result<T, AuthError> {
     serde_json::from_slice(body).map_err(|_| AuthError::InvalidResponse)
 }
 
+/// The fake Twitch's broadcaster (`crates/fakes` keeps the same values; its tests check they match).
+pub const FAKE_USER_ID: &str = "1000";
+pub const FAKE_LOGIN: &str = "fake_streamer";
+
+/// A stored token for the fake Twitch (`crates/fakes`) only: its broadcaster, every scope the app asks for and no
+/// Client ID, so any Client ID accepts it. Never written for a real account.
+pub fn fake_stored_token() -> String {
+    let token = StoredToken {
+        client_id: String::new(),
+        access_token: "fake-access".into(),
+        refresh_token: "fake-refresh".into(),
+        user_id: FAKE_USER_ID.into(),
+        login: FAKE_LOGIN.into(),
+        scopes: super::MVP_SCOPES.iter().map(|s| s.to_string()).collect(),
+    };
+    serde_json::to_string(&token).expect("a stored token serializes")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_fake_token_signs_in_with_every_scope() {
+        let store = Arc::new(crate::secrets::InMemory::with(fake_stored_token()));
+        let http = tls::https_client(tls::client_config().unwrap());
+        let auth = TwitchAuth::new("any-client".into(), "http://127.0.0.1:1", http, store);
+        assert_eq!(
+            auth.status(),
+            AuthStatus::SignedIn {
+                user_id: "1000".into(),
+                login: "fake_streamer".into()
+            }
+        );
+    }
     use crate::{secrets::memory::MemoryStore, tls};
     use axum::{
         Form, Json, Router,

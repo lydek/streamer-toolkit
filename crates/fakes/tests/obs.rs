@@ -1,34 +1,17 @@
 //! The real OBS client (`integrations::obs`) against the fake OBS.
 
 use std::{
-    sync::{Arc, Mutex, atomic::AtomicU64},
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 
 use fakes::obs::{FakeObs, Stats};
 use integrations::{
     obs::{Obs, ObsControl, ObsState, ObsStatus},
-    secrets::{SecretStore, SecretStoreError},
+    secrets::InMemory,
 };
 use tokio::{net::TcpListener, sync::watch};
 use toolkit_core::streaming::{ItemSize, Monitor, StreamingState, TransformChange};
-
-#[derive(Default)]
-struct Password(Mutex<Option<String>>);
-
-impl SecretStore for Password {
-    fn read(&self) -> Result<Option<String>, SecretStoreError> {
-        Ok(self.0.lock().unwrap().clone())
-    }
-    fn write(&self, value: &str) -> Result<(), SecretStoreError> {
-        *self.0.lock().unwrap() = Some(value.into());
-        Ok(())
-    }
-    fn delete(&self) -> Result<(), SecretStoreError> {
-        *self.0.lock().unwrap() = None;
-        Ok(())
-    }
-}
 
 struct Client {
     status: watch::Receiver<ObsStatus>,
@@ -55,7 +38,11 @@ fn connect(port: u16, password: Option<&str>) -> Client {
         Obs {
             host: "127.0.0.1".into(),
             port,
-            secrets: Arc::new(Password(Mutex::new(password.map(str::to_owned)))),
+            secrets: Arc::new(
+                password
+                    .map(|p| InMemory::with(p.into()))
+                    .unwrap_or_default(),
+            ),
             status: Arc::new(status_tx),
             state: Arc::new(state_tx),
             generation: 1,
