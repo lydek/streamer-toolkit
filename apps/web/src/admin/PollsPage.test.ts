@@ -212,3 +212,13 @@ describe('predictions', () => {
     expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success', summary: t('polls.predictionStarted') }))
   })
 })
+
+it('says a poll runs without a countdown when Twitch gives no time, and trims a question too long for a prediction', async () => {
+  vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+    ok(path === '/api/admin/polls' ? { poll: { ...poll('active', [1, 1]), endsAt: '' }, prediction: null } : [])) as never)
+  const w = await open()
+  expect(w.get('[data-poll-state]').text()).toBe(t('polls.running'))
+  await w.get('#polls-question').setValue('字'.repeat(60))
+  await w.findAll('.p-togglebutton').find((b) => b.text() === t('polls.kinds.prediction'))!.trigger('click')
+  expect((w.get('#polls-question').element as HTMLInputElement).value).toBe('字'.repeat(45))
+})

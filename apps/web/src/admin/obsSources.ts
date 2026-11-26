@@ -34,6 +34,7 @@ export const OVERLAYS: OverlayEntry[] = [
   { id: 'captions', group: 'media', size: '1600 × 200' },
   { id: 'avatar', group: 'media', size: '400 × 400' },
   { id: 'requests', group: 'media', size: '1280 × 720' },
+  { id: 'polls', group: 'interact', path: '/overlay/polls/', size: '600 × 400' },
   { id: 'leaderboard', group: 'viewers', path: '/overlay/leaderboard/', size: '400 × 500' },
   { id: 'shoutouts', group: 'viewers', size: '1280 × 720' },
   { id: 'credits', group: 'viewers', size: '1920 × 1080' },
