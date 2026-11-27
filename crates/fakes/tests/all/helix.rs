@@ -248,3 +248,41 @@ async fn rewards_are_managed_and_redemptions_marked_once() {
     assert_eq!(count(&helix.get_json(&own).await.unwrap()), 0);
     assert_eq!(refused(helix.delete(&one).await), 404);
 }
+
+#[tokio::test]
+async fn chat_sent_by_the_app_comes_back_as_the_broadcasters_message() {
+    let fake = FakeTwitch::default();
+    let helix = helix(&fake).await;
+    let me = json!({"broadcaster_id": BROADCASTER_ID, "sender_id": BROADCASTER_ID});
+    let sent = helix
+        .post_json_read("/chat/messages", &json!({"broadcaster_id": BROADCASTER_ID, "sender_id": BROADCASTER_ID, "message": "大家好"}))
+        .await
+        .unwrap();
+    let row = &sent["data"][0];
+    assert_eq!(row["is_sent"], true);
+    let id = row["message_id"].as_str().unwrap();
+    let logged = fake.recorder().recent(5);
+    let event = logged
+        .iter()
+        .find(|e| e.key == "channel.chat.message")
+        .expect("the chat event");
+    assert_eq!(event.id.as_deref(), Some(id));
+
+    let mut empty = me.clone();
+    empty["message"] = json!(" ");
+    assert_eq!(
+        refused(helix.post_json_read("/chat/messages", &empty).await),
+        400
+    );
+    let mut long = me.clone();
+    long["message"] = json!("a".repeat(501));
+    assert_eq!(
+        refused(helix.post_json_read("/chat/messages", &long).await),
+        400
+    );
+    let other = json!({"broadcaster_id": BROADCASTER_ID, "sender_id": "7", "message": "hi"});
+    assert_eq!(
+        refused(helix.post_json_read("/chat/messages", &other).await),
+        403
+    );
+}

@@ -106,18 +106,6 @@ fn apply(reward: &mut Value, body: &Value) {
     }
 }
 
-fn param<'a>(query: &'a Option<String>, key: &str) -> Option<&'a str> {
-    query
-        .as_deref()?
-        .split('&')
-        .find_map(|pair| pair.strip_prefix(key)?.strip_prefix('='))
-}
-
-fn refused(status: StatusCode, message: &str) -> Response {
-    (status, Json(json!({"error": status.canonical_reason(), "status": status.as_u16(), "message": message})))
-        .into_response()
-}
-
 fn data(item: Value) -> Response {
     Json(json!({ "data": [item] })).into_response()
 }
@@ -128,14 +116,14 @@ fn invalid(body: &Value, creating: bool) -> Option<Response> {
     if (creating && title.is_none())
         || title.is_some_and(|t| t.trim().is_empty() || t.chars().count() > 45)
     {
-        return Some(refused(
+        return Some(rejected(
             StatusCode::BAD_REQUEST,
             "The title must be 1 to 45 characters.",
         ));
     }
     let cost = &body["cost"];
     if (creating && cost.is_null()) || (!cost.is_null() && cost.as_u64().is_none_or(|c| c < 1)) {
-        return Some(refused(
+        return Some(rejected(
             StatusCode::BAD_REQUEST,
             "The cost must be at least 1.",
         ));
@@ -244,7 +232,7 @@ pub(super) async fn update(
             apply(&mut w.rewards[at].helix, &body);
             data(w.rewards[at].helix.clone())
         }
-        Err((status, message)) => refused(status, message),
+        Err((status, message)) => rejected(status, message),
     }
 }
 
@@ -255,7 +243,7 @@ pub(super) async fn delete(State(fake): State<FakeTwitch>, RawQuery(query): RawQ
             w.rewards.remove(at);
             StatusCode::NO_CONTENT.into_response()
         }
-        Err((status, message)) => refused(status, message),
+        Err((status, message)) => rejected(status, message),
     }
 }
 
@@ -269,7 +257,7 @@ pub(super) async fn mark(
     let status = match body["status"].as_str() {
         Some(s @ ("FULFILLED" | "CANCELED")) => s,
         _ => {
-            return refused(
+            return rejected(
                 StatusCode::BAD_REQUEST,
                 "The status must be FULFILLED or CANCELED.",
             );
@@ -283,7 +271,7 @@ pub(super) async fn mark(
         let mut w = fake.0.world.lock().unwrap();
         match w.rewards.iter().find(|r| r.helix["id"] == reward_id) {
             Some(r) if !r.app_created => {
-                return refused(StatusCode::FORBIDDEN, "The app did not create this reward.");
+                return rejected(StatusCode::FORBIDDEN, "The app did not create this reward.");
             }
             _ => {}
         }
@@ -292,7 +280,7 @@ pub(super) async fn mark(
                 && r.event["reward"]["id"] == reward_id
                 && r.event["status"] == "unfulfilled"
         }) else {
-            return refused(
+            return rejected(
                 StatusCode::NOT_FOUND,
                 "No unfulfilled redemption has this ID.",
             );

@@ -52,23 +52,11 @@ impl Channel {
     }
 }
 
-fn query_value<'a>(query: &'a Option<String>, key: &str) -> Option<&'a str> {
-    query
-        .as_deref()?
-        .split('&')
-        .find_map(|pair| pair.strip_prefix(key)?.strip_prefix('='))
-}
-
-fn refused(status: StatusCode, message: &str) -> Response {
-    (status, Json(json!({"error": status.canonical_reason(), "status": status.as_u16(), "message": message})))
-        .into_response()
-}
-
 pub(super) async fn get_channel(
     State(fake): State<FakeTwitch>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    if query_value(&query, "broadcaster_id") != Some(BROADCASTER_ID) {
+    if param(&query, "broadcaster_id") != Some(BROADCASTER_ID) {
         return Json(json!({ "data": [] })).into_response();
     }
     let c = fake.0.world.lock().unwrap().channel.clone();
@@ -87,8 +75,8 @@ pub(super) async fn patch_channel(
     RawQuery(query): RawQuery,
     Json(body): Json<Value>,
 ) -> Response {
-    if query_value(&query, "broadcaster_id") != Some(BROADCASTER_ID) {
-        return refused(
+    if param(&query, "broadcaster_id") != Some(BROADCASTER_ID) {
+        return rejected(
             StatusCode::UNAUTHORIZED,
             "The ID in broadcaster_id must match the user ID in the token.",
         );
@@ -96,7 +84,7 @@ pub(super) async fn patch_channel(
     let mut next = fake.0.world.lock().unwrap().channel.clone();
     if let Some(title) = body["title"].as_str() {
         if title.trim().is_empty() {
-            return refused(StatusCode::BAD_REQUEST, "The title may not be empty.");
+            return rejected(StatusCode::BAD_REQUEST, "The title may not be empty.");
         }
         next.title = title.to_owned();
     }
@@ -104,7 +92,7 @@ pub(super) async fn patch_channel(
         next.category_id = match id {
             "" | "0" => String::new(),
             id if CATEGORIES.iter().any(|(c, _)| *c == id) => id.to_owned(),
-            _ => return refused(StatusCode::BAD_REQUEST, "The game_id is not valid."),
+            _ => return rejected(StatusCode::BAD_REQUEST, "The game_id is not valid."),
         };
     }
     if let Some(tags) = body["tags"].as_array() {
@@ -117,7 +105,7 @@ pub(super) async fn patch_channel(
                 .iter()
                 .any(|t| t.is_empty() || t.contains(char::is_whitespace))
         {
-            return refused(StatusCode::BAD_REQUEST, "The tags are not valid.");
+            return rejected(StatusCode::BAD_REQUEST, "The tags are not valid.");
         }
         next.tags = tags;
     }
@@ -130,11 +118,11 @@ pub(super) async fn patch_channel(
 
 /// Names containing the query (any case), at most `first` (default 20).
 pub(super) async fn search_categories(RawQuery(query): RawQuery) -> Response {
-    let needle = query_value(&query, "query")
+    let needle = param(&query, "query")
         .map(decode)
         .unwrap_or_default()
         .to_lowercase();
-    let first = query_value(&query, "first")
+    let first = param(&query, "first")
         .and_then(|n| n.parse().ok())
         .unwrap_or(20);
     let data: Vec<Value> = CATEGORIES
