@@ -1,7 +1,7 @@
 //! The Helix calls the Host's admin pages make, through the real client (`integrations::twitch::helix`), against the
 //! fake Twitch: the shapes the Host parses, and the state they change.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use fakes::twitch::{BROADCASTER_ID, FakeTwitch};
 use integrations::{
@@ -9,18 +9,29 @@ use integrations::{
     tls,
     twitch::{
         auth::{TwitchAuth, fake_stored_token},
+        eventsub::EventSub,
         helix::{Helix, HelixError},
     },
 };
 use serde_json::json;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::mpsc};
+use toolkit_core::events::Contest;
 
-async fn helix(fake: &FakeTwitch) -> Helix {
+async fn start(fake: &FakeTwitch) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
     tokio::spawn(fake.clone().serve(listener));
+    base
+}
+
+/// Signed in as the dev builds are, plus the poll and prediction scopes 投票與預測 asks for.
+fn client(base: &str) -> Helix {
     let http = tls::https_client(tls::client_config().unwrap());
-    let store = Arc::new(InMemory::with(fake_stored_token()));
+    let mut token: serde_json::Value = serde_json::from_str(&fake_stored_token()).unwrap();
+    for scope in ["channel:manage:polls", "channel:manage:predictions"] {
+        token["scopes"].as_array_mut().unwrap().push(json!(scope));
+    }
+    let store = Arc::new(InMemory::with(token.to_string()));
     let auth = TwitchAuth::new(
         "fake-client".into(),
         &format!("http://{base}/oauth2"),
@@ -28,6 +39,48 @@ async fn helix(fake: &FakeTwitch) -> Helix {
         store,
     );
     Helix::new(&format!("http://{base}/helix"), auth, http)
+}
+
+async fn helix(fake: &FakeTwitch) -> Helix {
+    client(&start(fake).await)
+}
+
+/// The app's EventSub client on the fake, handing over every poll and prediction it reads; returns once connected.
+async fn contests(fake: &FakeTwitch) -> (Helix, mpsc::UnboundedReceiver<Contest>) {
+    let base = start(fake).await;
+    let (tx, rx) = mpsc::unbounded_channel();
+    let (up_tx, mut up) = mpsc::unbounded_channel();
+    tokio::spawn(
+        EventSub {
+            url: format!("ws://{base}/eventsub"),
+            helix: client(&base),
+            tls: tls::client_config().unwrap(),
+            deliver: Arc::new(|_| {}),
+            deliver_alert: Arc::new(|_| {}),
+            deliver_redemption: Arc::new(|_| {}),
+            deliver_stream: Arc::new(|_| {}),
+            deliver_contest: Arc::new(move |c| {
+                let _ = tx.send(c);
+            }),
+            deliver_removal: Arc::new(|_, _| Box::pin(async {})),
+            connected: Arc::new(move |c| {
+                let _ = up_tx.send(c);
+            }),
+        }
+        .run(),
+    );
+    let connected = tokio::time::timeout(Duration::from_secs(10), up.recv())
+        .await
+        .unwrap();
+    assert_eq!(connected, Some(true));
+    (client(&base), rx)
+}
+
+async fn next(rx: &mut mpsc::UnboundedReceiver<Contest>) -> Contest {
+    tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("an event")
+        .unwrap()
 }
 
 fn refused(result: Result<impl std::fmt::Debug, HelixError>) -> u16 {
@@ -285,4 +338,76 @@ async fn chat_sent_by_the_app_comes_back_as_the_broadcasters_message() {
         refused(helix.post_json_read("/chat/messages", &other).await),
         403
     );
+}
+
+#[tokio::test]
+async fn polls_start_take_votes_and_end_with_their_events() {
+    use toolkit_core::events::PollStatus;
+    let fake = FakeTwitch::default();
+    let (helix, mut events) = contests(&fake).await;
+    let poll = |title: &str| {
+        json!({"broadcaster_id": BROADCASTER_ID, "title": title, "duration": 60,
+               "choices": [{"title": "能"}, {"title": "不能"}]})
+    };
+
+    let made = helix
+        .post_json_read("/polls", &poll("吃雞？"))
+        .await
+        .unwrap();
+    let id = made["data"][0]["id"].as_str().unwrap().to_owned();
+    assert!(
+        id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+        "{id}"
+    );
+    let read = integrations::twitch::contests::poll_from_json(made["data"][0].clone()).unwrap();
+    assert_eq!((read.status, read.choices.len()), (PollStatus::Active, 2));
+    assert!(!read.ends_at.is_empty(), "the start plus the duration");
+    let Contest::Poll(begin) = next(&mut events).await else {
+        panic!("a poll")
+    };
+    assert_eq!(
+        (begin.id.as_str(), begin.status),
+        (id.as_str(), PollStatus::Active)
+    );
+    assert_eq!(
+        refused(helix.post_json_read("/polls", &poll("Another")).await),
+        400,
+        "one at a time"
+    );
+
+    fakes::control::poll_body(
+        &fake,
+        &json!({"action": "vote", "choice": "2", "count": "3"}),
+    )
+    .unwrap();
+    let Contest::Poll(progress) = next(&mut events).await else {
+        panic!("a poll")
+    };
+    assert_eq!(progress.choices[1].votes, 3);
+    let listed = helix
+        .get_json(&format!("/polls?broadcaster_id={BROADCASTER_ID}&first=1"))
+        .await
+        .unwrap();
+    assert_eq!(listed["data"][0]["choices"][1]["votes"], 3);
+
+    let end = json!({"broadcaster_id": BROADCASTER_ID, "id": id, "status": "TERMINATED"});
+    let ended = helix.patch_json_read("/polls", &end).await.unwrap();
+    assert_eq!(ended["data"][0]["status"], "TERMINATED");
+    let Contest::Poll(over) = next(&mut events).await else {
+        panic!("a poll")
+    };
+    assert_eq!(over.status, PollStatus::Terminated);
+    assert_eq!(
+        refused(helix.patch_json_read("/polls", &end).await),
+        400,
+        "already over"
+    );
+    assert!(fakes::control::poll_body(&fake, &json!({"action": "end"})).is_err());
+
+    // A new poll may start once the last one is over.
+    helix
+        .post_json_read("/polls", &poll("再一次"))
+        .await
+        .unwrap();
+    assert_eq!(fake.snapshot().poll.unwrap().title, "再一次");
 }
