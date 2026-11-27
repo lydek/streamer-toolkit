@@ -18,14 +18,17 @@ pre-commit:
 # Keep this list in sync with ci.yml. The frontend must build first: the host embeds apps/web/dist.
 #
 # Each job except translations is skipped when every pushed file ({push_files}) matches its `exclude`;
-# CI skips only docs-only PRs (root *.md, docs/ but decisions.md, prototype/, .agents/, .claude/: translations only,
-# see ci.yml).
+# CI skips whole jobs by the rules in scripts/ci-changes.mjs. These lists follow those rules where a glob list can
+# say it (no negation), so a push may run more here than in CI, never less.
 # Exclude lists name only what a job provably ignores, so any other file
-# (lefthook.yml, .github/, package.json, pnpm-lock.yaml, rust-toolchain.toml, scripts/, Cargo.*) runs it:
+# (lefthook.yml, .github/, package.json, pnpm-lock.yaml, scripts/) runs it:
 # - Docs never affect a check except translations; docs/decisions.md feeds the license allowlist.
 # - prototype/ is a static HTML mock-up and .agents/ and .claude/ hold agent skills and settings; no check reads them.
+# - Frontend and script checks ignore Rust, except five files they read (WEB_READS_RUST in scripts/ci-changes.mjs);
+#   those live in crates/host/ and apps/desktop/, so those folders still run them here.
 # - Rust-only jobs ignore apps/web/, except cargo-test: the Host embeds dist/ and the overlay's
-#   built-in templates and tests them, so only admin UI and E2E changes skip it.
+#   built-in templates and tests them, so only admin UI, interface text and E2E changes skip it.
+# - fakes-panel builds only fakes and its dev-dependencies core and integrations.
 # shortcut: lefthook drops paths that no longer exist from {push_files}, so a push that only deletes or renames files may skip
 # checks; CI still catches it.
 # Full run regardless of files: pnpm lefthook run pre-push --force
@@ -36,7 +39,7 @@ pre-push:
       run: node scripts/check-translations.mjs
     - name: script-tests
       run: pnpm test:scripts
-      exclude: &docs-but-decisions
+      exclude: &docs-but-decisions-and-rust
         - "*.md"
         - "docs/{architecture,dev,scope}.md"
         - "docs/**/*.en.md"
@@ -44,23 +47,37 @@ pre-push:
         - "prototype/**"
         - ".agents/**"
         - ".claude/**"
+        - "crates/{arch-tests,core,fakes,integrations,modules}/**"
+        - "Cargo.{toml,lock}"
+        - "rust-toolchain.toml"
+        - "deny.toml"
     - name: frontend-licenses
       run: pnpm check:licenses
-      exclude: *docs-but-decisions
+      exclude: *docs-but-decisions-and-rust
     - name: web-lint
       run: pnpm web:lint
+      exclude: &docs-and-rust
+        - "*.md"
+        - "docs/**"
+        - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
+        - "crates/{arch-tests,core,fakes,integrations,modules}/**"
+        - "Cargo.{toml,lock}"
+        - "rust-toolchain.toml"
+        - "deny.toml"
+    - name: web-test
+      run: pnpm web:test
+      exclude: *docs-and-rust
+    # The Rust steps need dist, so the build skips only docs.
+    - name: web-build
+      run: pnpm web:build
       exclude: &docs
         - "*.md"
         - "docs/**"
         - "prototype/**"
         - ".agents/**"
         - ".claude/**"
-    - name: web-test
-      run: pnpm web:test
-      exclude: *docs
-    - name: web-build
-      run: pnpm web:build
-      exclude: *docs
     - name: api-gen
       run: pnpm api:gen
       exclude: *docs
@@ -88,13 +105,27 @@ pre-push:
         - "*.md"
         - "docs/**"
         - "apps/web/src/admin/**"
+        - "apps/web/src/locales/**"
         - "apps/web/e2e/**"
         - "prototype/**"
         - ".agents/**"
         - ".claude/**"
     - name: fakes-panel
       run: cargo clippy -p fakes --all-targets --features ui -- -D warnings && cargo test -p fakes --features ui --lib --bins
-      exclude: *docs-and-web
+      exclude:
+        - "*.md"
+        - "docs/**"
+        - "prototype/**"
+        - ".agents/**"
+        - ".claude/**"
+        - "apps/**"
+        - "crates/{host,modules,arch-tests}/**"
+        - "scripts/**"
+        - "assets/**"
+        - "deny.toml"
+        - "package.json"
+        - "pnpm-{lock,workspace}.yaml"
+        - ".nvmrc"
     - name: cargo-deny
       run: cargo deny check
       exclude: *docs-and-web
