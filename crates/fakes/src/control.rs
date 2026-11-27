@@ -38,6 +38,7 @@ pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
         .route("/_control/scenario", post(scenario))
         .route("/_control/stats", post(stats))
         .route("/_control/fault", post(fault))
+        .route("/_control/poll", post(poll))
         .with_state(Fakes { obs, twitch })
 }
 
@@ -111,6 +112,7 @@ pub fn run_command(obs: &FakeObs, twitch: &FakeTwitch, words: &[String]) -> Resu
             twitch.drop_eventsub();
             Ok(json!({}))
         }
+        "/_control/poll" => poll_body(twitch, &body),
         _ => Err(format!("{path} is not run in the panel")),
     }
 }
@@ -232,6 +234,23 @@ pub fn obs_body(obs: &FakeObs, body: &Value) -> Result<Value, String> {
     }
     let s = obs.stats();
     Ok(json!({"cpu": s.cpu_percent, "dropped": s.dropped_percent, "kbps": s.bitrate_kbps}))
+}
+
+/// `{"action": "vote", "choice", "count"?}` or `{"action": "end"}` for the running poll.
+pub fn poll_body(twitch: &FakeTwitch, body: &Value) -> Result<Value, String> {
+    match body["action"].as_str() {
+        Some("vote") => {
+            let choice = number(&body["choice"]).ok_or("poll vote needs --choice <n>")? as usize;
+            let count = number(&body["count"]).unwrap_or(1.0).max(0.0) as u64;
+            twitch.poll_vote(choice, count)
+        }
+        Some("end") => twitch.poll_end("COMPLETED"),
+        other => Err(format!("unknown poll action {other:?}")),
+    }
+}
+
+async fn poll(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    reply(poll_body(&fakes.twitch, &body))
 }
 
 async fn eventsub_drop(State(fakes): State<Fakes>) -> Response {
@@ -387,6 +406,17 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
             }
             Ok(("/_control/obs", body))
         }
+        "poll" => {
+            match rest.first().map(String::as_str) {
+                Some("vote") => {
+                    flags(&rest[1..])?;
+                    body["action"] = json!("vote");
+                }
+                Some("end") => body["action"] = json!("end"),
+                _ => return Err("poll needs vote --choice <n> [--count <n>] or end".into()),
+            }
+            Ok(("/_control/poll", body))
+        }
         "eventsub" if rest.first().map(String::as_str) == Some("drop") => {
             Ok(("/_control/eventsub/drop", body))
         }
@@ -486,6 +516,15 @@ mod tests {
             cmd(&["eventsub", "drop"]).unwrap().0,
             "/_control/eventsub/drop"
         );
+        assert_eq!(
+            cmd(&["poll", "vote", "--choice", "2", "--count", "3"]).unwrap(),
+            (
+                "/_control/poll",
+                json!({"action": "vote", "choice": "2", "count": "3"})
+            )
+        );
+        assert_eq!(cmd(&["poll", "end"]).unwrap().1, json!({"action": "end"}));
+        assert!(cmd(&["poll"]).is_err());
         assert_eq!(
             cmd(&["scenario", "gift-bomb"]).unwrap().1["name"],
             "gift-bomb"

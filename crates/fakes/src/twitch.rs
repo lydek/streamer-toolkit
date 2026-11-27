@@ -24,8 +24,10 @@ use crate::metrics::{self, Call, Recorder};
 
 mod channel;
 mod chat;
+mod contests;
 mod rewards;
 pub use channel::{CATEGORIES, Channel};
+pub use contests::PollView;
 pub use rewards::RewardView;
 
 pub const BROADCASTER_ID: &str = "1000";
@@ -54,6 +56,8 @@ pub struct TwitchSnapshot {
     /// The stream info viewers see (`/helix/channels`).
     pub channel: Channel,
     pub rewards: Vec<RewardView>,
+    /// The latest poll, running or ended.
+    pub poll: Option<PollView>,
     /// The ID of the last redemption and the last chat message the app received.
     pub last_redemption: Option<String>,
     pub last_chat: Option<String>,
@@ -91,6 +95,7 @@ struct World {
     channel: Channel,
     rewards: Vec<rewards::Reward>,
     redemptions: Vec<rewards::Redemption>,
+    poll: Option<contests::Poll>,
     last_redemption: Option<String>,
     last_chat: Option<String>,
     next_id: u64,
@@ -141,6 +146,7 @@ impl FakeTwitch {
                 channel: Channel::default(),
                 rewards: rewards::preloaded(),
                 redemptions: Vec::new(),
+                poll: None,
                 last_redemption: None,
                 last_chat: None,
                 next_id: 0,
@@ -183,6 +189,12 @@ impl FakeTwitch {
                 patch(rewards::mark),
             )
             .route("/helix/chat/messages", post(chat::send))
+            .route(
+                "/helix/polls",
+                get(contests::get_polls)
+                    .post(contests::create_poll)
+                    .patch(contests::end_poll),
+            )
             .route("/helix/chat/badges/global", get(badges))
             .route("/helix/chat/badges", get(badges))
             .route(
@@ -228,6 +240,7 @@ impl FakeTwitch {
             irc_joins: w.irc_joins.clone(),
             channel: w.channel.clone(),
             rewards: w.rewards.iter().map(rewards::Reward::view).collect(),
+            poll: w.poll.as_ref().map(contests::Poll::view),
             last_redemption: w.last_redemption.clone(),
             last_chat: w.last_chat.clone(),
         }

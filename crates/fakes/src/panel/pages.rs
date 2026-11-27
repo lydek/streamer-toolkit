@@ -225,6 +225,7 @@ impl Panel {
         .spacing(2);
         column![
             row![account, drops].spacing(24),
+            self.poll_row(),
             row![
                 column![rewards].width(FillPortion(3)),
                 column![
@@ -246,6 +247,42 @@ impl Panel {
 }
 
 impl Panel {
+    /// The latest poll: each choice's votes (a click adds one while it runs), and ending it now.
+    fn poll_row(&self) -> Element<'_, Message> {
+        let Some(p) = &self.twitch_view.poll else {
+            return row![heading("投票"), text("沒有").color(MUTED)]
+                .spacing(8)
+                .into();
+        };
+        let active = p.status == "ACTIVE";
+        let status = match p.status.as_str() {
+            "ACTIVE" => "進行中",
+            "COMPLETED" => "已結束",
+            "TERMINATED" => "提早結束",
+            _ => "已封存",
+        };
+        let mut line = row![heading("投票"), text(format!("{} · {status}", p.title))]
+            .spacing(8)
+            .align_y(Alignment::Center);
+        for (n, (title, votes)) in p.choices.iter().enumerate() {
+            let label = text(format!("{title} {votes} 票")).size(SMALL);
+            line = line.push(if active {
+                let choice = (n + 1).to_string();
+                button(label)
+                    .padding([3, 8])
+                    .style(button::secondary)
+                    .on_press(command(&["poll", "vote", "--choice", &choice]))
+                    .into()
+            } else {
+                Element::from(label)
+            });
+        }
+        if active {
+            line = line.push(small_button("結束", command(&["poll", "end"])));
+        }
+        line.wrap().into()
+    }
+
     pub(super) fn obs_page(&self) -> Element<'_, Message> {
         let o = &self.obs_view;
         let selected = self.scene.as_deref().unwrap_or(&o.program);
