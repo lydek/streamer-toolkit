@@ -5,7 +5,6 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
-import BotGreetingsPage from './BotGreetingsPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
@@ -40,16 +39,6 @@ async function page(component: Component, path: string) {
 }
 
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
-
-describe('聊天機器人', () => {
-  it('shows one message per greeting with its switch disabled, and the variables as written', async () => {
-    const w = await page(BotGreetingsPage, '/greetings')
-    const switches = w.findAll('[role="switch"]')
-    expect(switches).toHaveLength(6)
-    expect(switches.every((s) => s.attributes('disabled') !== undefined)).toBe(true)
-    expect(w.get('#greet-follow').attributes('placeholder')).toBe('謝謝 {觀眾} 的追隨，歡迎！')
-  })
-})
 
 describe('點歌', () => {
   it('shows nothing on and an empty queue, with the song actions disabled', async () => {

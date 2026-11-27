@@ -61,6 +61,7 @@ async fn commands_are_added_edited_and_deleted_and_never_clash_with_another_feat
         Arc::new(Modules::load(dir.clone())),
         Arc::new(NoSender),
         Arc::new(NoLookups),
+        Arc::new(|_, _| {}),
     );
     let app = routes(service);
     let command = |name: &str, reply: &str| serde_json::json!({ "name": name, "allowed": "subscriber", "reply": reply, "cooldown_seconds": 30, "enabled": true });

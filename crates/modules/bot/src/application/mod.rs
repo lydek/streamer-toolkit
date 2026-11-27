@@ -17,9 +17,9 @@ use tokio::{
 };
 use toolkit_core::{
     commands::CommandTable,
-    events::{ChatMessage, Source},
+    events::{Alert, AlertKind, ChatMessage, Source},
     modules::{self, Modules},
-    settings::{self, BotCommand, BotTimer},
+    settings::{self, BotCommand, BotGreetings, BotTimer},
 };
 
 use crate::domain::{
@@ -28,6 +28,15 @@ use crate::domain::{
 
 /// How often due timers are looked at.
 const TICK: Duration = Duration::from_secs(1);
+/// Chat kept to name the viewer when Twitch's first-chat mark comes after the message: how long, how many.
+const RECENT_KEEP: Duration = Duration::from_secs(300);
+const RECENT_MAX: usize = 500;
+/// `{觀眾}` for an anonymous cheer.
+const ANONYMOUS: &str = "匿名";
+const DAY: Duration = Duration::from_secs(86_400);
+
+/// The tag on a 回訪 chat line (只提示我): Twitch's message ID and the days since the viewer was last seen.
+pub type OnReturning = Arc<dyn Fn(String, u64) + Send + Sync>;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
@@ -65,6 +74,12 @@ struct State {
     live_start: Option<Instant>,
     /// Per timer ID: when it is next due, and the chat lines since its last send this stream.
     timers: std::collections::HashMap<String, (Instant, u32)>,
+    /// Twitch events already thanked (by event ID), kept like the bot's message IDs.
+    thanked: SentMessages,
+    /// Viewers greeted as returning this stream (Twitch user IDs).
+    returned: std::collections::HashSet<String>,
+    /// Recent chat: when, Twitch's message ID, whether the streamer sent it, and the sender's display name.
+    recent: std::collections::VecDeque<(Instant, String, bool, String)>,
     /// Messages dropped since launch: the queue was full or they waited too long.
     dropped: u64,
 }
@@ -82,6 +97,8 @@ pub struct BotService {
     /// What `settings.json` holds, so chat never waits on the file.
     pub(crate) bot_commands: RwLock<Vec<BotCommand>>,
     pub(crate) bot_timers: RwLock<Vec<BotTimer>>,
+    pub(crate) greetings: RwLock<BotGreetings>,
+    on_returning: OnReturning,
     state: Arc<Mutex<State>>,
     tx: mpsc::Sender<Outgoing>,
 }
@@ -94,6 +111,7 @@ impl BotService {
         modules: Arc<Modules>,
         sender: Arc<dyn ChatSender>,
         lookups: Arc<dyn BotLookups>,
+        on_returning: OnReturning,
     ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(QUEUE_MAX);
         let saved = settings::load(&data_dir).bot;
@@ -104,6 +122,8 @@ impl BotService {
             sender: sender.clone(),
             bot_commands: RwLock::new(saved.commands),
             bot_timers: RwLock::new(saved.timers),
+            greetings: RwLock::new(saved.greetings),
+            on_returning,
             state: Arc::default(),
             tx,
         });
@@ -149,6 +169,8 @@ impl BotService {
         }
         state.live_since = live_since;
         state.timers.clear();
+        // A new stream greets returning viewers again.
+        state.returned.clear();
         state.live_start = live_since.map(|t| {
             let ago = (Utc::now() - t).to_std().unwrap_or_default();
             Instant::now().checked_sub(ago).unwrap_or_else(Instant::now)
@@ -268,8 +290,26 @@ impl BotService {
         if source != Source::Twitch || !self.on() || self.own(m) {
             return;
         }
-        for (_, lines) in self.state.lock().unwrap().timers.values_mut() {
-            *lines = lines.saturating_add(1);
+        {
+            let mut state = self.state.lock().unwrap();
+            for (_, lines) in state.timers.values_mut() {
+                *lines = lines.saturating_add(1);
+            }
+            let now = Instant::now();
+            while state
+                .recent
+                .front()
+                .is_some_and(|(t, ..)| now.duration_since(*t) >= RECENT_KEEP)
+                || state.recent.len() >= RECENT_MAX
+            {
+                state.recent.pop_front();
+            }
+            state.recent.push_back((
+                now,
+                m.id.clone(),
+                m.user_id == m.broadcaster_id,
+                m.user_name.clone(),
+            ));
         }
         let found = self
             .bot_commands
@@ -293,6 +333,94 @@ impl BotService {
         );
         if ready {
             self.enqueue(command.reply, Some(m.user_name.clone()), None);
+        }
+    }
+}
+
+impl BotService {
+    /// A follow, sub, resub, cheer or raid from Twitch: thanked once (by its event ID) as set. Subs Twitch sends for
+    /// each gifted sub are not thanked, nor is the gift itself.
+    pub fn receive_alert(&self, a: &Alert, source: Source) {
+        if source != Source::Twitch || !self.on() {
+            return;
+        }
+        let g = self.greetings.read().unwrap().clone();
+        let (template, amount) = match &a.kind {
+            AlertKind::Follow if g.follow.enabled => (g.follow.message, None),
+            AlertKind::Subscribe { gifted: false, .. } | AlertKind::Resubscribe { .. }
+                if g.sub.enabled =>
+            {
+                (g.sub.message, None)
+            }
+            AlertKind::Cheer { bits, .. } if g.bits.enabled && *bits > 0 => {
+                let message = match bits {
+                    1..=99 => g.bits.small,
+                    100..=999 => g.bits.medium,
+                    _ => g.bits.large,
+                };
+                (message, Some(u64::from(*bits)))
+            }
+            AlertKind::Raid { viewers } if g.raid.enabled => {
+                (g.raid.message, Some(u64::from(*viewers)))
+            }
+            _ => return,
+        };
+        {
+            let mut state = self.state.lock().unwrap();
+            let now = Instant::now().into_std();
+            if state.thanked.contains(&a.id, now) {
+                return;
+            }
+            state.thanked.remember(a.id.clone(), now);
+        }
+        let viewer = a.user_name.clone().unwrap_or_else(|| ANONYMOUS.into());
+        self.enqueue(template, Some(viewer), amount);
+    }
+
+    /// Twitch's first-chat mark (or the toolkit's own first sighting) for message `id`, which may come after the
+    /// message: greets its sender, unless it is the streamer.
+    pub fn receive_first_chat(&self, id: &str) {
+        let g = self.greetings.read().unwrap().first_chat.clone();
+        if !self.on() || !g.enabled {
+            return;
+        }
+        let sender = self
+            .state
+            .lock()
+            .unwrap()
+            .recent
+            .iter()
+            .find(|(_, m, ..)| m == id)
+            .map(|(_, _, streamer, name)| (*streamer, name.clone()));
+        if let Some((false, name)) = sender {
+            self.enqueue(g.message, Some(name), None);
+        }
+    }
+
+    /// A chat message from Twitch with when its sender was last seen before it: a returning viewer's first message
+    /// this stream, after the set days, is tagged (只提示我) or greeted, once per stream; never the streamer's.
+    pub fn receive_return(&self, m: &ChatMessage, last_seen_before: Option<DateTime<Utc>>) {
+        let g = self.greetings.read().unwrap().returning.clone();
+        if !self.on() || !g.enabled || m.user_id == m.broadcaster_id {
+            return;
+        }
+        let Some(away) = last_seen_before.and_then(|t| (Utc::now() - t).to_std().ok()) else {
+            return;
+        };
+        let days = away.as_secs() / DAY.as_secs();
+        if away < DAY * g.days {
+            return;
+        }
+        {
+            let mut state = self.state.lock().unwrap();
+            if state.live_start.is_none() || !state.returned.insert(m.user_id.clone()) {
+                return;
+            }
+        }
+        if g.post {
+            self.enqueue(g.message, Some(m.user_name.clone()), None);
+        } else {
+            (self.on_returning)(m.id.clone(), days);
         }
     }
 }

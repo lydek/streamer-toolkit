@@ -5,7 +5,7 @@ mod application;
 mod domain;
 mod infrastructure;
 
-pub use application::ViewerService;
+pub use application::{ChatSeen, ViewerService};
 pub use infrastructure::{
     db::{MIGRATOR, ViewerName, avatars, names, search},
     start,

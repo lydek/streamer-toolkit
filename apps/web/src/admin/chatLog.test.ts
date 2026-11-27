@@ -183,3 +183,11 @@ describe('first chats', () => {
     expect(marked.messages.map((m) => m.payload.firstChat ?? false)).toEqual([false, true])
   })
 })
+
+describe('回訪 tags', () => {
+  it('bot.returning tags a message already in the log with the days away', () => {
+    const log = receive(EMPTY_LOG, [chat(1), chat(2)])
+    const tagged = applyChat(log, { id: 'r', type: 'bot.returning', version: 1, seq: 9, occurredAt: '', source: 'twitch', payload: { messageId: 'c1', days: 12 } })
+    expect(tagged.messages.map((m) => m.returningDays)).toEqual([12, undefined])
+  })
+})

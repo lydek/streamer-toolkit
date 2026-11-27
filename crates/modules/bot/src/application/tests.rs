@@ -2,7 +2,7 @@ use super::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::sync::Notify;
 use toolkit_core::commands::{Allowed, CommandEntry};
-use toolkit_core::events::ChatBadge;
+use toolkit_core::events::{Alert, AlertKind, ChatBadge};
 
 /// Posts into a list; `hold` keeps each send waiting until released, as a slow Twitch answer would.
 #[derive(Default)]
@@ -64,6 +64,8 @@ fn message(id: &str, user: &str, text: &str, badges: Vec<ChatBadge>) -> ChatMess
 struct Bot {
     service: Arc<BotService>,
     sender: Arc<FakeSender>,
+    /// 回訪 tags: message ID and days.
+    tags: Arc<Mutex<Vec<(String, u64)>>>,
     dir: PathBuf,
 }
 
@@ -105,16 +107,20 @@ fn bot(name: &str, commands: &[(&str, Allowed, &str, u32, bool)]) -> Bot {
     modules.set_enabled(modules::BOT, true).unwrap();
     let sender = Arc::new(FakeSender::default());
     sender.signed_in.store(true, Ordering::SeqCst);
+    let tags: Arc<Mutex<Vec<(String, u64)>>> = Arc::default();
+    let seen = tags.clone();
     let service = BotService::start(
         dir.clone(),
         table,
         modules,
         Arc::new(sender.clone()),
         Arc::new(Lookups),
+        Arc::new(move |id, days| seen.lock().unwrap().push((id, days))),
     );
     Bot {
         service,
         sender,
+        tags,
         dir,
     }
 }
@@ -359,4 +365,118 @@ async fn a_timer_with_no_minimum_posts_every_interval_from_the_stream_start() {
     assert_eq!(posted(&b).len(), 1);
     wait_minutes(5).await;
     assert_eq!(posted(&b).len(), 2);
+}
+
+fn alert(id: &str, name: Option<&str>, kind: AlertKind) -> Alert {
+    Alert {
+        id: id.into(),
+        user_id: name.map(|_| "7".into()),
+        user_login: name.map(|n| n.to_lowercase()),
+        user_name: name.map(str::to_owned),
+        kind,
+        occurred_at: "2026-11-28T10:00:00Z".into(),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn each_twitch_event_is_thanked_once_as_set_and_gifted_subs_are_not() {
+    let b = bot("thanks", &[]);
+    let cheer = |bits| AlertKind::Cheer {
+        bits,
+        message: String::new(),
+    };
+    for a in [
+        alert("f1", Some("小魚"), AlertKind::Follow),
+        // The same event again.
+        alert("f1", Some("小魚"), AlertKind::Follow),
+        alert(
+            "s1",
+            Some("小魚"),
+            AlertKind::Subscribe {
+                tier: 1,
+                gifted: false,
+            },
+        ),
+        // One of a gift's subs, and the gift itself.
+        alert(
+            "s2",
+            Some("阿花"),
+            AlertKind::Subscribe {
+                tier: 1,
+                gifted: true,
+            },
+        ),
+        alert("g1", Some("老闆"), AlertKind::Gift { tier: 1, count: 20 }),
+        alert("c1", Some("小魚"), cheer(99)),
+        alert("c2", Some("小魚"), cheer(100)),
+        alert("c3", None, cheer(1000)),
+        alert("r1", Some("隔壁台"), AlertKind::Raid { viewers: 42 }),
+    ] {
+        b.service.receive_alert(&a, Source::Twitch);
+    }
+    b.service.receive_alert(
+        &alert("sim", Some("模擬"), AlertKind::Follow),
+        Source::Simulation,
+    );
+    settle().await;
+    assert_eq!(
+        posted(&b),
+        [
+            "謝謝 小魚 的追隨，歡迎！",
+            "感謝 小魚 的訂閱！",
+            "謝謝 小魚 的 99 小奇點！",
+            "哇！小魚 送了 100 小奇點，太感謝了！",
+            "匿名 你是大老闆！1000 小奇點！",
+            "感謝 隔壁台 帶著 42 人揪團！",
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_first_chat_is_greeted_when_its_mark_comes_but_never_the_streamer() {
+    let b = bot("first", &[]);
+    b.service.greetings.write().unwrap().first_chat.enabled = true;
+    b.service
+        .receive_chat(&message("m1", "7", "大家好", vec![]), Source::Twitch);
+    b.service
+        .receive_chat(&message("m2", "42", "開台囉", vec![]), Source::Twitch);
+    // The mark arrives after the message; one for a message never seen greets nobody.
+    b.service.receive_first_chat("m1");
+    b.service.receive_first_chat("m2");
+    b.service.receive_first_chat("never");
+    settle().await;
+    assert_eq!(posted(&b), ["歡迎 小魚 第一次來聊天！"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_returning_viewer_is_tagged_once_per_stream_after_the_set_days() {
+    let b = bot("return", &[]);
+    let days_ago =
+        |d: i64| Some(Utc::now() - chrono::Duration::days(d) - chrono::Duration::hours(1));
+    let m = message("m1", "7", "我回來了", vec![]);
+    // Not live: nothing.
+    b.service.receive_return(&m, days_ago(10));
+    b.service.stream_status(Some(Utc::now()));
+    // Six days is not long enough (7 by default); new viewers and the streamer never count.
+    b.service.receive_return(&m, days_ago(6));
+    b.service
+        .receive_return(&message("m2", "8", "嗨", vec![]), None);
+    b.service
+        .receive_return(&message("m3", "42", "嗨", vec![]), days_ago(30));
+    b.service.receive_return(&m, days_ago(10));
+    b.service
+        .receive_return(&message("m4", "7", "還在", vec![]), days_ago(10));
+    settle().await;
+    assert_eq!(b.tags.lock().unwrap().as_slice(), [("m1".to_owned(), 10)]);
+    assert!(posted(&b).is_empty());
+
+    // The next stream, set to post instead of tagging.
+    b.service.greetings.write().unwrap().returning.post = true;
+    b.service.stream_status(None);
+    b.service.stream_status(Some(Utc::now()));
+    b.service
+        .receive_return(&message("m5", "7", "又來了", vec![]), days_ago(8));
+    settle().await;
+    assert_eq!(posted(&b), ["小魚 歡迎回來！"]);
+    assert_eq!(b.tags.lock().unwrap().len(), 1);
 }

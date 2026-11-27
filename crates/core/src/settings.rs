@@ -684,6 +684,73 @@ pub struct BotSettings {
     /// Each command's reply and cooldown; its name and who may use it are under `bot.<id>` in `chat_commands`.
     pub commands: Vec<BotCommand>,
     pub timers: Vec<BotTimer>,
+    pub greetings: BotGreetings,
+}
+
+/// 自動感謝與歡迎: one message per kind, each switched on its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(default)]
+pub struct BotGreetings {
+    pub follow: Greeting,
+    pub first_chat: Greeting,
+    pub returning: ReturnGreeting,
+    /// Subs and resubs; gifted subs are not thanked.
+    pub sub: Greeting,
+    pub bits: BitsGreeting,
+    pub raid: Greeting,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct Greeting {
+    pub enabled: bool,
+    pub message: String,
+}
+
+/// A returning viewer's first message this stream, after `days` or more without being seen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ReturnGreeting {
+    pub enabled: bool,
+    pub message: String,
+    /// `false`: only tag the chat line (回訪 · N 天沒來); `true`: post the message.
+    pub post: bool,
+    pub days: u32,
+}
+
+/// Bits in three tiers: 1–99, 100–999, 1000 and more.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct BitsGreeting {
+    pub enabled: bool,
+    pub small: String,
+    pub medium: String,
+    pub large: String,
+}
+
+impl Default for BotGreetings {
+    /// The prototype's messages, each kind on as there (the module itself starts off).
+    fn default() -> Self {
+        let greeting = |enabled: bool, message: &str| Greeting {
+            enabled,
+            message: message.into(),
+        };
+        Self {
+            follow: greeting(true, "謝謝 {觀眾} 的追隨，歡迎！"),
+            first_chat: greeting(false, "歡迎 {觀眾} 第一次來聊天！"),
+            returning: ReturnGreeting {
+                enabled: true,
+                message: "{觀眾} 歡迎回來！".into(),
+                post: false,
+                days: 7,
+            },
+            sub: greeting(true, "感謝 {觀眾} 的訂閱！"),
+            bits: BitsGreeting {
+                enabled: true,
+                small: "謝謝 {觀眾} 的 {數量} 小奇點！".into(),
+                medium: "哇！{觀眾} 送了 {數量} 小奇點，太感謝了！".into(),
+                large: "{觀眾} 你是大老闆！{數量} 小奇點！".into(),
+            },
+            raid: greeting(true, "感謝 {觀眾} 帶著 {數量} 人揪團！"),
+        }
+    }
 }
 
 /// A message posted on a timer while live, unless chat was too quiet since its last one.

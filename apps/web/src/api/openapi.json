@@ -730,6 +730,73 @@
         }
       }
     },
+    "/api/admin/bot/greetings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "greetings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotGreetings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "set_greetings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotGreetings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The greetings as kept (trimmed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotGreetings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bot.invalid_greetings`: a message over 500 characters, an empty message switched on, or 回訪 days outside 1–365",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/bot/status": {
       "get": {
         "tags": [
@@ -9281,6 +9348,30 @@
           "bgm.test"
         ]
       },
+      "BitsGreeting": {
+        "type": "object",
+        "description": "Bits in three tiers: 1–99, 100–999, 1000 and more.",
+        "required": [
+          "enabled",
+          "small",
+          "medium",
+          "large"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "large": {
+            "type": "string"
+          },
+          "medium": {
+            "type": "string"
+          },
+          "small": {
+            "type": "string"
+          }
+        }
+      },
       "Board": {
         "type": "object",
         "required": [
@@ -9398,6 +9489,124 @@
             "type": "string"
           }
         }
+      },
+      "BotGreetings": {
+        "type": "object",
+        "description": "自動感謝與歡迎: one message per kind, each switched on its own.",
+        "properties": {
+          "bits": {
+            "$ref": "#/components/schemas/BitsGreeting",
+            "default": {
+              "enabled": true,
+              "large": "{觀眾} 你是大老闆！{數量} 小奇點！",
+              "medium": "哇！{觀眾} 送了 {數量} 小奇點，太感謝了！",
+              "small": "謝謝 {觀眾} 的 {數量} 小奇點！"
+            }
+          },
+          "first_chat": {
+            "$ref": "#/components/schemas/Greeting",
+            "default": {
+              "enabled": false,
+              "message": "歡迎 {觀眾} 第一次來聊天！"
+            }
+          },
+          "follow": {
+            "$ref": "#/components/schemas/Greeting",
+            "default": {
+              "enabled": true,
+              "message": "謝謝 {觀眾} 的追隨，歡迎！"
+            }
+          },
+          "raid": {
+            "$ref": "#/components/schemas/Greeting",
+            "default": {
+              "enabled": true,
+              "message": "感謝 {觀眾} 帶著 {數量} 人揪團！"
+            }
+          },
+          "returning": {
+            "$ref": "#/components/schemas/ReturnGreeting",
+            "default": {
+              "days": 7,
+              "enabled": true,
+              "message": "{觀眾} 歡迎回來！",
+              "post": false
+            }
+          },
+          "sub": {
+            "$ref": "#/components/schemas/Greeting",
+            "description": "Subs and resubs; gifted subs are not thanked.",
+            "default": {
+              "enabled": true,
+              "message": "感謝 {觀眾} 的訂閱！"
+            }
+          }
+        }
+      },
+      "BotReturningEvent": {
+        "type": "object",
+        "description": "A `bot.returning` event exactly as `/ws/overlay` sends it (only 只提示我): the chat log and the docked chat tag\nthat message 回訪 · N 天沒來. Not kept in the snapshot: the tag is for now.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BotReturningPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/BotReturningType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "BotReturningPayload": {
+        "type": "object",
+        "required": [
+          "messageId",
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Days since the viewer was last seen before it.",
+            "minimum": 0
+          },
+          "messageId": {
+            "type": "string",
+            "description": "Twitch's ID of the chat message to tag."
+          }
+        }
+      },
+      "BotReturningType": {
+        "type": "string",
+        "enum": [
+          "bot.returning"
+        ]
       },
       "BotStatus": {
         "type": "object",
@@ -11747,6 +11956,21 @@
           "settings_unreadable": {
             "type": "boolean",
             "description": "Read only (ignored on PUT): `settings.json` exists but cannot be read or parsed. Defaults are in use and\nno setting saves (`settings.save_failed`) until the file is fixed or removed."
+          }
+        }
+      },
+      "Greeting": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "message"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
           }
         }
       },
@@ -14556,6 +14780,33 @@
             "type": "integer",
             "description": "Template folders, e.g. `templates/chat/`.",
             "minimum": 0
+          }
+        }
+      },
+      "ReturnGreeting": {
+        "type": "object",
+        "description": "A returning viewer's first message this stream, after `days` or more without being seen.",
+        "required": [
+          "enabled",
+          "message",
+          "post",
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "post": {
+            "type": "boolean",
+            "description": "`false`: only tag the chat line (回訪 · N 天沒來); `true`: post the message."
           }
         }
       },

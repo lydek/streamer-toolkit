@@ -204,6 +204,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/bot/greetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["greetings"];
+        put: operations["set_greetings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/bot/status": {
         parameters: {
             query?: never;
@@ -2857,6 +2873,13 @@ export interface components {
         };
         /** @enum {string} */
         BgmTestType: "bgm.test";
+        /** @description Bits in three tiers: 1–99, 100–999, 1000 and more. */
+        BitsGreeting: {
+            enabled: boolean;
+            large: string;
+            medium: string;
+            small: string;
+        };
         Board: {
             board: components["schemas"]["BoardKind"];
             /** @description Most first, at most 10. */
@@ -2898,6 +2921,82 @@ export interface components {
             name: string;
             reply: string;
         };
+        /** @description 自動感謝與歡迎: one message per kind, each switched on its own. */
+        BotGreetings: {
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "large": "{觀眾} 你是大老闆！{數量} 小奇點！",
+             *       "medium": "哇！{觀眾} 送了 {數量} 小奇點，太感謝了！",
+             *       "small": "謝謝 {觀眾} 的 {數量} 小奇點！"
+             *     }
+             */
+            bits: components["schemas"]["BitsGreeting"];
+            /**
+             * @default {
+             *       "enabled": false,
+             *       "message": "歡迎 {觀眾} 第一次來聊天！"
+             *     }
+             */
+            first_chat: components["schemas"]["Greeting"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "message": "謝謝 {觀眾} 的追隨，歡迎！"
+             *     }
+             */
+            follow: components["schemas"]["Greeting"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "message": "感謝 {觀眾} 帶著 {數量} 人揪團！"
+             *     }
+             */
+            raid: components["schemas"]["Greeting"];
+            /**
+             * @default {
+             *       "days": 7,
+             *       "enabled": true,
+             *       "message": "{觀眾} 歡迎回來！",
+             *       "post": false
+             *     }
+             */
+            returning: components["schemas"]["ReturnGreeting"];
+            /**
+             * @description Subs and resubs; gifted subs are not thanked.
+             * @default {
+             *       "enabled": true,
+             *       "message": "感謝 {觀眾} 的訂閱！"
+             *     }
+             */
+            sub: components["schemas"]["Greeting"];
+        };
+        /**
+         * @description A `bot.returning` event exactly as `/ws/overlay` sends it (only 只提示我): the chat log and the docked chat tag
+         *     that message 回訪 · N 天沒來. Not kept in the snapshot: the tag is for now.
+         */
+        BotReturningEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["BotReturningPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["BotReturningType"];
+            /** Format: int32 */
+            version: number;
+        };
+        BotReturningPayload: {
+            /**
+             * Format: int64
+             * @description Days since the viewer was last seen before it.
+             */
+            days: number;
+            /** @description Twitch's ID of the chat message to tag. */
+            messageId: string;
+        };
+        /** @enum {string} */
+        BotReturningType: "bot.returning";
         /** @description How many messages the bot dropped since launch (the queue was full, or they waited too long). */
         BotStatus: {
             /** Format: int64 */
@@ -3745,6 +3844,10 @@ export interface components {
              *     no setting saves (`settings.save_failed`) until the file is fixed or removed.
              */
             settings_unreadable?: boolean;
+        };
+        Greeting: {
+            enabled: boolean;
+            message: string;
         };
         /** @enum {string} */
         ImageKind: "badge" | "points";
@@ -4715,6 +4818,15 @@ export interface components {
             sounds: number;
             /** @description Template folders, e.g. `templates/chat/`. */
             templates: number;
+        };
+        /** @description A returning viewer's first message this stream, after `days` or more without being seen. */
+        ReturnGreeting: {
+            /** Format: int32 */
+            days: number;
+            enabled: boolean;
+            message: string;
+            /** @description `false`: only tag the chat line (回訪 · N 天沒來); `true`: post the message. */
+            post: boolean;
         };
         /** @description A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text. */
         Reward: {
@@ -6060,6 +6172,67 @@ export interface operations {
             };
             /** @description `bot.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    greetings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotGreetings"];
+                };
+            };
+        };
+    };
+    set_greetings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotGreetings"];
+            };
+        };
+        responses: {
+            /** @description The greetings as kept (trimmed) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotGreetings"];
+                };
+            };
+            /** @description `bot.invalid_greetings`: a message over 500 characters, an empty message switched on, or 回訪 days outside 1–365 */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

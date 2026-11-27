@@ -120,7 +120,8 @@ export function backgroundOf(el: Element | null, fallback: Rgb): Rgb {
 // ---- The drawer's live log ----
 
 /** A message in the admin log; a deleted one keeps its place with its text gone. */
-export type LoggedChat = ChatEvent & { deleted?: boolean }
+/** `returningDays`: the chat bot tagged it 回訪 (只提示我), with the days the viewer had not been seen. */
+export type LoggedChat = ChatEvent & { deleted?: boolean; returningDays?: number }
 
 export interface ChatLog {
   messages: LoggedChat[]
@@ -159,6 +160,10 @@ export function applyChat(log: ChatLog, msg: Incoming): ChatLog {
     const messages = log.messages.map((m) =>
       m.id === msg.payload.messageId && !m.payload.firstChat ? { ...m, payload: { ...m.payload, firstChat: true } } : m,
     )
+    return { ...log, messages }
+  }
+  if (msg.type === 'bot.returning') {
+    const messages = log.messages.map((m) => (m.id === msg.payload.messageId ? { ...m, returningDays: msg.payload.days } : m))
     return { ...log, messages }
   }
   if (msg.type === 'chat.removed') {
@@ -242,10 +247,10 @@ export function useChatHistory() {
       connected = true
       pending?.push(...(msg.payload['chat.removed'] ?? []))
     }
-    if (msg.type === 'chat.removed' || msg.type === 'chat.first') pending?.push(msg)
+    if (msg.type === 'chat.removed' || msg.type === 'chat.first' || msg.type === 'bot.returning') pending?.push(msg)
     log.value = applyChat(log.value, msg)
   }
   return { log, accept, historyFailed }
 }
 
-export type ChatUpdate = Extract<Incoming, { type: 'chat.removed' | 'chat.first' }>
+export type ChatUpdate = Extract<Incoming, { type: 'chat.removed' | 'chat.first' | 'bot.returning' }>

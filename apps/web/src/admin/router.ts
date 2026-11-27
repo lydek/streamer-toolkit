@@ -34,12 +34,12 @@ import RewardsPage from './RewardsPage.vue'
 import PollsPage from './PollsPage.vue'
 import BotCommandsPage from './BotCommandsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
+import BotGreetingsPage from './BotGreetingsPage.vue'
 import { needsSetup } from './setup'
 import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 
 // Unbuilt pages drawn ahead of their backend (UI-G), opened in dev mode only; lazy, so release never loads them.
 export const DRAWN: Record<string, () => Promise<unknown>> = {
-  '/greetings': () => import('./BotGreetingsPage.vue'),
   '/songs': () => import('./SongsPage.vue'),
   '/song-list': () => import('./SongListPage.vue'),
   '/singing-booth': () => import('./SingingBoothPage.vue'),
@@ -99,6 +99,7 @@ export const router = createRouter({
     { path: '/polls', component: PollsPage },
     { path: '/commands', component: BotCommandsPage },
     { path: '/timers', component: BotTimersPage },
+    { path: '/greetings', component: BotGreetingsPage },
     // Screens of the design that are not built yet (docs/scope.md 階段 0): their URL leads home, except in dev mode,
     // where a page drawn ahead of its backend opens (DRAWN) and the rest show a placeholder.
     ...SOON_PAGES.map((p) => ({

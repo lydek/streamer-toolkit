@@ -128,6 +128,7 @@ use crate::{
     ),
     components(schemas(
         overlay::Snapshot,
+        crate::bot_ports::BotReturningEvent,
         chat::ChatMessageEvent,
         alerts::AlertEvent,
         alerts::AlertReceivedEvent,
