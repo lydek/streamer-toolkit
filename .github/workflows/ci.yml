@@ -52,7 +52,9 @@ jobs:
           done <<< "$files"
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
-  main:
+  # Frontend checks; runs on every PR so docs-only PRs still get the translation check. Needs no Rust: no script or
+  # frontend test runs cargo (dev-server.test.ts and dev-fake.test.mjs only read Rust source as text).
+  web:
     needs: changes
     runs-on: windows-latest
     steps:
@@ -67,20 +69,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
         if: needs.changes.outputs.code == 'true'
 
-      # Toolchain and components come from rust-toolchain.toml.
-      - run: rustup show active-toolchain || rustup toolchain install
-        if: needs.changes.outputs.code == 'true'
-      # Restores the cache cache.yml saves on main; PRs never save (1–1.7 GB each would evict main's).
-      - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.code == 'true'
-        with:
-          shared-key: ci
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@v2
-        if: needs.changes.outputs.code == 'true'
-        with:
-          tool: cargo-deny
-
       - name: Translations in sync
         run: node scripts/check-translations.mjs
 
@@ -91,7 +79,6 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         run: pnpm check:licenses
 
-      # Frontend first: the Host embeds apps/web/dist at compile time.
       - run: pnpm web:lint
         if: needs.changes.outputs.code == 'true'
       - run: pnpm web:test
@@ -100,30 +87,59 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         run: pnpm web:build
 
-      # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types.
-      - name: Regenerate API contracts
-        if: needs.changes.outputs.code == 'true'
-        run: pnpm api:gen
-      - name: API contracts are up to date (run pnpm api:gen and commit)
-        if: needs.changes.outputs.code == 'true'
-        run: git diff --exit-code HEAD -- apps/web/src/api
+  # In parallel with `web`. Builds the frontend bundles again, since the Host embeds them, but leaves the typecheck to
+  # `web`. One command per step: Windows pwsh reports only the last native exit code.
+  rust:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node for the frontend bundles and for openapi-typescript in `pnpm api:gen`.
+      - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Toolchain and components come from rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      # Restores the cache cache.yml saves on main; PRs never save (1–1.7 GB each would evict main's).
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
 
       - run: cargo fmt --all --check
-        if: needs.changes.outputs.code == 'true'
+
+      # The Host embeds apps/web/dist at compile time; the tauri/custom-protocol clippy run embeds apps/web/dist-port
+      # (frontendDist in apps/desktop/tauri.conf.json).
+      - name: Build frontend (typecheck runs in web)
+        run: pnpm --filter web exec vite build
+      - name: Build frontend port page
+        run: pnpm --filter web exec vite build --mode port
+
+      # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types.
+      - name: Regenerate API contracts
+        run: pnpm api:gen
+      - name: API contracts are up to date (run pnpm api:gen and commit)
+        run: git diff --exit-code HEAD -- apps/web/src/api
+
       - run: cargo clippy --workspace --all-targets -- -D warnings
-        if: needs.changes.outputs.code == 'true'
       - name: Clippy on release-only code (tauri/custom-protocol; checked, never shipped)
-        if: needs.changes.outputs.code == 'true'
         run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
       - name: Tests (includes architecture tests)
-        if: needs.changes.outputs.code == 'true'
         run: cargo test --workspace
       - name: Licenses and advisories
-        if: needs.changes.outputs.code == 'true'
         run: cargo deny check
 
-  # In parallel with `main`, with its own cache (iced stays out of the main one). Needs no Node: fakes depends on
-  # neither the Host nor apps/web/dist.
+  # In parallel with `web` and `rust`, with its own cache (iced stays out of the `ci` one). Needs no Node: fakes
+  # depends on neither the Host nor apps/web/dist.
   fakes-ui:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -144,7 +160,7 @@ jobs:
   # The one required check. A skipped required check counts as passing, so this runs always and accepts
   # `skipped` only where the PR's files allow it.
   check:
-    needs: [changes, main, fakes-ui]
+    needs: [changes, web, rust, fakes-ui]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -152,12 +168,13 @@ jobs:
         shell: bash
         env:
           CHANGES: ${{ needs.changes.result }}
-          MAIN: ${{ needs.main.result }}
+          WEB: ${{ needs.web.result }}
+          RUST: ${{ needs.rust.result }}
           FAKES_UI: ${{ needs.fakes-ui.result }}
           CODE: ${{ needs.changes.outputs.code }}
         run: |
-          echo "changes=$CHANGES main=$MAIN fakes-ui=$FAKES_UI code=$CODE"
-          [ "$CHANGES" = success ] && [ "$MAIN" = success ] || exit 1
-          if [ "$CODE" = true ]; then [ "$FAKES_UI" = success ]
-          elif [ "$CODE" = false ]; then [ "$FAKES_UI" = skipped ]
+          echo "changes=$CHANGES web=$WEB rust=$RUST fakes-ui=$FAKES_UI code=$CODE"
+          [ "$CHANGES" = success ] && [ "$WEB" = success ] || exit 1
+          if [ "$CODE" = true ]; then [ "$RUST" = success ] && [ "$FAKES_UI" = success ]
+          elif [ "$CODE" = false ]; then [ "$RUST" = skipped ] && [ "$FAKES_UI" = skipped ]
           else exit 1; fi
