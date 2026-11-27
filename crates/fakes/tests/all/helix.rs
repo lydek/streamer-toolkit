@@ -411,3 +411,147 @@ async fn polls_start_take_votes_and_end_with_their_events() {
         .unwrap();
     assert_eq!(fake.snapshot().poll.unwrap().title, "再一次");
 }
+
+#[tokio::test]
+async fn predictions_take_bets_lock_and_settle_with_their_events() {
+    use toolkit_core::events::PredictionStatus;
+    let fake = FakeTwitch::default();
+    let (helix, mut events) = contests(&fake).await;
+    let prediction = |title: &str| {
+        json!({"broadcaster_id": BROADCASTER_ID, "title": title, "prediction_window": 120,
+               "outcomes": [{"title": "能"}, {"title": "不能"}]})
+    };
+
+    let made = helix
+        .post_json_read("/predictions", &prediction("吃雞？"))
+        .await
+        .unwrap();
+    let p = &made["data"][0];
+    let id = p["id"].as_str().unwrap().to_owned();
+    let winner = p["outcomes"][0]["id"].as_str().unwrap().to_owned();
+    for id in [&id, &winner] {
+        assert!(
+            id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+            "{id}"
+        );
+    }
+    let read = integrations::twitch::contests::prediction_from_json(p.clone(), false).unwrap();
+    assert_eq!(
+        (read.status, read.outcomes.len()),
+        (PredictionStatus::Active, 2)
+    );
+    assert!(!read.locks_at.is_empty(), "the start plus the window");
+    let Contest::Prediction(begin) = next(&mut events).await else {
+        panic!("a prediction")
+    };
+    assert_eq!(
+        (begin.id.as_str(), begin.status),
+        (id.as_str(), PredictionStatus::Active)
+    );
+    assert_eq!(
+        refused(
+            helix
+                .post_json_read("/predictions", &prediction("Another"))
+                .await
+        ),
+        400,
+        "one at a time"
+    );
+
+    fakes::control::prediction_body(
+        &fake,
+        &json!({"action": "bet", "outcome": "1", "points": "500", "users": "2"}),
+    )
+    .unwrap();
+    let Contest::Prediction(progress) = next(&mut events).await else {
+        panic!("a prediction")
+    };
+    assert_eq!(
+        (progress.outcomes[0].users, progress.outcomes[0].points),
+        (2, 500)
+    );
+
+    let change =
+        |status: &str| json!({"broadcaster_id": BROADCASTER_ID, "id": id, "status": status});
+    let locked = helix
+        .patch_json_read("/predictions", &change("LOCKED"))
+        .await
+        .unwrap();
+    assert_eq!(locked["data"][0]["status"], "LOCKED");
+    let Contest::Prediction(lock) = next(&mut events).await else {
+        panic!("a prediction")
+    };
+    assert_eq!(lock.status, PredictionStatus::Locked);
+    assert_eq!(
+        refused(
+            helix
+                .patch_json_read("/predictions", &change("LOCKED"))
+                .await
+        ),
+        400,
+        "already locked"
+    );
+    assert!(
+        fakes::control::prediction_body(&fake, &json!({"action": "bet", "outcome": "1"})).is_err()
+    );
+    assert_eq!(
+        refused(
+            helix
+                .post_json_read("/predictions", &prediction("Still locked"))
+                .await
+        ),
+        400
+    );
+
+    let mut resolve = change("RESOLVED");
+    resolve["winning_outcome_id"] = json!("fake-none");
+    assert_eq!(
+        refused(helix.patch_json_read("/predictions", &resolve).await),
+        400,
+        "not an outcome"
+    );
+    resolve["winning_outcome_id"] = json!(winner);
+    let done = helix
+        .patch_json_read("/predictions", &resolve)
+        .await
+        .unwrap();
+    assert_eq!(done["data"][0]["winning_outcome_id"], winner.as_str());
+    let Contest::Prediction(end) = next(&mut events).await else {
+        panic!("a prediction")
+    };
+    assert_eq!(
+        (end.status, end.winning_outcome_id.as_deref()),
+        (PredictionStatus::Resolved, Some(winner.as_str()))
+    );
+    assert_eq!(
+        refused(
+            helix
+                .patch_json_read("/predictions", &change("CANCELED"))
+                .await
+        ),
+        400,
+        "already settled"
+    );
+
+    // A new prediction may start once the last one is settled; canceling works while it is open.
+    let again = helix
+        .post_json_read("/predictions", &prediction("再一次"))
+        .await
+        .unwrap();
+    let again_id = again["data"][0]["id"].as_str().unwrap();
+    let cancel = json!({"broadcaster_id": BROADCASTER_ID, "id": again_id, "status": "CANCELED"});
+    assert_eq!(
+        helix
+            .patch_json_read("/predictions", &cancel)
+            .await
+            .unwrap()["data"][0]["status"],
+        "CANCELED"
+    );
+    let listed = helix
+        .get_json(&format!(
+            "/predictions?broadcaster_id={BROADCASTER_ID}&first=1"
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listed["data"][0]["status"], "CANCELED");
+}

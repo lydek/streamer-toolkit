@@ -226,6 +226,7 @@ impl Panel {
         column![
             row![account, drops].spacing(24),
             self.poll_row(),
+            self.prediction_row(),
             row![
                 column![rewards].width(FillPortion(3)),
                 column![
@@ -279,6 +280,43 @@ impl Panel {
         }
         if active {
             line = line.push(small_button("結束", command(&["poll", "end"])));
+        }
+        line.wrap().into()
+    }
+
+    /// The latest prediction: each outcome's predictors and points (a click bets 100 points while it is open), and
+    /// locking it now. A result or a cancel comes from the app, as on Twitch.
+    fn prediction_row(&self) -> Element<'_, Message> {
+        let Some(p) = &self.twitch_view.prediction else {
+            return row![heading("預測"), text("沒有").color(MUTED)]
+                .spacing(8)
+                .into();
+        };
+        let open = p.status == "ACTIVE";
+        let status = match p.status.as_str() {
+            "ACTIVE" => "下注中",
+            "LOCKED" => "已鎖定",
+            "RESOLVED" => "已結算",
+            _ => "已取消",
+        };
+        let mut line = row![heading("預測"), text(format!("{} · {status}", p.title))]
+            .spacing(8)
+            .align_y(Alignment::Center);
+        for (n, (title, users, points)) in p.outcomes.iter().enumerate() {
+            let label = text(format!("{title} {users} 人 {points} 點")).size(SMALL);
+            line = line.push(if open {
+                let outcome = (n + 1).to_string();
+                button(label)
+                    .padding([3, 8])
+                    .style(button::secondary)
+                    .on_press(command(&["prediction", "bet", "--outcome", &outcome]))
+                    .into()
+            } else {
+                Element::from(label)
+            });
+        }
+        if open {
+            line = line.push(small_button("鎖定", command(&["prediction", "lock"])));
         }
         line.wrap().into()
     }

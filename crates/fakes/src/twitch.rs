@@ -27,7 +27,7 @@ mod chat;
 mod contests;
 mod rewards;
 pub use channel::{CATEGORIES, Channel};
-pub use contests::PollView;
+pub use contests::{PollView, PredictionView};
 pub use rewards::RewardView;
 
 pub const BROADCASTER_ID: &str = "1000";
@@ -58,6 +58,8 @@ pub struct TwitchSnapshot {
     pub rewards: Vec<RewardView>,
     /// The latest poll, running or ended.
     pub poll: Option<PollView>,
+    /// The latest prediction, running or ended.
+    pub prediction: Option<PredictionView>,
     /// The ID of the last redemption and the last chat message the app received.
     pub last_redemption: Option<String>,
     pub last_chat: Option<String>,
@@ -96,6 +98,7 @@ struct World {
     rewards: Vec<rewards::Reward>,
     redemptions: Vec<rewards::Redemption>,
     poll: Option<contests::Poll>,
+    prediction: Option<contests::Prediction>,
     last_redemption: Option<String>,
     last_chat: Option<String>,
     next_id: u64,
@@ -147,6 +150,7 @@ impl FakeTwitch {
                 rewards: rewards::preloaded(),
                 redemptions: Vec::new(),
                 poll: None,
+                prediction: None,
                 last_redemption: None,
                 last_chat: None,
                 next_id: 0,
@@ -195,6 +199,12 @@ impl FakeTwitch {
                     .post(contests::create_poll)
                     .patch(contests::end_poll),
             )
+            .route(
+                "/helix/predictions",
+                get(contests::get_predictions)
+                    .post(contests::create_prediction)
+                    .patch(contests::end_prediction),
+            )
             .route("/helix/chat/badges/global", get(badges))
             .route("/helix/chat/badges", get(badges))
             .route(
@@ -241,6 +251,7 @@ impl FakeTwitch {
             channel: w.channel.clone(),
             rewards: w.rewards.iter().map(rewards::Reward::view).collect(),
             poll: w.poll.as_ref().map(contests::Poll::view),
+            prediction: w.prediction.as_ref().map(contests::Prediction::view),
             last_redemption: w.last_redemption.clone(),
             last_chat: w.last_chat.clone(),
         }

@@ -39,6 +39,7 @@ pub fn router(obs: FakeObs, twitch: FakeTwitch) -> Router {
         .route("/_control/stats", post(stats))
         .route("/_control/fault", post(fault))
         .route("/_control/poll", post(poll))
+        .route("/_control/prediction", post(prediction))
         .with_state(Fakes { obs, twitch })
 }
 
@@ -113,6 +114,7 @@ pub fn run_command(obs: &FakeObs, twitch: &FakeTwitch, words: &[String]) -> Resu
             Ok(json!({}))
         }
         "/_control/poll" => poll_body(twitch, &body),
+        "/_control/prediction" => prediction_body(twitch, &body),
         _ => Err(format!("{path} is not run in the panel")),
     }
 }
@@ -251,6 +253,25 @@ pub fn poll_body(twitch: &FakeTwitch, body: &Value) -> Result<Value, String> {
 
 async fn poll(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
     reply(poll_body(&fakes.twitch, &body))
+}
+
+/// `{"action": "bet", "outcome", "points"?, "users"?}` or `{"action": "lock"}` for the open prediction.
+pub fn prediction_body(twitch: &FakeTwitch, body: &Value) -> Result<Value, String> {
+    match body["action"].as_str() {
+        Some("bet") => {
+            let outcome =
+                number(&body["outcome"]).ok_or("prediction bet needs --outcome <n>")? as usize;
+            let points = number(&body["points"]).unwrap_or(100.0).max(0.0) as u64;
+            let users = number(&body["users"]).unwrap_or(1.0).max(0.0) as u64;
+            twitch.prediction_bet(outcome, users, points)
+        }
+        Some("lock") => twitch.prediction_lock(),
+        other => Err(format!("unknown prediction action {other:?}")),
+    }
+}
+
+async fn prediction(State(fakes): State<Fakes>, Json(body): Json<Value>) -> Response {
+    reply(prediction_body(&fakes.twitch, &body))
 }
 
 async fn eventsub_drop(State(fakes): State<Fakes>) -> Response {
@@ -417,6 +438,22 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
             }
             Ok(("/_control/poll", body))
         }
+        "prediction" => {
+            match rest.first().map(String::as_str) {
+                Some("bet") => {
+                    flags(&rest[1..])?;
+                    body["action"] = json!("bet");
+                }
+                Some("lock") => body["action"] = json!("lock"),
+                _ => {
+                    return Err(
+                        "prediction needs bet --outcome <n> [--points <n>] [--users <n>] or lock"
+                            .into(),
+                    );
+                }
+            }
+            Ok(("/_control/prediction", body))
+        }
         "eventsub" if rest.first().map(String::as_str) == Some("drop") => {
             Ok(("/_control/eventsub/drop", body))
         }
@@ -525,6 +562,17 @@ mod tests {
         );
         assert_eq!(cmd(&["poll", "end"]).unwrap().1, json!({"action": "end"}));
         assert!(cmd(&["poll"]).is_err());
+        assert_eq!(
+            cmd(&["prediction", "bet", "--outcome", "1", "--points", "500"]).unwrap(),
+            (
+                "/_control/prediction",
+                json!({"action": "bet", "outcome": "1", "points": "500"})
+            )
+        );
+        assert_eq!(
+            cmd(&["prediction", "lock"]).unwrap().1,
+            json!({"action": "lock"})
+        );
         assert_eq!(
             cmd(&["scenario", "gift-bomb"]).unwrap().1["name"],
             "gift-bomb"
