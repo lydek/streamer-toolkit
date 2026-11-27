@@ -3,6 +3,7 @@
 
 mod control;
 mod faults;
+mod helix;
 mod metrics;
 mod obs;
 mod snapshot;
