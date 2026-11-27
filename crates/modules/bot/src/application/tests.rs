@@ -286,3 +286,77 @@ async fn a_message_waiting_over_two_minutes_is_dropped() {
     assert_eq!(posted(&b), ["嗨"]);
     assert_eq!(b.service.dropped(), 1);
 }
+
+/// A bot with one timer (every `minutes`, at least `lines` chat lines), signed in and on.
+fn timed(name: &str, minutes: u32, lines: u32) -> Bot {
+    let b = bot(name, &[]);
+    let timer = BotTimer {
+        id: "t1".into(),
+        name: "喝水".into(),
+        message: "大家記得喝水".into(),
+        every_minutes: minutes,
+        min_chat_lines: lines,
+        enabled: true,
+    };
+    settings::update(&b.dir, |s| s.bot.timers = vec![timer.clone()]).unwrap();
+    *b.service.bot_timers.write().unwrap() = vec![timer];
+    b
+}
+
+async fn wait_minutes(n: u64) {
+    tokio::time::advance(Duration::from_secs(n * 60) + Duration::from_millis(1100)).await;
+    settle().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_timer_posts_while_live_only_when_chat_was_not_too_quiet() {
+    let b = timed("timer", 5, 2);
+    // Not live: nothing is due.
+    wait_minutes(10).await;
+    assert!(b.service.next_times().is_empty());
+    b.service.stream_status(Some(Utc::now()));
+    assert_eq!(b.service.next_times().len(), 1);
+
+    // One line in the first five minutes: too quiet, skipped.
+    b.service
+        .receive_chat(&message("1", "7", "哈囉", vec![]), Source::Twitch);
+    wait_minutes(5).await;
+    assert!(posted(&b).is_empty());
+    // Counted since the start (no send yet): two lines now.
+    b.service
+        .receive_chat(&message("2", "8", "嗨", vec![]), Source::Twitch);
+    wait_minutes(5).await;
+    assert_eq!(posted(&b), ["大家記得喝水"]);
+    // Its own message is not chat; lines start again from the send.
+    b.service.receive_chat(
+        &message("sent-0", "42", "大家記得喝水", vec![]),
+        Source::Twitch,
+    );
+    wait_minutes(5).await;
+    assert_eq!(posted(&b).len(), 1);
+
+    b.service.stream_status(None);
+    for i in 0..5 {
+        b.service.receive_chat(
+            &message(&format!("x{i}"), "7", "嗨", vec![]),
+            Source::Twitch,
+        );
+    }
+    wait_minutes(10).await;
+    assert_eq!(posted(&b).len(), 1);
+    assert!(b.service.next_times().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_timer_with_no_minimum_posts_every_interval_from_the_stream_start() {
+    let b = timed("timer-every", 5, 0);
+    // Joined two minutes into the stream: the first one is three minutes away.
+    b.service
+        .stream_status(Some(Utc::now() - chrono::Duration::minutes(2)));
+    wait_minutes(2).await;
+    assert!(posted(&b).is_empty());
+    wait_minutes(1).await;
+    assert_eq!(posted(&b).len(), 1);
+    wait_minutes(5).await;
+    assert_eq!(posted(&b).len(), 2);
+}

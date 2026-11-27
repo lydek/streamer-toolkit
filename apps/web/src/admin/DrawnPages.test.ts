@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
 import BotGreetingsPage from './BotGreetingsPage.vue'
-import BotTimersPage from './BotTimersPage.vue'
 import SongsPage from './SongsPage.vue'
 import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
@@ -43,17 +42,6 @@ async function page(component: Component, path: string) {
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
 
 describe('聊天機器人', () => {
-  it('shows no timers, with adding them disabled', async () => {
-    for (const [component, path, kind] of [
-      [BotTimersPage, '/timers', 'timers'],
-    ] as const) {
-      const w = await page(component, path)
-      expect(w.get('h1').text()).toBe(t(`pages.${kind}.name`))
-      expect(w.get('.empty-cell').text()).toBe(t(`bot.${kind}.empty`))
-      expect(button(w, t(`bot.${kind}.add`)).attributes('disabled')).toBeDefined()
-    }
-  })
-
   it('shows one message per greeting with its switch disabled, and the variables as written', async () => {
     const w = await page(BotGreetingsPage, '/greetings')
     const switches = w.findAll('[role="switch"]')

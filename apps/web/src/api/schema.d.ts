@@ -220,6 +220,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/bot/timers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_timers"];
+        put?: never;
+        post: operations["create_timer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bot/timers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_timer"];
+        post?: never;
+        delete: operations["delete_timer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chat-display": {
         parameters: {
             query?: never;
@@ -2870,6 +2902,36 @@ export interface components {
         BotStatus: {
             /** Format: int64 */
             dropped: number;
+        };
+        BotTimerBody: {
+            enabled: boolean;
+            /**
+             * Format: int32
+             * @description 5–120.
+             */
+            every_minutes: number;
+            /** @description Up to 500 characters; may use `{計數:名稱}` and `{直播時長}`. */
+            message: string;
+            /**
+             * Format: int32
+             * @description 0–100: chat lines needed since its last send; fewer skip this time.
+             */
+            min_chat_lines: number;
+            /** @description Up to 50 characters. */
+            name: string;
+        };
+        /** @description A timed message as the admin page shows it. `name` and `message` are the broadcaster's text, shown as text. */
+        BotTimerView: {
+            enabled: boolean;
+            /** Format: int32 */
+            every_minutes: number;
+            id: string;
+            message: string;
+            /** Format: int32 */
+            min_chat_lines: number;
+            name: string;
+            /** @description RFC 3339: when it is next due; `None` while not live (or when off). */
+            next_at: string | null;
         };
         /**
          * @description How an item fills its bounding box: `none` scales its content by its size; the rest make its size the box.
@@ -6031,6 +6093,155 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BotStatus"];
+                };
+            };
+        };
+    };
+    list_timers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTimerView"][];
+                };
+            };
+        };
+    };
+    create_timer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotTimerBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTimerView"];
+                };
+            };
+            /** @description `bot.invalid_timer`: an empty or over-long name or message, an interval outside 5–120 minutes, over 100 chat lines, or more than 20 timers */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_timer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotTimerBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTimerView"];
+                };
+            };
+            /** @description `bot.invalid_timer` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `bot.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_timer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `bot.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

@@ -137,6 +137,23 @@
       "add": "新增指令"
     },
     "timers": {
+      "heading": "定時訊息",
+      "name": "名稱",
+      "message": "訊息",
+      "every": "每隔",
+      "minLines": "至少間隔聊天",
+      "next": "下一次",
+      "lines": "{n} 則",
+      "minutesUnit": "分鐘",
+      "linesUnit": "則",
+      "offline": "未開播",
+      "soon": "馬上",
+      "inMinutes": "{n} 分鐘後",
+      "enableLabel": "啟用：{name}",
+      "editLabel": "編輯：{name}",
+      "addTitle": "新增定時訊息",
+      "editTitle": "編輯定時訊息",
+      "deleteTitle": "刪除「{name}」？",
       "empty": "還沒有定時訊息。",
       "note": "只在直播中送出；聊天室太安靜時（不到「至少間隔聊天」的則數）就跳過",
       "add": "新增定時訊息"

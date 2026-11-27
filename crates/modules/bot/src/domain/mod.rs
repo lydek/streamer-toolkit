@@ -138,6 +138,19 @@ impl SentMessages {
     }
 }
 
+/// A timer's next time after `now`: every `every` from the stream's `start`, the first one `every` after it.
+pub(crate) fn next_due(start: Instant, every: Duration, now: Instant) -> Instant {
+    if every.is_zero() {
+        return now;
+    }
+    let first = start + every;
+    if now < first {
+        return first;
+    }
+    let passed = now.duration_since(start).as_nanos() / every.as_nanos();
+    start + every * (passed as u32 + 1)
+}
+
 /// When each command last replied.
 #[derive(Default)]
 pub(crate) struct Cooldowns {
@@ -237,6 +250,23 @@ mod tests {
         }
         assert!(!sent.contains("x0", start));
         assert!(sent.contains(&format!("x{SENT_MAX}"), start));
+    }
+
+    #[test]
+    fn timers_count_their_intervals_from_the_stream_start() {
+        let start = Instant::now();
+        let five = Duration::from_secs(300);
+        assert_eq!(next_due(start, five, start), start + five);
+        assert_eq!(
+            next_due(start, five, start + Duration::from_secs(299)),
+            start + five
+        );
+        // Exactly on time, or joining mid-stream: the next one after now.
+        assert_eq!(next_due(start, five, start + five), start + five * 2);
+        assert_eq!(
+            next_due(start, five, start + Duration::from_secs(1234)),
+            start + five * 5
+        );
     }
 
     #[test]
