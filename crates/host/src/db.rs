@@ -42,6 +42,7 @@ fn modules() -> Vec<&'static Migrator> {
         &activity::MIGRATOR,
         &viewers::MIGRATOR,
         &chat::MIGRATOR,
+        &songs::MIGRATOR,
     ]
 }
 

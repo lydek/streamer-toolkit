@@ -392,6 +392,8 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         commands.clone(),
         move || counter_sessions.session_after_pending(),
     );
+    // 點歌: the song list and requests.
+    let song_list = songs::start(config.db.clone());
     // 聊天機器人: posts as the streamer through Helix, through one rate-limited queue.
     let chat_bot = bot::BotService::start(
         config.data_dir.clone(),
@@ -680,6 +682,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                 admin.clone(),
                 admin::require_token,
             )))
+            .merge(
+                songs::routes(song_list).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
             .merge(
                 overlays::routes(screen_tools.clone()).layer(middleware::from_fn_with_state(
                     admin.clone(),

@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: c4d04d8f728c8bf8eb078c7ac209bfc0630d845239ad5823e916e431991569f0 -->
+<!-- source: docs/decisions.md source-sha256: eb1e1b120b67dc9ef02568dad38814e46d4a547988bc5c5436e0079af653e664 -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -79,6 +79,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Backup files | `zip` (deflate only: `flate2` + `zlib-rs`) + `sha2`; format in architecture.en.md §6 "Backup files" |
 | Performance monitor | `sysinfo` (MIT, `system` only): CPU and memory of this computer and of this app's process |
 | Image sizes | `image` (MIT/Apache-2.0, PNG, JPEG, GIF and WebP only) to resize; `oxipng` (MIT, default features off) to compress PNGs losslessly; `color_quant` (MIT) to reduce to 256 colors. Never `libimagequant` (GPL-3) |
+| Song list import | `calamine` (MIT, default features off) reads `.xlsx`; `csv` (MIT/Unlicense) reads CSV |
 | OpenAPI | `utoipa` |
 | Frontend API types | `openapi-typescript` + `openapi-fetch`; WS event types also live in OpenAPI components |
 | Architecture tests | Custom Rust test: `cargo_metadata` checks crate dependencies and scans `domain/` for any occurrence of `sqlx`/`axum` (including derives and full paths) |

@@ -11,6 +11,8 @@ const pageTab = (page: Page, category: string, name: string) => pageTabs(page, c
 const more = (page: Page) => tabs(page).getByRole('button', { name: zh.nav.more })
 /** A group tab with no built page to open: grey, not a link. */
 const greyTab = (page: Page, group: string) => tabs(page).locator('[data-group-tab][aria-disabled="true"]', { hasText: zh.nav.groups[group] })
+/** 點歌 turned off: none of its pages is open, so its group tab is grey. */
+const songsOff = { modules: [{ id: 'chat', enabled: true, closed: false }, { id: 'songs', enabled: false, closed: false }] }
 
 test('every group, category and page is one click away, and the current one is marked', async ({ page }) => {
   await openAdmin(page)
@@ -72,8 +74,8 @@ test('the app bar stays in view while the page scrolls', async ({ page }) => {
 
 test('"More" shows only when the groups do not fit, and holds the ones that do not', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 640 })
-  await openAdmin(page)
-  // 點歌, the one group with no built page, saved last in the bar, so it is the one that moves to "More".
+  await openAdmin(page, songsOff)
+  // 點歌, turned off so it has no page to open, saved last in the bar, so it is the one that moves to "More".
   await page.route('**/api/admin/tab-bar', (r) =>
     r.fulfill({ json: { groups: ['home', 'chat', 'interact', 'media', 'viewers', 'song'], position: 'top' } }),
   )
@@ -91,7 +93,7 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
   // The last item of "More" is always 「編輯分頁」.
   const items = page.locator('#tabs-more').getByRole('menuitem').filter({ hasNotText: zh.nav.edit })
   expect(visible + (await items.count())).toBe(Object.keys(zh.nav.groups).length)
-  // A group with no built page (點歌) is in "More" too, but greyed; a usable one opens.
+  // A group with no page to open (點歌) is in "More" too, but greyed; a usable one opens.
   await expect(items.filter({ hasText: zh.nav.groups.song })).toHaveAttribute('aria-disabled', 'true')
   await expect(items.filter({ hasText: zh.nav.groups.song })).toHaveAttribute('title', zh.home.unbuilt)
   await page.locator('#tabs-more [role="menuitem"]:not([aria-disabled="true"])').filter({ hasNotText: zh.nav.edit }).last().click()
@@ -181,7 +183,7 @@ const light = (page: Page, name: string) => page.getByRole('button', { name: new
 
 test('below 600px the tabs are a bottom bar, and a warning replaces the status lights', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 700 })
-  await openAdmin(page)
+  await openAdmin(page, songsOff)
   const box = await tabs(page).boundingBox()
   expect(Math.round(box!.y + box!.height)).toBe(700)
   await expect(light(page, 'Twitch')).toBeHidden()
@@ -190,7 +192,7 @@ test('below 600px the tabs are a bottom bar, and a warning replaces the status l
   await expect(problem(page)).toBeVisible()
   await expect(problem(page)).toHaveAccessibleName(zh.nav.problem.replace('{names}', 'Twitch'))
 
-  // The first four groups are in the bar (點歌 grey, nothing built yet); the rest are in "More".
+  // The first four groups are in the bar (點歌 grey, turned off); the rest are in "More".
   await expect(greyTab(page, 'song')).toBeVisible()
   for (const [group, url] of [['chat', /\/admin\/chat-log$/], ['interact', /\/admin\/alerts$/], ['home', /\/admin\/$/]] as const) {
     await tab(page, group).click()
@@ -248,8 +250,8 @@ test('sub-tabs stay one row, faded at the edge while more are off to the right',
   expect(rows).toBe(1)
 })
 
-test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home', async ({ page }) => {
-  await openAdmin(page)
+test('a group with no page to open has a grey tab that goes nowhere, and an unbuilt URL leads home', async ({ page }) => {
+  await openAdmin(page, songsOff)
   const song = greyTab(page, 'song')
   await expect(song).toHaveAttribute('title', zh.home.unbuilt)
   await expect(tabs(page).getByRole('link', { name: zh.nav.groups.song })).toHaveCount(0)
@@ -258,7 +260,7 @@ test('an unbuilt page has a grey tab that goes nowhere, and its URL leads home',
   const sub = page.getByRole('navigation', { name: zh.nav.sub })
   await expect(sub.locator('[aria-disabled="true"]', { hasText: zh.nav.categories.raids })).toBeVisible()
   await expect(sub.getByRole('link', { name: zh.nav.categories.raids })).toHaveCount(0)
-  await page.goto('/admin/songs')
+  await page.goto('/admin/raids')
   await expect(page).toHaveURL(/\/admin\/$/)
 })
 
@@ -275,8 +277,8 @@ test('a grey tile for a feature not built yet is no link or button, and the skip
 })
 
 /** Opens home with the saved tab bar `saved`; returns the bodies of every save. */
-async function openWithTabBar(page: Page, saved: unknown = null) {
-  await mockAdmin(page)
+async function openWithTabBar(page: Page, saved: unknown = null, state: Parameters<typeof mockAdmin>[1] = {}) {
+  await mockAdmin(page, state)
   const puts: unknown[] = []
   await page.route('**/api/admin/tab-bar', (r) => {
     if (r.request().method() === 'GET') return r.fulfill({ json: saved })
@@ -291,7 +293,7 @@ async function openWithTabBar(page: Page, saved: unknown = null) {
 
 test('with nothing in "More", 編輯分頁 is in the bar; pinning and order are saved and shown', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
-  const puts = await openWithTabBar(page)
+  const puts = await openWithTabBar(page, null, songsOff)
   await expect(more(page)).toBeHidden()
   await tabs(page).getByRole('button', { name: zh.nav.edit }).click()
   const editor = page.getByRole('dialog', { name: zh.nav.editor.title })
@@ -301,7 +303,7 @@ test('with nothing in "More", 編輯分頁 is in the bar; pinning and order are 
   await expect(editor).toBeHidden()
   await expect.poll(() => puts).toEqual([{ groups: ['home', 'song', 'chat', 'media', 'interact'], position: 'top' }])
 
-  // 點歌 has no built page: it keeps its place in the bar as a grey tab, not a link.
+  // 點歌 is turned off: it keeps its place in the bar as a grey tab, not a link.
   const order = await tabs(page).getByRole('link').allTextContents()
   expect(order.map((t) => t.trim())).toEqual(['home', 'chat', 'media', 'interact'].map((g) => zh.nav.groups[g]))
   await expect(greyTab(page, 'song')).toBeVisible()

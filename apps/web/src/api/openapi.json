@@ -7449,6 +7449,522 @@
         }
       }
     },
+    "/api/admin/song-list": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "song_library",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongLibrary"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/categories": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_song_category",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.invalid`: an empty or over-long name, or 100 categories already",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.duplicate`: another category has the name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/categories/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_song_category",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.duplicate`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_song_category",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted; its songs are uncategorised now"
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/import": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "apply_song_import",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "description": "`xlsx` or `csv`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The file, up to 5 MB",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What it did, in one transaction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.unreadable_file`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Over 5 MB"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/import/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "preview_song_import",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "description": "`xlsx` or `csv`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The file, up to 5 MB",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What importing it would do; nothing is written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.unreadable_file`: not a readable `.xlsx` or UTF-8 CSV",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Over 5 MB"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/songs": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_song",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SongBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.invalid`: an empty or over-long title or artist, a link that is not a YouTube address, an unknown category, or 5,000 songs already",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.duplicate`: the same song (title and artist) is on the list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-list/songs/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_song",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SongBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`songs.invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.duplicate`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_song",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds": {
       "get": {
         "tags": [
@@ -10023,6 +10539,48 @@
           }
         }
       },
+      "CategoryBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "requestable"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–30 characters, unique ignoring case."
+          },
+          "requestable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CategoryView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "requestable",
+          "songs"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requestable": {
+            "type": "boolean"
+          },
+          "songs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many songs are in it.",
+            "minimum": 0
+          }
+        }
+      },
       "ChannelReward": {
         "type": "object",
         "description": "A custom reward. `title` and `prompt` are raw Twitch text.",
@@ -11981,6 +12539,47 @@
           "points"
         ]
       },
+      "ImportResult": {
+        "type": "object",
+        "description": "What an import does (preview) or did.",
+        "required": [
+          "added",
+          "updated",
+          "unchanged",
+          "new_categories",
+          "skipped"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "new_categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportSkipped"
+            }
+          },
+          "unchanged": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows naming a song already there, with nothing to change.",
+            "minimum": 0
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "ImportSkip": {
         "type": "object",
         "description": "An entry left out. `key` is the file's own text (at most 64 characters): escape it when rendering.",
@@ -12006,6 +12605,33 @@
           "invalid_total",
           "invalid_date"
         ]
+      },
+      "ImportSkipped": {
+        "type": "object",
+        "required": [
+          "sheet",
+          "row",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "`no_title_column`, `no_title`, `too_long`, `bad_link`, `duplicate_in_file`, `too_many_songs` or\n`too_many_categories`."
+          },
+          "row": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1-based, as a spreadsheet shows it.",
+            "minimum": 0
+          },
+          "sheet": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The sheet's name; `None` for CSV."
+          }
+        }
       },
       "ImportSummary": {
         "type": "object",
@@ -15495,6 +16121,103 @@
         "enum": [
           "snapshot"
         ]
+      },
+      "SongBody": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string",
+            "description": "Up to 100 characters; empty for none."
+          },
+          "category_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "1–100 characters."
+          },
+          "youtube_url": {
+            "type": "string",
+            "description": "Empty for none; otherwise a `youtube.com/watch?v=` or `youtu.be/` address."
+          }
+        }
+      },
+      "SongLibrary": {
+        "type": "object",
+        "required": [
+          "songs",
+          "categories"
+        ],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryView"
+            }
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SongView"
+            }
+          }
+        }
+      },
+      "SongView": {
+        "type": "object",
+        "description": "A song on the list. `title`, `artist` and `youtube_url` are the broadcaster's text, shown as text.",
+        "required": [
+          "id",
+          "title",
+          "artist",
+          "category_id",
+          "youtube_url",
+          "last_sung_at",
+          "request_count"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string",
+            "description": "Empty: no artist."
+          },
+          "category_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`None`: uncategorised."
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_sung_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339; `None`: never sung."
+          },
+          "request_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "youtube_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "Sound": {
         "type": "object",

@@ -65,7 +65,7 @@ export const GROUPS: TabGroup[] = [
     icon: 'pi pi-microphone',
     pages: [
       soon('/songs', 'songs', 'pi pi-microphone', true),
-      soon('/song-list', 'songList', 'pi pi-book'),
+      { path: '/song-list', label: 'pages.songList.name', icon: 'pi pi-book' },
       soon('/song-rules', 'songRules', 'pi pi-sliders-h'),
       soon('/singing-booth', 'singingBooth', 'pi pi-headphones', true),
     ],

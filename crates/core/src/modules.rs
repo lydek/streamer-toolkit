@@ -41,6 +41,8 @@ pub const REWARDS: &str = "rewards";
 pub const POLLS: &str = "polls";
 /// 聊天機器人: commands, timed messages, and thanks and greetings posted as the streamer (docs/modules/chat-bot.md).
 pub const BOT: &str = "bot";
+/// 點歌: the song list, requests and their rules (docs/modules/songs.md).
+pub const SONGS: &str = "songs";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -59,6 +61,7 @@ pub const ALL: &[&str] = &[
     REWARDS,
     POLLS,
     BOT,
+    SONGS,
 ];
 
 /// Modules that start off: each needs a Twitch scope the base sign-in lacks, so turning it on asks for that first.

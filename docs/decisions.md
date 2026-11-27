@@ -78,6 +78,7 @@
 | 備份檔 | `zip`（只開 deflate：`flate2`＋`zlib-rs`）＋`sha2`；格式見 architecture.md §6「備份檔」 |
 | 效能監看 | `sysinfo`（MIT，只開 `system`）：本機與本工具程序的 CPU、記憶體 |
 | 圖片尺寸 | `image`（MIT/Apache-2.0，只開 PNG、JPEG、GIF、WebP）縮放；`oxipng`（MIT，關掉預設功能）無失真壓縮 PNG；`color_quant`（MIT）減成 256 色。不用 `libimagequant`（GPL-3） |
+| 歌單匯入 | `calamine`（MIT，關掉預設功能）讀 `.xlsx`；`csv`（MIT/Unlicense）讀 CSV |
 | OpenAPI | `utoipa` |
 | 前端 API 型別 | `openapi-typescript`＋`openapi-fetch`；WS 事件型別也放進 OpenAPI components |
 | 架構測試 | 自寫 Rust 測試：`cargo_metadata` 檢查 crate 相依性，掃描 `domain/` 內任何 `sqlx`／`axum` 字樣（含 derive 與完整路徑） |

@@ -60,7 +60,7 @@ describe('groupUsable', () => {
   const song = GROUPS.find((g) => g.id === 'song')!
 
   it('greys a group with no built page, and one whose built pages are all turned off', () => {
-    expect(groupUsable(song)).toBe(false)
+    expect(groupUsable({ ...song, pages: song.pages.filter((p) => p.soon) })).toBe(false)
     expect(groupUsable(interact)).toBe(true)
     const built = interact.pages.filter((p) => !p.soon).map((p) => p.path)
     expect(groupUsable(interact, new Set(built))).toBe(false)
