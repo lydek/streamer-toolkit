@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Node for the frontend bundles and for openapi-typescript in `pnpm api:gen`.
+      # Node for the frontend bundles and for openapi-typescript in the API contract check.
       - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
       - uses: actions/setup-node@v7
         with:
@@ -117,17 +117,22 @@ jobs:
       - name: Build frontend port page
         run: pnpm --filter web exec vite build --mode port
 
-      # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types.
-      - name: Regenerate API contracts
-        run: pnpm api:gen
-      - name: API contracts are up to date (run pnpm api:gen and commit)
-        run: git diff --exit-code HEAD -- apps/web/src/api
-
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Clippy on release-only code (tauri/custom-protocol; checked, never shipped)
         run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
       - name: Tests (includes architecture tests)
         run: cargo test --workspace
+
+      # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types. Runs the example
+      # `cargo test --workspace` just built; `pnpm api:gen` (`cargo run -p host`) resolves only host's graph and would
+      # compile a second set of crates.
+      - name: Regenerate the OpenAPI document
+        run: .\target\debug\examples\openapi.exe apps/web/src/api/openapi.json
+      - name: Regenerate the TS types
+        run: pnpm --filter web api:types
+      - name: API contracts are up to date (run pnpm api:gen and commit)
+        run: git diff --exit-code HEAD -- apps/web/src/api
+
       - name: Licenses and advisories
         run: cargo deny check
 
