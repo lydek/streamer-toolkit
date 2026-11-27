@@ -23,6 +23,7 @@ use tokio::{net::TcpListener, sync::broadcast};
 use crate::metrics::{self, Call, Recorder};
 
 mod channel;
+mod chat;
 mod rewards;
 pub use channel::{CATEGORIES, Channel};
 pub use rewards::RewardView;
@@ -181,6 +182,7 @@ impl FakeTwitch {
                 "/helix/channel_points/custom_rewards/redemptions",
                 patch(rewards::mark),
             )
+            .route("/helix/chat/messages", post(chat::send))
             .route("/helix/chat/badges/global", get(badges))
             .route("/helix/chat/badges", get(badges))
             .route(
@@ -300,6 +302,21 @@ impl FakeTwitch {
         w.next_id += 1;
         format!("{prefix}-{}", w.next_id)
     }
+}
+
+/// A Helix refusal in Twitch's error shape.
+fn rejected(status: StatusCode, message: &str) -> Response {
+    let body =
+        json!({"error": status.canonical_reason(), "status": status.as_u16(), "message": message});
+    (status, Json(body)).into_response()
+}
+
+/// The first value of `key` in a raw query (`a=1&b=2`), as sent.
+fn param<'a>(query: &'a Option<String>, key: &str) -> Option<&'a str> {
+    query
+        .as_deref()?
+        .split('&')
+        .find_map(|pair| pair.strip_prefix(key)?.strip_prefix('='))
 }
 
 /// The current UTC time as RFC 3339, as Twitch stamps messages.
