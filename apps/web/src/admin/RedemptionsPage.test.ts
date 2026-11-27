@@ -4,7 +4,7 @@ import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { testRouter } from './testRouter'
 import { i18n } from '../i18n'
 import RedemptionsPage from './RedemptionsPage.vue'
 
@@ -19,7 +19,7 @@ vi.mock('./features', async (original) => ({
 const ok = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) })
 
 async function mountPage() {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/redemptions', component: RedemptionsPage }] })
+  const router = testRouter([{ path: '/redemptions', component: RedemptionsPage }])
   await router.push('/redemptions')
   return mount(RedemptionsPage, { global: { plugins: [router, i18n, PrimeVue, ToastService] } })
 }

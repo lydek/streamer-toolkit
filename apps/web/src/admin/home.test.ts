@@ -30,6 +30,7 @@ import {
   useThrottled,
 } from './home'
 import HomeTile from './HomeTile.vue'
+import { testRouter } from './testRouter'
 
 const t = i18n.global.t
 
@@ -387,7 +388,7 @@ describe('HomeTile', () => {
   const tile = (line: Line, attention = false) =>
     mount(HomeTile, {
       props: { id: 'chat', name: '聊天室', icon: 'pi pi-comments', tint: 'blue', line, attention, expanded: false },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n, testRouter()] },
     })
 
   it('is a disclosure button for its drawer and the drawer focus fallback', () => {
@@ -411,7 +412,7 @@ describe('HomeTile', () => {
   it('shows a feature not built yet as a grey block that does nothing', () => {
     const wrapper = mount(HomeTile, {
       props: { id: 'songs', name: '點歌', icon: 'pi pi-microphone', tint: 'muted', line: { state: 'loading' }, expanded: false, unbuilt: true },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n, testRouter()] },
     })
     expect(wrapper.find('button').exists()).toBe(false)
     expect(wrapper.get('.tile').attributes('title')).toBe(t('home.unbuilt'))
