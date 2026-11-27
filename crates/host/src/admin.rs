@@ -102,6 +102,8 @@ pub(crate) struct AdminState {
     irc_connected: Arc<Mutex<(u64, bool)>>,
     /// 投票與預測: the latest poll, from EventSub and Helix answers.
     contests: Arc<crate::contests::Contests>,
+    /// 聊天機器人: answers chat; the send box's messages count toward its rate.
+    pub(crate) bot: Arc<bot::BotService>,
 }
 
 impl AdminState {
@@ -128,6 +130,7 @@ impl AdminState {
         outbox: Arc<Outbox>,
         modules: Arc<Modules>,
         contests: Arc<crate::contests::Contests>,
+        bot: Arc<bot::BotService>,
     ) -> Self {
         let current = twitch.try_read().expect("not locked yet").clone();
         let state = Self {
@@ -154,6 +157,7 @@ impl AdminState {
             eventsub_connected: Arc::new(Mutex::new((0, false))),
             irc_connected: Arc::new(Mutex::new((0, false))),
             contests,
+            bot,
         };
         state.start_eventsub(current);
         state
@@ -205,6 +209,7 @@ impl AdminState {
         );
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
         let contests = self.contests.clone();
+        let chat_bot = self.bot.clone();
         // A replaced task may still report before it is aborted; only the newest one counts.
         let reporter = |state: &Arc<Mutex<(u64, bool)>>| -> Arc<dyn Fn(bool) + Send + Sync> {
             let state = state.clone();
@@ -244,6 +249,7 @@ impl AdminState {
                     });
                 }
                 checkin.receive_chat(&m, Source::Twitch);
+                chat_bot.receive_chat(&m, Source::Twitch);
                 counters.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),

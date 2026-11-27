@@ -272,6 +272,8 @@ export interface Tile {
   tint: 'primary' | 'green' | 'yellow' | 'red' | 'blue' | 'muted'
   /** Not a module's: shown whatever modules are on. */
   always?: boolean
+  /** The module that shows it, when the ID is not that module's (a tile keeps the ID it had while unbuilt). */
+  module?: string
   /** Wider than a tile in the 12-column grid: `m` a third of a row, `l` two thirds, `w` a whole row. */
   size?: 'm' | 'l' | 'w'
   /** A feature not built yet: a grey tile that does nothing; `label` is its page's name key. */
@@ -305,6 +307,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'stream-info', icon: 'pi pi-pencil', tint: 'red' },
   { id: 'rewards', icon: 'pi pi-star', tint: 'yellow' },
   { id: 'polls', icon: 'pi pi-chart-bar', tint: 'blue' },
+  { id: 'commands', module: 'bot', icon: 'pi pi-reply', tint: 'green' },
 ]
 
 /**
@@ -324,7 +327,7 @@ export const TILES: Tile[] = [...BUILT_TILES, ...UNBUILT_TILES]
 /** The tiles home shows, in order: those of enabled modules, and the ones shown whatever modules are on (incl. grey ones). */
 export function homeTiles(modules: Schemas['ModuleState'][], tiles = TILES) {
   const enabled = new Set(modules.filter((m) => m.enabled).map((m) => m.id))
-  return tiles.filter((t) => t.always || t.unbuilt || enabled.has(t.id))
+  return tiles.filter((t) => t.always || t.unbuilt || enabled.has(t.module ?? t.id))
 }
 
 /** Each stage's home before it is arranged (prototype `DEFAULTS`, only built features). A saved arrangement always

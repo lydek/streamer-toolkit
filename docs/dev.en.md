@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 260d368d89ed13e8a09c8c02e7455c2525ca0038d85b15cbde63081f2be819c2 -->
+<!-- source: docs/dev.md source-sha256: 120be4668d1bd6e70ee9fe353e6eca049d8446f1ba396df21d51f5ceaab5c04e -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -157,7 +157,7 @@ A soft limit, not checked in CI. Whether to split a file depends on how many rea
 
 ## Documentation rules
 - Maintain only the root `README.md`, `AGENTS.md`, and `scope.md`, `architecture.md`, `decisions.md`, `dev.md` under `docs/`.
-- Complex modules (currently redemption records and daily check-in) get `docs/modules/<module>.md` when their slice starts, covering only rules, state transitions and acceptance; thin modules get none.
+- Complex modules (currently redemption records, daily check-in and the chat bot) get `docs/modules/<module>.md` when their slice starts, covering only rules, state transitions and acceptance; thin modules get none.
 - Scope changes go into `scope.md`; layer or module rule changes go into `architecture.md`; tech choice changes get one line in the change log of `decisions.md`.
 - To-dos and ideas become GitHub Issues, not documents.
 - No ADRs, research documents or quality checklists. `docs/archive/` holds early drafts, is listed in `.gitignore`, exists only locally, and is reference only, not instructions.

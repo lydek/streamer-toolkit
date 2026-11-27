@@ -161,6 +161,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(redemption::openapi());
     doc.merge(checkin::openapi());
     doc.merge(counter::openapi());
+    doc.merge(bot::openapi());
     doc.merge(overlays::openapi());
     doc.merge(sound::openapi());
     doc.merge(bgm::openapi());

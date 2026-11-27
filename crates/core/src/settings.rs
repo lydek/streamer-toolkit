@@ -33,6 +33,8 @@ pub struct Settings {
     /// 投票 saved to start again in one click, in the broadcaster's order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub poll_templates: Vec<PollTemplate>,
+    /// 聊天機器人 (docs/modules/chat-bot.md); command names and who may use them are in `chat_commands`.
+    pub bot: BotSettings,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -436,6 +438,7 @@ impl Default for Settings {
             modules_split: false,
             modules_defaulted: Vec::new(),
             poll_templates: Vec::new(),
+            bot: BotSettings::default(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
             setup_done: false,
@@ -672,4 +675,22 @@ pub struct PollTemplate {
     pub title: String,
     pub choices: Vec<String>,
     pub seconds: u32,
+}
+
+/// What the chat bot says (docs/modules/chat-bot.md).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BotSettings {
+    /// Each command's reply and cooldown; its name and who may use it are under `bot.<id>` in `chat_commands`.
+    pub commands: Vec<BotCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BotCommand {
+    /// UUID v7; its key in the command table is `bot.<id>`.
+    pub id: String,
+    pub reply: String,
+    /// 0: no cooldown.
+    pub cooldown_seconds: u32,
+    pub enabled: bool,
 }

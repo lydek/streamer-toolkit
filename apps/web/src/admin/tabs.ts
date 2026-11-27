@@ -83,7 +83,7 @@ export const GROUPS: TabGroup[] = [
     {
       id: 'bot',
       pages: [
-        soon('/commands', 'commands', 'pi pi-reply', true),
+        { path: '/commands', label: 'pages.commands.name', icon: 'pi pi-reply' },
         soon('/timers', 'timers', 'pi pi-clock'),
         soon('/greetings', 'greetings', 'pi pi-heart'),
       ],

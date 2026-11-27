@@ -39,6 +39,8 @@ pub const STREAM_INFO: &str = "stream-info";
 pub const REWARDS: &str = "rewards";
 /// 投票與預測: Twitch's own polls and predictions; the switch only shows or hides its page and tile.
 pub const POLLS: &str = "polls";
+/// 聊天機器人: commands, timed messages, and thanks and greetings posted as the streamer (docs/modules/chat-bot.md).
+pub const BOT: &str = "bot";
 pub const ALL: &[&str] = &[
     CHAT,
     ALERTS,
@@ -56,10 +58,11 @@ pub const ALL: &[&str] = &[
     STREAM_INFO,
     REWARDS,
     POLLS,
+    BOT,
 ];
 
 /// Modules that start off: each needs a Twitch scope the base sign-in lacks, so turning it on asks for that first.
-pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO, REWARDS, POLLS];
+pub const OFF_BY_DEFAULT: &[&str] = &[STREAM_INFO, REWARDS, POLLS, BOT];
 
 /// Modules split out of another one, with the one they came from: each starts in that one's state (off, closed).
 const SPLIT: &[(&str, &str)] = &[

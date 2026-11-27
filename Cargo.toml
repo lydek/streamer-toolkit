@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/core", "crates/modules/chat", "crates/modules/alerts", "crates/modules/redemption", "crates/modules/checkin", "crates/modules/sound", "crates/modules/bgm",
-    "crates/modules/counter", "crates/modules/overlays", "crates/modules/stream", "crates/modules/activity", "crates/modules/viewers", "crates/host", "crates/integrations", "crates/arch-tests", "crates/fakes", "apps/desktop"]
+    "crates/modules/counter", "crates/modules/bot", "crates/modules/overlays", "crates/modules/stream", "crates/modules/activity", "crates/modules/viewers", "crates/host", "crates/integrations", "crates/arch-tests", "crates/fakes", "apps/desktop"]
 
 [workspace.package]
 edition = "2024"

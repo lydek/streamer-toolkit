@@ -453,6 +453,12 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="commands" :title="moduleName('commands')" full-page="/commands">
+      <template #now>
+        <p>{{ t('bot.tile') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <ObsStatusLink overlay="/overlay/bgm/" />
@@ -750,6 +756,7 @@ const lines = computed<Record<string, Line>>(() => {
     'stream-info': { state: 'ready', text: t('streamInfo.tile') },
     rewards: { state: 'ready', text: t('rewards.tile') },
     polls: { state: 'ready', text: t('polls.tile') },
+    commands: { state: 'ready', text: t('bot.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }
@@ -885,7 +892,8 @@ const moduleName = (id: string) => {
   const unbuilt = TILES.find((tile) => tile.id === id)?.unbuilt
   if (unbuilt) return t(unbuilt.label)
   // A module's tile goes by its feature's name, as its page does (場景與模式, 休息卡片); the ID stays the module's.
-  const feature = FEATURES.find((f) => f.module === id)
+  const module = TILES.find((tile) => tile.id === id)?.module ?? id
+  const feature = FEATURES.find((f) => f.module === module)
   if (feature) return t(`features.${feature.id}.name`)
   if (te(`modules.names.${id}`)) return t(`modules.names.${id}`)
   if (te(`home.blocks.${id}`)) return t(`home.blocks.${id}`)

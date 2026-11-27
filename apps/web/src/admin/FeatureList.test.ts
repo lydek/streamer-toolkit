@@ -111,8 +111,8 @@ describe('FeatureList group switches', () => {
 
   it('turns a whole group off after one confirmation listing it, and on again', async () => {
     const wrapper = mounted(['alerts', 'checkin', 'redemption'])
-    // Only one built feature in 聊天: no group switches there.
-    expect(bulk(wrapper, 'chat', 'off')).toBeUndefined()
+    // Only one feature with a switch in 首頁 (直播資訊): no group switches there.
+    expect(bulk(wrapper, 'home', 'off')).toBeUndefined()
     await bulk(wrapper, 'interact', 'off')!.trigger('click')
     expect([...document.querySelectorAll('.confirm li')].map((li) => li.textContent)).toEqual(
       ['alerts', 'checkin', 'redemption'].map(name),

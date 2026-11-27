@@ -3,6 +3,7 @@
 mod admin;
 mod after_numbers;
 mod backup;
+mod bot_ports;
 mod card_packs;
 mod chat_display;
 mod chat_dock;
@@ -388,13 +389,26 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         config.db.clone(),
         bus.clone(),
         modules.clone(),
-        commands,
+        commands.clone(),
         move || counter_sessions.session_after_pending(),
+    );
+    // 聊天機器人: posts as the streamer through Helix, through one rate-limited queue.
+    let chat_bot = bot::BotService::start(
+        config.data_dir.clone(),
+        commands,
+        modules.clone(),
+        Arc::new(bot_ports::HelixChatSender {
+            twitch: twitch.clone(),
+            helix: config.twitch.helix.clone(),
+            http: http.clone(),
+        }),
+        Arc::new(bot_ports::CounterLookups(counters.clone())),
     );
     // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once),
     // and the marathon clock runs only while live.
     let (_, mut stream_events) = bus.subscribe();
     let live_counters = counters.clone();
+    let live_bot = chat_bot.clone();
     tokio::spawn(async move {
         loop {
             match stream_events.recv().await {
@@ -416,6 +430,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                         _ => None,
                     };
                     if let Some(state) = state {
+                        live_bot.stream_status(match &state {
+                            counter::StreamState::Live { started_at } => Some(*started_at),
+                            counter::StreamState::Offline => None,
+                        });
                         live_counters.stream_status(state).await;
                     }
                 }
@@ -584,6 +602,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         outbox,
         modules.clone(),
         Arc::new(contests::Contests::new(bus.clone())),
+        chat_bot.clone(),
     ));
     watch_warnings(&screen_tools, &overlays, &admin, obs.states(), &modules);
     let services = services::routes(services::ServicesState {
@@ -649,6 +668,10 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     admin::require_token,
                 )),
             )
+            .merge(bot::routes(chat_bot).layer(middleware::from_fn_with_state(
+                admin.clone(),
+                admin::require_token,
+            )))
             .merge(
                 overlays::routes(screen_tools.clone()).layer(middleware::from_fn_with_state(
                     admin.clone(),
