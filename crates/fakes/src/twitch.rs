@@ -22,6 +22,9 @@ use tokio::{net::TcpListener, sync::broadcast};
 
 use crate::metrics::{self, Call, Recorder};
 
+mod channel;
+pub use channel::{CATEGORIES, Channel};
+
 pub const BROADCASTER_ID: &str = "1000";
 pub const BROADCASTER_LOGIN: &str = "fake_streamer";
 /// The access token of `integrations::twitch::auth::fake_stored_token` (a fakes test checks they match).
@@ -45,6 +48,8 @@ pub struct TwitchSnapshot {
     /// The subscription types the app created.
     pub subscriptions: Vec<String>,
     pub irc_joins: Vec<String>,
+    /// The stream info viewers see (`/helix/channels`).
+    pub channel: Channel,
     /// The ID of the last redemption and the last chat message the app received.
     pub last_redemption: Option<String>,
     pub last_chat: Option<String>,
@@ -79,6 +84,7 @@ struct World {
     eventsub_open: u32,
     irc_open: u32,
     irc_joins: Vec<String>,
+    channel: Channel,
     last_redemption: Option<String>,
     last_chat: Option<String>,
     next_id: u64,
@@ -126,6 +132,7 @@ impl FakeTwitch {
                 eventsub_open: 0,
                 irc_open: 0,
                 irc_joins: Vec::new(),
+                channel: Channel::default(),
                 last_redemption: None,
                 last_chat: None,
                 next_id: 0,
@@ -151,6 +158,11 @@ impl FakeTwitch {
             .route("/oauth2/validate", get(validate))
             .route("/helix/users", get(users))
             .route("/helix/streams", get(streams))
+            .route(
+                "/helix/channels",
+                get(channel::get_channel).patch(channel::patch_channel),
+            )
+            .route("/helix/search/categories", get(channel::search_categories))
             .route("/helix/channel_points/custom_rewards", get(rewards))
             .route("/helix/chat/badges/global", get(badges))
             .route("/helix/chat/badges", get(badges))
@@ -195,6 +207,7 @@ impl FakeTwitch {
                 .filter_map(|s| s["type"].as_str().map(str::to_owned))
                 .collect(),
             irc_joins: w.irc_joins.clone(),
+            channel: w.channel.clone(),
             last_redemption: w.last_redemption.clone(),
             last_chat: w.last_chat.clone(),
         }
@@ -380,11 +393,15 @@ async fn users(RawQuery(query): RawQuery) -> Response {
 }
 
 async fn streams(State(fake): State<FakeTwitch>) -> Response {
-    let live = fake.0.world.lock().unwrap().live;
+    let (live, c) = {
+        let w = fake.0.world.lock().unwrap();
+        (w.live, w.channel.clone())
+    };
     let data = if live {
         json!([{"id": "fake-stream", "user_id": BROADCASTER_ID, "user_login": BROADCASTER_LOGIN,
-                "user_name": BROADCASTER_NAME, "game_name": "Just Chatting", "type": "live",
-                "title": "Fake stream", "viewer_count": 42, "started_at": TIMESTAMP}])
+                "user_name": BROADCASTER_NAME, "game_id": c.category_id, "game_name": c.category_name(),
+                "type": "live", "title": c.title, "tags": c.tags, "language": c.language,
+                "viewer_count": 42, "started_at": TIMESTAMP}])
     } else {
         json!([])
     };

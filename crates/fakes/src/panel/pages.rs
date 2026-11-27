@@ -186,6 +186,8 @@ impl Panel {
         let account = column![
             kv("帳號", format!("{BROADCASTER_LOGIN} · {BROADCASTER_ID}")),
             kv("直播中", if t.live { "是" } else { "否" }.to_owned()),
+            kv("標題", t.channel.title.clone()),
+            kv("分類", t.channel.category_name().to_owned()),
             kv("IRC 頻道", channels),
         ]
         .spacing(3)
