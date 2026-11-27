@@ -19,10 +19,15 @@ use toolkit_core::{
     commands::CommandTable,
     events::{ChatMessage, Source},
     modules::{self, Modules},
-    settings::{self, BotCommand},
+    settings::{self, BotCommand, BotTimer},
 };
 
-use crate::domain::{self, Cooldowns, QUEUE_EXPIRY, QUEUE_MAX, RateWindow, SentMessages, Vars};
+use crate::domain::{
+    self, Cooldowns, QUEUE_EXPIRY, QUEUE_MAX, RateWindow, SentMessages, Vars, next_due,
+};
+
+/// How often due timers are looked at.
+const TICK: Duration = Duration::from_secs(1);
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
@@ -56,6 +61,10 @@ struct State {
     in_flight: Option<String>,
     cooldowns: Cooldowns,
     live_since: Option<DateTime<Utc>>,
+    /// The stream's start on the runtime's clock, which timers count from; `None` while not live.
+    live_start: Option<Instant>,
+    /// Per timer ID: when it is next due, and the chat lines since its last send this stream.
+    timers: std::collections::HashMap<String, (Instant, u32)>,
     /// Messages dropped since launch: the queue was full or they waited too long.
     dropped: u64,
 }
@@ -72,6 +81,7 @@ pub struct BotService {
     sender: Arc<dyn ChatSender>,
     /// What `settings.json` holds, so chat never waits on the file.
     pub(crate) bot_commands: RwLock<Vec<BotCommand>>,
+    pub(crate) bot_timers: RwLock<Vec<BotTimer>>,
     state: Arc<Mutex<State>>,
     tx: mpsc::Sender<Outgoing>,
 }
@@ -86,17 +96,29 @@ impl BotService {
         lookups: Arc<dyn BotLookups>,
     ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(QUEUE_MAX);
-        let saved = settings::load(&data_dir).bot.commands;
+        let saved = settings::load(&data_dir).bot;
         let service = Arc::new(Self {
             data_dir,
             commands,
             modules: modules.clone(),
             sender: sender.clone(),
-            bot_commands: RwLock::new(saved),
+            bot_commands: RwLock::new(saved.commands),
+            bot_timers: RwLock::new(saved.timers),
             state: Arc::default(),
             tx,
         });
         tokio::spawn(post(rx, service.state.clone(), modules, sender, lookups));
+        let ticking = Arc::downgrade(&service);
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(TICK);
+            loop {
+                tick.tick().await;
+                let Some(service) = ticking.upgrade() else {
+                    return;
+                };
+                service.post_due_timers();
+            }
+        });
         service
     }
 
@@ -118,9 +140,89 @@ impl BotService {
             .record(Instant::now().into_std());
     }
 
-    /// The stream started (`Some` with its start) or ended.
+    /// The stream started (`Some` with its start; repeated by each check) or ended. Timers start counting from the
+    /// start of each stream, and stop when it ends.
     pub fn stream_status(&self, live_since: Option<DateTime<Utc>>) {
-        self.state.lock().unwrap().live_since = live_since;
+        let mut state = self.state.lock().unwrap();
+        if state.live_since == live_since {
+            return;
+        }
+        state.live_since = live_since;
+        state.timers.clear();
+        state.live_start = live_since.map(|t| {
+            let ago = (Utc::now() - t).to_std().unwrap_or_default();
+            Instant::now().checked_sub(ago).unwrap_or_else(Instant::now)
+        });
+        drop(state);
+        self.reschedule();
+    }
+
+    /// Puts every enabled timer on its next time this stream (keeping the chat lines counted so far); after a
+    /// stream starts or the timers change.
+    pub(crate) fn reschedule(&self) {
+        let mut state = self.state.lock().unwrap();
+        let Some(start) = state.live_start else {
+            state.timers.clear();
+            return;
+        };
+        let now = Instant::now();
+        let timers = self.bot_timers.read().unwrap();
+        let mut next = std::collections::HashMap::new();
+        for t in timers.iter().filter(|t| t.enabled) {
+            let every = Duration::from_secs(u64::from(t.every_minutes) * 60);
+            let lines = state.timers.get(&t.id).map_or(0, |(_, l)| *l);
+            let due = next_due(start.into_std(), every, now.into_std());
+            next.insert(t.id.clone(), (Instant::from_std(due), lines));
+        }
+        state.timers = next;
+    }
+
+    /// When each timer is next due, on the wall clock; empty while not live.
+    pub fn next_times(&self) -> std::collections::HashMap<String, DateTime<Utc>> {
+        let state = self.state.lock().unwrap();
+        let now = Instant::now();
+        state
+            .timers
+            .iter()
+            .filter_map(|(id, (due, _))| {
+                let left = chrono::Duration::from_std(due.saturating_duration_since(now)).ok()?;
+                Some((id.clone(), Utc::now() + left))
+            })
+            .collect()
+    }
+
+    /// Posts each timer that is due, unless chat was too quiet since its last send; either way it waits for its
+    /// next interval, with nothing saved up.
+    fn post_due_timers(&self) {
+        if !self.on() {
+            return;
+        }
+        let now = Instant::now();
+        let timers = self.bot_timers.read().unwrap().clone();
+        let mut post = Vec::new();
+        {
+            let mut state = self.state.lock().unwrap();
+            let Some(start) = state.live_start else {
+                return;
+            };
+            for t in timers.iter().filter(|t| t.enabled) {
+                let Some((due, lines)) = state.timers.get_mut(&t.id) else {
+                    continue;
+                };
+                if now < *due {
+                    continue;
+                }
+                if *lines >= t.min_chat_lines {
+                    post.push(t.message.clone());
+                    *lines = 0;
+                }
+                let every = Duration::from_secs(u64::from(t.every_minutes) * 60);
+                *due = Instant::from_std(next_due(start.into_std(), every, now.into_std()));
+            }
+        }
+        for message in post {
+            self.enqueue(message, None, None);
+        }
     }
 
     /// Queues a message, unless the bot is off or cannot post; a full queue drops it.
@@ -160,10 +262,14 @@ impl BotService {
         echo
     }
 
-    /// A chat message from Twitch: answers the bot command it is, unless the bot posted it.
+    /// A chat message from Twitch: counts toward the timers' chat lines and answers the bot command it is, unless
+    /// the bot posted it.
     pub fn receive_chat(&self, m: &ChatMessage, source: Source) {
         if source != Source::Twitch || !self.on() || self.own(m) {
             return;
+        }
+        for (_, lines) in self.state.lock().unwrap().timers.values_mut() {
+            *lines = lines.saturating_add(1);
         }
         let found = self
             .bot_commands

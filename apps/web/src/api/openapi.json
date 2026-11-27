@@ -749,6 +749,183 @@
         }
       }
     },
+    "/api/admin/bot/timers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_timers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BotTimerView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTimerBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTimerView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bot.invalid_timer`: an empty or over-long name or message, an interval outside 5–120 minutes, over 100 chat lines, or more than 20 timers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/bot/timers/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_timer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTimerBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTimerView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bot.invalid_timer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`bot.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_timer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`bot.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/chat-display": {
       "get": {
         "tags": [
@@ -9233,6 +9410,85 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "BotTimerBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "message",
+          "every_minutes",
+          "min_chat_lines",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "every_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "5–120.",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "Up to 500 characters; may use `{計數:名稱}` and `{直播時長}`."
+          },
+          "min_chat_lines": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–100: chat lines needed since its last send; fewer skip this time.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "Up to 50 characters."
+          }
+        }
+      },
+      "BotTimerView": {
+        "type": "object",
+        "description": "A timed message as the admin page shows it. `name` and `message` are the broadcaster's text, shown as text.",
+        "required": [
+          "id",
+          "name",
+          "message",
+          "every_minutes",
+          "min_chat_lines",
+          "enabled",
+          "next_at"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "every_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "min_chat_lines": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "next_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: when it is next due; `None` while not live (or when off)."
           }
         }
       },

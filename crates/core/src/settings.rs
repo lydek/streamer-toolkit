@@ -683,6 +683,20 @@ pub struct PollTemplate {
 pub struct BotSettings {
     /// Each command's reply and cooldown; its name and who may use it are under `bot.<id>` in `chat_commands`.
     pub commands: Vec<BotCommand>,
+    pub timers: Vec<BotTimer>,
+}
+
+/// A message posted on a timer while live, unless chat was too quiet since its last one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BotTimer {
+    /// UUID v7.
+    pub id: String,
+    pub name: String,
+    pub message: String,
+    pub every_minutes: u32,
+    /// Chat lines needed since its last send (or the stream's start); fewer skip this time.
+    pub min_chat_lines: u32,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
