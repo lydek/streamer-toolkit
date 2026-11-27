@@ -7,3 +7,11 @@ members = ["crates/core", "crates/modules/chat", "crates/modules/alerts", "crate
 edition = "2024"
 license = "MIT"
 publish = false
+
+# Dev and test builds: line numbers for our crates (backtraces keep file and line), no debug info for dependencies.
+# Smaller PDBs on Windows mean faster links, a smaller target/ and a smaller CI cache.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

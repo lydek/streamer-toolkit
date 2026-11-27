@@ -13,11 +13,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Line numbers only, no full debug info: faster links and a smaller cache; panics still show file and line.
-  # The `test` profile inherits `dev`. Keep it equal in cache.yml: rust-cache hashes CARGO* variables into its key.
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
-
 # The main ruleset requires only `check`, which passes only when every job that had to run passed.
 jobs:
   changes:

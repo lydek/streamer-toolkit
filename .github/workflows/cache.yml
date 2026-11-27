@@ -14,10 +14,6 @@ concurrency:
   group: cache-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Same as ci.yml: rust-cache hashes CARGO* variables into its key, so a mismatch would never hit.
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
-
 jobs:
   warm:
     runs-on: windows-latest
