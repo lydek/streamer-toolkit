@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTakenBody},
     modules,
-    settings::{self, BotCommand, BotTimer},
+    settings::{self, BotCommand, BotGreetings, BotTimer},
 };
 use utoipa::{OpenApi, ToSchema};
 
@@ -28,6 +28,7 @@ const TIMERS_MAX: usize = 20;
 const TIMER_NAME_MAX_CHARS: usize = 50;
 const EVERY_MINUTES: std::ops::RangeInclusive<u32> = 5..=120;
 const MIN_CHAT_LINES_MAX: u32 = 100;
+const RETURN_DAYS: std::ops::RangeInclusive<u32> = 1..=365;
 
 #[derive(Serialize, ToSchema)]
 pub struct ErrorBody {
@@ -385,6 +386,60 @@ async fn delete_timer(State(s): State<Arc<BotService>>, Path(id): Path<String>) 
     StatusCode::NO_CONTENT.into_response()
 }
 
+#[utoipa::path(get, path = "/api/admin/bot/greetings", tag = "admin", responses((status = 200, body = BotGreetings)))]
+async fn greetings(State(s): State<Arc<BotService>>) -> Json<BotGreetings> {
+    Json(s.greetings.read().unwrap().clone())
+}
+
+/// The greetings trimmed, or `None` when one is over 500 characters, an enabled one is empty, or the 回訪 days are
+/// outside 1–365.
+fn checked_greetings(mut g: BotGreetings) -> Option<BotGreetings> {
+    let fits = |enabled: bool, message: &mut String| {
+        *message = message.trim().to_owned();
+        message.chars().count() <= MESSAGE_MAX_CHARS && !(enabled && message.is_empty())
+    };
+    let ok = fits(g.follow.enabled, &mut g.follow.message)
+        & fits(g.first_chat.enabled, &mut g.first_chat.message)
+        & fits(
+            g.returning.enabled && g.returning.post,
+            &mut g.returning.message,
+        )
+        & fits(g.sub.enabled, &mut g.sub.message)
+        & fits(g.bits.enabled, &mut g.bits.small)
+        & fits(g.bits.enabled, &mut g.bits.medium)
+        & fits(g.bits.enabled, &mut g.bits.large)
+        & fits(g.raid.enabled, &mut g.raid.message)
+        & RETURN_DAYS.contains(&g.returning.days);
+    ok.then_some(g)
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/admin/bot/greetings",
+    tag = "admin",
+    request_body = BotGreetings,
+    responses(
+        (status = 200, description = "The greetings as kept (trimmed)", body = BotGreetings),
+        (status = 400, description = "`bot.invalid_greetings`: a message over 500 characters, an empty message switched on, or 回訪 days outside 1–365", body = ErrorBody),
+        (status = 500, description = "`settings.save_failed`", body = ErrorBody),
+    )
+)]
+async fn set_greetings(
+    State(s): State<Arc<BotService>>,
+    Json(body): Json<BotGreetings>,
+) -> Response {
+    let Some(next) = checked_greetings(body) else {
+        return error(StatusCode::BAD_REQUEST, "bot.invalid_greetings");
+    };
+    let mut current = s.greetings.write().unwrap();
+    let saved = next.clone();
+    if settings::update(&s.data_dir, move |set| set.bot.greetings = saved).is_err() {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "settings.save_failed");
+    }
+    *current = next.clone();
+    Json(next).into_response()
+}
+
 #[utoipa::path(get, path = "/api/admin/bot/status", tag = "admin", responses((status = 200, body = BotStatus)))]
 async fn status(State(s): State<Arc<BotService>>) -> Json<BotStatus> {
     Json(BotStatus {
@@ -403,6 +458,10 @@ pub fn routes(service: Arc<BotService>) -> Router {
             put(update_command).delete(delete_command),
         )
         .route("/api/admin/bot/status", get(status))
+        .route(
+            "/api/admin/bot/greetings",
+            get(greetings).put(set_greetings),
+        )
         .route("/api/admin/bot/timers", get(list_timers).post(create_timer))
         .route(
             "/api/admin/bot/timers/{id}",
@@ -421,7 +480,9 @@ pub fn routes(service: Arc<BotService>) -> Router {
     list_timers,
     create_timer,
     update_timer,
-    delete_timer
+    delete_timer,
+    greetings,
+    set_greetings
 ))]
 struct BotApi;
 

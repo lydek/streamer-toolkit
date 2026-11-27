@@ -83,6 +83,7 @@
     "broadcaster": "實況主",
     "deleted": "這則訊息已被管理員刪除",
     "firstChat": "第一次聊天",
+    "returning": "回訪 · {n} 天沒來",
     "shared": "共享聊天中：{channels}",
     "ownOnly": "只看本頻道",
     "sharedFrom": "來自 {channel}",
@@ -200,7 +201,8 @@
         "name": "揪團",
         "example": "感謝 {'{'}觀眾{'}'} 帶著 {'{'}數量{'}'} 人揪團！"
       },
-      "enabled": "啟用：{name}"
+      "enabled": "啟用：{name}",
+      "note": "可用的變數：{'{'}觀眾{'}'}、{'{'}數量{'}'}（小奇點、揪團人數）；送禮產生的訂閱不感謝，實況主本人不算第一次聊天與回訪。"
     }
   },
   "chatFilter": {

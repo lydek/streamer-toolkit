@@ -403,6 +403,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             http: http.clone(),
         }),
         Arc::new(bot_ports::CounterLookups(counters.clone())),
+        bot_ports::announce_returning(bus.clone()),
     );
     // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once),
     // and the marathon clock runs only while live.
@@ -416,6 +417,13 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     let Ok(e) = serde_json::from_str::<serde_json::Value>(&text) else {
                         continue;
                     };
+                    // The chat module's first-chat mark, once it is lined up with its message.
+                    if e["type"] == "chat.first" {
+                        if let Some(id) = e["payload"]["messageId"].as_str() {
+                            live_bot.receive_first_chat(id);
+                        }
+                        continue;
+                    }
                     if e["type"] != "stream.status" {
                         continue;
                     }

@@ -210,6 +210,7 @@ impl AdminState {
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
         let contests = self.contests.clone();
         let chat_bot = self.bot.clone();
+        let thanks = self.bot.clone();
         // A replaced task may still report before it is aborted; only the newest one counts.
         let reporter = |state: &Arc<Mutex<(u64, bool)>>| -> Arc<dyn Fn(bool) + Send + Sync> {
             let state = state.clone();
@@ -239,15 +240,18 @@ impl AdminState {
             helix: Helix::new(&self.endpoints.helix, auth.clone(), self.http.clone()),
             tls: self.tls.clone(),
             deliver: Arc::new(move |m| {
-                let new = chat_viewers.receive_chat_first_time(&m, Source::Twitch);
-                if !irc_up.lock().unwrap().1 {
-                    let (chat, id) = (fallback_chat.clone(), m.id.clone());
-                    tokio::spawn(async move {
-                        if new.await {
-                            chat.first_chat(id);
-                        }
-                    });
-                }
+                let seen = chat_viewers.receive_chat_seen(&m, Source::Twitch);
+                let irc = irc_up.lock().unwrap().1;
+                let (firsts, returns, message) =
+                    (fallback_chat.clone(), chat_bot.clone(), m.clone());
+                tokio::spawn(async move {
+                    let seen = seen.await;
+                    if seen.new && !irc {
+                        firsts.first_chat(message.id.clone());
+                    }
+                    // The last sighting before this message, so 回訪 never counts the message itself.
+                    returns.receive_return(&message, seen.last_seen_before);
+                });
                 checkin.receive_chat(&m, Source::Twitch);
                 chat_bot.receive_chat(&m, Source::Twitch);
                 counters.receive_chat(&m, Source::Twitch);
@@ -255,6 +259,7 @@ impl AdminState {
             }),
             deliver_alert: Arc::new(move |a| {
                 alert_viewers.receive_alert(&a, Source::Twitch);
+                thanks.receive_alert(&a, Source::Twitch);
                 marathon.receive_alert(&a, Source::Twitch);
                 activity.receive(a.clone(), Source::Twitch);
                 alerts.receive(a, Source::Twitch)

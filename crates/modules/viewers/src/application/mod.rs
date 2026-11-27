@@ -31,6 +31,17 @@ pub(crate) struct Recorded {
     pub(crate) no_avatar: bool,
     /// The toolkit had never seen this viewer before.
     pub(crate) new: bool,
+    /// When the viewer was last seen before this sighting; `None` for a new one.
+    pub(crate) last_seen_before: Option<DateTime<Utc>>,
+}
+
+/// What a chat message's sender was to the toolkit before it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ChatSeen {
+    /// Never seen before (the fallback for 第一次聊天).
+    pub new: bool,
+    /// When last seen before this message (any sighting, not only chat); `None` for a new viewer.
+    pub last_seen_before: Option<DateTime<Utc>>,
 }
 
 pub(crate) trait ViewerRepository: Send + Sync + 'static {
@@ -46,8 +57,8 @@ pub(crate) trait ViewerRepository: Send + Sync + 'static {
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 
-/// A sighting, when it happened, and who wants to know whether it was the viewer's first.
-type Job = (Sighting, DateTime<Utc>, Option<oneshot::Sender<bool>>);
+/// A sighting, when it happened, and who wants to know what the viewer was before it.
+type Job = (Sighting, DateTime<Utc>, Option<oneshot::Sender<ChatSeen>>);
 
 pub struct ViewerService {
     tx: mpsc::UnboundedSender<Job>,
@@ -116,7 +127,10 @@ impl ViewerService {
                             sightings.into_iter().zip(answers).zip(results)
                         {
                             if let Some(answer) = answer {
-                                let _ = answer.send(recorded.new);
+                                let _ = answer.send(ChatSeen {
+                                    new: recorded.new,
+                                    last_seen_before: recorded.last_seen_before,
+                                });
                             }
                             if recorded.no_avatar && tried.insert(sighting.user_id.clone()) {
                                 let _ = avatars.send(sighting.user_id);
@@ -144,21 +158,22 @@ impl ViewerService {
         self.see(Sighting::from_chat(m), source);
     }
 
-    /// Records a chat message's sender like [`Self::receive_chat`] and tells whether the toolkit had never seen
-    /// them before (the fallback for 第一次聊天 when Twitch's own mark cannot be read); `false` for simulations or
-    /// when it could not be stored.
-    pub fn receive_chat_first_time(
+    /// Records a chat message's sender like [`Self::receive_chat`] and tells what they were before it: never seen
+    /// (the fallback for 第一次聊天 when Twitch's own mark cannot be read) or when last seen (the chat bot's 回訪),
+    /// read before this sighting updates it. Nothing (not new, never seen) for simulations or when it could not be
+    /// stored.
+    pub fn receive_chat_seen(
         &self,
         m: &ChatMessage,
         source: Source,
-    ) -> impl Future<Output = bool> + Send + use<> {
-        let (first, answer) = oneshot::channel();
+    ) -> impl Future<Output = ChatSeen> + Send + use<> {
+        let (seen, answer) = oneshot::channel();
         if source == Source::Twitch {
             let _ = self
                 .tx
-                .send((Sighting::from_chat(m), Utc::now(), Some(first)));
+                .send((Sighting::from_chat(m), Utc::now(), Some(seen)));
         }
-        async move { answer.await.unwrap_or(false) }
+        async move { answer.await.unwrap_or_default() }
     }
 
     pub fn receive_alert(&self, a: &Alert, source: Source) {

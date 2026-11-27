@@ -4,11 +4,18 @@
 use std::sync::Arc;
 
 use bot::{BotLookups, BoxFuture, ChatSender};
+use chrono::{SecondsFormat, Utc};
 use integrations::{
     tls::HttpsClient,
     twitch::{auth::TwitchAuth, helix::Helix},
 };
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use toolkit_core::{
+    bus::{Event, EventBus},
+    events::Source,
+};
+use utoipa::ToSchema;
 
 use crate::admin::chat_send::{Posted, post_chat};
 
@@ -47,6 +54,54 @@ impl ChatSender for HelixChatSender {
             }
         })
     }
+}
+
+pub(crate) const RETURNING: &str = "bot.returning";
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BotReturningPayload {
+    /// Twitch's ID of the chat message to tag.
+    message_id: String,
+    /// Days since the viewer was last seen before it.
+    days: u64,
+}
+
+/// A `bot.returning` event exactly as `/ws/overlay` sends it (only 只提示我): the chat log and the docked chat tag
+/// that message 回訪 · N 天沒來. Not kept in the snapshot: the tag is for now.
+// The bus serializes its own envelope.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BotReturningEvent {
+    id: String,
+    #[serde(rename = "type")]
+    event_type: BotReturningType,
+    version: u32,
+    seq: u64,
+    occurred_at: String,
+    source: Source,
+    payload: BotReturningPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+enum BotReturningType {
+    #[serde(rename = "bot.returning")]
+    BotReturning,
+}
+
+/// Announces a 回訪 tag on the bus.
+pub(crate) fn announce_returning(bus: Arc<EventBus>) -> bot::application::OnReturning {
+    Arc::new(move |message_id, days| {
+        let payload = BotReturningPayload { message_id, days };
+        bus.publish(Event {
+            id: uuid::Uuid::now_v7().to_string(),
+            event_type: RETURNING,
+            version: 1,
+            occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            source: Source::Twitch,
+            payload: serde_json::to_value(&payload).expect("tag serializes"),
+        });
+    })
 }
 
 pub(crate) struct CounterLookups(pub(crate) Arc<counter::Counters>);

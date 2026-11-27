@@ -59,10 +59,11 @@ async fn record_sighting(
     // A NULL role (not shown by this event) keeps the stored one; a new viewer starts without roles.
     // A new row's first sighting is this one; an existing row keeps its earlier first sighting.
     // The caller holds a transaction. Two sightings can have the same timestamp.
-    let existed: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM viewers WHERE twitch_user_id = ?)")
+    // Read before the update below changes it: the chat bot's 回訪 counts from it.
+    let last_seen: Option<String> =
+        sqlx::query_scalar("SELECT last_seen_at FROM viewers WHERE twitch_user_id = ?")
             .bind(&s.user_id)
-            .fetch_one(&mut *conn)
+            .fetch_optional(&mut *conn)
             .await
             .map_err(storage)?;
     let no_avatar: bool = sqlx::query_scalar(
@@ -88,7 +89,10 @@ async fn record_sighting(
         .map_err(storage)?;
     Ok(Recorded {
         no_avatar,
-        new: !existed,
+        new: last_seen.is_none(),
+        last_seen_before: last_seen
+            .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
+            .map(|t| t.to_utc()),
     })
 }
 
@@ -383,13 +387,15 @@ mod tests {
         });
         let viewers = start(pool.clone(), profiles);
         let m = chat("fan", "Fan", vec![]);
-        assert!(viewers.receive_chat_first_time(&m, Source::Twitch).await);
-        assert!(!viewers.receive_chat_first_time(&m, Source::Twitch).await);
+        let first = viewers.receive_chat_seen(&m, Source::Twitch).await;
+        assert!(first.new && first.last_seen_before.is_none());
+        let again = viewers.receive_chat_seen(&m, Source::Twitch).await;
+        // Seen before: when, as it was before this message.
+        assert!(!again.new && again.last_seen_before.is_some());
         let other = chat("sim", "Sim", vec![]);
-        assert!(
-            !viewers
-                .receive_chat_first_time(&other, Source::Simulation)
-                .await,
+        assert_eq!(
+            viewers.receive_chat_seen(&other, Source::Simulation).await,
+            crate::ChatSeen::default(),
             "simulations never count"
         );
     }
