@@ -24,6 +24,7 @@ mod performance;
 mod queue;
 mod rehearsal;
 mod services;
+mod song_events;
 mod source_settings;
 mod stream_summary;
 mod tab_bar;
@@ -371,7 +372,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     // Every module's chat commands in one table; a name belongs to one of them.
     let commands = Arc::new(toolkit_core::commands::CommandTable::load(
         config.data_dir.clone(),
-        checkin::COMMANDS.to_vec(),
+        [checkin::COMMANDS, songs::COMMANDS].concat(),
     ));
     let checkin = Arc::new(checkin::start(
         config.db.clone(),
@@ -397,7 +398,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     // 聊天機器人: posts as the streamer through Helix, through one rate-limited queue.
     let chat_bot = bot::BotService::start(
         config.data_dir.clone(),
-        commands,
+        commands.clone(),
         modules.clone(),
         Arc::new(bot_ports::HelixChatSender {
             twitch: twitch.clone(),
@@ -406,6 +407,16 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         }),
         Arc::new(bot_ports::CounterLookups(counters.clone())),
         bot_ports::announce_returning(bus.clone()),
+    );
+    // Requests from chat answer through the chat bot's queue.
+    let replies = chat_bot.clone();
+    let song_requests = songs::start_requests(
+        config.db.clone(),
+        modules.clone(),
+        commands,
+        config.data_dir.clone(),
+        Arc::new(move |text| replies.say(text)),
+        song_events::announce_changes(bus.clone()),
     );
     // Per-stream counters go back to 0 once a stream is live (each status repeats it; the counters keep it to once),
     // and the marathon clock runs only while live.
@@ -613,6 +624,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
         modules.clone(),
         Arc::new(contests::Contests::new(bus.clone())),
         chat_bot.clone(),
+        song_requests.clone(),
     ));
     watch_warnings(&screen_tools, &overlays, &admin, obs.states(), &modules);
     let services = services::routes(services::ServicesState {
@@ -684,6 +696,12 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
             )))
             .merge(
                 songs::routes(song_list).layer(middleware::from_fn_with_state(
+                    admin.clone(),
+                    admin::require_token,
+                )),
+            )
+            .merge(
+                songs::request_routes(song_requests).layer(middleware::from_fn_with_state(
                     admin.clone(),
                     admin::require_token,
                 )),

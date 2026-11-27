@@ -23,7 +23,8 @@ use toolkit_core::{
 };
 
 use crate::domain::{
-    self, Cooldowns, QUEUE_EXPIRY, QUEUE_MAX, RateWindow, SentMessages, Vars, next_due,
+    self, Cooldowns, MESSAGE_MAX_CHARS, QUEUE_EXPIRY, QUEUE_MAX, RateWindow, SentMessages, Vars,
+    next_due,
 };
 
 /// How often due timers are looked at.
@@ -60,6 +61,8 @@ struct Outgoing {
     viewer: Option<String>,
     amount: Option<u64>,
     queued: Instant,
+    /// Another module's text, already filled in: posted as it is, so a viewer's words are never read as variables.
+    raw: bool,
 }
 
 #[derive(Default)]
@@ -249,15 +252,31 @@ impl BotService {
 
     /// Queues a message, unless the bot is off or cannot post; a full queue drops it.
     fn enqueue(&self, template: String, viewer: Option<String>, amount: Option<u64>) {
-        if !self.on() || !self.sender.can_send() {
-            return;
-        }
-        let message = Outgoing {
+        self.push(Outgoing {
             template,
             viewer,
             amount,
             queued: Instant::now(),
-        };
+            raw: false,
+        });
+    }
+
+    /// Posts another module's reply (song requests) as it is, through the same queue and rules: nothing when the bot is off or
+    /// cannot post, and its variables are not filled in.
+    pub fn say(&self, text: String) {
+        self.push(Outgoing {
+            template: text,
+            viewer: None,
+            amount: None,
+            queued: Instant::now(),
+            raw: true,
+        });
+    }
+
+    fn push(&self, message: Outgoing) {
+        if !self.on() || !self.sender.can_send() {
+            return;
+        }
         if self.tx.try_send(message).is_err() {
             self.state.lock().unwrap().dropped += 1;
             tracing::warn!(
@@ -282,6 +301,11 @@ impl BotService {
             state.sent.remember(m.id.clone(), now);
         }
         echo
+    }
+
+    /// Whether the bot posted this chat message, so other modules' commands ignore it too.
+    pub fn is_own(&self, m: &ChatMessage) -> bool {
+        self.own(m)
     }
 
     /// A chat message from Twitch: counts toward the timers' chat lines and answers the bot command it is, unless
@@ -478,6 +502,10 @@ async fn post(
 
 /// The message's text with its variables filled in now.
 async fn render(m: &Outgoing, state: &Mutex<State>, lookups: &dyn BotLookups) -> Option<String> {
+    if m.raw {
+        let text = m.template.trim();
+        return (!text.is_empty()).then(|| text.chars().take(MESSAGE_MAX_CHARS).collect());
+    }
     // Counter values are read first: rendering itself is not async.
     let mut values = Vec::new();
     for name in counter_names(&m.template) {

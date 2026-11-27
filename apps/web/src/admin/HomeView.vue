@@ -459,6 +459,12 @@
       </template>
     </AppDrawer>
 
+    <AppDrawer id="songs" :title="moduleName('songs')" full-page="/songs">
+      <template #now>
+        <p>{{ t('songs.tile') }}</p>
+      </template>
+    </AppDrawer>
+
     <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
       <template #actions>
         <ObsStatusLink overlay="/overlay/bgm/" />
@@ -757,6 +763,7 @@ const lines = computed<Record<string, Line>>(() => {
     rewards: { state: 'ready', text: t('rewards.tile') },
     polls: { state: 'ready', text: t('polls.tile') },
     commands: { state: 'ready', text: t('bot.tile') },
+    songs: { state: 'ready', text: t('songs.tile') },
     'screen-tools':
       status !== 'open'
         ? { state: status }

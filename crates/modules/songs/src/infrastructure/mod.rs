@@ -2,6 +2,7 @@
 
 pub mod db;
 mod import;
+pub mod requests;
 
 use std::sync::Arc;
 
@@ -454,8 +455,13 @@ pub fn routes(service: Arc<Songs>) -> Router {
 struct SongsApi;
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    SongsApi::openapi()
+    let mut doc = SongsApi::openapi();
+    doc.merge(requests::RequestsApi::openapi());
+    doc
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod request_tests;

@@ -245,6 +245,26 @@ async fn the_bot_never_answers_its_own_messages_even_before_twitch_answers() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn another_modules_reply_goes_out_as_it_is_and_only_while_the_bot_is_on() {
+    let b = bot("say", &[]);
+    b.service.say("小魚 點了 {計數:死亡次數} {觀眾}".into());
+    settle().await;
+    assert_eq!(posted(&b), ["小魚 點了 {計數:死亡次數} {觀眾}"]);
+    // Its echo is the bot's own message for every module.
+    assert!(b.service.is_own(&message(
+        "sent-0",
+        "42",
+        "小魚 點了 {計數:死亡次數} {觀眾}",
+        vec![]
+    )));
+    assert!(!b.service.is_own(&message("2", "7", "!點歌 晴天", vec![])));
+    b.service.modules.set_enabled(modules::BOT, false).unwrap();
+    b.service.say("關了".into());
+    settle().await;
+    assert_eq!(posted(&b).len(), 1);
+}
+
+#[tokio::test(start_paused = true)]
 async fn at_most_twenty_go_out_in_thirty_seconds_counting_the_streamer_and_the_rest_wait_or_drop() {
     let b = bot("rate", &[("hi", Allowed::Everyone, "嗨", 0, true)]);
     // Five sent by hand use up part of the 30 seconds.
