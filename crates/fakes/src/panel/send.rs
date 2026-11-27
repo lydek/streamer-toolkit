@@ -159,7 +159,8 @@ pub struct Form {
     pub tier: &'static str,
     pub months: String,
     pub message: String,
-    pub reward: &'static str,
+    /// A reward title; the fake fills in that reward's ID.
+    pub reward: String,
     pub id: String,
     pub status: &'static str,
     pub first: bool,
@@ -175,7 +176,7 @@ impl Default for Form {
             tier: "1000",
             months: "3".into(),
             message: "早安主播！".into(),
-            reward: "Check in",
+            reward: "Check in".into(),
             id: String::new(),
             status: "fulfilled",
             first: false,
@@ -192,7 +193,7 @@ impl Form {
             Field::Tier => self.tier,
             Field::Months => &self.months,
             Field::Message => &self.message,
-            Field::Reward => self.reward,
+            Field::Reward => &self.reward,
             Field::Id => &self.id,
             Field::Status => self.status,
         }

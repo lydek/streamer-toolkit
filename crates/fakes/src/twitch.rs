@@ -15,7 +15,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{any, get, post},
+    routing::{any, get, patch, post},
 };
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, sync::broadcast};
@@ -23,7 +23,9 @@ use tokio::{net::TcpListener, sync::broadcast};
 use crate::metrics::{self, Call, Recorder};
 
 mod channel;
+mod rewards;
 pub use channel::{CATEGORIES, Channel};
+pub use rewards::RewardView;
 
 pub const BROADCASTER_ID: &str = "1000";
 pub const BROADCASTER_LOGIN: &str = "fake_streamer";
@@ -31,7 +33,7 @@ pub const BROADCASTER_LOGIN: &str = "fake_streamer";
 pub const PRELOADED_TOKEN: &str = "fake-access";
 const BROADCASTER_NAME: &str = "Fake_Streamer";
 const TIMESTAMP: &str = "2026-11-26T12:00:00Z";
-/// The channel point rewards, as `(id, title, cost)`.
+/// The rewards the channel starts with, made in the Twitch dashboard rather than by the app: `(id, title, cost)`.
 pub const REWARDS: &[(&str, &str, u32)] = &[
     ("fake-reward-check-in", "Check in", 100),
     ("fake-reward-hydrate", "Hydrate", 500),
@@ -50,6 +52,7 @@ pub struct TwitchSnapshot {
     pub irc_joins: Vec<String>,
     /// The stream info viewers see (`/helix/channels`).
     pub channel: Channel,
+    pub rewards: Vec<RewardView>,
     /// The ID of the last redemption and the last chat message the app received.
     pub last_redemption: Option<String>,
     pub last_chat: Option<String>,
@@ -85,6 +88,8 @@ struct World {
     irc_open: u32,
     irc_joins: Vec<String>,
     channel: Channel,
+    rewards: Vec<rewards::Reward>,
+    redemptions: Vec<rewards::Redemption>,
     last_redemption: Option<String>,
     last_chat: Option<String>,
     next_id: u64,
@@ -133,6 +138,8 @@ impl FakeTwitch {
                 irc_open: 0,
                 irc_joins: Vec::new(),
                 channel: Channel::default(),
+                rewards: rewards::preloaded(),
+                redemptions: Vec::new(),
                 last_redemption: None,
                 last_chat: None,
                 next_id: 0,
@@ -163,7 +170,17 @@ impl FakeTwitch {
                 get(channel::get_channel).patch(channel::patch_channel),
             )
             .route("/helix/search/categories", get(channel::search_categories))
-            .route("/helix/channel_points/custom_rewards", get(rewards))
+            .route(
+                "/helix/channel_points/custom_rewards",
+                get(rewards::list)
+                    .post(rewards::create)
+                    .patch(rewards::update)
+                    .delete(rewards::delete),
+            )
+            .route(
+                "/helix/channel_points/custom_rewards/redemptions",
+                patch(rewards::mark),
+            )
             .route("/helix/chat/badges/global", get(badges))
             .route("/helix/chat/badges", get(badges))
             .route(
@@ -208,6 +225,7 @@ impl FakeTwitch {
                 .collect(),
             irc_joins: w.irc_joins.clone(),
             channel: w.channel.clone(),
+            rewards: w.rewards.iter().map(rewards::Reward::view).collect(),
             last_redemption: w.last_redemption.clone(),
             last_chat: w.last_chat.clone(),
         }
@@ -405,21 +423,6 @@ async fn streams(State(fake): State<FakeTwitch>) -> Response {
     } else {
         json!([])
     };
-    Json(json!({ "data": data })).into_response()
-}
-
-async fn rewards() -> Response {
-    let reward = |id: &str, title: &str, cost: u32| {
-        json!({"broadcaster_id": BROADCASTER_ID, "broadcaster_login": BROADCASTER_LOGIN,
-               "broadcaster_name": BROADCASTER_NAME, "id": id, "title": title, "prompt": "", "cost": cost,
-               "image": null, "default_image": null, "background_color": "#9147FF", "is_enabled": true,
-               "is_user_input_required": false, "is_paused": false, "is_in_stock": true,
-               "should_redemptions_skip_request_queue": false})
-    };
-    let data: Vec<Value> = REWARDS
-        .iter()
-        .map(|(id, title, cost)| reward(id, title, *cost))
-        .collect();
     Json(json!({ "data": data })).into_response()
 }
 

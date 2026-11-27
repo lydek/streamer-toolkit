@@ -162,10 +162,15 @@ pub fn send_event(
         "stream.offline" => twitch.set_live(false),
         _ => {}
     }
-    out(
-        twitch_type,
-        events::event(twitch_type, p, &id).expect("every kind has an event"),
-    );
+    let mut event = events::event(twitch_type, p, &id).expect("every kind has an event");
+    match twitch_type {
+        "channel.channel_points_custom_reward_redemption.add" => twitch.redeemed(&mut event),
+        "channel.channel_points_custom_reward_redemption.update" => {
+            twitch.redemption_changed(&event)
+        }
+        _ => {}
+    }
+    out(twitch_type, event);
     // A gift also sends one `channel.subscribe` per recipient, as Twitch does.
     if twitch_type == "channel.subscription.gift" {
         for n in 1..=p.count {

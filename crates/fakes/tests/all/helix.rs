@@ -121,3 +121,130 @@ async fn stream_info_is_read_changed_and_searched() {
         keys.contains(&"PATCH /helix/channels") && keys.contains(&"GET /helix/search/categories")
     );
 }
+
+#[tokio::test]
+async fn rewards_are_managed_and_redemptions_marked_once() {
+    let fake = FakeTwitch::default();
+    let helix = helix(&fake).await;
+    let path = format!("/channel_points/custom_rewards?broadcaster_id={BROADCASTER_ID}");
+    let count = |v: &serde_json::Value| v["data"].as_array().unwrap().len();
+
+    let all = helix.get_json(&path).await.unwrap();
+    assert_eq!(count(&all), 3, "the preloaded rewards");
+    for key in [
+        "global_cooldown_setting",
+        "max_per_stream_setting",
+        "max_per_user_per_stream_setting",
+    ] {
+        assert!(all["data"][0][key]["is_enabled"].is_boolean(), "{key}");
+    }
+    let own = format!("{path}&only_manageable_rewards=true");
+    assert_eq!(count(&helix.get_json(&own).await.unwrap()), 0);
+
+    let made = helix
+        .post_json_read(&path, &json!({"title": "Hug", "cost": 50, "is_global_cooldown_enabled": true, "global_cooldown_seconds": 30}))
+        .await
+        .unwrap();
+    let id = made["data"][0]["id"].as_str().unwrap().to_owned();
+    assert!(
+        id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+        "{id}"
+    );
+    assert_eq!(
+        made["data"][0]["global_cooldown_setting"]["global_cooldown_seconds"],
+        30
+    );
+    assert_eq!(count(&helix.get_json(&own).await.unwrap()), 1);
+    assert_eq!(count(&helix.get_json(&path).await.unwrap()), 4);
+    assert_eq!(
+        refused(
+            helix
+                .post_json_read(&path, &json!({"title": "No cost"}))
+                .await
+        ),
+        400
+    );
+
+    let one = format!("{path}&id={id}");
+    helix
+        .patch_json(&one, &json!({"cost": 75, "is_paused": true}))
+        .await
+        .unwrap();
+    let changed = &helix.get_json(&one).await.unwrap()["data"][0];
+    assert_eq!(
+        (changed["cost"].as_u64(), changed["is_paused"].as_bool()),
+        (Some(75), Some(true))
+    );
+    let preloaded = format!("{path}&id=fake-reward-check-in");
+    assert_eq!(
+        refused(helix.patch_json(&preloaded, &json!({"cost": 1})).await),
+        403
+    );
+    assert_eq!(refused(helix.delete(&preloaded).await), 403);
+    assert_eq!(
+        refused(
+            helix
+                .patch_json(&format!("{path}&id=fake-none"), &json!({"cost": 1}))
+                .await
+        ),
+        404
+    );
+
+    // A viewer redeems the app's reward: the event carries its real ID, and the app marks it once.
+    let sent = fakes::control::send_body(
+        &fake,
+        &json!({"kind": "redeem", "reward": "Hug", "user": "viewer"}),
+    )
+    .unwrap();
+    let redemption = sent["id"].as_str().unwrap().to_owned();
+    let mark = |reward: &str| {
+        format!(
+            "/channel_points/custom_rewards/redemptions?id={redemption}&broadcaster_id={BROADCASTER_ID}&reward_id={reward}"
+        )
+    };
+    let done = helix
+        .patch_json_read(&mark(&id), &json!({"status": "FULFILLED"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            done["data"][0]["status"].as_str(),
+            done["data"][0]["reward"]["id"].as_str()
+        ),
+        (Some("FULFILLED"), Some(id.as_str()))
+    );
+    assert!(
+        fake.recorder()
+            .recent(10)
+            .iter()
+            .any(|e| e.key == "channel.channel_points_custom_reward_redemption.update")
+    );
+    assert_eq!(
+        refused(
+            helix
+                .patch_json_read(&mark(&id), &json!({"status": "CANCELED"}))
+                .await
+        ),
+        404,
+        "already marked"
+    );
+
+    let other =
+        fakes::control::send_body(&fake, &json!({"kind": "redeem", "reward": "Check in"})).unwrap();
+    let other_mark = format!(
+        "/channel_points/custom_rewards/redemptions?id={}&broadcaster_id={BROADCASTER_ID}&reward_id=fake-reward-check-in",
+        other["id"].as_str().unwrap()
+    );
+    assert_eq!(
+        refused(
+            helix
+                .patch_json_read(&other_mark, &json!({"status": "CANCELED"}))
+                .await
+        ),
+        403
+    );
+
+    helix.delete(&one).await.unwrap();
+    assert_eq!(count(&helix.get_json(&own).await.unwrap()), 0);
+    assert_eq!(refused(helix.delete(&one).await), 404);
+}

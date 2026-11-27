@@ -81,7 +81,7 @@ pub enum Message {
     Edit(send::Field, String),
     Kind(send::Kind),
     Tier(&'static str),
-    Reward(&'static str),
+    Reward(String),
     Status(send::Status),
     First(bool),
     /// A delivered redemption or chat message clicked in the log: the form kind and the ID.
