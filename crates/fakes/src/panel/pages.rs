@@ -15,7 +15,7 @@ use super::{
     small_button,
 };
 use crate::metrics::Fault;
-use crate::twitch::{BROADCASTER_ID, BROADCASTER_LOGIN, REWARDS};
+use crate::twitch::{BROADCASTER_ID, BROADCASTER_LOGIN, RewardView};
 use serde_json::Value;
 
 const SCENARIOS: [(&str, &str); 4] = [
@@ -114,8 +114,13 @@ impl Panel {
                     .text_size(TEXT)
                     .into(),
                 Field::Reward => {
-                    let titles: Vec<&'static str> = REWARDS.iter().map(|r| r.1).collect();
-                    pick_list(titles, Some(form.reward), Message::Reward)
+                    let titles: Vec<String> = self
+                        .twitch_view
+                        .rewards
+                        .iter()
+                        .map(|r| r.title.clone())
+                        .collect();
+                    pick_list(titles, Some(form.reward.clone()), Message::Reward)
                         .text_size(TEXT)
                         .into()
                 }
@@ -199,18 +204,16 @@ impl Panel {
         .spacing(6);
         let rewards = table::table(
             [
-                table::column(heading("獎勵"), |r: (&'static str, &'static str, u32)| {
-                    text(r.1)
-                })
-                .width(Fill),
-                table::column(heading("點數"), |r: (&'static str, &'static str, u32)| {
-                    text(r.2.to_string())
+                table::column(heading("獎勵"), |r: RewardView| text(r.title)).width(Fill),
+                table::column(heading("點數"), |r: RewardView| text(r.cost.to_string())),
+                table::column(heading("app 建立"), |r: RewardView| {
+                    text(if r.app_created { "是" } else { "" })
                 }),
-                table::column(heading("ID"), |r: (&'static str, &'static str, u32)| {
-                    text(r.0).size(SMALL).color(MUTED)
+                table::column(heading("ID"), |r: RewardView| {
+                    text(r.id).size(SMALL).color(MUTED)
                 }),
             ],
-            REWARDS.iter().copied(),
+            t.rewards.clone(),
         )
         .padding_x(8)
         .padding_y(2);
