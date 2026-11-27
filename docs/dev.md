@@ -57,7 +57,7 @@
 ## 每次提交前（PR 的 CI 也跑同一套，只跑 Windows）
 順序：先建置前端（`dist/` 不進版控，`rust-embed` 需要它才編得過），再跑 Rust 檢查。
 CI 只在 PR 上跑；合併進 `main` 不再跑一次，因為 rebase-merge 合併的就是 PR 已檢查過的 commit。合併進 `main` 後，`cache.yml` 只編譯、不檢查，把 Rust 與 pnpm 快取存在 `main`；PR 從 `main` 還原快取，自己不存（各 PR 的快取會擠掉 `main` 的）。GitHub 更新 runner 映像的 Rust 後快取會對不上，到下次合併前可手動觸發 `cache.yml`。
-CI 分成幾個 job：`changes` 判斷是不是只改文件；`main` 跑上面整套檢查；`fakes-ui` 同時跑假服務控制面板的檢查，用自己的快取（iced 不放進主快取）；`check` 只確認該跑的 job 都通過，`main` 的 ruleset 只要求它。CI 編譯只留行號（`CARGO_PROFILE_DEV_DEBUG=line-tables-only`），連結較快、快取較小，panic 時仍看得到檔名和行號；`ci.yml` 與 `cache.yml` 的設定要一致，否則快取對不上。
+CI 分成幾個 job：`changes` 判斷是不是只改文件；`web` 跑譯文與前端檢查（只改文件時只跑譯文檢查）；`rust` 同時跑 Rust 檢查，自己先建好前端（Host 要內嵌），型別檢查留給 `web`；`fakes-ui` 也同時跑假服務控制面板的檢查，用自己的快取（iced 不放進主快取）；`check` 只確認該跑的 job 都通過，`main` 的 ruleset 只要求它。CI 編譯只留行號（`CARGO_PROFILE_DEV_DEBUG=line-tables-only`），連結較快、快取較小，panic 時仍看得到檔名和行號；`ci.yml` 與 `cache.yml` 的設定要一致，否則快取對不上。
 格式、lint、型別檢查、測試、架構測試、`cargo deny check`（授權與安全公告）、`pnpm check:licenses`（前端授權）、`pnpm test:scripts`（`scripts/` 的 Node 測試）全部通過（Rust：`cargo fmt --check`、`cargo clippy`、`cargo test`；前端：lint、typecheck、test、build）；OpenAPI 與 TS 型別產物必須是最新。
 沒有開啟 `tauri/custom-protocol` 的 cargo 指令都以 dev 模式編譯，所以 CI 另跑 `cargo clippy --features tauri/custom-protocol`，檢查只在正式版編譯的程式碼（只用來檢查，不散布產物）。正式發佈一律用 `tauri build`。
 

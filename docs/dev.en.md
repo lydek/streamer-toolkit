@@ -1,4 +1,4 @@
-<!-- source: docs/dev.md source-sha256: 52c0a37485e42371f4d401a1620a8ca2dee6251394a459794aa5a8c277da700d -->
+<!-- source: docs/dev.md source-sha256: a13adab74c23059dc38211ce7fce86033e31e47189a166695f22ae614ad134ae -->
 [繁體中文](dev.md) | **English**
 
 # Development
@@ -58,7 +58,7 @@ Principle: another Windows PC can get it running by following this document.
 ## Before every commit (PR CI runs the same set, Windows only)
 Order: build the frontend first (`dist/` is not under version control, and `rust-embed` needs it to compile), then run the Rust checks.
 CI runs only on PRs; merging into `main` does not run it again, because rebase-merge lands exactly the commits the PR already checked. After a merge into `main`, `cache.yml` only compiles, without checks, and saves the Rust and pnpm caches on `main`; PRs restore from `main` and never save their own (per-PR caches would evict main's). When GitHub updates the runner image's Rust, the cache no longer matches; until the next merge, trigger `cache.yml` by hand.
-CI is split into jobs: `changes` tells whether only docs changed; `main` runs the checks above; `fakes-ui` runs the control panel checks alongside it with its own cache (iced stays out of the main one); `check` only confirms that every job that had to run passed, and is the only check the `main` ruleset requires. CI builds keep line numbers only (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`): faster links and a smaller cache, while panics still show file and line. `ci.yml` and `cache.yml` must set it alike, or the cache never matches.
+CI is split into jobs: `changes` tells whether only docs changed; `web` runs the translation and frontend checks (only the translation check when only docs changed); `rust` runs the Rust checks alongside it, builds the frontend itself (the Host embeds it) and leaves the typecheck to `web`; `fakes-ui` runs the control panel checks alongside both with its own cache (iced stays out of the main one); `check` only confirms that every job that had to run passed, and is the only check the `main` ruleset requires. CI builds keep line numbers only (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`): faster links and a smaller cache, while panics still show file and line. `ci.yml` and `cache.yml` must set it alike, or the cache never matches.
 Formatting, lint, type checks, tests, architecture tests and `cargo deny check` (licenses and security advisories), `pnpm check:licenses` (frontend licenses) and `pnpm test:scripts` (Node tests for `scripts/`) all pass (Rust: `cargo fmt --check`, `cargo clippy`, `cargo test`; frontend: lint, typecheck, test, build); generated OpenAPI and TS types must be up to date.
 Cargo commands without `tauri/custom-protocol` all compile in dev mode, so CI also runs `cargo clippy --features tauri/custom-protocol` to check code compiled only in release (for checking only; nothing is distributed). Releases always use `tauri build`.
 
