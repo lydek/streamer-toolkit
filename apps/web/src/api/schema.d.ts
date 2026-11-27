@@ -172,6 +172,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/bot/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_commands"];
+        put?: never;
+        post: operations["create_command"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bot/commands/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_command"];
+        post?: never;
+        delete: operations["delete_command"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bot/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chat-display": {
         parameters: {
             query?: never;
@@ -2791,6 +2839,38 @@ export interface components {
         };
         /** @enum {string} */
         BoardKind: "bits" | "gifts" | "chat" | "checkins";
+        BotCommandBody: {
+            allowed: components["schemas"]["Allowed"];
+            /**
+             * Format: int32
+             * @description 0–3600; 0 is no cooldown.
+             */
+            cooldown_seconds: number;
+            enabled: boolean;
+            /** @description One word, with or without its `!`, up to 25 characters; unique among every feature's commands. */
+            name: string;
+            /** @description Up to 500 characters; may use `{觀眾}`, `{計數:名稱}` and `{直播時長}`. */
+            reply: string;
+        };
+        /** @description A bot command as the admin page shows it. `reply` is the broadcaster's text, shown as text. */
+        BotCommandView: {
+            allowed: components["schemas"]["Allowed"];
+            /**
+             * Format: int32
+             * @description 0: no cooldown.
+             */
+            cooldown_seconds: number;
+            enabled: boolean;
+            id: string;
+            /** @description Without its `!`. */
+            name: string;
+            reply: string;
+        };
+        /** @description How many messages the bot dropped since launch (the queue was full, or they waited too long). */
+        BotStatus: {
+            /** Format: int64 */
+            dropped: number;
+        };
         /**
          * @description How an item fills its bounding box: `none` scales its content by its size; the rest make its size the box.
          * @enum {string}
@@ -5765,6 +5845,192 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_commands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotCommandView"][];
+                };
+            };
+        };
+    };
+    create_command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotCommandBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotCommandView"];
+                };
+            };
+            /** @description `bot.invalid`: a name that is not one word, an empty reply or one over 500 characters, a cooldown over 3600 s, or more than 100 commands */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `commands.taken`: another feature's command has the name */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandTakenBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotCommandBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotCommandView"];
+                };
+            };
+            /** @description `bot.invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `bot.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `commands.taken` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandTakenBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `bot.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `settings.save_failed` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotStatus"];
                 };
             };
         };

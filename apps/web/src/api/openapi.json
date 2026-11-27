@@ -533,6 +533,222 @@
         }
       }
     },
+    "/api/admin/bot/commands": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_commands",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BotCommandView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_command",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCommandView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bot.invalid`: a name that is not one word, an empty reply or one over 500 characters, a cooldown over 3600 s, or more than 100 commands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`commands.taken`: another feature's command has the name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTakenBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/bot/commands/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_command",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCommandView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bot.invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`bot.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`commands.taken`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTakenBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_command",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "description": "`bot.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`settings.save_failed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/bot/status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/chat-display": {
       "get": {
         "tags": [
@@ -8937,6 +9153,88 @@
           "chat",
           "checkins"
         ]
+      },
+      "BotCommandBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "allowed",
+          "reply",
+          "cooldown_seconds",
+          "enabled"
+        ],
+        "properties": {
+          "allowed": {
+            "$ref": "#/components/schemas/Allowed"
+          },
+          "cooldown_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0–3600; 0 is no cooldown.",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "description": "One word, with or without its `!`, up to 25 characters; unique among every feature's commands."
+          },
+          "reply": {
+            "type": "string",
+            "description": "Up to 500 characters; may use `{觀眾}`, `{計數:名稱}` and `{直播時長}`."
+          }
+        }
+      },
+      "BotCommandView": {
+        "type": "object",
+        "description": "A bot command as the admin page shows it. `reply` is the broadcaster's text, shown as text.",
+        "required": [
+          "id",
+          "name",
+          "allowed",
+          "reply",
+          "cooldown_seconds",
+          "enabled"
+        ],
+        "properties": {
+          "allowed": {
+            "$ref": "#/components/schemas/Allowed"
+          },
+          "cooldown_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0: no cooldown.",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Without its `!`."
+          },
+          "reply": {
+            "type": "string"
+          }
+        }
+      },
+      "BotStatus": {
+        "type": "object",
+        "description": "How many messages the bot dropped since launch (the queue was full, or they waited too long).",
+        "required": [
+          "dropped"
+        ],
+        "properties": {
+          "dropped": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
       },
       "Bounds": {
         "type": "string",

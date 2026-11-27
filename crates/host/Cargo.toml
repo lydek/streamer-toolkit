@@ -11,6 +11,7 @@ axum = { version = "0.8.9", features = ["ws"] }
 chat = { version = "0.1.0", path = "../modules/chat" }
 checkin = { version = "0.1.0", path = "../modules/checkin" }
 counter = { version = "0.1.0", path = "../modules/counter" }
+bot = { version = "0.1.0", path = "../modules/bot" }
 overlays = { version = "0.1.0", path = "../modules/overlays" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 integrations = { version = "0.1.0", path = "../integrations" }

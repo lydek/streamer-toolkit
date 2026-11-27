@@ -5,7 +5,6 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
-import BotCommandsPage from './BotCommandsPage.vue'
 import BotGreetingsPage from './BotGreetingsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
 import SongsPage from './SongsPage.vue'
@@ -44,9 +43,8 @@ async function page(component: Component, path: string) {
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
 
 describe('聊天機器人', () => {
-  it('shows no commands or timers, with adding them disabled', async () => {
+  it('shows no timers, with adding them disabled', async () => {
     for (const [component, path, kind] of [
-      [BotCommandsPage, '/commands', 'commands'],
       [BotTimersPage, '/timers', 'timers'],
     ] as const) {
       const w = await page(component, path)

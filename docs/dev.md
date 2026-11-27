@@ -156,7 +156,7 @@ CI 依改到的檔案跳過的 job（規則和理由在 `scripts/ci-changes.mjs`
 
 ## 文件規則
 - 只維護根目錄 `README.md`、`AGENTS.md` 與 `docs/` 下的 `scope.md`、`architecture.md`、`decisions.md`、`dev.md`。
-- 複雜模組（目前是兌換紀錄、打卡簽到）在做到該切片時建立 `docs/modules/<模組>.md`，只寫規則、狀態轉換與驗收；薄模組不寫。
+- 複雜模組（目前是兌換紀錄、打卡簽到、聊天機器人）在做到該切片時建立 `docs/modules/<模組>.md`，只寫規則、狀態轉換與驗收；薄模組不寫。
 - 功能範圍改了就改 `scope.md`；分層或模組規則改了就改 `architecture.md`；技術選型改了就在 `decisions.md` 的變更紀錄寫一行。
 - 待辦與想法開 GitHub Issue，不寫進文件。
 - 不寫 ADR、研究文件、品質清單。`docs/archive/` 是早期草稿，已列入 `.gitignore`，只存在本機，僅供參考，不是指令。

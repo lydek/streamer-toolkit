@@ -27,6 +27,29 @@ struct SendResult {
     is_sent: bool,
 }
 
+/// What Twitch did with a message.
+pub(crate) enum Posted {
+    /// Sent, with its message ID (as chat events carry it).
+    Sent(String),
+    /// Taken but not sent (e.g. a duplicate or AutoMod).
+    Dropped,
+}
+
+/// Posts `text` to broadcaster `id`'s chat as them (Helix Send Chat Message); the admin send box and the chat bot
+/// both go through here.
+pub(crate) async fn post_chat(helix: &Helix, id: &str, text: &str) -> Result<Posted, HelixError> {
+    let request = serde_json::json!({ "broadcaster_id": id, "sender_id": id, "message": text });
+    let body = helix.post_json_read("/chat/messages", &request).await?;
+    match serde_json::from_value::<SendList>(body)
+        .ok()
+        .and_then(|l| l.data.into_iter().next())
+    {
+        Some(r) if r.is_sent => Ok(Posted::Sent(r.message_id)),
+        Some(_) => Ok(Posted::Dropped),
+        None => Err(HelixError::Auth(AuthError::InvalidResponse)),
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/api/admin/chat/send",
@@ -57,19 +80,12 @@ pub(super) async fn chat_send(
         return auth_error(AuthError::SignInRequired);
     };
     let helix = Helix::new(&s.endpoints.helix, twitch, s.http.clone());
-    let request = serde_json::json!({ "broadcaster_id": id, "sender_id": id, "message": text });
-    match helix.post_json_read("/chat/messages", &request).await {
-        Ok(body) => match serde_json::from_value::<SendList>(body)
-            .ok()
-            .and_then(|l| l.data.into_iter().next())
-        {
-            Some(r) if r.is_sent => Json(ChatSent {
-                message_id: r.message_id,
-            })
-            .into_response(),
-            Some(_) => error(StatusCode::UNPROCESSABLE_ENTITY, "chat.send_dropped"),
-            None => auth_error(AuthError::InvalidResponse),
-        },
+    let result = post_chat(&helix, &id, text).await;
+    // Counts toward the chat bot's 30 seconds, whatever Twitch did with it.
+    s.bot.note_manual_send();
+    match result {
+        Ok(Posted::Sent(message_id)) => Json(ChatSent { message_id }).into_response(),
+        Ok(Posted::Dropped) => error(StatusCode::UNPROCESSABLE_ENTITY, "chat.send_dropped"),
         Err(HelixError::Auth(e)) => auth_error(e),
         Err(HelixError::Refused(401 | 403)) => {
             error(StatusCode::FORBIDDEN, "twitch.scope_required")
