@@ -100,6 +100,13 @@
       "storage_failed": "無法讀取或更新待處理的事件。",
       "not_found": "這筆事件已經處理過了。"
     },
+    "songs": {
+      "invalid": "內容不正確：歌名 1 到 100 字、歌手最多 100 字、分類 1 到 30 字、連結要是 YouTube 影片；歌單最多 5000 首、100 個分類。",
+      "duplicate": "已經有同一首歌，或同名的分類。",
+      "not_found": "找不到這首歌或這個分類。",
+      "unreadable_file": "讀不出這個檔案：要是 .xlsx，或 UTF-8 的 .csv，5 MB 以內。",
+      "storage_failed": "無法讀取或寫入歌單。"
+    },
     "checkin": {
       "invalid_query": "搜尋條件不正確。",
       "import_invalid": "不是有效的打卡資料：需要一個以 Twitch user ID 為鍵的 JSON 物件。",

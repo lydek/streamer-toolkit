@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
 import SongsPage from './SongsPage.vue'
-import SongListPage from './SongListPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
 import ShoutoutsPage from './ShoutoutsPage.vue'
 import RaidsPage from './RaidsPage.vue'
@@ -46,16 +45,6 @@ describe('點歌', () => {
     expect(w.get('h1').text()).toBe(t('pages.songs.name'))
     expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songs.nothingNow'), t('songs.emptyQueue'), t('songs.boothOff')])
     for (const label of [t('songs.next'), t('songs.skip'), t('songs.prepare')])
-      expect(button(w, label).attributes('disabled')).toBeDefined()
-  })
-})
-
-describe('歌單', () => {
-  it('shows no songs and no links, with reloading and finding links disabled', async () => {
-    const w = await page(SongListPage, '/song-list')
-    expect(w.get('h1').text()).toBe(t('pages.songList.name'))
-    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songList.empty'), t('songList.noLinks')])
-    for (const label of [t('songList.reload'), t('songList.findLinks')])
       expect(button(w, label).attributes('disabled')).toBeDefined()
   })
 })

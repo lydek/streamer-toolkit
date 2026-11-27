@@ -55,7 +55,7 @@ test("a feature's page link opens its first built page", async ({ page }) => {
 
 test('features not built yet say so and cannot be switched; home is always on', async ({ page }) => {
   await openFeatures(page)
-  await expect(sw(page, 'songs')).toBeDisabled()
+  await expect(sw(page, 'singingBooth')).toBeDisabled()
   const home = page.getByRole('listitem').filter({ has: page.getByText(zh.features.home.name, { exact: true }) })
   await expect(home.getByText(zh.features.alwaysOn)).toBeVisible()
   await expect(sw(page, 'home')).toHaveCount(0)
