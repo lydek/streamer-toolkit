@@ -308,6 +308,7 @@ const BUILT_TILES: Tile[] = [
   { id: 'rewards', icon: 'pi pi-star', tint: 'yellow' },
   { id: 'polls', icon: 'pi pi-chart-bar', tint: 'blue' },
   { id: 'commands', module: 'bot', icon: 'pi pi-reply', tint: 'green' },
+  { id: 'songs', icon: 'pi pi-microphone', tint: 'primary' },
 ]
 
 /**

@@ -1,6 +1,8 @@
 //! The song list (docs/modules/songs.md): songs and categories with their limits, and importing a file through a
 //! preview. Storage is a port; the SQLite implementation is in `infrastructure::db`.
 
+pub mod requests;
+
 use std::future::Future;
 
 use crate::domain::{

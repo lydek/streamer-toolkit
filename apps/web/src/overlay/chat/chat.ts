@@ -31,6 +31,7 @@ export type Incoming =
   | components['schemas']['LeaderboardEvent']
   | components['schemas']['ContestEvent']
   | components['schemas']['BotReturningEvent']
+  | components['schemas']['SongsChangedEvent']
   | components['schemas']['CounterTestEvent']
   | components['schemas']['MarathonTestEvent']
   | components['schemas']['BgmTestEvent']

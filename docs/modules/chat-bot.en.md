@@ -1,4 +1,4 @@
-<!-- source: docs/modules/chat-bot.md source-sha256: 256986727fd2e93705becd9a1427ca255fd4190e064ecac7d78745c9ff696f3e -->
+<!-- source: docs/modules/chat-bot.md source-sha256: 7acffa36f86d0ad5c975a36bc41717d6619c5efd9ac448e0c8d7f90d5b42c0bf -->
 [繁體中文](chat-bot.md) | **English**
 
 # Chat bot
@@ -9,11 +9,11 @@ Module `bot` (the feature list's chat bot: the commands, timed messages, and tha
 
 ## Posting
 - Posts as the streamer through Helix Send Chat Message (`user:write:chat`); a separate bot account comes in phase 9. The Host implements the sending port; the module knows nothing of Helix.
-- Command replies, timed messages, and thanks and greetings all go into one local queue and are sent in order, rate-limited with the conservative value: at most 20 messages in any 30 seconds. Messages the streamer sends by hand from the send box are not queued or delayed, but count toward the same 30 seconds.
+- Command replies, timed messages, thanks and greetings, and song request replies all go into one local queue and are sent in order, rate-limited with the conservative value: at most 20 messages in any 30 seconds. Messages the streamer sends by hand from the send box are not queued or delayed, but count toward the same 30 seconds.
 - The queue holds at most 20 messages; once it is full, new automatic messages are dropped. A message still waiting after 2 minutes is dropped too (e.g. a flood of follows during a raid), so no stale thanks go out. The number dropped goes to the log and shows in the running total since launch.
-- Variables are replaced first, then leading and trailing blanks trimmed; a blank message is not sent, and one over 500 characters is cut to 500.
+- Variables are replaced first, then leading and trailing blanks trimmed; a blank message is not sent, and one over 500 characters is cut to 500. Song request replies come filled in by the song requests module, and the bot sends them as they are without replacing variables again (a viewer's words are never read as variables).
 - A failed send (Twitch refused it, did not send it with `is_sent=false`, or the rate limit is in effect) is not retried and goes to the log (without the message text). Signed out or without `user:write:chat`, nothing is sent or queued.
-- Twitch's `message_id` of every message sent is kept for 5 minutes (at most 200). When chat brings a message with one of these IDs, the bot ignores it: it triggers no command, does not count toward a timed message's chat lines, and triggers no greeting. The chat message may arrive before Twitch's answer: while a send still waits for its answer, a message from the streamer's account with the same text as the one being sent is ignored too. Messages the streamer types are handled as usual.
+- Twitch's `message_id` of every message sent is kept for 5 minutes (at most 200). When chat brings a message with one of these IDs, the bot ignores it: it triggers no command (song requests included), does not count toward a timed message's chat lines, and triggers no greeting. The chat message may arrive before Twitch's answer: while a send still waits for its answer, a message from the streamer's account with the same text as the one being sent is ignored too. Messages the streamer types are handled as usual.
 - Simulated events (`source=simulation`) and rehearsals never trigger a message and never reach the queue.
 - With the module off, nothing is sent; messages still in the queue are dropped.
 

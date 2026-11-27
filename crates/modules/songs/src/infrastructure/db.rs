@@ -6,8 +6,12 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
-    application::{RepositoryError, SongRepository},
-    domain::{Category, ImportPlan, Song, normalize, song_key},
+    application::{RepositoryError, SongRepository, requests::RequestRepository},
+    domain::{
+        Category, ImportPlan, Song, normalize,
+        requests::{Request, RequestState},
+        song_key,
+    },
 };
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -200,6 +204,133 @@ impl SongRepository for SqliteSongs {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
+        }
+        tx.commit().await.map_err(storage)
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct RequestRow {
+    id: String,
+    song_id: Option<String>,
+    title: String,
+    artist: String,
+    viewer_id: Option<String>,
+    viewer_name: Option<String>,
+    by_hand: bool,
+    state: String,
+    position: i64,
+    requested_at: String,
+    finished_at: Option<String>,
+}
+
+fn parse_time(t: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(t).ok().map(|t| t.to_utc())
+}
+
+impl TryFrom<RequestRow> for Request {
+    type Error = RepositoryError;
+    fn try_from(r: RequestRow) -> Result<Self, RepositoryError> {
+        let bad = || RepositoryError(format!("songs_requests row {} is malformed", r.id));
+        Ok(Request {
+            state: RequestState::parse(&r.state).ok_or_else(bad)?,
+            requested_at: parse_time(&r.requested_at).ok_or_else(bad)?,
+            finished_at: r.finished_at.as_deref().and_then(parse_time),
+            id: r.id,
+            song_id: r.song_id,
+            title: r.title,
+            artist: r.artist,
+            viewer_id: r.viewer_id,
+            viewer_name: r.viewer_name,
+            by_hand: r.by_hand,
+            position: r.position,
+        })
+    }
+}
+
+/// The columns of `songs_requests`, in `RequestRow` order (a macro, so queries stay static strings).
+macro_rules! request_columns {
+    () => {
+        "id, song_id, title, artist, viewer_id, viewer_name, by_hand, state, position, requested_at, finished_at"
+    };
+}
+
+impl RequestRepository for SqliteSongs {
+    async fn active_requests(&self) -> Result<Vec<Request>, RepositoryError> {
+        let rows: Vec<RequestRow> = sqlx::query_as(concat!(
+            "SELECT ",
+            request_columns!(),
+            " FROM songs_requests WHERE state IN ('queued', 'singing') ORDER BY position"
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(Request::try_from).collect()
+    }
+
+    async fn sung_requests(&self, limit: u32) -> Result<Vec<Request>, RepositoryError> {
+        let rows: Vec<RequestRow> = sqlx::query_as(concat!(
+            "SELECT ",
+            request_columns!(),
+            " FROM songs_requests WHERE state = 'sung' ORDER BY finished_at DESC LIMIT ?"
+        ))
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(Request::try_from).collect()
+    }
+
+    async fn add_request(&self, r: &Request) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        sqlx::query(concat!(
+            "INSERT INTO songs_requests (",
+            request_columns!(),
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ))
+        .bind(&r.id)
+        .bind(&r.song_id)
+        .bind(&r.title)
+        .bind(&r.artist)
+        .bind(&r.viewer_id)
+        .bind(&r.viewer_name)
+        .bind(r.by_hand)
+        .bind(r.state.as_str())
+        .bind(r.position)
+        .bind(time(r.requested_at))
+        .bind(r.finished_at.map(time))
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        sqlx::query("UPDATE songs_songs SET request_count = request_count + 1 WHERE id = ?")
+            .bind(&r.song_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        tx.commit().await.map_err(storage)
+    }
+
+    async fn save_requests(&self, rs: &[Request]) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        for r in rs {
+            sqlx::query(
+                "UPDATE songs_requests SET state = ?, position = ?, finished_at = ? WHERE id = ?",
+            )
+            .bind(r.state.as_str())
+            .bind(r.position)
+            .bind(r.finished_at.map(time))
+            .bind(&r.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if r.state == RequestState::Sung {
+                sqlx::query("UPDATE songs_songs SET last_sung_at = ? WHERE id = ?")
+                    .bind(r.finished_at.map(time))
+                    .bind(&r.song_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage)?;
+            }
         }
         tx.commit().await.map_err(storage)
     }

@@ -104,6 +104,8 @@ pub(crate) struct AdminState {
     contests: Arc<crate::contests::Contests>,
     /// 聊天機器人: answers chat; the send box's messages count toward its rate.
     pub(crate) bot: Arc<bot::BotService>,
+    /// 點歌: takes requests from chat.
+    songs: Arc<songs::Requests>,
 }
 
 impl AdminState {
@@ -131,6 +133,7 @@ impl AdminState {
         modules: Arc<Modules>,
         contests: Arc<crate::contests::Contests>,
         bot: Arc<bot::BotService>,
+        songs: Arc<songs::Requests>,
     ) -> Self {
         let current = twitch.try_read().expect("not locked yet").clone();
         let state = Self {
@@ -158,6 +161,7 @@ impl AdminState {
             irc_connected: Arc::new(Mutex::new((0, false))),
             contests,
             bot,
+            songs,
         };
         state.start_eventsub(current);
         state
@@ -210,6 +214,7 @@ impl AdminState {
         let (stream, checked) = (self.stream.clone(), self.stream.clone());
         let contests = self.contests.clone();
         let chat_bot = self.bot.clone();
+        let song_requests = self.songs.clone();
         let thanks = self.bot.clone();
         // A replaced task may still report before it is aborted; only the newest one counts.
         let reporter = |state: &Arc<Mutex<(u64, bool)>>| -> Arc<dyn Fn(bool) + Send + Sync> {
@@ -254,6 +259,10 @@ impl AdminState {
                 });
                 checkin.receive_chat(&m, Source::Twitch);
                 chat_bot.receive_chat(&m, Source::Twitch);
+                // The chat bot's replies never request a song.
+                if !chat_bot.is_own(&m) {
+                    song_requests.receive_chat(&m, Source::Twitch);
+                }
                 counters.receive_chat(&m, Source::Twitch);
                 chat.receive(m, Source::Twitch)
             }),

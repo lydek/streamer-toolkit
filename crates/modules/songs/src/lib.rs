@@ -5,4 +5,11 @@ pub mod application;
 mod domain;
 mod infrastructure;
 
-pub use infrastructure::{Songs, db::MIGRATOR, openapi, routes, start};
+pub use application::requests::{COMMANDS, Changed, Say};
+pub use infrastructure::{
+    Songs,
+    db::MIGRATOR,
+    openapi,
+    requests::{Requests, request_routes, start_requests},
+    routes, start,
+};

@@ -5,7 +5,6 @@ import PrimeVue from 'primevue/config'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { i18n } from '../i18n'
-import SongsPage from './SongsPage.vue'
 import SingingBoothPage from './SingingBoothPage.vue'
 import ShoutoutsPage from './ShoutoutsPage.vue'
 import RaidsPage from './RaidsPage.vue'
@@ -38,16 +37,6 @@ async function page(component: Component, path: string) {
 }
 
 const button = (w: Awaited<ReturnType<typeof page>>, label: string) => w.findAll('button').find((b) => b.text() === label)!
-
-describe('點歌', () => {
-  it('shows nothing on and an empty queue, with the song actions disabled', async () => {
-    const w = await page(SongsPage, '/songs')
-    expect(w.get('h1').text()).toBe(t('pages.songs.name'))
-    expect(w.findAll('.empty-cell').map((e) => e.text())).toEqual([t('songs.nothingNow'), t('songs.emptyQueue'), t('songs.boothOff')])
-    for (const label of [t('songs.next'), t('songs.skip'), t('songs.prepare')])
-      expect(button(w, label).attributes('disabled')).toBeDefined()
-  })
-})
 
 describe('練唱台', () => {
   it('shows where the booth will be, with opening it disabled', async () => {

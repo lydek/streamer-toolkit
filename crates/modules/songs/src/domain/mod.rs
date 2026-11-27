@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
+pub mod requests;
+
 pub(crate) const TITLE_MAX_CHARS: usize = 100;
 pub(crate) const ARTIST_MAX_CHARS: usize = 100;
 pub(crate) const CATEGORY_MAX_CHARS: usize = 30;

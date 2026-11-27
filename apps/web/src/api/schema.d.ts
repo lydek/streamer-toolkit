@@ -2323,6 +2323,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/song-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["request_board"];
+        put?: never;
+        post: operations["request_song"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/song-requests/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["finish_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/song-requests/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["reorder_requests"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/song-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove_request"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/song-requests/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/sounds": {
         parameters: {
             query?: never;
@@ -4188,6 +4268,11 @@ export interface components {
         };
         /** @enum {string} */
         ManualCheckInResult: "checked_in" | "already_checked_in";
+        ManualRequest: {
+            song_id: string;
+            /** @description Who it is for (at most 25 characters); empty or absent: nobody. */
+            viewer?: string | null;
+        };
         MarathonAdd: {
             /**
              * Format: int64
@@ -4956,6 +5041,33 @@ export interface components {
             code?: string | null;
             level: string;
         };
+        RequestBoard: {
+            /** @description In order; the first one is next. */
+            queued: components["schemas"]["RequestView"][];
+            singing: components["schemas"]["RequestView"] | null;
+            /** @description The latest first, at most 50. */
+            sung: components["schemas"]["RequestView"][];
+        };
+        RequestOrder: {
+            /** @description Every queued request's ID once, in the new order. */
+            ids: string[];
+        };
+        /** @description A request. `title`, `artist` and `viewer` are text from the list or from chat, shown as text. */
+        RequestView: {
+            artist: string;
+            /** @description Requested by the streamer on the page. */
+            by_hand: boolean;
+            /** @description RFC 3339: when it was sung; `None` until then. */
+            finished_at: string | null;
+            id: string;
+            /** @description RFC 3339. */
+            requested_at: string;
+            /** @description `None` once the song was deleted from the list. */
+            song_id: string | null;
+            title: string;
+            /** @description Who it is for (a display name); `None`: nobody. */
+            viewer: string | null;
+        };
         /** @description What a backup holds, shown before the broadcaster confirms a restore. */
         RestorePreview: {
             /** @description The version of the app that made it. */
@@ -5250,6 +5362,24 @@ export interface components {
             title: string;
             youtube_url: string | null;
         };
+        /**
+         * @description A `songs.changed` event exactly as `/ws/overlay` sends it: the queue changed (a request from chat or a change on
+         *     the page). It carries nothing and is not kept in the snapshot; the page reads `GET /api/admin/song-requests`.
+         */
+        SongsChangedEvent: {
+            id: string;
+            occurredAt: string;
+            payload: components["schemas"]["SongsChangedPayload"];
+            /** Format: int64 */
+            seq: number;
+            source: components["schemas"]["Source"];
+            type: components["schemas"]["SongsChangedType"];
+            /** Format: int32 */
+            version: number;
+        };
+        SongsChangedPayload: Record<string, never>;
+        /** @enum {string} */
+        SongsChangedType: "songs.changed";
         /** @description One imported sound. `label` is broadcaster text: render it as text. Its file is `GET /sounds/{id}`. */
         Sound: {
             /**
@@ -12375,6 +12505,249 @@ export interface operations {
             };
             /** @description `songs.not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    request_board: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestBoard"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    request_song: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualRequest"];
+            };
+        };
+        responses: {
+            /** @description Queued; nothing is posted in chat */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `songs.invalid`: the name is too long */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `songs.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `songs.already_queued` or `songs.queue_full` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    finish_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sung; the next queued one is being sung */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `songs.not_allowed`: nothing is being sung */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reorder_requests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestOrder"];
+            };
+        };
+        responses: {
+            /** @description Reordered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `songs.invalid`: not every queued request once */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A queued or singing request */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `songs.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    start_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A queued request */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Being sung */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `songs.not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `songs.not_allowed`: another song is being sung */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

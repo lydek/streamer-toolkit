@@ -7965,6 +7965,264 @@
         }
       }
     },
+    "/api/admin/song-requests": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "request_board",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestBoard"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "request_song",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Queued; nothing is posted in chat"
+          },
+          "400": {
+            "description": "`songs.invalid`: the name is too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.already_queued` or `songs.queue_full`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-requests/finish": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "finish_request",
+        "responses": {
+          "204": {
+            "description": "Sung; the next queued one is being sung"
+          },
+          "409": {
+            "description": "`songs.not_allowed`: nothing is being sung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-requests/order": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "reorder_requests",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Reordered"
+          },
+          "400": {
+            "description": "`songs.invalid`: not every queued request once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-requests/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "remove_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "A queued or singing request",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/song-requests/{id}/start": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "start_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "A queued request",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Being sung"
+          },
+          "404": {
+            "description": "`songs.not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`songs.not_allowed`: another song is being sung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/sounds": {
       "get": {
         "tags": [
@@ -13139,6 +13397,24 @@
           "already_checked_in"
         ]
       },
+      "ManualRequest": {
+        "type": "object",
+        "required": [
+          "song_id"
+        ],
+        "properties": {
+          "song_id": {
+            "type": "string"
+          },
+          "viewer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who it is for (at most 25 characters); empty or absent: nobody."
+          }
+        }
+      },
       "MarathonAdd": {
         "type": "object",
         "required": [
@@ -15352,6 +15628,110 @@
           }
         }
       },
+      "RequestBoard": {
+        "type": "object",
+        "required": [
+          "singing",
+          "queued",
+          "sung"
+        ],
+        "properties": {
+          "queued": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestView"
+            },
+            "description": "In order; the first one is next."
+          },
+          "singing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RequestView",
+                "description": "The song being sung."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sung": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestView"
+            },
+            "description": "The latest first, at most 50."
+          }
+        }
+      },
+      "RequestOrder": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every queued request's ID once, in the new order."
+          }
+        }
+      },
+      "RequestView": {
+        "type": "object",
+        "description": "A request. `title`, `artist` and `viewer` are text from the list or from chat, shown as text.",
+        "required": [
+          "id",
+          "song_id",
+          "title",
+          "artist",
+          "viewer",
+          "by_hand",
+          "requested_at",
+          "finished_at"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "by_hand": {
+            "type": "boolean",
+            "description": "Requested by the streamer on the page."
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: when it was sung; `None` until then."
+          },
+          "id": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "song_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`None` once the song was deleted from the list."
+          },
+          "title": {
+            "type": "string"
+          },
+          "viewer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who it is for (a display name); `None`: nobody."
+          }
+        }
+      },
       "RestorePreview": {
         "type": "object",
         "description": "What a backup holds, shown before the broadcaster confirms a restore.",
@@ -16218,6 +16598,55 @@
             ]
           }
         }
+      },
+      "SongsChangedEvent": {
+        "type": "object",
+        "description": "A `songs.changed` event exactly as `/ws/overlay` sends it: the queue changed (a request from chat or a change on\nthe page). It carries nothing and is not kept in the snapshot; the page reads `GET /api/admin/song-requests`.",
+        "required": [
+          "id",
+          "type",
+          "version",
+          "seq",
+          "occurredAt",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SongsChangedPayload"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SongsChangedType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "SongsChangedPayload": {
+        "type": "object"
+      },
+      "SongsChangedType": {
+        "type": "string",
+        "enum": [
+          "songs.changed"
+        ]
       },
       "Sound": {
         "type": "object",

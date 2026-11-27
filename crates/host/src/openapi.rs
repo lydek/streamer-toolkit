@@ -129,6 +129,7 @@ use crate::{
     components(schemas(
         overlay::Snapshot,
         crate::bot_ports::BotReturningEvent,
+        crate::song_events::SongsChangedEvent,
         chat::ChatMessageEvent,
         alerts::AlertEvent,
         alerts::AlertReceivedEvent,

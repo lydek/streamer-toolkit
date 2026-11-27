@@ -35,6 +35,8 @@ pub struct Settings {
     pub poll_templates: Vec<PollTemplate>,
     /// 聊天機器人 (docs/modules/chat-bot.md); command names and who may use them are in `chat_commands`.
     pub bot: BotSettings,
+    /// 點歌 (docs/modules/songs.md); the command's name and who may use it are in `chat_commands`.
+    pub songs: SongSettings,
     /// Where obs-websocket listens; its password lives in the Windows Credential Manager.
     pub obs: ObsSettings,
     /// "Don't show again" on the close hint: ✕ hides the admin window without asking.
@@ -439,6 +441,7 @@ impl Default for Settings {
             modules_defaulted: Vec::new(),
             poll_templates: Vec::new(),
             bot: BotSettings::default(),
+            songs: SongSettings::default(),
             obs: ObsSettings::default(),
             skip_close_hint: false,
             setup_done: false,
@@ -675,6 +678,41 @@ pub struct PollTemplate {
     pub title: String,
     pub choices: Vec<String>,
     pub seconds: u32,
+}
+
+/// 點歌's settings (docs/modules/songs.md).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SongSettings {
+    /// What the chat bot answers to a request from chat.
+    pub replies: SongReplies,
+}
+
+/// One reply per outcome of a request; `{觀眾}` `{歌名}` `{歌手}` `{順位}` `{輸入}` are filled in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SongReplies {
+    pub queued: String,
+    pub not_found: String,
+    /// Several songs have that title.
+    pub several: String,
+    /// Its category is closed for requests.
+    pub not_open: String,
+    pub already_queued: String,
+    pub full: String,
+}
+
+impl Default for SongReplies {
+    fn default() -> Self {
+        Self {
+            queued: "{觀眾} 點了「{歌名}」，排在第 {順位} 首".into(),
+            not_found: "{觀眾} 歌單裡找不到「{輸入}」".into(),
+            several: "{觀眾} 有好幾首「{輸入}」，請加上歌手".into(),
+            not_open: "{觀眾}「{歌名}」現在不開放點".into(),
+            already_queued: "{觀眾}「{歌名}」已經在待唱了".into(),
+            full: "{觀眾} 待唱已經滿了，晚點再點".into(),
+        }
+    }
 }
 
 /// What the chat bot says (docs/modules/chat-bot.md).

@@ -158,23 +158,25 @@
     "playlistUsedBy": "這些場景對應會停用，並顯示「歌單不見了」："
   },
   "songs": {
-    "now": "正在演唱",
-    "nothingNow": "沒有正在唱的歌。",
-    "next": "唱完了，下一首",
-    "skip": "不唱這首",
-    "queue": "接下來",
-    "shownLabel": "顯示",
-    "shown": {
-      "all": "全部",
-      "review": "待審核"
-    },
-    "emptyQueue": "還沒有人點歌。",
-    "add": "加歌",
+    "tile": "正在唱的歌、待唱與已唱歌單",
+    "summary": "待唱 {n} 首",
+    "add": "手動點歌",
+    "song": "歌曲",
     "search": "搜尋歌單",
-    "for": "幫誰點",
-    "forHint": "選填",
-    "boothOff": "練唱台還沒連線。",
-    "prepare": "先準備接下來 3 首"
+    "for": "點歌者（選填）",
+    "addButton": "加入待唱",
+    "added": "已加入：{title}",
+    "now": "正在演唱",
+    "by": "{'@'}{viewer} 點歌",
+    "nothingNow": "沒有正在唱的歌。",
+    "finish": "唱完了",
+    "remove": "移除",
+    "queue": "待唱歌單",
+    "emptyQueue": "還沒有人點歌。",
+    "startLabel": "開始唱：{title}",
+    "removeLabel": "移除：{title}",
+    "sung": "已唱歌單",
+    "nothingSung": "還沒有唱完的歌。"
   },
   "songList": {
     "summary": "{n} 首",

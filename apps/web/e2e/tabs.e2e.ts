@@ -265,12 +265,12 @@ test('a group with no page to open has a grey tab that goes nowhere, and an unbu
 })
 
 test('a grey tile for a feature not built yet is no link or button, and the skip link passes it', async ({ page }) => {
-  await openAdmin(page, { homeTiles: ['songs', 'feed'] })
+  await openAdmin(page, { homeTiles: ['singing-booth', 'feed'] })
   const grey = page.locator('#tiles .tile.off')
-  await expect(grey).toContainText(zh.pages.songs.name)
+  await expect(grey).toContainText(zh.pages.singingBooth.name)
   await expect(grey).toContainText(zh.home.unbuilt)
   await expect(grey.getByRole('link')).toHaveCount(0)
-  await expect(page.locator('#tiles').getByRole('button', { name: new RegExp(zh.pages.songs.name) })).toHaveCount(0)
+  await expect(page.locator('#tiles').getByRole('button', { name: new RegExp(zh.pages.singingBooth.name) })).toHaveCount(0)
   await page.keyboard.press('Tab')
   await page.keyboard.press('Enter')
   await expect(page.locator('[data-expand="feed"]')).toBeFocused()

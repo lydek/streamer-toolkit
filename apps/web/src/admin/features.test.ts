@@ -29,7 +29,7 @@ describe('isOn', () => {
   })
   it('is always on for home and never on for a feature not built yet', () => {
     expect(isOn(FEATURES.find((f) => f.id === 'home')!, [])).toBe(true)
-    expect(isOn(FEATURES.find((f) => f.id === 'songs')!, [])).toBe(false)
+    expect(isOn(FEATURES.find((f) => f.id === 'singingBooth')!, [])).toBe(false)
   })
 })
 

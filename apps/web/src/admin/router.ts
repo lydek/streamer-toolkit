@@ -33,6 +33,7 @@ import StreamInfoPage from './StreamInfoPage.vue'
 import RewardsPage from './RewardsPage.vue'
 import PollsPage from './PollsPage.vue'
 import SongListPage from './SongListPage.vue'
+import SongsPage from './SongsPage.vue'
 import BotCommandsPage from './BotCommandsPage.vue'
 import BotTimersPage from './BotTimersPage.vue'
 import BotGreetingsPage from './BotGreetingsPage.vue'
@@ -41,7 +42,6 @@ import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 
 // Unbuilt pages drawn ahead of their backend (UI-G), opened in dev mode only; lazy, so release never loads them.
 export const DRAWN: Record<string, () => Promise<unknown>> = {
-  '/songs': () => import('./SongsPage.vue'),
   '/singing-booth': () => import('./SingingBoothPage.vue'),
   '/shoutouts': () => import('./ShoutoutsPage.vue'),
   '/raids': () => import('./RaidsPage.vue'),
@@ -97,6 +97,7 @@ export const router = createRouter({
     { path: '/stream-info', component: StreamInfoPage },
     { path: '/rewards', component: RewardsPage },
     { path: '/polls', component: PollsPage },
+    { path: '/songs', component: SongsPage },
     { path: '/song-list', component: SongListPage },
     { path: '/commands', component: BotCommandsPage },
     { path: '/timers', component: BotTimersPage },
