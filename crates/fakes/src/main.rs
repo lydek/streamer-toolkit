@@ -1,7 +1,7 @@
 //! `fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>]`: runs the fake OBS and the
 //! fake Twitch on `127.0.0.1` until stopped. Point the app's OBS settings at the OBS port, and a dev build at the
 //! Twitch port with `TOOLKIT_FAKE_SERVICES=127.0.0.1:<port>`. Without `--password` the fake OBS asks for none.
-//! `fake-services [--port <twitch port>] send|obs|eventsub|poll|scenario …` controls a running one (see `USAGE`).
+//! `fake-services [--port <twitch port>] send|obs|eventsub|poll|prediction|scenario …` controls a running one (see `USAGE`).
 //! `--ui` also opens the control panel (built with `--features ui`); closing it stops the fakes.
 
 use fakes::{
@@ -26,6 +26,7 @@ const USAGE: &str = "usage:
                 | obs meters [--inputs <extra inputs>] [--interval <ms>] | obs burst scenes|items [--count <n>]
   fake-services [--port <twitch port>] eventsub drop
   fake-services [--port <twitch port>] poll vote --choice <n> [--count <n>] | poll end
+  fake-services [--port <twitch port>] prediction bet --outcome <n> [--points <n>] [--users <n>] | prediction lock
   fake-services [--port <twitch port>] scenario <name>
   fake-services [--port <twitch port>] stats [--reset] [--json]
   fake-services [--port <twitch port>] fault <call key> [--status <code>] [--delay <time>] [--for <time>] [--close]
@@ -157,7 +158,14 @@ fn main() {
         .find(|a| !a.starts_with("--") && a.parse::<u16>().is_err())
         .is_some_and(|a| {
             [
-                "send", "obs", "eventsub", "scenario", "stats", "fault", "poll",
+                "send",
+                "obs",
+                "eventsub",
+                "scenario",
+                "stats",
+                "fault",
+                "poll",
+                "prediction",
             ]
             .contains(&a.as_str())
         });
