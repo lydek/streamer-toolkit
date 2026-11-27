@@ -14,6 +14,10 @@ concurrency:
   group: cache-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Same as ci.yml: rust-cache hashes CARGO* variables into its key, so a mismatch would never hit.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
 jobs:
   warm:
     runs-on: windows-latest
@@ -42,3 +46,15 @@ jobs:
       - run: cargo test --workspace --no-run
       # pnpm api:gen builds only host's graph, which resolves some shared crates with different features than --workspace.
       - run: cargo build -p host --example openapi
+
+  # ci.yml's fakes-ui job, with its own cache so iced stays out of the main one.
+  warm-fakes-ui:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fakes-ui
+      - run: cargo clippy -p fakes --all-targets --features ui
+      - run: cargo test -p fakes --features ui --lib --bins --no-run

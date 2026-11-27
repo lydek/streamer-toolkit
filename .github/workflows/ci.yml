@@ -13,19 +13,26 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Line numbers only, no full debug info: faster links and a smaller cache; panics still show file and line.
+  # The `test` profile inherits `dev`. Keep it equal in cache.yml: rust-cache hashes CARGO* variables into its key.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+# The main ruleset requires only `check`, which passes only when every job that had to run passed.
 jobs:
-  check:
-    runs-on: windows-latest
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2 # the PR merge commit and its base parent, to list the PR's files
 
-      # Docs-only PRs run just the translation check; the job still reports `check`, which the main ruleset
-      # requires. Docs = root *.md, docs/ (not decisions.md: it feeds the frontend license allowlist),
-      # prototype/ and the agent folders .agents/ and .claude/, the files lefthook's pre-push also skips for
-      # every check but translations. With rebase-merge
-      # main is never re-checked, so only list files no check reads.
+      # Docs-only PRs run just the translation check. Docs = root *.md, docs/ (not decisions.md: it feeds the
+      # frontend license allowlist), prototype/ and the agent folders .agents/ and .claude/, the files lefthook's
+      # pre-push also skips for every check but translations. With rebase-merge main is never re-checked, so only
+      # list files no check reads.
       - name: Changed files
         id: changes
         shell: bash
@@ -45,26 +52,32 @@ jobs:
           done <<< "$files"
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
+  main:
+    needs: changes
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
       - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: ${{ steps.changes.outputs.code == 'true' && 'pnpm' || '' }}
+          cache: ${{ needs.changes.outputs.code == 'true' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
 
       # Toolchain and components come from rust-toolchain.toml.
       - run: rustup show active-toolchain || rustup toolchain install
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       # Restores the cache cache.yml saves on main; PRs never save (1–1.7 GB each would evict main's).
       - uses: Swatinem/rust-cache@v2
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         with:
           shared-key: ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@v2
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         with:
           tool: cargo-deny
 
@@ -72,45 +85,79 @@ jobs:
         run: node scripts/check-translations.mjs
 
       - name: Script tests
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: pnpm test:scripts
       - name: Bundled frontend licenses (allowlist in docs/decisions.md)
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: pnpm check:licenses
 
       # Frontend first: the Host embeds apps/web/dist at compile time.
       - run: pnpm web:lint
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       - run: pnpm web:test
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       - name: Typecheck and build frontend
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: pnpm web:build
 
       # Code-first contracts: regenerating must not change the checked-in OpenAPI and TS types.
       - name: Regenerate API contracts
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: pnpm api:gen
       - name: API contracts are up to date (run pnpm api:gen and commit)
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: git diff --exit-code HEAD -- apps/web/src/api
 
       - run: cargo fmt --all --check
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       - run: cargo clippy --workspace --all-targets -- -D warnings
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
       - name: Clippy on release-only code (tauri/custom-protocol; checked, never shipped)
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: cargo clippy --workspace --all-targets --features tauri/custom-protocol -- -D warnings
       - name: Tests (includes architecture tests)
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: cargo test --workspace
-      - name: Fake services control panel (fakes `ui` feature; a dev tool, never shipped)
-        if: steps.changes.outputs.code == 'true'
-        run: |
-          cargo clippy -p fakes --all-targets --features ui -- -D warnings
-          cargo test -p fakes --features ui --lib --bins
-
       - name: Licenses and advisories
-        if: steps.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true'
         run: cargo deny check
+
+  # In parallel with `main`, with its own cache (iced stays out of the main one). Needs no Node: fakes depends on
+  # neither the Host nor apps/web/dist.
+  fakes-ui:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fakes-ui
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # One command per step: Windows pwsh reports only the last native exit code, so a failed clippy would pass.
+      - name: Fake services control panel clippy (fakes `ui` feature; a dev tool, never shipped)
+        run: cargo clippy -p fakes --all-targets --features ui -- -D warnings
+      - name: Fake services control panel tests
+        run: cargo test -p fakes --features ui --lib --bins
+
+  # The one required check. A skipped required check counts as passing, so this runs always and accepts
+  # `skipped` only where the PR's files allow it.
+  check:
+    needs: [changes, main, fakes-ui]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job that had to run passed
+        shell: bash
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          MAIN: ${{ needs.main.result }}
+          FAKES_UI: ${{ needs.fakes-ui.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+        run: |
+          echo "changes=$CHANGES main=$MAIN fakes-ui=$FAKES_UI code=$CODE"
+          [ "$CHANGES" = success ] && [ "$MAIN" = success ] || exit 1
+          if [ "$CODE" = true ]; then [ "$FAKES_UI" = success ]
+          elif [ "$CODE" = false ]; then [ "$FAKES_UI" = skipped ]
+          else exit 1; fi
