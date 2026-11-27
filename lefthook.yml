@@ -12,7 +12,8 @@ pre-commit:
     translations:
       run: node scripts/check-translations.mjs
 
-# Same steps and order as .github/workflows/ci.yml; stops at the first failure to catch red pushes before CI.
+# Same steps as .github/workflows/ci.yml's main and fakes-ui jobs, run in a row; stops at the first failure to catch red
+# pushes before CI.
 # shortcut: checks the working tree, not the pushed commits; CI re-runs on the pushed commit.
 # Keep this list in sync with ci.yml. The frontend must build first: the host embeds apps/web/dist.
 #
