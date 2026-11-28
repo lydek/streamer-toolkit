@@ -17,11 +17,11 @@
     "more": "更多",
     "pending": "，{n} 項待處理",
     "edit": "編輯分頁",
-    "streaming": "串流中",
+    "streaming": "串流",
     "live": "直播中",
     "offline": "已下播",
     "viewers": "{n} 位觀眾",
-    "recording": "錄影中",
+    "recording": "錄影",
     "editor": {
       "title": "編輯分頁",
       "pinned": "放在分頁列的群組",
