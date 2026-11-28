@@ -131,3 +131,25 @@ it('requests a song by hand for someone', async () => {
   expect(post).toHaveBeenCalledWith('/api/admin/song-requests', { body: { song_id: 's9', viewer: '莓莓' } })
   expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ summary: t('songs.added', { title: '倒數' }) }))
 })
+
+it('copies the title of the song being sung, and says so when it cannot', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+  const w = await open()
+  await button(w, t('songs.copy')).trigger('click')
+  await flushPromises()
+  expect(writeText).toHaveBeenCalledWith('晴天')
+  expect(toastAdd.mock.calls.at(-1)![0].summary).toBe(t('songs.copied', { title: '晴天' }))
+
+  writeText.mockRejectedValue(new Error('denied'))
+  await button(w, t('songs.copy')).trigger('click')
+  await flushPromises()
+  expect(toastAdd.mock.calls.at(-1)![0].summary).toBe(t('songs.copyFailed'))
+})
+
+it('puts singing and the queue in one column, adding a song and what was sung in the other', async () => {
+  const w = await open()
+  const [main, side] = w.findAll('.song-board > .col')
+  expect(main.find('[aria-labelledby="song-now"]').exists() && main.find('[aria-labelledby="song-queue"]').exists()).toBe(true)
+  expect(side.find('form.add').exists() && side.find('[aria-labelledby="song-sung"]').exists()).toBe(true)
+})

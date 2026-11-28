@@ -2,110 +2,117 @@
   <!-- 點歌: the song being sung, the queue and what was sung, plus requesting a song by hand (docs/modules/songs.md). -->
   <FullPage :status="t('songs.summary', { n: board.queued.length })">
     <p v-if="loadFailed" role="alert">{{ loadFailed }}</p>
-    <form class="add" :aria-label="t('songs.add')" @submit.prevent="add">
-      <Select
-        v-model="pick"
-        :options="songs"
-        :option-label="songLabel"
-        option-value="id"
-        filter
-        :filter-placeholder="t('songs.search')"
-        :placeholder="t('songs.search')"
-        :aria-label="t('songs.song')"
-        class="pick"
-      />
-      <InputText v-model="viewer" :maxlength="VIEWER_MAX" :placeholder="t('songs.for')" :aria-label="t('songs.for')" />
-      <Button :label="t('songs.addButton')" icon="pi pi-plus" type="submit" :disabled="!pick || busy" />
-    </form>
 
+    <!-- Two columns as the prototype: singing and the queue on the left, adding a song and what was sung on the
+         right; one column in a narrow window. -->
     <div class="song-board">
-      <section class="tbl-wrap now" aria-labelledby="song-now">
-        <h3 id="song-now" class="tbl-head">{{ t('songs.now') }}</h3>
-        <div v-if="board.singing" class="now-body" data-singing>
-          <p class="now-title">
-            <b>{{ board.singing.title }}</b> <span class="muted">{{ board.singing.artist }}</span>
-          </p>
-          <p v-if="board.singing.viewer" class="muted">{{ t('songs.by', { viewer: board.singing.viewer }) }}</p>
-        </div>
-        <p v-else class="empty-cell">{{ t('songs.nothingNow') }}</p>
-        <div class="tbl-foot">
-          <Button
-            v-if="board.singing"
-            :label="t('songs.remove')"
-            icon="pi pi-times"
-            text
-            severity="secondary"
-            @click="run(() => api(client.DELETE('/api/admin/song-requests/{id}', { params: { path: { id: board.singing!.id } } })))"
-          />
-          <span v-else></span>
-          <Button :label="t('songs.finish')" icon="pi pi-check" :disabled="!board.singing" @click="run(() => api(client.POST('/api/admin/song-requests/finish')))" />
-        </div>
-      </section>
+      <div class="col">
+        <section class="tbl-wrap now" aria-labelledby="song-now">
+          <h3 id="song-now" class="tbl-head">{{ t('songs.now') }}</h3>
+          <div v-if="board.singing" class="now-body" data-singing>
+            <p class="now-title">
+              <b>{{ board.singing.title }}</b> <span class="muted">{{ board.singing.artist }}</span>
+            </p>
+            <p v-if="board.singing.viewer" class="muted">{{ t('songs.by', { viewer: board.singing.viewer }) }}</p>
+          </div>
+          <p v-else class="empty-cell">{{ t('songs.nothingNow') }}</p>
+          <div class="tbl-foot">
+            <Button
+              v-if="board.singing"
+              :label="t('songs.remove')"
+              icon="pi pi-times"
+              text
+              severity="secondary"
+              @click="run(() => api(client.DELETE('/api/admin/song-requests/{id}', { params: { path: { id: board.singing!.id } } })))"
+            />
+            <span v-else></span>
+            <Button v-if="board.singing" :label="t('songs.copy')" icon="pi pi-copy" text severity="secondary" @click="copyTitle(board.singing.title)" />
+            <Button :label="t('songs.finish')" icon="pi pi-check" :disabled="!board.singing" @click="run(() => api(client.POST('/api/admin/song-requests/finish')))" />
+          </div>
+        </section>
 
-      <section class="tbl-wrap" aria-labelledby="song-queue">
-        <div class="tbl-top">
-          <h3 id="song-queue" class="tbl-head">{{ t('songs.queue') }} <span class="count">{{ board.queued.length }}</span></h3>
-        </div>
-        <p v-if="!board.queued.length" class="empty-cell">{{ t('songs.emptyQueue') }}</p>
-        <ol v-else class="queue">
-          <li
-            v-for="(r, i) in board.queued"
-            :key="r.id"
-            :data-request="r.id"
-            :class="{ over: over === r.id }"
-            draggable="true"
-            @dragstart="onDragstart($event, r.id)"
-            @dragover="onDragover($event, r.id)"
-            @dragleave="over = null"
-            @drop="onDrop($event, r.id)"
-            @dragend="dragged = over = null"
-          >
-            <i class="pi pi-bars grip" aria-hidden="true" />
-            <span class="n">{{ i + 1 }}</span>
-            <span class="t">
-              <b>{{ r.title }}</b>
-              <small class="muted">{{ detail(r) }}</small>
-            </span>
-            <span class="acts">
-              <Button icon="pi pi-arrow-up" text :disabled="i === 0" :aria-label="`${t('arrange.earlier')}：${r.title}`" @click="move(i, -1)" />
-              <Button
-                icon="pi pi-arrow-down"
-                text
-                :disabled="i === board.queued.length - 1"
-                :aria-label="`${t('arrange.later')}：${r.title}`"
-                @click="move(i, 1)"
-              />
-              <Button
-                v-if="!board.singing"
-                icon="pi pi-play"
-                text
-                :aria-label="t('songs.startLabel', { title: r.title })"
-                @click="run(() => api(client.POST('/api/admin/song-requests/{id}/start', { params: { path: { id: r.id } } })))"
-              />
-              <Button
-                icon="pi pi-times"
-                text
-                :aria-label="t('songs.removeLabel', { title: r.title })"
-                @click="run(() => api(client.DELETE('/api/admin/song-requests/{id}', { params: { path: { id: r.id } } })))"
-              />
-            </span>
-          </li>
-        </ol>
-      </section>
+        <section class="tbl-wrap" aria-labelledby="song-queue">
+          <div class="tbl-top">
+            <h3 id="song-queue" class="tbl-head">{{ t('songs.queue') }} <span class="count">{{ board.queued.length }}</span></h3>
+          </div>
+          <p v-if="!board.queued.length" class="empty-cell">{{ t('songs.emptyQueue') }}</p>
+          <ol v-else class="queue">
+            <li
+              v-for="(r, i) in board.queued"
+              :key="r.id"
+              :data-request="r.id"
+              :class="{ over: over === r.id }"
+              draggable="true"
+              @dragstart="onDragstart($event, r.id)"
+              @dragover="onDragover($event, r.id)"
+              @dragleave="over = null"
+              @drop="onDrop($event, r.id)"
+              @dragend="dragged = over = null"
+            >
+              <i class="pi pi-bars grip" aria-hidden="true" />
+              <span class="n">{{ i + 1 }}</span>
+              <span class="t">
+                <b>{{ r.title }}</b>
+                <small class="muted">{{ detail(r) }}</small>
+              </span>
+              <span class="acts">
+                <Button icon="pi pi-arrow-up" text :disabled="i === 0" :aria-label="`${t('arrange.earlier')}：${r.title}`" @click="move(i, -1)" />
+                <Button
+                  icon="pi pi-arrow-down"
+                  text
+                  :disabled="i === board.queued.length - 1"
+                  :aria-label="`${t('arrange.later')}：${r.title}`"
+                  @click="move(i, 1)"
+                />
+                <Button
+                  v-if="!board.singing"
+                  icon="pi pi-play"
+                  text
+                  :aria-label="t('songs.startLabel', { title: r.title })"
+                  @click="run(() => api(client.POST('/api/admin/song-requests/{id}/start', { params: { path: { id: r.id } } })))"
+                />
+                <Button
+                  icon="pi pi-times"
+                  text
+                  :aria-label="t('songs.removeLabel', { title: r.title })"
+                  @click="run(() => api(client.DELETE('/api/admin/song-requests/{id}', { params: { path: { id: r.id } } })))"
+                />
+              </span>
+            </li>
+          </ol>
+        </section>
 
-      <section class="tbl-wrap" aria-labelledby="song-sung">
-        <h3 id="song-sung" class="tbl-head">{{ t('songs.sung') }} <span class="count">{{ board.sung.length }}</span></h3>
-        <p v-if="!board.sung.length" class="empty-cell">{{ t('songs.nothingSung') }}</p>
-        <ol v-else class="queue sung">
-          <li v-for="r in board.sung" :key="r.id">
-            <span class="n">{{ r.finished_at ? clock(r.finished_at) : '' }}</span>
-            <span class="t">
-              <b>{{ r.title }}</b>
-              <small class="muted">{{ detail(r) }}</small>
-            </span>
-          </li>
-        </ol>
-      </section>
+      </div>
+      <div class="col">
+      <form class="add" :aria-label="t('songs.add')" @submit.prevent="add">
+        <Select
+          v-model="pick"
+          :options="songs"
+          :option-label="songLabel"
+          option-value="id"
+          filter
+          :filter-placeholder="t('songs.search')"
+          :placeholder="t('songs.search')"
+          :aria-label="t('songs.song')"
+          class="pick"
+        />
+        <InputText v-model="viewer" :maxlength="VIEWER_MAX" :placeholder="t('songs.for')" :aria-label="t('songs.for')" />
+        <Button :label="t('songs.addButton')" icon="pi pi-plus" type="submit" :disabled="!pick || busy" />
+      </form>
+        <section class="tbl-wrap" aria-labelledby="song-sung">
+          <h3 id="song-sung" class="tbl-head">{{ t('songs.sung') }} <span class="count">{{ board.sung.length }}</span></h3>
+          <p v-if="!board.sung.length" class="empty-cell">{{ t('songs.nothingSung') }}</p>
+          <ol v-else class="queue sung">
+            <li v-for="r in board.sung" :key="r.id">
+              <span class="n">{{ r.finished_at ? clock(r.finished_at) : '' }}</span>
+              <span class="t">
+                <b>{{ r.title }}</b>
+                <small class="muted">{{ detail(r) }}</small>
+              </span>
+            </li>
+          </ol>
+        </section>
+      </div>
     </div>
   </FullPage>
 </template>
@@ -129,6 +136,15 @@ const VIEWER_MAX = 25
 
 const { t } = useI18n()
 const toast = useToast()
+
+async function copyTitle(title: string) {
+  try {
+    await navigator.clipboard.writeText(title)
+    toast.add(successToast(t('songs.copied', { title })))
+  } catch {
+    toast.add(errorToast(t('songs.copyFailed')))
+  }
+}
 const board = shallowRef<Schemas['RequestBoard']>({ singing: null, queued: [], sung: [] })
 const songs = shallowRef<Song[]>([])
 const loadFailed = ref('')
@@ -239,10 +255,40 @@ loadSongs().catch((e: unknown) => (loadFailed.value = message(e)))
 
 .song-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 1rem;
   align-items: start;
   max-width: 90rem;
+}
+
+.col {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* In the narrower right column the form is a card of two rows: the song picker, then the viewer and 加入. */
+.col .add {
+  margin-bottom: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.col .add .pick {
+  flex-basis: 100%;
+}
+
+.col .add > .p-inputtext {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+@container view (max-width: 56rem) {
+  .song-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .song-board .tbl-wrap {
