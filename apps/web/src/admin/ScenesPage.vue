@@ -83,6 +83,7 @@
               <tr
                 :class="{
                   open: open === item.id,
+                  group: item.kind === 'group',
                   moved: moved === item.id,
                   dragging: dragged === item.id,
                   [`drop-${dropSide}`]: over === item.id,
@@ -120,7 +121,7 @@
                     :aria-controls="`editor-${item.id}`"
                     @click="open = open === item.id ? null : item.id"
                   >
-                    <i class="pi pi-angle-right" aria-hidden="true"></i><i :class="kindIcon(item.kind)" class="kind" aria-hidden="true"></i>{{ item.source }}
+                    <i class="pi pi-angle-right" aria-hidden="true"></i><i :class="kindIcon(item.kind)" class="kind" aria-hidden="true"></i><span class="source">{{ item.source }}</span>
                   </button>
                   <RouterLink v-if="duplicates.has(item.source)" to="/obs-sources" class="dup">{{ t('scene.duplicate') }}</RouterLink>
                 </th>
@@ -1377,6 +1378,100 @@ tr.faded > * {
 
 .move {
   white-space: nowrap;
+}
+
+/* A narrow page: each item is two lines. Grip, name, show, lock and more on the first; kind, position and the move
+   arrows under the name. The number goes, the row's place shows it. */
+@container view (max-width: 45rem) {
+  tbody tr[data-item] {
+    gap: 0.125rem 0.5rem;
+    padding: 0.5rem;
+  }
+
+  tbody tr[data-item] > .grip {
+    flex-basis: auto;
+    order: 1;
+  }
+
+  /* The name keeps to one line and ends in an ellipsis; the button still reads the whole name. */
+  tbody tr[data-item] > th {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    order: 2;
+    min-width: 0;
+  }
+
+  .item-name {
+    min-width: 0;
+  }
+
+  .item-name .source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tbody tr[data-item] > td {
+    order: 3;
+  }
+
+  /* More stays on the first line; the arrows go to the second. */
+  tbody tr[data-item] > .move {
+    display: contents;
+  }
+
+  .move > * {
+    order: 6;
+  }
+
+  .move > :last-child {
+    order: 3;
+  }
+
+  /* The line break. */
+  tbody tr[data-item]::after {
+    content: '';
+    flex-basis: 100%;
+    order: 4;
+  }
+
+  tbody tr[data-item] > .kind-cell {
+    order: 5;
+    margin-left: 2rem;
+    color: var(--p-text-muted-color);
+    font-size: 0.75rem;
+  }
+
+  tbody tr[data-item] > .geo {
+    order: 5;
+    margin-left: auto;
+    font-size: 0.75rem;
+  }
+
+  .num {
+    display: none;
+  }
+
+  tr.child[data-item] {
+    padding-left: 2rem;
+  }
+
+  tr.child > th {
+    padding-left: 0;
+  }
+
+  /* Shade the whole row, not each cell. */
+  tr.group[data-item] {
+    background: color-mix(in srgb, var(--p-surface-800) 45%, transparent);
+  }
+
+  tr.open[data-item] {
+    background: var(--p-surface-800);
+  }
+
+  tr.open[data-item] > * {
+    background: none;
+  }
 }
 
 .coord :deep(.p-inputnumber-input) {
