@@ -26,6 +26,8 @@ export interface TabPage {
 export interface TabCategory {
   /** `nav.categories.<id>` holds its name. */
   id: string
+  /** Beside its name in the second row. */
+  icon: string
   pages: TabPage[]
 }
 
@@ -73,6 +75,7 @@ export const GROUPS: TabGroup[] = [
   grouped('chat', 'pi pi-comments', [
     {
       id: 'chatroom',
+      icon: 'pi pi-comments',
       pages: [
         { path: '/chat-log', label: 'pages.chatLog.name', icon: 'pi pi-list' },
         { path: '/chat', label: 'pages.chatTemplates.name', icon: 'pi pi-palette' },
@@ -82,6 +85,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'bot',
+      icon: 'pi pi-reply',
       pages: [
         { path: '/commands', label: 'pages.commands.name', icon: 'pi pi-reply' },
         { path: '/timers', label: 'pages.timers.name', icon: 'pi pi-clock' },
@@ -92,6 +96,7 @@ export const GROUPS: TabGroup[] = [
   grouped('interact', 'pi pi-bolt', [
     {
       id: 'alerts',
+      icon: 'pi pi-bell',
       pages: [
         { path: '/alerts', label: 'modules.names.alerts', icon: 'pi pi-bell', tabLabel: 'nav.pageTabs.alertTemplates' },
         { path: '/alert-events', label: 'pages.alertEvents.name', icon: 'pi pi-list' },
@@ -100,6 +105,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'checkin',
+      icon: 'pi pi-check-square',
       pages: [
         { path: '/checkin', label: 'modules.names.checkin', icon: 'pi pi-check-square', tabLabel: 'nav.pageTabs.checkin' },
         { path: '/card-style', label: 'pages.cardStyle.name', icon: 'pi pi-palette' },
@@ -108,6 +114,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'points',
+      icon: 'pi pi-star',
       pages: [
         { path: '/rewards', label: 'pages.rewards.name', icon: 'pi pi-star', tabLabel: 'nav.pageTabs.rewards' },
         { path: '/reward-playback', label: 'pages.rewardPlayback.name', icon: 'pi pi-play', tint: 'yellow' },
@@ -116,16 +123,18 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'counters',
+      icon: 'pi pi-hashtag',
       pages: [
         { path: '/counters', label: 'modules.names.counter', icon: 'pi pi-hashtag' },
         { path: '/marathon', label: 'pages.marathon.name', icon: 'pi pi-stopwatch' },
       ],
     },
-    { id: 'polls', pages: [{ path: '/polls', label: 'pages.polls.name', icon: 'pi pi-chart-bar' }] },
+    { id: 'polls', icon: 'pi pi-chart-bar', pages: [{ path: '/polls', label: 'pages.polls.name', icon: 'pi pi-chart-bar' }] },
   ]),
   grouped('media', 'pi pi-images', [
     {
       id: 'obs',
+      icon: 'pi pi-clone',
       pages: [
         { path: '/scenes', label: 'modules.names.scene', icon: 'pi pi-images' },
         soon('/modes', 'modes', 'pi pi-sliders-h'),
@@ -135,6 +144,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'music',
+      icon: 'pi pi-headphones',
       pages: [
         { path: '/music', label: 'modules.names.bgm', icon: 'pi pi-headphones', tabLabel: 'nav.pageTabs.musicPlayer' },
         { path: '/music-playlists', label: 'pages.musicPlaylists.name', icon: 'pi pi-list' },
@@ -142,9 +152,10 @@ export const GROUPS: TabGroup[] = [
         soon('/music-requests', 'musicRequests', 'pi pi-youtube'),
       ],
     },
-    { id: 'sound', pages: [{ path: '/sounds', label: 'modules.names.sound', icon: 'pi pi-volume-up' }] },
+    { id: 'sound', icon: 'pi pi-volume-up', pages: [{ path: '/sounds', label: 'modules.names.sound', icon: 'pi pi-volume-up' }] },
     {
       id: 'widgets',
+      icon: 'pi pi-desktop',
       pages: [
         { path: '/screen-tools', label: 'modules.names.screen-tools', icon: 'pi pi-moon', tabLabel: 'nav.pageTabs.breakCard' },
         { path: '/warnings', label: 'pages.warnings.name', icon: 'pi pi-exclamation-triangle' },
@@ -155,6 +166,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'pictures',
+      icon: 'pi pi-images',
       pages: [
         { path: '/media', label: 'pages.media.name', icon: 'pi pi-images' },
         { path: '/image-sizes', label: 'pages.imageSizes.name', icon: 'pi pi-image' },
@@ -162,6 +174,7 @@ export const GROUPS: TabGroup[] = [
     },
     {
       id: 'avatar',
+      icon: 'pi pi-face-smile',
       pages: [
         { ...soon('/avatar', 'avatar', 'pi pi-face-smile', true), tabLabel: 'nav.pageTabs.avatar3d' },
         soon('/mic-avatar', 'micAvatar', 'pi pi-microphone'),
@@ -172,11 +185,13 @@ export const GROUPS: TabGroup[] = [
   grouped('viewers', 'pi pi-users', [
     {
       id: 'viewers',
+      icon: 'pi pi-users',
       pages: [soon('/viewers', 'viewers', 'pi pi-users', true), soon('/roles', 'roles', 'pi pi-tags')],
     },
-    { id: 'leaderboard', pages: [{ path: '/leaderboard', label: 'pages.leaderboard.name', icon: 'pi pi-trophy', tint: 'yellow' }] },
+    { id: 'leaderboard', icon: 'pi pi-trophy', pages: [{ path: '/leaderboard', label: 'pages.leaderboard.name', icon: 'pi pi-trophy', tint: 'yellow' }] },
     {
       id: 'raids',
+      icon: 'pi pi-send',
       pages: [
         soon('/shoutouts', 'shoutouts', 'pi pi-video', true),
         soon('/raids', 'raids', 'pi pi-send', true),

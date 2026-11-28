@@ -126,7 +126,7 @@ describe('categories', () => {
     expect(categoryTarget(checkin, new Set(), '/card-style')).toBe('/card-style')
     expect(categoryTarget(checkin, new Set(['/card-style']), '/card-style')).toBe('/checkin')
     // A page not built yet is skipped: the category opens its first built page.
-    const soonFirst = { id: 'x', pages: [{ path: '/a', label: '', soon: { id: 'a', icon: '' } }, { path: '/b', label: '' }] }
+    const soonFirst = { id: 'x', icon: '', pages: [{ path: '/a', label: '', soon: { id: 'a', icon: '' } }, { path: '/b', label: '' }] }
     expect(categoryTarget(soonFirst)).toBe('/b')
   })
 
@@ -160,5 +160,17 @@ describe('router', () => {
     for (const path of ['/checkin', '/CHECKIN', '/card-style/']) expect(await at(path), path).toBe('/alerts')
     shareModules([{ id: 'checkin', enabled: true, closed: false }])
     expect(await at('/card-style')).toBe('/card-style')
+  })
+})
+
+describe('second-row icons', () => {
+  it('gives every category, and every page of a group without categories, an icon (home takes its group’s)', () => {
+    for (const g of GROUPS) {
+      const items = g.categories ?? g.pages
+      for (const item of items) {
+        const icon = 'pages' in item ? item.icon : (item.icon ?? item.soon?.icon ?? g.icon)
+        expect(icon, `${g.id}: ${'id' in item ? item.id : item.path}`).toMatch(/^pi pi-/)
+      }
+    }
   })
 })
