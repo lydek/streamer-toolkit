@@ -232,6 +232,11 @@ pub fn obs_body(obs: &FakeObs, body: &Value) -> Result<Value, String> {
             let count = number(&body["count"]).unwrap_or(10.0).max(0.0) as usize;
             obs.burst(body["kind"].as_str().unwrap_or_default(), count)?;
         }
+        Some("sources") => {
+            let count = number(&body["count"]).ok_or("obs sources needs a number")?;
+            obs.set_stress_sources(count.max(0.0) as usize)?;
+            return Ok(json!({ "sources": obs.stress_sources() }));
+        }
         other => return Err(format!("unknown OBS action {other:?}")),
     }
     let s = obs.stats();
@@ -388,7 +393,7 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
         "obs" => {
             let (action, rest) = rest
                 .split_first()
-                .ok_or("obs needs drop, stats, stream, record, meters or burst")?;
+                .ok_or("obs needs drop, stats, stream, record, meters, burst or sources")?;
             match action.as_str() {
                 "drop" => body["action"] = json!("drop"),
                 "stats" => {
@@ -422,6 +427,14 @@ pub fn command(args: &[String]) -> Result<(&'static str, Value), String> {
                     flags(rest)?;
                     body["action"] = json!("burst");
                     body["kind"] = json!(kind);
+                }
+                "sources" => {
+                    let count = rest
+                        .first()
+                        .filter(|n| n.parse::<usize>().is_ok())
+                        .ok_or("obs sources needs a number from 0 to 1000")?;
+                    body["action"] = json!("sources");
+                    body["count"] = json!(count);
                 }
                 _ => return Err(format!("unknown obs action {action}")),
             }
@@ -611,6 +624,13 @@ mod tests {
             body,
             json!({"action": "burst", "kind": "items", "count": "20"})
         );
+        assert_eq!(
+            cmd(&["obs", "sources", "300"]).unwrap(),
+            (
+                "/_control/obs",
+                json!({"action": "sources", "count": "300"})
+            )
+        );
         let (path, body) = cmd(&["stats", "--reset", "--json"]).unwrap();
         assert_eq!(
             (path, body),
@@ -625,6 +645,8 @@ mod tests {
             &["send", "nope"],
             &["send", "chat", "--user"],
             &["send", "chat", "stray"],
+            &["obs", "sources"],
+            &["obs", "sources", "-1"],
             &["obs", "stream"],
             &["obs", "fly"],
             &["scenario", "nope"],

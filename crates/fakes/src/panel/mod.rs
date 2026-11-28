@@ -95,6 +95,7 @@ pub enum Message {
     Program(String),
     StudioMode(bool),
     BurstCount(String),
+    StressCount(String),
     FaultKey(String),
     FaultStatus(String),
     FaultDelay(String),
@@ -137,6 +138,8 @@ pub struct Panel {
     /// The scene whose sources the OBS tab shows; the program scene when none is picked.
     scene: Option<String>,
     burst: String,
+    /// The stress scene's source count being typed.
+    stress: String,
     fault_form: faults::FaultForm,
     sort: stats::Sort,
 }
@@ -186,6 +189,7 @@ impl Panel {
             notice: None,
             scene: None,
             burst: "10".into(),
+            stress: "300".into(),
             fault_form: faults::FaultForm::default(),
             sort: stats::Sort::default(),
         };
@@ -287,6 +291,7 @@ impl Panel {
                 self.refresh();
             }
             Message::BurstCount(count) => self.burst = count,
+            Message::StressCount(count) => self.stress = count,
             Message::FaultKey(key) => self.fault_form.key = key,
             Message::FaultStatus(status) => self.fault_form.status = status,
             Message::FaultDelay(delay) => self.fault_form.delay_ms = delay,
