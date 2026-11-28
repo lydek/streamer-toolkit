@@ -252,3 +252,50 @@ test('the drawer lists redemptions that kept failing, retries or skips them as i
   await expect(drawer.getByText('database is locked')).toHaveCount(0)
   await expect(drawer.getByRole('heading', { name: zh.checkin.outbox.deadLetters })).toHaveCount(0)
 })
+
+test('home 待處理 shows check-in redemptions that kept failing, without opening the drawer, and follows them', async ({ page }) => {
+  await mockAdmin(page, { modules })
+  await page.route('**/api/admin/checkin/today', (r) => r.fulfill({ json: { business_day: '2026-11-16', count: 0, full_today: 0, recent: [] } }))
+  const letter = (id: string) => ({ event_id: id, occurred_at: '2026-11-16T09:00:00.000Z', user_name: '小魚', reward_title: '每日打卡', error: 'database is locked' })
+  let dead = [letter('e1'), letter('e2')]
+  await page.route('**/api/admin/checkin/outbox', (r) => r.fulfill({ json: { pending: 0, oldest_pending_at: null, dead_letters: dead } }))
+  await page.route('**/api/admin/checkin/outbox/*/retry', (r) => {
+    dead = dead.filter((d) => !r.request().url().includes(`/${d.event_id}/`))
+    return r.fulfill({ status: 204 })
+  })
+  await liveSocket(page)
+  await page.goto('/admin/')
+  await toLiveHome(page)
+  const item = (n: number) => page.getByRole('button', { name: zh.home.pendingCheckin.replace('{n}', String(n)) })
+  await expect(item(2)).toBeVisible()
+  // The drawer is closed: the count still follows the outbox.
+  dead = [letter('e1')]
+  await expect(item(1)).toBeVisible()
+
+  // Still there after closing: focus goes back to it.
+  await item(1).click()
+  const drawer = page.locator('#drawer-checkin')
+  await expect(drawer).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(item(1)).toBeFocused()
+
+  // Handled: the item goes, and closing the drawer puts focus on the check-in tile instead.
+  await item(1).click()
+  await drawer.getByRole('button', { name: zh.checkin.outbox.retry }).click()
+  await expect(item(1)).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-drawer-tile="checkin"]')).toBeFocused()
+})
+
+test('home 待處理 says nothing about check-ins while the check-in module is off', async ({ page }) => {
+  await mockAdmin(page, { modules: [{ id: 'checkin', enabled: false, closed: false }] })
+  const reads: string[] = []
+  await page.route('**/api/admin/checkin/outbox', (r) => {
+    reads.push('outbox')
+    return r.fulfill({ json: { pending: 0, oldest_pending_at: null, dead_letters: [{ event_id: 'e1', occurred_at: '2026-11-16T09:00:00.000Z', user_name: 'x', reward_title: 'y', error: 'z' }] } })
+  })
+  await page.goto('/admin/')
+  await toLiveHome(page)
+  await expect(page.getByText(zh.home.pendingCheckin.replace('{n}', '1'))).toHaveCount(0)
+  expect(reads).toEqual([])
+})

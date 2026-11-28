@@ -83,7 +83,8 @@
               <h2 id="pending-heading">{{ t('home.blocks.pending') }}</h2>
               <ul class="plain">
                 <li v-for="p in pending" :key="p.id">
-                  <RouterLink :to="p.to">{{ p.text }}</RouterLink>
+                  <button v-if="p.drawer" type="button" class="link-button" @click="toggle(p.drawer, $event.currentTarget)">{{ p.text }}</button>
+                  <RouterLink v-else :to="p.to!">{{ p.text }}</RouterLink>
                 </li>
               </ul>
             </section>
@@ -284,6 +285,7 @@ import {
 import { isMasked, reveal, saveAfterNumbers, useAfterNumbers } from './afterNumbers'
 import HomeTile from './HomeTile.vue'
 import { obsProblems, useObsSources } from './obsSources'
+import { useCheckinOutbox } from './checkinOutbox'
 import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
 import { mixSections, useMic } from './mixer'
@@ -402,9 +404,16 @@ watch(
   },
   { immediate: true },
 )
-const pending = computed(() => {
+// Check-in redemptions that kept failing, read without opening the drawer (the poll is shared with it).
+const checkinOn = computed(() => !!modules.value?.some((m) => m.id === 'checkin' && m.enabled))
+const { outbox } = useCheckinOutbox(() => checkinOn.value)
+const pending = computed<{ id: string; text: string; to?: string; drawer?: string }[]>(() => {
   const off = new Set((modules.value ?? []).filter((m) => !m.enabled).map((m) => m.id))
-  return obsProblems(obsSources.value, sceneRules.value, off, t)
+  const dead = checkinOn.value ? (outbox.value?.dead_letters.length ?? 0) : 0
+  return [
+    ...(dead ? [{ id: 'checkin:dead', text: t('home.pendingCheckin', { n: dead }), drawer: 'checkin' }] : []),
+    ...obsProblems(obsSources.value, sceneRules.value, off, t),
+  ]
 })
 
 const lines = computed(() =>
@@ -719,6 +728,17 @@ onBeforeUnmount(() => {
 .plain {
   list-style: none;
   padding: 0;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-primary-color);
+  font: inherit;
+  text-align: start;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .tile-reason {

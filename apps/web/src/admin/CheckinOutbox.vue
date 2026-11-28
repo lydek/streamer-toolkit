@@ -33,24 +33,24 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { type Schemas, api, client } from './api'
+import { loadOutbox, useCheckinOutbox } from './checkinOutbox'
 
 // Backlog while paused and redemptions that kept failing; viewer and reward text is shown as text only.
 defineProps<{ state: Schemas['ModuleState'] | undefined }>()
 const emit = defineEmits<{ close: [pending: number]; error: [unknown] }>()
 const { t, locale } = useI18n()
-const outbox = ref<Schemas['CheckinOutbox']>()
+// Redemptions keep arriving while paused, and retried events settle in the background: the shared poll follows them.
+const { outbox } = useCheckinOutbox()
 const busy = ref(false)
-let timer: number | undefined
 
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleString(locale.value, { dateStyle: 'short', timeStyle: 'short' })
 
-async function load() {
-  outbox.value = await api(client.GET('/api/admin/checkin/outbox'))
-}
+// A fresh read: one already in flight may predate the change just made.
+const load = () => loadOutbox(true)
 
 async function act(eventId: string, action: 'retry' | 'skip') {
   busy.value = true
@@ -69,13 +69,7 @@ async function act(eventId: string, action: 'retry' | 'skip') {
   }
 }
 
-onMounted(async () => {
-  // Redemptions keep arriving while paused, and retried events settle in the background. Started before the
-  // first await, so unmounting during the first load still stops it.
-  timer = window.setInterval(() => void load().catch(() => {}), 2000)
-  await load().catch((e) => emit('error', e))
-})
-onBeforeUnmount(() => window.clearInterval(timer))
+onMounted(() => load().catch((e) => emit('error', e)))
 
 defineExpose({ load })
 </script>
