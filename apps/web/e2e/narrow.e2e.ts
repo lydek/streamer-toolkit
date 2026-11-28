@@ -1,6 +1,6 @@
 // Phones and narrow windows: the phone layout applies on a phone, and the app bar keeps to two rows, API mocked.
 import { type Page, expect, test } from '@playwright/test'
-import { mockAdmin, zh } from './fixtures'
+import { mockAdmin, scrollsSideways, zh } from './fixtures'
 
 /** Opens home with Twitch live and OBS streaming and recording, so every status pill shows. */
 async function openLive(page: Page) {
@@ -71,4 +71,18 @@ test('the logo is the solid square at every width, the name beside it from phone
     const box = (await logo.boundingBox())!
     expect(Math.round(box.width)).toBe(Math.round(box.height))
   }
+})
+
+test('the update banner keeps its icon, text and buttons in one row when wide and wraps without sideways scroll at 320px', async ({ page }) => {
+  await mockAdmin(page, { update: { current: '0.1.0', available: '0.2.0', check: true, can_check: true } })
+  await page.goto('/admin/')
+  const banner = page.getByRole('region', { name: zh.update.available.replace('{version}', '0.2.0') })
+  await expect(banner).toBeVisible()
+  await page.setViewportSize({ width: 1440, height: 800 })
+  const tops = async () =>
+    banner.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2)))
+  const wide = await tops()
+  expect(Math.max(...wide) - Math.min(...wide)).toBeLessThan(12)
+  await page.setViewportSize({ width: 320, height: 800 })
+  expect(await scrollsSideways(page)).toBe(false)
 })
