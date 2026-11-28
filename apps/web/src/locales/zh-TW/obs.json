@@ -242,6 +242,7 @@
     "locked": "鎖定",
     "showItem": "顯示「{item}」",
     "lockItem": "鎖定「{item}」",
+    "dragHint": "拖曳排序",
     "move": "順序",
     "forward": "「{item}」往前",
     "backward": "「{item}」往後",

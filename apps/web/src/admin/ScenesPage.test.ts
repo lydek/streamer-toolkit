@@ -772,19 +772,21 @@ describe('ScenesPage', () => {
     snapshot(connected())
     await flushPromises()
     const buttons = wrapper.findAll('ul button')
-    expect(buttons.map((b) => [b.text(), b.attributes('aria-pressed')])).toEqual([
+    expect(buttons.map((b) => [b.get('.name').text(), b.attributes('aria-pressed')])).toEqual([
       ['Opening', 'false'],
       ['Game', 'true'],
     ])
+    // The scene on air carries the same 直播中 pill as the item table's heading.
+    expect(buttons[1].get('.stag.live').text()).toBe(t('scene.onAir'))
 
     await buttons[0].trigger('click')
     await flushPromises()
     expect(put).toHaveBeenCalledWith('/api/admin/obs/scene', { body: { scene: 'Opening' } })
     // The view follows OBS, not the click.
-    expect(wrapper.get('[aria-pressed="true"]').text()).toBe('Game')
+    expect(wrapper.get('[aria-pressed="true"] .name').text()).toBe('Game')
     send({ type: 'obs.state', payload: connected('Opening') })
     await flushPromises()
-    expect(wrapper.get('[aria-pressed="true"]').text()).toBe('Opening')
+    expect(wrapper.get('[aria-pressed="true"] .name').text()).toBe('Opening')
     expect(wrapper.text()).toContain(t('scene.noItems'))
   })
 
@@ -794,7 +796,7 @@ describe('ScenesPage', () => {
     await flushPromises()
     const rows = wrapper.findAll('tbody tr')
     // A known kind reads as its name; another shows as OBS names it.
-    expect(rows.map((r) => [r.get('th .num').text(), r.get('th .item-name').text(), r.findAll('td')[0].text()])).toEqual([
+    expect(rows.map((r) => [r.get('th .num').text(), r.get('th .item-name').text(), r.findAll('td')[1].text()])).toEqual([
       ['1', 'Chat overlay', t('scene.kinds.browser')],
       ['2', 'Capture', 'spout_capture'],
     ])
@@ -809,7 +811,9 @@ describe('ScenesPage', () => {
     await flushPromises()
     expect(checked()).toBe(true)
 
-    await wrapper.get(`[aria-label="${t('scene.lockItem', { item: 'Chat overlay' })}"]`).trigger('change')
+    const lock = wrapper.get(`[aria-label="${t('scene.lockItem', { item: 'Chat overlay' })}"]`)
+    expect(lock.attributes('aria-pressed')).toBe('false')
+    await lock.trigger('click')
     await flushPromises()
     expect(put).toHaveBeenCalledWith('/api/admin/obs/item', { body: { scene: 'Game', item: 2, locked: true } })
   })

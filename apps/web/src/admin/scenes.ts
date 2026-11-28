@@ -102,6 +102,27 @@ const KINDS: Record<string, string> = {
   wasapi_process_output_capture: 'appAudio',
 }
 
+const KIND_ICONS: Record<string, string> = {
+  scene: 'pi pi-images',
+  group: 'pi pi-folder',
+  browser: 'pi pi-globe',
+  text: 'pi pi-align-left',
+  game: 'pi pi-play',
+  window: 'pi pi-window-maximize',
+  monitor: 'pi pi-desktop',
+  camera: 'pi pi-camera',
+  image: 'pi pi-image',
+  slideshow: 'pi pi-images',
+  media: 'pi pi-video',
+  color: 'pi pi-palette',
+  audioIn: 'pi pi-microphone',
+  audioOut: 'pi pi-volume-up',
+  appAudio: 'pi pi-volume-up',
+}
+
+/** The icon beside an item of `kind`, shared by the scene page and its drawer; a box for a kind not listed. */
+export const kindIcon = (kind: string) => KIND_ICONS[KINDS[kind.replace(/_v\d+$/, '')] ?? ''] ?? 'pi pi-box'
+
 /** The i18n key for an item's kind; `null` for a kind not listed here (shown as OBS names it). */
 export function kindKey(kind: string): string | null {
   const key = KINDS[kind.replace(/_v\d+$/, '')]
