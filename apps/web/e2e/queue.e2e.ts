@@ -1,4 +1,4 @@
-// The presentation queue on home and the emergency stop in the app bar (API and `/ws/overlay` mocked).
+// The presentation queue on home and the emergency stop in the app bar (API and `/ws/admin` mocked).
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, zh } from './fixtures'
 
@@ -13,7 +13,7 @@ async function openWithQueue(page: Page, queue: unknown) {
   await page.route('**/api/admin/queue/clear', (r) => (calls.push('clear'), r.fulfill({ json: { cancelled: 2 } })))
   await page.route('**/api/admin/queue/stop', (r) => (calls.push('stop'), r.fulfill({ json: { stopped: true, cancelled: 2 } })))
   await page.route('**/api/admin/queue/skip', (r) => (calls.push('skip'), r.fulfill({ json: { skipped: true } })))
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(
       JSON.stringify({
         type: 'snapshot',

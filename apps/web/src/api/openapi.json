@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Streamer Toolkit Host",
-    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `SoundStoppedEvent` follow in `seq` order.",
+    "description": "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `SoundStoppedEvent` follow in `seq` order.                        The admin window reads the same stream from `/ws/admin`, whose first message must be the admin token.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -14281,7 +14281,7 @@
       },
       "OverlayCounts": {
         "type": "object",
-        "description": "Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included.",
+        "description": "Open overlay sockets per kind; `other` counts sockets without a known kind (the admin window uses `/ws/admin`).",
         "required": [
           "chat",
           "alerts",

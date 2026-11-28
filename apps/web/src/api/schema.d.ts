@@ -4605,7 +4605,7 @@ export interface components {
          * @enum {string}
          */
         Outcome: "played" | "sound_missing" | "off_air" | "declined" | "skipped" | "cleared" | "stopped";
-        /** @description Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included. */
+        /** @description Open overlay sockets per kind; `other` counts sockets without a known kind (the admin window uses `/ws/admin`). */
         OverlayCounts: {
             alerts: number;
             bgm: number;

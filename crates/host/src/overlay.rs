@@ -1,17 +1,21 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
 //! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard|polls`; the Host counts open sockets per kind so it
-//! knows whether an overlay is in OBS. Sockets without a known kind (the admin window, old pages) count as other.
+//! knows whether an overlay is in OBS. Sockets without a known kind (old pages) count as other.
+//! The admin window reads the same stream from `/ws/admin`, after sending the admin token; it is not counted.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
 };
 
 use axum::{
     Json, Router,
     extract::{
         Query, State, WebSocketUpgrade,
-        ws::{Message, WebSocket},
+        ws::{CloseFrame, Message, WebSocket, close_code},
     },
     response::Response,
     routing::get,
@@ -20,6 +24,7 @@ use chat::{ChatMessageEvent, ChatRemovedEvent};
 use tokio::sync::watch;
 
 use crate::{
+    admin::AdminState,
     obs::{ObsStateEvent, ObsStatusEvent},
     queue::PresentationQueueEvent,
 };
@@ -206,7 +211,7 @@ pub(crate) async fn ws(
     })
 }
 
-/// Open overlay sockets per kind; `other` counts sockets without a known kind, the admin window included.
+/// Open overlay sockets per kind; `other` counts sockets without a known kind (the admin window uses `/ws/admin`).
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub(crate) struct OverlayCounts {
     chat: usize,
@@ -242,6 +247,41 @@ pub(crate) async fn overlay_counts(
     State(connections): State<Arc<OverlayConnections>>,
 ) -> Json<OverlayCounts> {
     Json(connections.counts())
+}
+
+/// How long a new `/ws/admin` socket may take to send the admin token.
+const ADMIN_AUTH_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_millis(300)
+} else {
+    Duration::from_secs(5)
+};
+
+#[derive(Clone)]
+pub(crate) struct AdminSocketState {
+    pub(crate) bus: Arc<EventBus>,
+    pub(crate) admin: Arc<AdminState>,
+}
+
+/// `/ws/admin`: the admin window's event stream. A browser WebSocket cannot send `Authorization`, so the first message
+/// is the admin token (kept out of the URL); until it checks out the socket subscribes to nothing and sends nothing,
+/// and a wrong token or none in time closes it.
+pub(crate) async fn admin_ws(ws: WebSocketUpgrade, State(s): State<AdminSocketState>) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let first = tokio::time::timeout(ADMIN_AUTH_TIMEOUT, socket.recv()).await;
+        let signed_in = matches!(
+            &first,
+            Ok(Some(Ok(Message::Text(token)))) if s.admin.token_matches(token.as_str())
+        );
+        if !signed_in {
+            let close = CloseFrame {
+                code: close_code::POLICY,
+                reason: "admin token required".into(),
+            };
+            let _ = socket.send(Message::Close(Some(close))).await;
+            return;
+        }
+        serve(socket, s.bus).await;
+    })
 }
 
 async fn serve(mut socket: WebSocket, bus: Arc<EventBus>) {

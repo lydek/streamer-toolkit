@@ -1,5 +1,5 @@
 // Check-ins: the home tile and drawer, and the full page's search, pages, manual check-ins and live refresh, with the
-// admin API and `/ws/overlay` mocked (the rules themselves are tested on real SQLite in crates/modules/checkin).
+// admin API and `/ws/admin` mocked (the rules themselves are tested on real SQLite in crates/modules/checkin).
 import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import type { components } from '../src/api/schema'
 import { mockAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
@@ -22,10 +22,10 @@ const viewer = (n: number, over: Partial<Schemas['CheckinViewer']> = {}): Schema
   ...over,
 })
 
-/** `/ws/overlay` with a handle to push `checkin.changed` later. */
+/** `/ws/admin` with a handle to push `checkin.changed` later. */
 async function liveSocket(page: Page) {
   let socket: WebSocketRoute | undefined
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
     socket = ws
     ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] } }))
   })

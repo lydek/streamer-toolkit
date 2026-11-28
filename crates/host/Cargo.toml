@@ -48,3 +48,6 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }
+# A plain WebSocket client for the admin socket tests; dev-only, so crates/arch-tests allows it.
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }

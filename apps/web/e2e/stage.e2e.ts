@@ -1,4 +1,4 @@
-// The stream stage card on home: before, live or after, following Twitch (API and `/ws/overlay` mocked).
+// The stream stage card on home: before, live or after, following Twitch (API and `/ws/admin` mocked).
 import { type Page, expect, test } from '@playwright/test'
 import type { components } from '../src/api/schema'
 import { mockAdmin, zh } from './fixtures'
@@ -30,7 +30,7 @@ async function open(
   const state = await mockAdmin(page, { streamSummary, ...admin })
   if (overlays) await page.route('**/api/admin/overlays', (r) => r.fulfill({ json: overlays() }))
   let push: (s: Schemas['StreamStatusPayload']) => void = () => {}
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
     const event = (seq: number, payload: Schemas['StreamStatusPayload']) => ({
       id: `s${seq}`,
       type: 'stream.status',

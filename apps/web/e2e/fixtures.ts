@@ -90,7 +90,7 @@ export const emit = (page: Page, event: string, payload: unknown) =>
 const hostPath = (url: URL) => /^\/(api|ws|templates|sounds|music)(\/|$)/.test(url.pathname)
 
 /**
- * Mocks the IPC, the admin API and `/ws/overlay` for the admin UI on the Vite dev server. Requests to Host paths
+ * Mocks the IPC, the admin API and `/ws/admin` for the admin UI on the Vite dev server. Requests to Host paths
  * that no test mocks get a 404 instead of reaching the dev proxy (and a Host that may be running). Later
  * `page.route` calls take precedence, so a test adds or overrides endpoints after this.
  */

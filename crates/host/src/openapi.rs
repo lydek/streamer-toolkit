@@ -16,7 +16,7 @@ use crate::{
         title = "Streamer Toolkit Host",
         description = "Local Host API on 127.0.0.1. `/ws/overlay` is a read-only WebSocket: the first message \
                        is a `Snapshot`, then events such as `ChatMessageEvent`, `AlertEvent`, `ObsStatusEvent`, \
-                       `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `SoundStoppedEvent` follow in `seq` order."
+                       `TemplateChangedEvent`, `RedemptionChangedEvent`, `CheckinChangedEvent`, `CheckinStampedEvent`, `SoundPlayEvent` and `SoundStoppedEvent` follow in `seq` order.                        The admin window reads the same stream from `/ws/admin`, whose first message must be the admin token."
     ),
     paths(
         admin::twitch_account::twitch_overview,

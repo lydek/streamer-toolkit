@@ -32,6 +32,8 @@ import {
 import HomeTile from './HomeTile.vue'
 import { testRouter } from './testRouter'
 
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => 'test-token') }))
+
 const t = i18n.global.t
 
 const chat = (seq: number, text = `msg ${seq}`): Schemas['ChatMessageEvent'] => ({
@@ -242,6 +244,39 @@ describe('useLiveEvents', () => {
     sockets[1].onclose!()
     vi.advanceTimersByTime(2000)
     expect(sockets).toHaveLength(2)
+  })
+
+  it('opens the admin socket and sends the admin token first, again on every reconnect', async () => {
+    const sockets: { url: string; sent: string[]; onopen?: () => void; onclose?: () => void }[] = []
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        readonly OPEN = 1
+        readyState = 1
+        sent: string[] = []
+        onopen?: () => void
+        onclose?: () => void
+        close = vi.fn()
+        constructor(public url: string) {
+          sockets.push(this)
+        }
+        send(text: string) {
+          this.sent.push(text)
+        }
+      },
+    )
+    const scope = effectScope()
+    scope.run(() => useLiveEvents(1))
+
+    expect(sockets[0].url).toMatch(/\/ws\/admin$/)
+    expect(sockets[0].sent).toEqual([])
+    sockets[0].onopen!()
+    await vi.waitFor(() => expect(sockets[0].sent).toEqual(['test-token']))
+    sockets[0].onclose!()
+    await vi.waitFor(() => expect(sockets).toHaveLength(2))
+    sockets[1].onopen!()
+    await vi.waitFor(() => expect(sockets[1].sent).toEqual(['test-token']))
+    scope.stop()
   })
 })
 
