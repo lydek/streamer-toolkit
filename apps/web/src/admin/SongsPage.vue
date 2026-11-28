@@ -223,7 +223,10 @@ loadSongs().catch((e: unknown) => (loadFailed.value = message(e)))
 <style scoped>
 .add {
   display: flex;
+  /* A row, not the global form column: in a column `.pick`'s 18rem basis became its height. */
+  flex-direction: row;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   max-width: 90rem;
   margin-bottom: 1rem;
