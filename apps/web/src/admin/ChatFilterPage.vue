@@ -4,7 +4,7 @@
     <div class="chat-filter">
       <div class="split">
         <FormPanel :heading="t('chatFilter.rules')">
-          <FormRow v-for="r in RULES" :key="r" :label="t(`chatFilter.rule.${r}.name`)" :input-id="`cf-${r}`">
+          <FormRow v-for="r in RULES" :key="r" class="rule-row" :label="t(`chatFilter.rule.${r}.name`)" :input-id="`cf-${r}`">
             <div class="rule">
               <span class="action">
                 <Select
@@ -177,6 +177,29 @@ const rules = reactive({
 @container view (max-width: 56rem) {
   .split {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A narrow panel (FormRow puts the label over the field): each rule's switch sits beside its name, the action on the
+   line below, so the switch never wraps onto a line of its own. */
+@container (max-width: 34rem) {
+  /* .form-row too, to outrank FormRow's own one-column rule. */
+  .form-row.rule-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rule-row :deep(.field),
+  .rule {
+    display: contents;
+  }
+
+  .rule > .p-toggleswitch {
+    grid-area: 1 / 2;
+  }
+
+  .action,
+  .rule-row :deep(.hint) {
+    grid-column: 1 / -1;
   }
 }
 </style>
