@@ -96,7 +96,8 @@ describe('CheckinsPage', () => {
     await router.push('/checkins')
     const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
     await flushPromises()
-    expect(wrapper.text()).toContain(t('checkin.deduct.available', { n: 3 }))
+    // The 可用印章 column.
+    expect(wrapper.findAll('tbody td')[1].text()).toBe('3')
     expect(wrapper.text()).toContain(t('checkin.deduct.logLine', { name: 'Ann', n: 2 }))
 
     const open = async () => {
@@ -123,5 +124,30 @@ describe('CheckinsPage', () => {
       body: { amount: 2, reason: '換一首歌' },
     })
     expect(toastAdd.mock.calls.at(-1)?.[0].summary).toBe(t('checkin.deduct.done', { name: 'Ann', n: 2, left: 1 }))
+  })
+
+  it('draws the card from its slot setting: a dot a slot up to 20, a bar above, and the stamps on it', async () => {
+    const rows = [
+      { ...viewer, id: 'a', user_name: 'A', user_login: 'a', stamps: 1, card_slots: 1 },
+      { ...viewer, id: 'b', user_name: 'B', user_login: 'b', stamps: 20, card_slots: 20, available: 0 },
+      { ...viewer, id: 'c', user_name: 'C', user_login: 'c', stamps: 7, card_slots: 21 },
+      { ...viewer, id: 'd', user_name: 'D', user_login: 'd', stamps: 50, card_slots: 100 },
+    ]
+    client.GET.mockImplementation((path: string) => Promise.resolve(ok(path.includes('deductions') ? [] : { items: rows, total: 4 })))
+    const router = testRouter([{ path: '/checkins', component: CheckinsPage }])
+    await router.push('/checkins')
+    const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] } })
+    await flushPromises()
+    const cards = wrapper.findAll('.card-progress')
+    expect(cards.map((c) => c.text())).toEqual(['1/1', '20/20', '7/21', '50/100'])
+    expect(cards.map((c) => [c.findAll('.dots i').length, c.findAll('.dots i.on').length, c.find('.bar').exists()])).toEqual([
+      [1, 1, false],
+      [20, 20, false],
+      [0, 0, true],
+      [0, 0, true],
+    ])
+    expect(cards[3].get('.bar i').attributes('style')).toContain('width: 50%')
+    // Stamps come from the lifetime count, never from what is left to spend (B has none left, its card is full).
+    expect(wrapper.findAll('tbody tr')[1].findAll('td')[1].text()).toBe('0')
   })
 })

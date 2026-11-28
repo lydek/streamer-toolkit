@@ -108,6 +108,15 @@
   "checkin": {
     "today": "今天 {n} 人打卡",
     "page": {
+      "cols": {
+        "viewer": "觀眾",
+        "total": "累計（永久）",
+        "available": "可用印章",
+        "card": "集點卡",
+        "last": "最後打卡",
+        "actions": "動作"
+      },
+      "times": "{n} 次",
       "filters": "搜尋觀眾",
       "search": "觀眾",
       "date": "登記日期",
