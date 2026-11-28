@@ -149,10 +149,12 @@
     >
       <template v-for="item in subItems" :key="item.key">
         <span v-if="!item.to" class="off" aria-disabled="true" :title="t('home.unbuilt')">
-          {{ item.label }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
+          <i v-if="item.icon" :class="item.icon" aria-hidden="true"></i>{{ item.label }}<span class="sr-only">{{ t('home.unbuilt') }}</span>
         </span>
         <RouterLink v-else v-slot="{ href, navigate }" :to="item.to" custom>
-          <a :href="href" :aria-current="item.current" @click="navOpened.path = item.to!; navigate($event)">{{ item.label }}</a>
+          <a :href="href" :aria-current="item.current" @click="navOpened.path = item.to!; navigate($event)"
+            ><i v-if="item.icon" :class="item.icon" aria-hidden="true"></i>{{ item.label }}</a
+          >
         </RouterLink>
       </template>
     </nav>
@@ -302,13 +304,20 @@ const pinned = computed(() =>
 const unpinned = computed(() => groups.value.filter((g) => !pinned.value.includes(g)))
 // The second row: categories with a page left (grey when none of them is built), or a group's own pages. A
 // category is the current one while one of its pages is open; it is the page itself when that is its only page.
-const subItems = computed<{ key: string; label: string; to?: string; current?: 'page' | 'true' }[]>(() => {
+const subItems = computed<{ key: string; label: string; icon?: string; to?: string; current?: 'page' | 'true' }[]>(() => {
   const g = group.value
   if (!g) return []
   if (!g.categories)
     return g.pages
       .filter((p) => !hidden.value.has(p.path))
-      .map((p) => ({ key: p.path, label: t(p.label), to: isGrey(p) ? undefined : p.path, current: p.path === route.path ? 'page' : undefined }))
+      .map((p) => ({
+        key: p.path,
+        label: t(p.label),
+        // Home has no full page (so no icon of its own): its group's icon stands in.
+        icon: p.icon ?? p.soon?.icon ?? g.icon,
+        to: isGrey(p) ? undefined : p.path,
+        current: p.path === route.path ? 'page' : undefined,
+      }))
   return g.categories.flatMap((c) => {
     const pages = c.pages.filter((p) => !hidden.value.has(p.path))
     if (!pages.length) return []
@@ -316,6 +325,7 @@ const subItems = computed<{ key: string; label: string; to?: string; current?: '
     return [{
       key: c.id,
       label: t(`nav.categories.${c.id}`),
+      icon: c.icon,
       to: categoryTarget(c, hidden.value, lastInCategory[c.id]),
       current: open ? (pages.length === 1 ? ('page' as const) : ('true' as const)) : undefined,
     }]
@@ -693,6 +703,9 @@ onBeforeUnmount(() => {
 
 .sub-tabs a,
 .sub-tabs .off {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   flex: none;
   padding: 0.25rem 0.75rem;
   /* surface-500: 4.1:1 on surface-950 (WCAG 1.4.11). */
