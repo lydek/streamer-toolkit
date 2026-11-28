@@ -482,7 +482,7 @@ pub async fn checked_in_between(
          (SELECT r.id AS record_id, v.user_name, r.trigger_kind AS trigger, r.occurred_at FROM checkin_records r \
           JOIN checkin_viewers v ON v.id = r.viewer_id \
           WHERE (?1 IS NULL OR r.occurred_at >= ?1) AND (?2 IS NULL OR r.occurred_at < ?2) \
-          ORDER BY r.occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
+          ORDER BY r.occurred_at DESC, r.id DESC LIMIT ?3) ORDER BY occurred_at, record_id",
     )
     .bind(from.map(time_text))
     .bind(until.map(time_text))
@@ -526,6 +526,45 @@ pub(crate) mod tests {
         all.sort_by_key(|m| m.version);
         Migrator::with_migrations(all).run(&pool).await.unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn check_ins_from_the_same_instant_keep_the_order_they_arrived_in() {
+        let pool = pool().await;
+        // UUIDv7 IDs grow in insert order; one viewer each, as a viewer checks in once a day.
+        for (id, name) in [("01", "Cara"), ("02", "Abe"), ("03", "Bo")] {
+            sqlx::query(
+                "INSERT INTO checkin_viewers (id, twitch_user_id, user_login, user_name, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, '2026-11-19T10:00:00.000000Z', '2026-11-19T10:00:00.000000Z')",
+            )
+            .bind(format!("v{id}"))
+            .bind(format!("t{id}"))
+            .bind(name.to_lowercase())
+            .bind(name)
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO checkin_records (id, viewer_id, business_day, occurred_at, trigger_kind, recorded_at) \
+                 VALUES (?, ?, '2026-11-19', '2026-11-19T10:00:00.000000Z', 'chat', '2026-11-19T10:00:00.000000Z')",
+            )
+            .bind(id)
+            .bind(format!("v{id}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let names = |entries: Vec<CheckedInEntry>| {
+            entries.into_iter().map(|e| e.user_name).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(checked_in_between(&pool, None, None, 10).await.unwrap()),
+            ["Cara", "Abe", "Bo"]
+        );
+        assert_eq!(
+            names(checked_in_between(&pool, None, None, 2).await.unwrap()),
+            ["Abe", "Bo"]
+        );
     }
 
     pub(crate) fn utc(s: &str) -> Timestamp {
