@@ -60,3 +60,15 @@ for (const width of [800, 390, 320]) {
     expect(Math.abs(s!.y + s!.height / 2 - (b!.y + b!.height / 2))).toBeLessThan(12)
   })
 }
+
+test('the logo is the solid square at every width, the name beside it from phone width up', async ({ page }) => {
+  await mockAdmin(page)
+  await page.goto('/admin/')
+  const logo = page.getByRole('banner').locator('.brand .logo')
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await expect(logo).toBeVisible()
+    const box = (await logo.boundingBox())!
+    expect(Math.round(box.width)).toBe(Math.round(box.height))
+  }
+})

@@ -2,7 +2,7 @@
   <!-- Sticky on every page (docs/decisions.md 管理 UI 版面); its height is --appbar-h for other sticky parts. -->
   <header ref="bar" class="app-bar" :class="{ scrolled }">
     <div class="bar-top">
-      <span class="brand"><i class="pi pi-video" aria-hidden="true"></i><span class="brand-name">{{ t('app.name') }}</span></span>
+      <span class="brand"><span class="logo" aria-hidden="true"><i class="pi pi-video"></i></span><span class="brand-name">{{ t('app.name') }}</span></span>
       <!-- Screen readers hear going live or ending, never the ticking timer. -->
       <span class="sr-only" aria-live="polite">{{ liveState }}</span>
       <div class="bar-status">
@@ -483,8 +483,17 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.brand i {
-  color: var(--p-primary-color);
+/* The prototype's solid primary square: dark icon on the primary colour (contrast well over 3:1 both ways). */
+.logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font-size: 1.125rem;
 }
 
 /* Wide: name, status and tools on one row. Each group wraps as one unit, so settings never ends up alone on a line;
