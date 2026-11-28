@@ -1,42 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import AlertEventsPage from './AlertEventsPage.vue'
-import AlertLogPage from './AlertLogPage.vue'
-import AlertsPage from './AlertsPage.vue'
-import CardStylePage from './CardStylePage.vue'
-import ChatLogPage from './ChatLogPage.vue'
-import ChatPage from './ChatPage.vue'
-import CheckinRulesPage from './CheckinRulesPage.vue'
-import CheckinsPage from './CheckinsPage.vue'
 import { useDrawer } from './drawer'
 import { modulesLoaded, useModules } from './features'
 import HomeView from './HomeView.vue'
-import ImageSizesPage from './ImageSizesPage.vue'
-import LeaderboardPage from './LeaderboardPage.vue'
-import CountersPage from './CountersPage.vue'
-import MarathonPage from './MarathonPage.vue'
-import MusicPage from './MusicPage.vue'
-import NotFoundView from './NotFoundView.vue'
-import OverlayLookPage from './OverlayLookPage.vue'
-import MixerPage from './MixerPage.vue'
-import ObsSourcesPage from './ObsSourcesPage.vue'
-import RedemptionsPage from './RedemptionsPage.vue'
-import RehearsalPage from './RehearsalPage.vue'
-import RewardPlaybackPage from './RewardPlaybackPage.vue'
 import { rememberOpener } from './page'
-import SettingsView from './SettingsView.vue'
-import ScenesPage from './ScenesPage.vue'
-import MediaPage from './MediaPage.vue'
-import ScreenToolsPage from './ScreenToolsPage.vue'
-import WarningsPage from './WarningsPage.vue'
-import SoundsPage from './SoundsPage.vue'
-import StreamInfoPage from './StreamInfoPage.vue'
-import RewardsPage from './RewardsPage.vue'
-import PollsPage from './PollsPage.vue'
-import SongListPage from './SongListPage.vue'
-import SongsPage from './SongsPage.vue'
-import BotCommandsPage from './BotCommandsPage.vue'
-import BotTimersPage from './BotTimersPage.vue'
-import BotGreetingsPage from './BotGreetingsPage.vue'
 import { needsSetup } from './setup'
 import { SOON_PAGES, closedPageTarget, showUnbuilt } from './tabs'
 
@@ -63,45 +29,46 @@ export const DRAWN: Record<string, () => Promise<unknown>> = {
 // Base /admin/: the Host serves /admin/* with an SPA fallback, and the dev server does the same.
 export const router = createRouter({
   history: createWebHistory('/admin/'),
+  // Every page but Home loads on its first visit, so the admin window starts with Home and the shell only.
   routes: [
     { path: '/', component: HomeView },
     { path: '/setup', component: () => import('./SetupPage.vue') },
     { path: '/settings', redirect: '/settings/general' },
-    { path: '/settings/:section(general|connections|features|profiles|hotkeys|debug|backup|about)', component: SettingsView },
-    { path: '/chat-log', component: ChatLogPage },
-    { path: '/chat', component: ChatPage },
-    { path: '/alerts', component: AlertsPage },
-    { path: '/alert-events', component: AlertEventsPage },
-    { path: '/alert-log', component: AlertLogPage },
-    { path: '/redemptions', component: RedemptionsPage },
-    { path: '/reward-playback', component: RewardPlaybackPage },
-    { path: '/checkin', component: CheckinsPage },
-    { path: '/card-style', component: CardStylePage },
-    { path: '/checkin-rules', component: CheckinRulesPage },
-    { path: '/sounds', component: SoundsPage },
-    { path: '/scenes', component: ScenesPage },
-    { path: '/mixer', component: MixerPage },
-    { path: '/obs-sources', component: ObsSourcesPage },
-    { path: '/music', component: MusicPage, props: { part: 'player' } },
-    { path: '/music-playlists', component: MusicPage, props: { part: 'playlists' } },
-    { path: '/music-library', component: MusicPage, props: { part: 'library' } },
-    { path: '/counters', component: CountersPage },
-    { path: '/marathon', component: MarathonPage },
-    { path: '/rehearsal', component: RehearsalPage },
-    { path: '/leaderboard', component: LeaderboardPage },
-    { path: '/image-sizes', component: ImageSizesPage },
-    { path: '/screen-tools', component: ScreenToolsPage },
-    { path: '/warnings', component: WarningsPage },
-    { path: '/overlay-look', component: OverlayLookPage },
-    { path: '/media', component: MediaPage },
-    { path: '/stream-info', component: StreamInfoPage },
-    { path: '/rewards', component: RewardsPage },
-    { path: '/polls', component: PollsPage },
-    { path: '/songs', component: SongsPage },
-    { path: '/song-list', component: SongListPage },
-    { path: '/commands', component: BotCommandsPage },
-    { path: '/timers', component: BotTimersPage },
-    { path: '/greetings', component: BotGreetingsPage },
+    { path: '/settings/:section(general|connections|features|profiles|hotkeys|debug|backup|about)', component: () => import('./SettingsView.vue') },
+    { path: '/chat-log', component: () => import('./ChatLogPage.vue') },
+    { path: '/chat', component: () => import('./ChatPage.vue') },
+    { path: '/alerts', component: () => import('./AlertsPage.vue') },
+    { path: '/alert-events', component: () => import('./AlertEventsPage.vue') },
+    { path: '/alert-log', component: () => import('./AlertLogPage.vue') },
+    { path: '/redemptions', component: () => import('./RedemptionsPage.vue') },
+    { path: '/reward-playback', component: () => import('./RewardPlaybackPage.vue') },
+    { path: '/checkin', component: () => import('./CheckinsPage.vue') },
+    { path: '/card-style', component: () => import('./CardStylePage.vue') },
+    { path: '/checkin-rules', component: () => import('./CheckinRulesPage.vue') },
+    { path: '/sounds', component: () => import('./SoundsPage.vue') },
+    { path: '/scenes', component: () => import('./ScenesPage.vue') },
+    { path: '/mixer', component: () => import('./MixerPage.vue') },
+    { path: '/obs-sources', component: () => import('./ObsSourcesPage.vue') },
+    { path: '/music', component: () => import('./MusicPage.vue'), props: { part: 'player' } },
+    { path: '/music-playlists', component: () => import('./MusicPage.vue'), props: { part: 'playlists' } },
+    { path: '/music-library', component: () => import('./MusicPage.vue'), props: { part: 'library' } },
+    { path: '/counters', component: () => import('./CountersPage.vue') },
+    { path: '/marathon', component: () => import('./MarathonPage.vue') },
+    { path: '/rehearsal', component: () => import('./RehearsalPage.vue') },
+    { path: '/leaderboard', component: () => import('./LeaderboardPage.vue') },
+    { path: '/image-sizes', component: () => import('./ImageSizesPage.vue') },
+    { path: '/screen-tools', component: () => import('./ScreenToolsPage.vue') },
+    { path: '/warnings', component: () => import('./WarningsPage.vue') },
+    { path: '/overlay-look', component: () => import('./OverlayLookPage.vue') },
+    { path: '/media', component: () => import('./MediaPage.vue') },
+    { path: '/stream-info', component: () => import('./StreamInfoPage.vue') },
+    { path: '/rewards', component: () => import('./RewardsPage.vue') },
+    { path: '/polls', component: () => import('./PollsPage.vue') },
+    { path: '/songs', component: () => import('./SongsPage.vue') },
+    { path: '/song-list', component: () => import('./SongListPage.vue') },
+    { path: '/commands', component: () => import('./BotCommandsPage.vue') },
+    { path: '/timers', component: () => import('./BotTimersPage.vue') },
+    { path: '/greetings', component: () => import('./BotGreetingsPage.vue') },
     // Screens of the design that are not built yet (docs/scope.md 階段 0): their URL leads home, except in dev mode,
     // where a page drawn ahead of its backend opens (DRAWN) and the rest show a placeholder.
     ...SOON_PAGES.map((p) => ({
@@ -109,7 +76,7 @@ export const router = createRouter({
       component: DRAWN[p.path] ?? (() => import('./UnbuiltPage.vue')),
       beforeEnter: () => showUnbuilt() || '/',
     })),
-    { path: '/:path(.*)*', component: NotFoundView },
+    { path: '/:path(.*)*', component: () => import('./NotFoundView.vue') },
   ],
 })
 
