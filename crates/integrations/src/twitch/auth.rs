@@ -562,7 +562,11 @@ pub fn fake_stored_token() -> String {
         refresh_token: "fake-refresh".into(),
         user_id: FAKE_USER_ID.into(),
         login: FAKE_LOGIN.into(),
-        scopes: super::MVP_SCOPES.iter().map(|s| s.to_string()).collect(),
+        scopes: super::MVP_SCOPES
+            .iter()
+            .chain(super::FEATURE_SCOPES)
+            .map(|s| s.to_string())
+            .collect(),
     };
     serde_json::to_string(&token).expect("a stored token serializes")
 }
