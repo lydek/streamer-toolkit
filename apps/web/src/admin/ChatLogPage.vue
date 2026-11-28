@@ -30,6 +30,7 @@
           v-for="f in LOG_FILTERS"
           :key="f"
           :label="t(`chatLog.filter.${f}`)"
+          :icon="FILTER_ICONS[f]"
           size="small"
           :severity="filter === f ? undefined : 'secondary'"
           :outlined="filter !== f"
@@ -76,6 +77,7 @@ import { applyChat, fromStored, useChatHistory, EMPTY_LOG, type ChatUpdate } fro
 import {
   type LogEvent,
   type LogFilter,
+  FILTER_ICONS,
   LOG_FILTERS,
   clockText,
   dayText,

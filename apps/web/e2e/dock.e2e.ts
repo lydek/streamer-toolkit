@@ -9,7 +9,7 @@ const chat = (seq: number, userName: string, text: string) => ({
   seq,
   occurredAt: '2026-11-18T10:00:00.000Z',
   source: 'twitch',
-  payload: { color: null, fragments: [{ type: 'text', text }], text, userId: `u${seq}`, userLogin: userName.toLowerCase(), userName },
+  payload: { color: null, fragments: [{ type: 'text', text }], text, userId: `u${seq}`, userLogin: userName.toLowerCase(), userName, badges: [], highlighted: false },
 })
 
 /** Opens home with the panel's saved state `saved`; returns the bodies of every save. */
@@ -93,7 +93,14 @@ test('filters and search narrow the messages; without the chat scope, sending of
   await expect(panel(page).getByText('hello everyone')).toBeVisible()
   await expect(panel(page).getByText('@me can you sing')).toHaveCount(0)
 
-  await expect(panel(page).getByRole('button', { name: zh.dock.filter.mods })).toBeDisabled()
+  // 管理員和 VIP, 第一次聊天 and !指令 work as on the chat log page; neither viewer here is any of them.
+  await panel(page).getByRole('searchbox', { name: zh.dock.search }).fill('')
+  for (const f of [zh.dock.filter.mods, zh.dock.filter.first, zh.dock.filter.commands]) {
+    await panel(page).getByRole('button', { name: f }).click()
+    await expect(panel(page).getByText('hello everyone')).toHaveCount(0)
+  }
+  await panel(page).getByRole('button', { name: zh.dock.filter.all }).click()
+  await expect(panel(page).getByText('hello everyone')).toBeVisible()
   // Signed in without user:write:chat: no box to type in, a button to grant the scope instead.
   await expect(panel(page).getByRole('textbox', { name: zh.dock.send })).toHaveCount(0)
   await expect(panel(page).getByRole('button', { name: zh.dock.grant })).toBeVisible()
