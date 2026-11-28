@@ -327,6 +327,7 @@
     "perUser": "每場每人 {n} 次",
     "readOnly": "在 Twitch 後台建立 · 本工具只能讀",
     "dashboardOnly": "要在 Twitch 後台改",
+    "off": "已停用",
     "unused": "沒有功能用到",
     "used": {
       "checkin": "打卡",
