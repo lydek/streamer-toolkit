@@ -64,6 +64,9 @@ main :is(form, p) {
 
 /* The admin tables (class "table"). */
 .tbl-wrap {
+  /* The containing block of the rows' absolutely placed screen-reader-only text and switch inputs: without it
+     they escape a scrolling or clipped table and stretch the page. */
+  position: relative;
   margin-top: 0.75rem;
   border-radius: 6px;
   background: var(--p-surface-900);

@@ -94,9 +94,9 @@ test('the full page searches, pages, registers and back-fills, and reloads on ch
   await page.goto('/admin/checkin')
 
   await expect(page.getByText(fill(zh.checkin.page.total, { n: 120 }))).toBeVisible()
-  const row = page.getByRole('listitem').filter({ hasText: HTML })
-  await expect(row).toContainText(fill(zh.checkin.page.card, { stamps: 3, slots: 10 }))
-  await expect(row).toContainText(fill(zh.checkin.page.last, { date: '2026-11-15' }))
+  const row = page.getByRole('row').filter({ hasText: HTML })
+  await expect(row).toContainText('3/10')
+  await expect(row).toContainText('2026-11-15')
   await expect(page.locator('main img')).toHaveCount(0)
 
   await page.getByLabel(zh.checkin.page.search, { exact: true }).fill(' Ann ')
@@ -184,4 +184,35 @@ test('importing previews the file, says what is skipped and why, then imports th
   // Done, the dialog closes and focus goes back to the button that opened it.
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(opener).toBeFocused()
+})
+
+test('異動紀錄 opens from the header and gives focus back when it closes', async ({ page }) => {
+  await mockAdmin(page, { modules: [{ id: 'checkin', enabled: true, closed: false }] })
+  await page.route('**/api/admin/checkin/viewers*', (r) => r.fulfill({ json: { items: [viewer(1)], total: 1 } }))
+  await page.route('**/api/admin/checkin/deductions', (r) =>
+    r.fulfill({ json: [{ id: 'd1', viewer_id: 'v1', user_name: 'Viewer1', amount: 2, reason: null, deducted_at: '2026-11-20T12:00:00.000Z' }] }),
+  )
+  await page.goto('/admin/checkin')
+  const open = page.getByRole('button', { name: zh.checkin.deduct.log })
+  await open.focus()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog', { name: zh.checkin.deduct.log })
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(fill(zh.checkin.deduct.logLine, { name: 'Viewer1', n: 2 }))
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(open).toBeFocused()
+})
+
+test('the card dots keep ten to a row on a narrow window', async ({ page }) => {
+  await mockAdmin(page, { modules })
+  await page.route('**/api/admin/checkin/viewers*', (r) => r.fulfill({ json: { items: [viewer(1, { stamps: 3, card_slots: 10 })], total: 1 } }))
+  for (const width of [800, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/admin/checkin')
+    const dots = page.locator('.dots i')
+    await expect(dots).toHaveCount(10)
+    const tops = new Set(await dots.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top))))
+    expect(tops.size, `${width}px`).toBe(1)
+  }
 })
