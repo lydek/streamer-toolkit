@@ -94,3 +94,54 @@ test('a refused pause in the rewards drawer puts the switch back', async ({ page
   await expect(page.locator('#drawer-rewards').getByRole('alert')).toBeVisible()
   await expect(pause).not.toBeChecked()
 })
+
+test('the chat bot drawer switches timers and greetings as their pages do', async ({ page }) => {
+  await openHome(page, ['bot'], {}, ['commands'])
+  const greet = (enabled: boolean) => ({ enabled, message: 'hi' })
+  let greetings = {
+    follow: greet(true), first_chat: greet(false), returning: { ...greet(true), days: 7, post: false }, sub: greet(true), raid: greet(true),
+    bits: { enabled: true, small: 'a', medium: 'b', large: 'c' },
+  }
+  const timers = [{ id: 't1', name: 'Discord', message: 'join', every_minutes: 15, min_chat_lines: 5, enabled: false }]
+  const puts: unknown[] = []
+  await page.route('**/api/admin/bot/timers', (r) => r.fulfill({ json: timers }))
+  await page.route('**/api/admin/bot/timers/*', (r) => {
+    puts.push([new URL(r.request().url()).pathname, r.request().postDataJSON().enabled])
+    return r.fulfill({ json: timers[0] })
+  })
+  await page.route('**/api/admin/bot/greetings', (r) => {
+    if (r.request().method() === 'PUT') {
+      greetings = r.request().postDataJSON()
+      puts.push(['greetings', greetings.follow.enabled])
+    }
+    return r.fulfill({ json: greetings })
+  })
+  await page.locator('[data-drawer-tile="commands"]').click()
+  const drawer = page.locator('#drawer-commands')
+  await drawer.getByRole('switch', { name: zh.bot.timers.enableLabel.replace('{name}', 'Discord') }).click()
+  await expect.poll(() => puts).toEqual([['/api/admin/bot/timers/t1', true]])
+  await drawer.getByRole('switch', { name: zh.bot.greetings.enabled.replace('{name}', zh.bot.greetings.follow.name) }).click()
+  await expect.poll(() => puts.at(-1)).toEqual(['greetings', false])
+})
+
+test('a refused switch in the chat bot drawer goes back', async ({ page }) => {
+  await openHome(page, ['bot'], {}, ['commands'])
+  const timers = [{ id: 't1', name: 'Discord', message: 'join', every_minutes: 15, min_chat_lines: 5, enabled: false }]
+  await page.route('**/api/admin/bot/timers', (r) => r.fulfill({ json: timers }))
+  await page.route('**/api/admin/bot/timers/*', (r) => r.fulfill({ status: 500, json: { code: 'internal' } }))
+  await page.route('**/api/admin/bot/greetings', (r) => r.fulfill({ json: Object.fromEntries(['follow', 'first_chat', 'returning', 'sub', 'bits', 'raid'].map((k) => [k, { enabled: true, message: 'hi' }])) }))
+  await page.locator('[data-drawer-tile="commands"]').click()
+  const drawer = page.locator('#drawer-commands')
+  const timer = drawer.getByRole('switch', { name: zh.bot.timers.enableLabel.replace('{name}', 'Discord') })
+  await timer.click()
+  await expect(drawer.getByRole('alert')).toBeVisible()
+  await expect(timer).not.toBeChecked()
+})
+
+test('the chat bot drawer says why it cannot read the bot, as the pages do', async ({ page }) => {
+  await openHome(page, ['bot'], {}, ['commands'])
+  await page.route('**/api/admin/bot/timers', (r) => r.fulfill({ status: 403, json: { code: 'twitch.scope_required' } }))
+  await page.route('**/api/admin/bot/greetings', (r) => r.fulfill({ json: {} }))
+  await page.locator('[data-drawer-tile="commands"]').click()
+  await expect(page.locator('#drawer-commands').getByRole('alert')).toHaveText(zh.errors.twitch.scope_required)
+})
