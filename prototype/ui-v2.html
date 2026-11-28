@@ -364,8 +364,7 @@ body.dock-left .rail { right: auto; left: 0; border-right: 1px solid var(--s700)
 .brand[data-go]:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
 .pill .meta { color: var(--s300); font-variant-numeric: tabular-nums; }
 .pill.live { background: var(--t-red); }
-.on-air { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.125rem 0.5rem; border-radius: 999px; background: var(--t-red); color: var(--red); font-size: 0.8125rem; font-weight: 600; }
-.on-air::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--red); }
+.obs-out { padding-left: 0.5rem; border-left: 1px solid var(--s600); color: var(--red); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
 .sim-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .sim-rows li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .sim-rows .what { min-width: 8rem; font-weight: 600; }
@@ -899,6 +898,9 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.0625rem 0.375rem; bor
 .modes button { display: flex; align-items: center; gap: 0.375rem; padding: 0.3125rem 0.75rem; border: 0; border-radius: 999px; background: none; color: var(--s300); cursor: pointer; font-size: 0.875rem; }
 .modes button[aria-pressed="true"] { background: var(--s700); color: var(--s0); }
 .estop { color: var(--red); }
+/* always the top bar's last item, set apart from chat and settings by a gap and a rule so a narrow window never puts it between them */
+.topbar > .estop { position: relative; margin-left: 0.5rem; }
+.topbar > .estop::before { content: ''; position: absolute; left: -0.75rem; top: 20%; height: 60%; width: 1px; background: var(--s600); }
 .estop:hover { background: var(--t-red); color: var(--red); }
 .pq { margin-bottom: 1.75rem; }
 .pq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.375rem; }
@@ -1457,11 +1459,6 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
   .row { grid-template-columns: 1fr; }
   .row .hint { grid-column: 1; }
 }
-/* Narrow: icon buttons stay beside the brand, status pills wrap to their own line. */
-@media (max-width: 600px) {
-  .topbar .pill, .topbar > .on-air { order: 3; }
-  .topbar > .simulate-open { order: 1; }
-}
 /* ===== responsive rules (F1 F2 F3 F7 F8) ===== */
 /* F7: the top bar sizes by its own width, so docking chat squeezes it the same way as a narrow window */
 .appbar { container: top / inline-size; margin-bottom: 0.375rem; } /* the container stops the last row's margin collapsing, so it now pads inside the sticky bar */
@@ -1479,7 +1476,17 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
   .topbar { row-gap: 0.625rem; }
   .tb-break { margin-top: -0.625rem; }
   .tb-break { display: block; order: 2; flex-basis: 100%; height: 0; }
-  .topbar > .modes, .topbar > .pill, .topbar > .on-air { order: 3; }
+  .topbar > .modes, .topbar > .pill { order: 3; }
+}
+/* Narrow: icon buttons stay beside the brand, modes and status take the second line. After the rules above so it wins over them. */
+@media (max-width: 600px) {
+  .topbar { row-gap: 0; }
+  .topbar > .icon-btn { order: 1; }
+  .tb-break { display: block; order: 2; flex-basis: 100%; height: 0.5rem; margin-top: 0; } /* the break itself is the gap between the lines */
+  .topbar > .modes, .topbar .pill, .topbar > .conn-alert, .topbar > .simulate-open { order: 3; }
+  .topbar > .estop::before { left: -0.5rem; }
+  .topbar > .pill.live { gap: 0.375rem; padding-inline: 0.625rem; } /* keeps modes, status, alert and simulate on one line at 390px */
+  .obs-out { padding-left: 0.375rem; }
 }
 /* sub-tabs never wrap: one row that scrolls, faded at the edge */
 .subtabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent); }
@@ -1722,20 +1729,18 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
       <button type="button" aria-pressed="false" data-mode="聊天"><i class="pi pi-comments"></i>聊天</button>
       <button type="button" aria-pressed="false" data-mode="休息"><i class="pi pi-moon"></i>休息</button>
     </div>
-    <button class="pill live" type="button" id="live" data-open="connections"><span class="dot"></span><span id="live-text" aria-live="polite">直播中</span><span class="meta" id="live-meta"></span></button>
-    <!-- OBS's own output, apart from Twitch's live state: OBS can stream before Twitch reports live, and record without streaming -->
-    <span class="on-air">串流中</span>
-    <span class="on-air">錄影中</span>
+    <!-- one status pill: Twitch's live state, then OBS's own output, which can stream before Twitch reports live, and record without streaming -->
+    <button class="pill live" type="button" id="live" data-open="connections"><span class="dot"></span><span id="live-text" aria-live="polite">直播中</span><span class="meta" id="live-meta"></span><span class="obs-out">串流·錄影</span></button>
     <button class="pill ok" type="button" data-open="connections"><span class="dot" style="background:var(--green)"></span>Twitch 已連線</button>
     <button class="pill" type="button" data-open="connections"><span class="dot" style="background:var(--yellow)"></span>OBS 重新連線中</button>
     <button class="icon-btn" type="button" aria-label="排列" id="arrange-btn"><i class="pi pi-pencil"></i></button>
     <button class="icon-btn conn-alert" type="button" aria-label="連線有問題：OBS 重新連線中" data-go="settings" data-section-go="connections"><i class="pi pi-exclamation-triangle"></i></button>
     <button class="btn btn-text simulate-open" type="button" data-dialog="simulate"><i class="pi pi-wrench" aria-hidden="true"></i>模擬事件</button>
     <button class="icon-btn chat-mobile" type="button" id="chat-mobile-btn" aria-label="聊天室" aria-expanded="false"><i class="pi pi-comments"></i></button>
-    <button class="icon-btn estop" type="button" id="estop" aria-label="緊急停止：停掉正在播的並取消排隊中的呈現"><i class="pi pi-stop-circle"></i></button>
     <!-- prototype only: preview language, kept in the top bar so it never covers page content; hidden unless the URL has ?lang -->
     <div class="seg lang-switch" hidden role="radiogroup" aria-label="介面語言（預覽）"><label><input type="radio" name="ui-lang" value="zh" checked><span>繁中</span></label><label><input type="radio" name="ui-lang" value="en"><span>EN</span></label></div>
     <button class="icon-btn" type="button" aria-label="設定" data-go="settings"><i class="pi pi-cog"></i></button>
+    <button class="icon-btn estop" type="button" id="estop" aria-label="緊急停止：停掉正在播的並取消排隊中的呈現"><i class="pi pi-stop-circle"></i></button>
     <span class="tb-break" aria-hidden="true"></span>
   </header>
 <nav class="tabbar" aria-label="工作區">
