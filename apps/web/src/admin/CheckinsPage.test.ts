@@ -30,6 +30,19 @@ afterEach(() => {
 })
 
 describe('CheckinsPage', () => {
+  it('shows the login only when it differs from the display name by more than case', async () => {
+    const others = [
+      { ...viewer, id: 'v2', user_login: 'akai', user_name: 'Akai' },
+      { ...viewer, id: 'v3', user_login: 'akai_tw', user_name: '阿凱' },
+    ]
+    client.GET.mockResolvedValue(ok({ items: others, total: 2 }))
+    const router = testRouter([{ path: '/checkins', component: CheckinsPage }])
+    await router.push('/checkins')
+    const wrapper = mount(CheckinsPage, { global: { plugins: [router, i18n, PrimeVue] } })
+    await flushPromises()
+    expect(wrapper.findAll('.viewers .name').map((n) => n.text())).toEqual(['Akai', '阿凱 akai_tw'])
+  })
+
   it('registers the day it is when clicked, even if the page opened before midnight', async () => {
     vi.setSystemTime(new Date(2026, 10, 17, 23, 59, 30))
     const router = testRouter([{ path: '/checkins', component: CheckinsPage }])

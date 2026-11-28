@@ -27,7 +27,7 @@
     <ul v-else class="viewers">
       <li v-for="v in page.items" :key="v.id">
         <span class="name">
-          {{ v.user_name }} <span class="login">{{ v.user_login }}</span>
+          {{ v.user_name }} <span v-if="v.user_name.toLowerCase() !== v.user_login.toLowerCase()" class="login">{{ v.user_login }}</span>
         </span>
         <span>{{ t('checkin.page.totalOf', { n: v.total }) }}</span>
         <span>{{ t('checkin.deduct.available', { n: v.available }) }}</span>
