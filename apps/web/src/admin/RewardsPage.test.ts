@@ -197,3 +197,37 @@ describe('taking over a reward made in the Twitch dashboard', () => {
     expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warn', summary: t('rewards.takeover.notPaused', { name: 'Hydrate! 2' }) }))
   })
 })
+
+describe('opened from the home drawer’s 新增獎勵 (?new=1)', () => {
+  beforeAll(() => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true
+    }
+  })
+  async function openAt(path: string) {
+    const router = testRouter()
+    await router.push(path)
+    const w = mount(RewardsPage, { global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
+    await flushPromises()
+    return { w, router }
+  }
+  const dialogOpen = (w: Awaited<ReturnType<typeof open>>) => (w.get('dialog.reward-dialog').element as HTMLDialogElement).open
+
+  it('opens the add dialog once the list is read, focused from the add button, and drops the query', async () => {
+    const { w, router } = await openAt('/rewards?new=1')
+    expect(dialogOpen(w)).toBe(true)
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('does not open it for another value, when the channel is full, or when the list cannot be read', async () => {
+    expect(dialogOpen((await openAt('/rewards?new=yes')).w)).toBe(false)
+    const fifty = Array.from({ length: 50 }, (_, i) => reward(`r${i}`, `R${i}`, true))
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) => ok(path === '/api/admin/rewards' ? fifty : GETS[path])) as never)
+    expect(dialogOpen((await openAt('/rewards?new=1')).w)).toBe(false)
+    vi.spyOn(client, 'GET').mockImplementation(((path: string) =>
+      path === '/api/admin/rewards' ? refused('twitch.scope_required') : ok(GETS[path])) as never)
+    const failed = (await openAt('/rewards?new=1')).w
+    expect(dialogOpen(failed)).toBe(false)
+    expect(failed.text()).toContain(t('errors.twitch.scope_required'))
+  })
+})

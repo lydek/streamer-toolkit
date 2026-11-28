@@ -11,7 +11,7 @@
             <span v-if="rewards" class="sub">{{ t('rewards.count', { count: rewards.length, max: MAX_REWARDS, own: own.length }) }}</span>
           </div>
           <span v-if="full" class="sub">{{ t('rewards.full', { max: MAX_REWARDS }) }}</span>
-          <Button :label="t('rewards.add')" icon="pi pi-plus" :disabled="!rewards || full" @click="edit()" />
+          <Button ref="addButton" :label="t('rewards.add')" icon="pi pi-plus" :disabled="!rewards || full" @click="edit()" />
         </div>
         <p v-if="!rewards && !loadFailed" class="empty-cell">{{ t('app.loading') }}</p>
         <p v-else-if="rewards && !rewards.length" class="empty-cell">{{ t('rewards.empty') }}</p>
@@ -88,8 +88,9 @@
 import Button from 'primevue/button'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas, api, client } from './api'
 import FullPage from './FullPage.vue'
@@ -188,7 +189,21 @@ function reloadAll() {
   loadUses()
 }
 
-load().catch((e: unknown) => (loadFailed.value = message(e)))
+// 「新增獎勵」 from the home drawer comes as `?new=1`: once the list is read, and while there is room, the add dialog
+// opens as from the page's own button (focused first, so closing the dialog returns there).
+const route = useRoute()
+const router = useRouter()
+const addButton = ref<{ $el: HTMLElement }>()
+load()
+  .then(async () => {
+    if (route.query.new !== '1') return
+    await router.replace({ query: {} })
+    if (full.value) return
+    await nextTick()
+    addButton.value?.$el.focus()
+    edit()
+  })
+  .catch((e: unknown) => (loadFailed.value = message(e)))
 loadUses()
 </script>
 
