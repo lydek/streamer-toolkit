@@ -167,7 +167,7 @@ pub async fn recent_messages(
 ) -> Result<Vec<StoredMessage>, sqlx::Error> {
     let rows: Vec<(String, String, bool, String)> = sqlx::query_as(
         "SELECT twitch_message_id, sent_at, deleted, payload FROM \
-         (SELECT * FROM chat_messages ORDER BY sent_at DESC LIMIT ?) ORDER BY sent_at",
+         (SELECT * FROM chat_messages ORDER BY sent_at DESC, id DESC LIMIT ?) ORDER BY sent_at, id",
     )
     .bind(limit)
     .fetch_all(pool)
@@ -188,9 +188,9 @@ pub async fn messages_between(
     );
     push_time_range(&mut query, from, until);
     query
-        .push(" ORDER BY sent_at DESC LIMIT ")
+        .push(" ORDER BY sent_at DESC, id DESC LIMIT ")
         .push_bind(limit)
-        .push(") ORDER BY sent_at");
+        .push(") ORDER BY sent_at, id");
     let rows: Vec<(String, String, bool, String)> = query.build_query_as().fetch_all(pool).await?;
     rows.into_iter().map(stored).collect()
 }
@@ -558,6 +558,32 @@ pub(crate) mod tests {
             ["m1", "m2"]
         );
         assert_eq!(count_between(&pool, from, until).await.unwrap(), (2, from));
+    }
+
+    #[tokio::test]
+    async fn messages_from_the_same_instant_keep_the_order_they_arrived_in() {
+        let pool = pool().await;
+        let repo = SqliteChat::new(pool.clone());
+        let same = "2026-11-19T10:00:00Z";
+        for id in ["c", "a", "b"] {
+            repo.store(&[(message(id, "7", id, same), None, false)])
+                .await
+                .unwrap();
+        }
+        let ids = |v: Vec<StoredMessage>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(recent_messages(&pool, 10).await.unwrap()),
+            ["c", "a", "b"]
+        );
+        assert_eq!(ids(recent_messages(&pool, 2).await.unwrap()), ["a", "b"]);
+        assert_eq!(
+            ids(messages_between(&pool, None, None, 10).await.unwrap()),
+            ["c", "a", "b"]
+        );
+        assert_eq!(
+            ids(messages_between(&pool, None, None, 2).await.unwrap()),
+            ["a", "b"]
+        );
     }
 
     #[tokio::test]

@@ -345,10 +345,21 @@ fn param<'a>(query: &'a Option<String>, key: &str) -> Option<&'a str> {
 
 /// The current UTC time as RFC 3339, as Twitch stamps messages.
 pub(crate) fn now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    rfc3339(secs)
+    stamp(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default(),
+    )
+}
+
+/// With nanoseconds, as Twitch stamps EventSub messages, so two sent in the same second keep their order.
+fn stamp(since_epoch: Duration) -> String {
+    let whole = rfc3339(since_epoch.as_secs());
+    format!(
+        "{}.{:09}Z",
+        whole.trim_end_matches('Z'),
+        since_epoch.subsec_nanos()
+    )
 }
 
 fn rfc3339(secs: u64) -> String {
@@ -715,7 +726,12 @@ mod tests {
         assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
         assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
         assert_eq!(rfc3339(1_795_700_000), "2026-11-26T13:33:20Z");
-        assert_eq!(now().len(), 20);
+        assert_eq!(
+            stamp(Duration::new(1_795_700_000, 5)),
+            "2026-11-26T13:33:20.000000005Z"
+        );
+        assert!(stamp(Duration::new(1, 0) - Duration::from_nanos(1)) < stamp(Duration::new(1, 0)));
+        assert_eq!(now().len(), 30);
     }
 
     #[test]
