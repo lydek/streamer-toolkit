@@ -28,3 +28,26 @@ test('the counter drawer counts down and up, as the counter page does', async ({
     ['/api/admin/counters/c1/add', { delta: 1 }],
   ])
 })
+
+test('the scene drawer shows or hides the scene on air’s items, as the scene page does', async ({ page }) => {
+  const state = {
+    scene: 'Game',
+    scenes: [
+      { name: 'Opening', items: [] },
+      { name: 'Game', items: [{ id: 4, source: 'Chat overlay', kind: 'browser_source', enabled: false, locked: false }] },
+    ],
+    inputs: [],
+    streaming: false,
+    recording: false,
+  }
+  await openHome(page, ['scene'], { 'obs.state': state })
+  const puts: unknown[] = []
+  await page.route('**/api/admin/obs/item', (r) => {
+    puts.push(r.request().postDataJSON())
+    return r.fulfill({ status: 204 })
+  })
+  await page.locator('[data-drawer-tile="scene"]').click()
+  const drawer = page.locator('#drawer-scene')
+  await drawer.getByRole('switch', { name: zh.scene.showItem.replace('{item}', 'Chat overlay') }).click()
+  await expect.poll(() => puts).toEqual([{ scene: 'Game', item: 4, enabled: true }])
+})
