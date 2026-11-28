@@ -140,3 +140,13 @@ test('signed out and OBS away, the checks say so and fixing leads to the connect
   await check(page, zh.stage.checks.obs.bad).getByRole('link').click()
   await expect(page).toHaveURL(/\/settings\/connections#obs$/)
 })
+
+test('after the stream, 備份 next to 匯出本場紀錄 opens 資料與備份 with its heading focused', async ({ page }) => {
+  await open(page, { state: 'offline' }, summary('2026-11-18T14:39:00.000Z'))
+  await page.route('**/api/admin/backup/**', (r) => r.fulfill({ json: {} }))
+  const link = page.getByRole('link', { name: zh.record.backup, exact: true })
+  await expect(link).toBeVisible()
+  await link.click()
+  await expect(page).toHaveURL(/\/admin\/settings\/backup#backup$/)
+  await expect(page.locator('#backup')).toBeFocused()
+})
