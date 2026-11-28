@@ -24,6 +24,7 @@ const USAGE: &str = "usage:
   fake-services [--port <twitch port>] obs drop | obs stats [--cpu <%>] [--dropped <%>] [--kbps <n>]
                 | obs stream on|off | obs record on|off
                 | obs meters [--inputs <extra inputs>] [--interval <ms>] | obs burst scenes|items [--count <n>]
+                | obs sources <0-1000>
   fake-services [--port <twitch port>] eventsub drop
   fake-services [--port <twitch port>] poll vote --choice <n> [--count <n>] | poll end
   fake-services [--port <twitch port>] prediction bet --outcome <n> [--points <n>] [--users <n>] | prediction lock

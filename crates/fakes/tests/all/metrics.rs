@@ -288,7 +288,7 @@ async fn each_anomaly_made_on_purpose_is_flagged() {
 async fn real_clients_raise_no_warnings() {
     let f = start().await;
     f.obs.add_inputs(
-        &["Mic 2", "Music", "Game", "Webcam 2", "Overlay", "Clock"],
+        &["Mic 2", "Music 2", "Game 2", "Webcam 2", "Overlay", "Clock"],
         "wasapi_input_capture",
     );
     let (mut status, mut state, _obs) = obs_client(f.obs_port);

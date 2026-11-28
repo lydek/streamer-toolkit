@@ -166,6 +166,11 @@ struct Counters {
 
 const FPS: f64 = 60.0;
 
+/// The scene `obs sources <n>` fills, and its sources' name prefix.
+const STRESS: &str = "Stress";
+/// The most sources the stress scene holds.
+const STRESS_MAX: usize = 1000;
+
 fn uuid(n: u64) -> String {
     format!("00000000-0000-4000-8000-{n:012x}")
 }
@@ -179,7 +184,8 @@ fn db(mul: f64) -> f64 {
 }
 
 impl World {
-    /// Three scenes with a camera, a chat browser source, a logo, a microphone and desktop audio.
+    /// A collection like a real stream's: 12 scenes, 40 sources (8 with audio), 2 groups, 2 scenes used inside other
+    /// scenes, and some items hidden or locked. "Starting", "Live" and "Break" stay small for the tests.
     fn sample() -> Self {
         let mut w = World {
             scenes: Vec::new(),
@@ -205,18 +211,57 @@ impl World {
                 at: Instant::now(),
             },
         };
-        for (name, kind, audio, settings) in [
-            ("Mic", "wasapi_input_capture", true, json!({})),
-            ("Desktop Audio", "wasapi_output_capture", true, json!({})),
-            ("Camera", "dshow_input", false, json!({})),
-            ("Logo", "image_source", false, json!({})),
-            (
-                "Chat",
-                "browser_source",
-                false,
-                json!({"url": "http://127.0.0.1:47811/overlay/chat/", "width": 400, "height": 600}),
-            ),
-        ] {
+        let overlay = |path: &str, width: u32, height: u32| json!({"url": format!("http://127.0.0.1:47811/overlay/{path}/"), "width": width, "height": height});
+        let audio = [
+            ("Mic", "wasapi_input_capture"),
+            ("Desktop Audio", "wasapi_output_capture"),
+            ("Guest Mic", "wasapi_input_capture"),
+            ("Game Audio", "wasapi_process_output_capture"),
+            ("Music", "wasapi_process_output_capture"),
+            ("Discord", "wasapi_process_output_capture"),
+            ("Intro Music", "ffmpeg_source"),
+            ("BRB Music", "ffmpeg_source"),
+        ]
+        .map(|(name, kind)| (name, kind, true, json!({})));
+        let video = [
+            ("Camera", "dshow_input"),
+            ("Guest Camera", "dshow_input"),
+            ("Capture Card", "dshow_input"),
+            ("Game Capture", "game_capture"),
+            ("Display Capture", "monitor_capture"),
+            ("Browser Window", "window_capture"),
+            ("Logo", "image_source"),
+            ("Frame", "image_source"),
+            ("Background", "image_source"),
+            ("Starting Background", "image_source"),
+            ("Ending Background", "image_source"),
+            ("Webcam Border", "image_source"),
+            ("Sponsor Banner", "image_source"),
+            ("Black", "color_source_v3"),
+            ("Title Text", "text_gdiplus_v3"),
+            ("Now Playing", "text_gdiplus_v3"),
+            ("Starting Soon Text", "text_gdiplus_v3"),
+            ("Countdown", "text_gdiplus_v3"),
+            ("BRB Text", "text_gdiplus_v3"),
+            ("Ending Text", "text_gdiplus_v3"),
+            ("Socials Text", "text_gdiplus_v3"),
+        ]
+        .map(|(name, kind)| (name, kind, false, json!({})));
+        let overlays = [
+            ("Chat", overlay("chat", 400, 600)),
+            ("Alert Box", overlay("alerts", 800, 600)),
+            ("Check-in", overlay("checkin", 800, 600)),
+            ("Leaderboard", overlay("leaderboard", 400, 600)),
+            ("Poll", overlay("polls", 800, 400)),
+            ("Counter", overlay("counter", 400, 200)),
+            ("Marathon", overlay("marathon", 400, 200)),
+            ("Break Timer", overlay("break", 800, 400)),
+            ("Warnings", overlay("warnings", 800, 200)),
+            ("Sound", overlay("sound", 400, 200)),
+            ("BGM", overlay("bgm", 400, 200)),
+        ]
+        .map(|(name, settings)| (name, "browser_source", false, settings));
+        for (name, kind, audio, settings) in audio.into_iter().chain(video).chain(overlays) {
             let uuid = w.uuid();
             w.inputs.push(Input {
                 name: name.into(),
@@ -229,17 +274,110 @@ impl World {
                 monitor: "OBS_MONITORING_TYPE_NONE",
             });
         }
-        for (name, sources) in [
-            ("Starting", &["Logo"][..]),
-            ("Live", &["Camera", "Chat", "Logo"][..]),
-            ("Break", &["Logo"][..]),
-        ] {
+        // Top first, each scene's items bottom first; a leading `-` hides an item, `#` locks it.
+        let scenes: [(&str, bool, &[&str]); 14] = [
+            (
+                "Starting",
+                false,
+                &[
+                    "Starting Background",
+                    "Starting Soon Text",
+                    "Countdown",
+                    "Intro Music",
+                    "Logo",
+                ],
+            ),
+            ("Live", false, &["Camera", "Chat", "Logo"]),
+            (
+                "Game",
+                false,
+                &[
+                    "Game Capture",
+                    "Game Audio",
+                    "#Frame",
+                    "Webcam",
+                    "Now Playing",
+                    "Alerts Layer",
+                ],
+            ),
+            (
+                "Just Chatting",
+                false,
+                &[
+                    "#Background",
+                    "Camera",
+                    "Chat",
+                    "Title Text",
+                    "Music",
+                    "Sponsors",
+                    "Alerts Layer",
+                ],
+            ),
+            (
+                "Desktop",
+                false,
+                &[
+                    "Display Capture",
+                    "-Browser Window",
+                    "Music",
+                    "Alerts Layer",
+                ],
+            ),
+            (
+                "Console",
+                false,
+                &["Capture Card", "Game Audio", "#Frame", "Alerts Layer"],
+            ),
+            (
+                "Guest",
+                false,
+                &["Guest Camera", "Camera", "Guest Mic", "Discord", "-Chat"],
+            ),
+            ("Break", false, &["Logo"]),
+            (
+                "BRB",
+                false,
+                &["#Black", "BRB Text", "Break Timer", "BRB Music", "Logo"],
+            ),
+            (
+                "Ending",
+                false,
+                &[
+                    "Ending Background",
+                    "Ending Text",
+                    "Socials Text",
+                    "Sponsors",
+                ],
+            ),
+            (
+                "Alerts Layer",
+                false,
+                &["Overlays", "-Warnings", "Sound", "BGM", "Alert Box"],
+            ),
+            ("Sponsors", false, &["Sponsor Banner", "Socials Text"]),
+            ("Webcam", true, &["Camera", "Webcam Border"]),
+            (
+                "Overlays",
+                true,
+                &["Check-in", "Leaderboard", "Poll", "Counter", "Marathon"],
+            ),
+        ];
+        for (name, group, sources) in scenes {
             let uuid = w.uuid();
-            let items = sources.iter().map(|s| w.item(s)).collect();
+            let items = sources
+                .iter()
+                .map(|s| {
+                    let source = s.trim_start_matches(['-', '#']);
+                    let mut item = w.item(source);
+                    item.enabled = !s.starts_with('-');
+                    item.locked = s.starts_with('#');
+                    item
+                })
+                .collect();
             w.scenes.push(Scene {
                 name: name.into(),
                 uuid,
-                group: false,
+                group,
                 items,
             });
         }
@@ -853,6 +991,134 @@ impl World {
         })
     }
 
+    /// Creates, grows, shrinks or (at 0) removes the stress scene so it holds `n` color sources, with the events OBS
+    /// sends for each change. Events of the changes made before a failure stay in `events`.
+    fn set_stress_sources(&mut self, n: usize, events: &mut Vec<Event>) -> Result<(), String> {
+        let n = n.min(STRESS_MAX);
+        let scene = match self.scene_by_name(STRESS) {
+            Some(scene) => scene,
+            None if n == 0 => return Ok(()),
+            None => {
+                let uuid = self.uuid();
+                // A new scene goes to the bottom of OBS's list; groups are no scenes there.
+                let at = self
+                    .scenes
+                    .iter()
+                    .position(|s| s.group)
+                    .unwrap_or(self.scenes.len());
+                self.scenes.insert(
+                    at,
+                    Scene {
+                        name: STRESS.into(),
+                        uuid: uuid.clone(),
+                        group: false,
+                        items: Vec::new(),
+                    },
+                );
+                events.push((
+                    "SceneCreated",
+                    json!({"sceneName": STRESS, "sceneUuid": uuid, "isGroup": false}),
+                ));
+                at
+            }
+        };
+        // shortcut: counts every item of the stress scene as its own; one added there by hand counts too.
+        let have = self.scenes[scene].items.len();
+        for k in have + 1..=n {
+            let data = json!({"sceneName": STRESS, "inputName": format!("{STRESS} {k}"),
+                              "inputKind": "color_source_v3"});
+            self.apply("CreateInput", data, events)?;
+        }
+        for _ in n..have {
+            let Some(item) = self.scenes[scene].items.last().cloned() else {
+                break;
+            };
+            self.apply(
+                "RemoveSceneItem",
+                json!({"sceneName": STRESS, "sceneItemId": item.id}),
+                events,
+            )?;
+            self.drop_unused_input(&item.source, events);
+        }
+        if n > 0 {
+            return Ok(());
+        }
+        // OBS leaves no current scene pointing at a removed one, and takes it out of every scene that holds it.
+        let top = self
+            .scenes
+            .iter()
+            .find(|s| !s.group && s.name != STRESS)
+            .map(|s| s.name.clone())
+            .ok_or("no other scene to switch to")?;
+        if self.program == STRESS {
+            self.apply(
+                "SetCurrentProgramScene",
+                json!({ "sceneName": top }),
+                events,
+            )?;
+        }
+        if self.preview.as_deref() == Some(STRESS) {
+            self.apply(
+                "SetCurrentPreviewScene",
+                json!({ "sceneName": top }),
+                events,
+            )?;
+        }
+        let holders: Vec<(String, u64)> = self
+            .scenes
+            .iter()
+            .flat_map(|s| {
+                s.items
+                    .iter()
+                    .filter(|i| i.source == STRESS)
+                    .map(|i| (s.name.clone(), i.id))
+            })
+            .collect();
+        for (holder, id) in holders {
+            self.apply(
+                "RemoveSceneItem",
+                json!({"sceneName": holder, "sceneItemId": id}),
+                events,
+            )?;
+        }
+        let scene = self
+            .scene_by_name(STRESS)
+            .ok_or("the stress scene is gone")?;
+        let removed = self.scenes.remove(scene);
+        events.push((
+            "SceneRemoved",
+            json!({"sceneName": removed.name, "sceneUuid": removed.uuid, "isGroup": false}),
+        ));
+        Ok(())
+    }
+
+    /// Answers `request` as a connection would, keeping its events.
+    fn apply(&mut self, request: &str, data: Value, events: &mut Vec<Event>) -> Result<(), String> {
+        let (result, mut changed) = self.handle(request, &data);
+        events.append(&mut changed);
+        result.map(drop).map_err(|(_, e)| e)
+    }
+
+    /// Removes input `name` once no scene holds it, as OBS drops a source nothing uses, with `InputRemoved`.
+    fn drop_unused_input(&mut self, name: &str, events: &mut Vec<Event>) {
+        let used = self
+            .scenes
+            .iter()
+            .any(|s| s.items.iter().any(|i| i.source == name));
+        if let Some(at) = self
+            .inputs
+            .iter()
+            .position(|i| i.name == name)
+            .filter(|_| !used)
+        {
+            let input = self.inputs.remove(at);
+            events.push((
+                "InputRemoved",
+                json!({"inputName": input.name, "inputUuid": input.uuid}),
+            ));
+        }
+    }
+
     /// A new item on top of the scene.
     fn add_item(
         &mut self,
@@ -1037,6 +1303,7 @@ impl FakeObs {
             .unwrap()
             .scenes
             .iter()
+            .filter(|s| !s.group)
             .map(|s| s.name.clone())
             .collect();
         for n in 0..count.min(1000) {
@@ -1060,6 +1327,28 @@ impl FakeObs {
             }
         }
         Ok(())
+    }
+
+    /// Creates, resizes or (at 0) removes the "Stress" scene so it holds `n` sources (at most 1000), with the events
+    /// OBS sends for each change, so the app sees it without reconnecting.
+    pub fn set_stress_sources(&self, n: usize) -> Result<(), String> {
+        let mut events = Vec::new();
+        let result = self
+            .world
+            .lock()
+            .unwrap()
+            .set_stress_sources(n, &mut events);
+        for event in events {
+            self.emit(event);
+        }
+        result
+    }
+
+    /// How many sources the stress scene holds; 0 when there is none.
+    pub fn stress_sources(&self) -> usize {
+        let w = self.world.lock().unwrap();
+        w.scene_by_name(STRESS)
+            .map_or(0, |s| w.scenes[s].items.len())
     }
 
     /// What `GetStats` and `GetStreamStatus` report from now on.
@@ -1286,13 +1575,118 @@ mod tests {
             .iter()
             .map(|s| s["sceneName"].as_str().unwrap())
             .collect();
-        assert_eq!(names, ["Break", "Live", "Starting"]);
+        assert_eq!(names.len(), 12, "groups are no scenes");
+        assert_eq!(names.last(), Some(&"Starting"), "the top scene last");
         let items = w
             .handle("GetSceneItemList", &json!({"sceneName": "Live"}))
             .0
             .unwrap();
         assert_eq!(items["sceneItems"][0]["sourceName"], "Camera");
         assert_eq!(items["sceneItems"][1]["inputKind"], "browser_source");
+    }
+
+    #[test]
+    fn the_default_collection_looks_like_a_real_stream() {
+        let w = world();
+        let scenes = w.scenes.iter().filter(|s| !s.group).count();
+        let groups = w.scenes.iter().filter(|s| s.group).count();
+        let audio = w.inputs.iter().filter(|i| i.audio).count();
+        assert_eq!((scenes, groups, w.inputs.len(), audio), (12, 2, 40, 8));
+        let items = || w.scenes.iter().flat_map(|s| &s.items);
+        assert!(items().any(|i| !i.enabled) && items().any(|i| i.locked));
+        let nested: std::collections::BTreeSet<&str> = items()
+            .map(|i| i.source.as_str())
+            .filter(|source| w.scenes.iter().any(|s| !s.group && s.name == *source))
+            .collect();
+        assert_eq!(
+            nested.len(),
+            2,
+            "scenes used inside other scenes: {nested:?}"
+        );
+        for item in items() {
+            assert!(w.source(&item.source).is_some(), "{} exists", item.source);
+        }
+    }
+
+    #[test]
+    fn the_stress_scene_grows_shrinks_and_goes_with_obs_events() {
+        let mut w = world();
+        let inputs = w.inputs.len();
+        let count = |events: &[Event], kind: &str| events.iter().filter(|e| e.0 == kind).count();
+
+        let mut events = Vec::new();
+        w.set_stress_sources(300, &mut events).unwrap();
+        let stress = w.scene_by_name(STRESS).unwrap();
+        assert_eq!(w.scenes[stress].items.len(), 300);
+        assert_eq!(w.inputs.len(), inputs + 300);
+        assert_eq!(events[0].0, "SceneCreated");
+        assert_eq!(events[0].1["isGroup"], false);
+        assert_eq!(
+            (
+                count(&events, "InputCreated"),
+                count(&events, "SceneItemCreated")
+            ),
+            (300, 300)
+        );
+        assert_eq!(events.len(), 601);
+
+        w.handle("SetCurrentProgramScene", &json!({ "sceneName": STRESS }))
+            .0
+            .unwrap();
+        let mut events = Vec::new();
+        w.set_stress_sources(50, &mut events).unwrap();
+        assert_eq!(w.scenes[stress].items.len(), 50);
+        assert_eq!(w.scenes[stress].items.last().unwrap().source, "Stress 50");
+        assert_eq!(
+            (
+                count(&events, "SceneItemRemoved"),
+                count(&events, "InputRemoved")
+            ),
+            (250, 250)
+        );
+        assert_eq!(events.len(), 500);
+
+        let mut events = Vec::new();
+        w.set_stress_sources(0, &mut events).unwrap();
+        assert!(w.scene_by_name(STRESS).is_none());
+        assert_eq!(w.inputs.len(), inputs);
+        assert_eq!(
+            w.program, "Starting",
+            "the program scene moves off the removed one"
+        );
+        assert_eq!(
+            (
+                count(&events, "SceneItemRemoved"),
+                count(&events, "InputRemoved")
+            ),
+            (50, 50)
+        );
+        assert_eq!(count(&events, "CurrentProgramSceneChanged"), 1);
+        assert_eq!(events.last().unwrap().0, "SceneRemoved");
+        assert_eq!(events.len(), 102);
+
+        let mut events = Vec::new();
+        w.set_stress_sources(0, &mut events).unwrap();
+        assert!(events.is_empty(), "nothing to remove");
+        w.set_stress_sources(5000, &mut events).unwrap();
+        assert_eq!(
+            w.scenes[w.scene_by_name(STRESS).unwrap()].items.len(),
+            STRESS_MAX
+        );
+    }
+
+    #[test]
+    fn scene_bursts_switch_between_scenes_only() {
+        for count in 1..=16 {
+            let obs = FakeObs::new(None);
+            obs.burst("scenes", count).unwrap();
+            let snap = obs.snapshot();
+            assert!(
+                snap.scenes.iter().any(|s| s.name == snap.program),
+                "{} is a scene",
+                snap.program
+            );
+        }
     }
 
     #[test]
@@ -1307,13 +1701,14 @@ mod tests {
     #[test]
     fn items_move_and_report_the_new_order() {
         let mut w = world();
-        let camera = w.scenes[1].items[0].id;
+        let live = w.scene_by_name("Live").unwrap();
+        let camera = w.scenes[live].items[0].id;
         let (result, events) = w.handle(
             "SetSceneItemIndex",
             &json!({"sceneName": "Live", "sceneItemId": camera, "sceneItemIndex": 2}),
         );
         result.unwrap();
-        assert_eq!(w.scenes[1].items[2].source, "Camera");
+        assert_eq!(w.scenes[live].items[2].source, "Camera");
         assert_eq!(events[0].0, "SceneItemListReindexed");
         assert_eq!(events[0].1["sceneItems"][2]["sceneItemId"], camera);
     }

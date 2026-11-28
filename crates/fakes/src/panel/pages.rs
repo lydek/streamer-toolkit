@@ -400,6 +400,16 @@ impl Panel {
         ]
         .spacing(6)
         .align_y(Alignment::Center);
+        let stress = row![
+            text("壓力場景來源數").size(SMALL).color(MUTED),
+            text_input("", &self.stress)
+                .on_input(Message::StressCount)
+                .size(SMALL)
+                .width(56),
+            small_button("套用", command(&["obs", "sources", self.stress.trim()])),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center);
 
         let s = &o.stats;
         let stat = |label: String,
@@ -432,6 +442,7 @@ impl Panel {
         let controls = column![
             toggles,
             changes,
+            stress,
             stat(
                 format!("CPU {:.0}%", s.cpu_percent),
                 false,

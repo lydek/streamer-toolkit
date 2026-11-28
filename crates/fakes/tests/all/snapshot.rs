@@ -258,8 +258,45 @@ async fn studio_mode_and_the_program_scene_change_from_obs_itself() {
     assert!(f.obs.set_program("Nope").is_err());
     let snap = f.obs.snapshot();
     assert_eq!((snap.program.as_str(), snap.studio_mode), ("Break", true));
-    assert_eq!(snap.scenes[1].items[0].source, "Logo", "items top first");
+    let live = snap.scenes.iter().find(|s| s.name == "Live").unwrap();
+    assert_eq!(live.items[0].source, "Logo", "items top first");
     assert!(snap.audio.iter().any(|a| a.name == "Mic"));
+}
+
+#[tokio::test]
+async fn the_stress_scene_set_from_the_panel_reaches_the_app_without_reconnecting() {
+    let f = start().await;
+    let (mut status, mut state) = obs_client(f.obs_port);
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        status.wait_for(|s| s.state == ObsState::Connected),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let stress = |s: &StreamingState| {
+        s.scenes
+            .iter()
+            .find(|scene| scene.name == "Stress")
+            .map(|scene| scene.items.len())
+    };
+    // What the panel's 套用 button runs.
+    let run = |n: &str| {
+        let words: Vec<String> = ["obs", "sources", n].map(String::from).into();
+        control::run_command(&f.obs, &f.twitch, &words)
+    };
+    for (n, expected) in [("300", Some(300)), ("50", Some(50)), ("0", None)] {
+        assert_eq!(run(n).unwrap()["sources"], expected.unwrap_or(0));
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            state.wait_for(|s| stress(s) == expected),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("the app sees {n} stress sources"))
+        .unwrap();
+    }
+    assert!(run("x").is_err());
+    assert_eq!(status.borrow().state, ObsState::Connected);
 }
 
 #[tokio::test]

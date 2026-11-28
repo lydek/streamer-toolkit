@@ -81,7 +81,7 @@ async fn connects_without_a_password_and_reads_scenes_and_sources() {
         s.state == ObsState::Connected
     })
     .await;
-    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 12).await;
     let state = c.state.borrow().clone();
     assert_eq!(state.scene.as_deref(), Some("Starting"));
     // Front to back: the top item first.
@@ -101,7 +101,7 @@ async fn connects_without_a_password_and_reads_scenes_and_sources() {
 #[tokio::test]
 async fn switching_scenes_and_editing_sources_come_back_as_events() {
     let mut c = connect(fake(None).await, None);
-    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 12).await;
 
     c.control.switch_scene("Live").await.unwrap();
     until(&mut c.state, "the program scene", |s| {
@@ -164,15 +164,15 @@ async fn browser_sources_list_their_urls() {
     })
     .await;
     let sources = c.control.browser_sources().await.unwrap();
-    assert_eq!(sources.len(), 1);
-    assert_eq!(sources[0].name, "Chat");
-    assert_eq!(sources[0].url, "http://127.0.0.1:47811/overlay/chat/");
+    assert_eq!(sources.len(), 11);
+    let chat = sources.iter().find(|s| s.name == "Chat").unwrap();
+    assert_eq!(chat.url, "http://127.0.0.1:47811/overlay/chat/");
 }
 
 #[tokio::test]
 async fn studio_mode_previews_and_transitions() {
     let mut c = connect(fake(None).await, None);
-    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 12).await;
     c.control.set_studio_mode(true).await.unwrap();
     until(&mut c.state, "studio mode", |s| s.studio_mode).await;
     c.control.set_preview("Break").await.unwrap();
@@ -234,8 +234,16 @@ async fn volume_mute_and_monitoring_are_kept_and_reported() {
 #[tokio::test]
 async fn sizes_transforms_and_settings_read_back_as_written() {
     let mut c = connect(fake(None).await, None);
-    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
-    let camera = c.state.borrow().scenes[1].items.last().unwrap().id;
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 12).await;
+    let camera = c
+        .state
+        .borrow()
+        .scenes
+        .iter()
+        .find(|s| s.name == "Live")
+        .and_then(|s| s.items.iter().find(|i| i.source == "Camera"))
+        .unwrap()
+        .id;
 
     c.control
         .set_item_size(
@@ -300,7 +308,7 @@ async fn sizes_transforms_and_settings_read_back_as_written() {
 async fn stats_follow_the_set_drop_share_and_bitrate() {
     let obs = FakeObs::new(None);
     let mut c = connect(start(obs.clone()).await, None);
-    until(&mut c.state, "the scenes", |s| s.scenes.len() == 3).await;
+    until(&mut c.state, "the scenes", |s| s.scenes.len() == 12).await;
     obs.set_output(Some(true), None);
     until(&mut c.state, "streaming", |s| s.streaming).await;
     obs.set_stats(Stats {
