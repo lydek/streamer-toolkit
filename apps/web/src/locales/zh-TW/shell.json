@@ -15,6 +15,7 @@
     "label": "功能分頁",
     "sub": "子分頁",
     "more": "更多",
+    "pending": "，{n} 項待處理",
     "edit": "編輯分頁",
     "streaming": "串流中",
     "live": "直播中",

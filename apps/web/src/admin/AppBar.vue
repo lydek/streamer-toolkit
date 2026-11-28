@@ -106,7 +106,8 @@
           data-group-tab
           @click.prevent="router.push(target(g))"
         >
-          <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`) }}
+          <i :class="g.icon" aria-hidden="true"></i>{{ t(`nav.groups.${g.id}`)
+          }}<PendingCount :n="pending.countOf(g.pages.map((p) => p.path))" />
         </a>
         <!-- No built page to open (none built yet, or every built one turned off): grey, not focusable. -->
         <span v-else class="off" :hidden="i >= shown" aria-disabled="true" :title="t('home.unbuilt')" data-group-tab>
@@ -153,8 +154,8 @@
         </span>
         <RouterLink v-else v-slot="{ href, navigate }" :to="item.to" custom>
           <a :href="href" :aria-current="item.current" @click="navOpened.path = item.to!; navigate($event)"
-            ><i v-if="item.icon" :class="item.icon" aria-hidden="true"></i>{{ item.label }}</a
-          >
+            ><i v-if="item.icon" :class="item.icon" aria-hidden="true"></i>{{ item.label }}<PendingCount :n="item.pending"
+          /></a>
         </RouterLink>
       </template>
     </nav>
@@ -174,6 +175,8 @@ import { errorMessage } from '../i18n'
 import { ApiError, api, client } from './api'
 import { drawerId, useDrawer } from './drawer'
 import { clockText, errorToast, isDown, obsLight, servicesDown, twitchLight, twitchOverview, useLiveEvents } from './home'
+import PendingCount from './PendingCount.vue'
+import { usePendingCounts } from './pendingCounts'
 import StatusLight from './StatusLight.vue'
 import { summaryLight, useServices } from './services'
 import { DOCK_WIDE_QUERY, saveDock, useDock } from './dock'
@@ -194,7 +197,8 @@ const toast = useToast()
 // source when more pages need these values.
 const overview = twitchOverview
 const overviewFailed = ref(false)
-const live = useLiveEvents()
+// The tabs' waiting counts follow the same live messages (`pending` is set up once the hidden pages are known).
+const live = useLiveEvents(2000, (msg) => pending.onMessage(msg))
 
 // How long the stream has run, ticking each second, and the viewers from the last minute's check.
 const now = ref(Date.now())
@@ -263,6 +267,7 @@ watch(
 )
 // Pages of features turned off in settings are hidden, and so is a group left with none.
 const { hidden } = useModules()
+const pending = usePendingCounts(hidden)
 
 // Emergency stop: ends what plays and cancels what waits on the presentation queue; records are not touched.
 const stopping = ref(false)
@@ -304,7 +309,7 @@ const pinned = computed(() =>
 const unpinned = computed(() => groups.value.filter((g) => !pinned.value.includes(g)))
 // The second row: categories with a page left (grey when none of them is built), or a group's own pages. A
 // category is the current one while one of its pages is open; it is the page itself when that is its only page.
-const subItems = computed<{ key: string; label: string; icon?: string; to?: string; current?: 'page' | 'true' }[]>(() => {
+const subItems = computed<{ key: string; label: string; icon?: string; pending: number; to?: string; current?: 'page' | 'true' }[]>(() => {
   const g = group.value
   if (!g) return []
   if (!g.categories)
@@ -315,6 +320,7 @@ const subItems = computed<{ key: string; label: string; icon?: string; to?: stri
         label: t(p.label),
         // Home has no full page (so no icon of its own): its group's icon stands in.
         icon: p.icon ?? p.soon?.icon ?? g.icon,
+        pending: pending.countOf([p.path]),
         to: isGrey(p) ? undefined : p.path,
         current: p.path === route.path ? 'page' : undefined,
       }))
@@ -326,6 +332,7 @@ const subItems = computed<{ key: string; label: string; icon?: string; to?: stri
       key: c.id,
       label: t(`nav.categories.${c.id}`),
       icon: c.icon,
+      pending: pending.countOf(pages.map((p) => p.path)),
       to: categoryTarget(c, hidden.value, lastInCategory[c.id]),
       current: open ? (pages.length === 1 ? ('page' as const) : ('true' as const)) : undefined,
     }]
@@ -408,7 +415,8 @@ function checkSubEnd() {
   subAtEnd.value = !el || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
 }
 watch(group, () => void nextTick(checkSubEnd), { flush: 'post' })
-watch([pinned, () => tabBar.position], () => void fit())
+// A count appearing widens its tab, so the tabs that fit are measured again.
+watch([pinned, () => tabBar.position, pending.counts], () => void fit())
 
 const bar = ref<HTMLElement>()
 const scrolled = ref(false)
@@ -769,6 +777,18 @@ onBeforeUnmount(() => {
   .tabs > a[aria-current],
   .tabs > .more.current {
     color: var(--p-primary-color);
+  }
+
+  /* A waiting count sits on the icon's top right, as the prototype's bottom bar, not as a third stacked line. */
+  .tabs > a {
+    position: relative;
+  }
+
+  .tabs > a :deep(.pending-count) {
+    position: absolute;
+    top: 0.125rem;
+    left: 55%;
+    margin: 0;
   }
 
   /* The category row scrolls edge to edge; its first item lines up with the page. */

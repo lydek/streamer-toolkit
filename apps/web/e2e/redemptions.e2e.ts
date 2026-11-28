@@ -25,7 +25,9 @@ const record = (n: number, over: Partial<Schemas['RedemptionRecord']> = {}): Sch
 async function mockRecords(page: Page, answer: () => Schemas['RedemptionPage']) {
   const queries: URLSearchParams[] = []
   await page.route('**/api/admin/redemptions*', (r) => {
-    queries.push(new URL(r.request().url()).searchParams)
+    const query = new URL(r.request().url()).searchParams
+    // The tabs' waiting count (one unfulfilled record for its total) is not one of the page's reads.
+    if (!(query.get('status') === 'unfulfilled' && query.get('limit') === '1')) queries.push(query)
     return r.fulfill({ json: answer() })
   })
   return queries
