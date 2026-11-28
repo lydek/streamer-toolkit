@@ -1488,6 +1488,11 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
   .topbar > .pill.live { gap: 0.375rem; padding-inline: 0.625rem; } /* keeps modes, status, alert and simulate on one line at 390px */
   .obs-out { padding-left: 0.375rem; }
 }
+/* Smallest phones (320-375px): the logo stands for the name, so the alert and simulate join the icons and no button wraps alone */
+@container top (max-width: 21rem) {
+  .brand h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .topbar > .conn-alert, .topbar > .simulate-open { order: 1; }
+}
 /* sub-tabs never wrap: one row that scrolls, faded at the edge */
 .subtabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent); }
 .subtabs button { flex: none; white-space: nowrap; }
