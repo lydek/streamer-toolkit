@@ -176,6 +176,9 @@
     "startLabel": "開始唱：{title}",
     "removeLabel": "移除：{title}",
     "sung": "已唱歌單",
+    "copy": "複製歌名",
+    "copied": "已複製「{title}」。",
+    "copyFailed": "沒辦法複製歌名，請手動選取。",
     "nothingSung": "還沒有唱完的歌。"
   },
   "songList": {
