@@ -216,3 +216,29 @@ test('the card dots keep ten to a row on a narrow window', async ({ page }) => {
     expect(tops.size, `${width}px`).toBe(1)
   }
 })
+
+test('the drawer lists redemptions that kept failing, retries or skips them as in settings, and shows avatars', async ({ page }) => {
+  await mockAdmin(page, { modules })
+  await page.route('**/api/admin/checkin/today', (r) =>
+    r.fulfill({ json: { business_day: '2026-11-16', count: 1, recent: [{ viewer_id: 'v1', user_name: '阿凱', occurred_at: '2026-11-16T10:00:00.000Z' }] } }),
+  )
+  let dead = [{ event_id: 'e1', occurred_at: '2026-11-16T09:00:00.000Z', user_name: '小魚', reward_title: '每日打卡', error: 'database is locked' }]
+  await page.route('**/api/admin/checkin/outbox', (r) => r.fulfill({ json: { pending: 0, oldest_pending_at: null, dead_letters: dead } }))
+  const acts: string[] = []
+  await page.route('**/api/admin/checkin/outbox/*/*', (r) => {
+    acts.push(new URL(r.request().url()).pathname)
+    dead = []
+    return r.fulfill({ status: 204 })
+  })
+  await liveSocket(page)
+  await page.goto('/admin/')
+  await toLiveHome(page)
+  await page.locator('[data-drawer-tile="checkin"]').click()
+  const drawer = page.locator('#drawer-checkin')
+  await expect(drawer.locator('.recent-checkins .avatar')).toHaveText('阿')
+  await expect(drawer.getByText('database is locked')).toBeVisible()
+  await drawer.getByRole('button', { name: zh.checkin.outbox.retry }).click()
+  await expect.poll(() => acts).toEqual(['/api/admin/checkin/outbox/e1/retry'])
+  await expect(drawer.getByText('database is locked')).toHaveCount(0)
+  await expect(drawer.getByRole('heading', { name: zh.checkin.outbox.deadLetters })).toHaveCount(0)
+})
