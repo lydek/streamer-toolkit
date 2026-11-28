@@ -11740,12 +11740,25 @@
         "required": [
           "viewer_id",
           "user_name",
-          "occurred_at"
+          "occurred_at",
+          "stamps",
+          "card_slots"
         ],
         "properties": {
+          "card_slots": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
           "occurred_at": {
             "type": "string",
             "description": "RFC 3339, UTC."
+          },
+          "stamps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stamps on their current card, out of `card_slots`; from the lifetime count, as on the check-in list.",
+            "minimum": 0
           },
           "user_name": {
             "type": "string"
@@ -11928,6 +11941,7 @@
         "required": [
           "business_day",
           "count",
+          "full_today",
           "recent"
         ],
         "properties": {
@@ -11938,6 +11952,12 @@
           "count": {
             "type": "integer",
             "format": "int64",
+            "minimum": 0
+          },
+          "full_today": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of them, how many have a full card now (stamps from the lifetime count equal the card's slots); follows later\nback-fills and slot changes, as the card does.",
             "minimum": 0
           },
           "recent": {

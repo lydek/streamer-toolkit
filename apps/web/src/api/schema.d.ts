@@ -3676,8 +3676,15 @@ export interface components {
         };
         /** @description `user_name` is raw Twitch text. */
         CheckinRecent: {
+            /** Format: int32 */
+            card_slots: number;
             /** @description RFC 3339, UTC. */
             occurred_at: string;
+            /**
+             * Format: int32
+             * @description Stamps on their current card, out of `card_slots`; from the lifetime count, as on the check-in list.
+             */
+            stamps: number;
             user_name: string;
             viewer_id: string;
         };
@@ -3753,6 +3760,12 @@ export interface components {
             business_day: string;
             /** Format: int64 */
             count: number;
+            /**
+             * Format: int64
+             * @description Of them, how many have a full card now (stamps from the lifetime count equal the card's slots); follows later
+             *     back-fills and slot changes, as the card does.
+             */
+            full_today: number;
             /** @description The latest few, newest first. */
             recent: components["schemas"]["CheckinRecent"][];
         };

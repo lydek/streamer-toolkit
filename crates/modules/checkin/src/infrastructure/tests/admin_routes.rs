@@ -389,6 +389,63 @@ async fn today_counts_the_current_business_day() {
     let _ = std::fs::remove_dir_all(&a.dir);
 }
 
+#[tokio::test]
+async fn today_counts_full_cards_and_each_recent_viewers_card_from_the_lifetime_count() {
+    let a = api("today_full").await;
+    let settings = |slots: u32| serde_json::json!({ "command": "打卡", "allowed": "everyone", "time_zone": "Asia/Taipei", "reset_hour": 0, "card_slots": slots, "reward_id": null });
+    let now = Timestamp::now();
+    // Ann: an older day and today (2 in all); Bob: today only (1).
+    seed(&a.pool, "1", "Ann", "2026-01-01T01:00:00Z").await;
+    seed(&a.pool, "1", "Ann", &now.to_string()).await;
+    seed(
+        &a.pool,
+        "2",
+        "Bob",
+        &(now + SignedDuration::from_millis(1)).to_string(),
+    )
+    .await;
+    let today = |slots: u32| {
+        let app = a.app.clone();
+        let body = settings(slots);
+        async move {
+            let (status, _) = call(&app, "PUT", "/api/admin/checkin/settings", Some(body)).await;
+            assert_eq!(status, 200);
+            call(&app, "GET", "/api/admin/checkin/today", None).await.1
+        }
+    };
+    let cards = |body: &serde_json::Value| -> Vec<(String, u64, u64)> {
+        body["recent"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["user_name"].as_str().unwrap().to_owned(),
+                    r["stamps"].as_u64().unwrap(),
+                    r["card_slots"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    // Two slots: Ann's card is full (2/2), Bob's is not (1/2).
+    let body = today(2).await;
+    assert_eq!(body["full_today"], 1);
+    assert_eq!(
+        cards(&body),
+        [("Bob".to_owned(), 1, 2), ("Ann".to_owned(), 2, 2)]
+    );
+    // Changing the slots counts again at once: with three, nobody is full.
+    let body = today(3).await;
+    assert_eq!(body["full_today"], 0);
+    assert_eq!(
+        cards(&body),
+        [("Bob".to_owned(), 1, 3), ("Ann".to_owned(), 2, 3)]
+    );
+    // With one slot every check-in fills a card.
+    assert_eq!(today(1).await["full_today"], 2);
+    let _ = std::fs::remove_dir_all(&a.dir);
+}
+
 async fn post_raw(app: &axum::Router, uri: &str, body: String) -> (u16, serde_json::Value) {
     let req = Request::builder()
         .method("POST")

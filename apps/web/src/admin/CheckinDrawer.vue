@@ -25,11 +25,15 @@
       <p v-if="today.state === 'failed'" role="alert">{{ t('checkin.page.loadFailed') }}</p>
       <p v-else-if="today.state === 'loading'">{{ t('app.loading') }}</p>
       <template v-else-if="today.state === 'ready'">
-        <p>{{ t('checkin.today', { n: today.today.count }) }}</p>
+        <p>
+          {{ t('checkin.today', { n: today.today.count }) }}
+          <span class="full">{{ t('checkin.fullToday', { n: today.today.full_today }) }}</span>
+        </p>
         <ul v-if="today.today.recent.length" class="recent-checkins">
           <li v-for="r in today.today.recent" :key="r.viewer_id">
             <span class="avatar" aria-hidden="true">{{ Array.from(r.user_name)[0] ?? '' }}</span>
             <span class="who">{{ r.user_name }}</span>
+            <span class="card">{{ r.stamps }}/{{ r.card_slots }}</span>
             <time :datetime="r.occurred_at">{{ formatTime(r.occurred_at) }}</time>
           </li>
         </ul>
@@ -98,8 +102,17 @@ const sendCheckin = () =>
   overflow-wrap: anywhere;
 }
 
-time {
+time,
+.full {
   color: var(--p-text-muted-color);
   font-size: 0.8125rem;
+}
+
+.full {
+  margin-inline-start: 0.5rem;
+}
+
+.card {
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -160,6 +160,9 @@ pub struct CheckinToday {
     /// `YYYY-MM-DD`.
     pub business_day: String,
     pub count: u64,
+    /// Of them, how many have a full card now (stamps from the lifetime count equal the card's slots); follows later
+    /// back-fills and slot changes, as the card does.
+    pub full_today: u64,
     /// The latest few, newest first.
     pub recent: Vec<CheckinRecent>,
 }
@@ -171,6 +174,9 @@ pub struct CheckinRecent {
     pub user_name: String,
     /// RFC 3339, UTC.
     pub occurred_at: String,
+    /// Stamps on their current card, out of `card_slots`; from the lifetime count, as on the check-in list.
+    pub stamps: u32,
+    pub card_slots: u32,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -435,17 +441,26 @@ pub(crate) async fn list_viewers(
     )
 )]
 pub(crate) async fn today(State(s): State<Arc<HttpState>>) -> Response {
-    let day = s.service.config().rules().day.day_of(Timestamp::now());
+    let rules = s.service.config().rules();
+    let (day, slots) = (rules.day.day_of(Timestamp::now()), rules.slots);
     match db::day_summary(&s.pool, day, RECENT).await {
-        Ok((count, recent)) => Json(CheckinToday {
+        Ok(summary) => Json(CheckinToday {
             business_day: day.to_string(),
-            count,
-            recent: recent
+            count: summary.count,
+            full_today: summary
+                .totals
+                .iter()
+                .filter(|t| slots.stamps(**t) == slots.get())
+                .count() as u64,
+            recent: summary
+                .recent
                 .into_iter()
-                .map(|(viewer_id, user_name, occurred_at)| CheckinRecent {
+                .map(|(viewer_id, user_name, occurred_at, total)| CheckinRecent {
                     viewer_id,
                     user_name,
                     occurred_at,
+                    stamps: slots.stamps(total),
+                    card_slots: slots.get(),
                 })
                 .collect(),
         })

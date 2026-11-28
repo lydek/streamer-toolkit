@@ -162,36 +162,63 @@ pub async fn top_checkins(
         .collect())
 }
 
-/// How many viewers checked in on `day`, and the latest `recent` of them (viewer ID, name, time).
+/// One business day's check-ins: how many, the latest `recent` (viewer, name, time, lifetime total) and every
+/// lifetime total of the viewers who checked in that day (imported baselines included), for the cards they fill.
+pub(crate) struct DaySummary {
+    pub(crate) count: u64,
+    pub(crate) recent: Vec<(String, String, String, u64)>,
+    pub(crate) totals: Vec<u64>,
+}
+
+/// A viewer's lifetime total, as the check-in list counts it.
+macro_rules! lifetime_total {
+    () => {
+        "v.baseline_total + (SELECT COUNT(*) FROM checkin_records x WHERE x.viewer_id = v.id)"
+    };
+}
+
 pub(crate) async fn day_summary(
     pool: &SqlitePool,
     day: jiff::civil::Date,
     recent: u32,
-) -> Result<(u64, Vec<(String, String, String)>), RepositoryError> {
+) -> Result<DaySummary, RepositoryError> {
     let day = day.to_string();
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM checkin_records WHERE business_day = ?")
-            .bind(&day)
-            .fetch_one(pool)
-            .await
-            .map_err(storage)?;
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT v.id, v.user_name, r.occurred_at FROM checkin_records r JOIN checkin_viewers v ON v.id = r.viewer_id \
-         WHERE r.business_day = ? ORDER BY r.occurred_at DESC, r.id DESC LIMIT ?",
-    )
+    let rows: Vec<(String, String, String, i64)> = sqlx::query_as(concat!(
+        "SELECT v.id, v.user_name, r.occurred_at, ",
+        lifetime_total!(),
+        " FROM checkin_records r JOIN checkin_viewers v ON v.id = r.viewer_id",
+        " WHERE r.business_day = ? ORDER BY r.occurred_at DESC, r.id DESC LIMIT ?"
+    ))
     .bind(&day)
     .bind(i64::from(recent))
     .fetch_all(pool)
     .await
     .map_err(storage)?;
-    let rows = rows
+    let totals: Vec<i64> = sqlx::query_scalar(concat!(
+        "SELECT ",
+        lifetime_total!(),
+        " FROM checkin_records r JOIN checkin_viewers v ON v.id = r.viewer_id WHERE r.business_day = ?"
+    ))
+    .bind(&day)
+    .fetch_all(pool)
+    .await
+    .map_err(storage)?;
+    let recent = rows
         .into_iter()
-        .map(|(id, name, at)| {
+        .map(|(id, name, at, total)| {
             let at = at.parse::<Timestamp>().map(time::millis).unwrap_or(at);
-            (id, name, at)
+            (id, name, at, u64::try_from(total).unwrap_or(0))
         })
         .collect();
-    Ok((u64::try_from(count).unwrap_or(0), rows))
+    Ok(DaySummary {
+        // One total per check-in that day, so the count and the full cards come from the same read.
+        count: totals.len() as u64,
+        recent,
+        totals: totals
+            .into_iter()
+            .map(|t| u64::try_from(t).unwrap_or(0))
+            .collect(),
+    })
 }
 
 fn storage(e: impl std::fmt::Display) -> RepositoryError {
