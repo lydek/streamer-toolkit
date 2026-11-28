@@ -5,6 +5,11 @@
     "tested": "已送出測試特效。",
     "empty": "還沒有特效",
     "recent": {
+      "cols": {
+        "when": "時間",
+        "what": "事件",
+        "outcome": "結果"
+      },
       "title": "最近事件",
       "empty": "這次啟動後還沒有特效。",
       "simulated": "模擬",
