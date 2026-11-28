@@ -115,7 +115,9 @@ mod tests {
     use std::time::Duration;
     use toolkit_core::events::{LiveStream, StreamChange};
 
-    async fn next_status(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> serde_json::Value {
+    async fn next_status(
+        rx: &mut tokio::sync::broadcast::Receiver<toolkit_core::bus::Published>,
+    ) -> serde_json::Value {
         let text = tokio::time::timeout(Duration::from_secs(5), rx.recv())
             .await
             .unwrap()

@@ -197,7 +197,7 @@ mod tests {
         std::path::PathBuf,
         Arc<Modules>,
         AlertsService,
-        broadcast::Receiver<Arc<str>>,
+        broadcast::Receiver<toolkit_core::bus::Published>,
     ) {
         let dir = std::env::temp_dir().join(format!("st-alerts-{name}-{}", std::process::id()));
         let bus = Arc::new(EventBus::default());
@@ -223,7 +223,7 @@ mod tests {
     const SOUND_ID: &str = "0190a5b0-0000-7000-8000-000000000001";
 
     /// The next alert handed to the overlays (announcements skipped).
-    async fn next(rx: &mut broadcast::Receiver<Arc<str>>) -> Value {
+    async fn next(rx: &mut broadcast::Receiver<toolkit_core::bus::Published>) -> Value {
         loop {
             let event: Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
             if event["type"] == "alert" {

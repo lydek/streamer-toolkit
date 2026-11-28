@@ -566,7 +566,7 @@ mod tests {
         );
         let now = Timestamp::now().to_string();
         let (_, mut rx) = bus.subscribe();
-        let next = |rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>| {
+        let next = |rx: &mut tokio::sync::broadcast::Receiver<toolkit_core::bus::Published>| {
             serde_json::from_str::<serde_json::Value>(&rx.try_recv().unwrap()).unwrap()
         };
 

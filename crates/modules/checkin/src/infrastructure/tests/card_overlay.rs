@@ -34,7 +34,7 @@ impl ProfileImages for FixedProfile {
 }
 
 async fn next_card(
-    rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>,
+    rx: &mut tokio::sync::broadcast::Receiver<toolkit_core::bus::Published>,
 ) -> (serde_json::Value, std::time::Instant) {
     loop {
         let text = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())

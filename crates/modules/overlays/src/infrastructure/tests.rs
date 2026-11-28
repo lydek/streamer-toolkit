@@ -540,7 +540,9 @@ fn redemption(
 }
 
 /// Every `screen.media` event published so far, as (source, payload).
-fn media_events(events: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<(String, Value)> {
+fn media_events(
+    events: &mut tokio::sync::broadcast::Receiver<toolkit_core::bus::Published>,
+) -> Vec<(String, Value)> {
     let mut out = Vec::new();
     while let Ok(text) = events.try_recv() {
         let v: Value = serde_json::from_str(&text).unwrap();

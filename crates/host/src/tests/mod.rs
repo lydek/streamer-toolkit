@@ -2,12 +2,12 @@ use super::*;
 use integrations::secrets::SecretStoreError;
 use tower::ServiceExt;
 
-mod admin_socket;
 mod backup_routes;
 mod chat_routes;
 mod feature_routes;
 mod guard;
 mod settings_routes;
+mod sockets;
 mod template_routes;
 mod twitch_write_routes;
 
