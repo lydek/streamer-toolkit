@@ -66,8 +66,10 @@ test('the app bar stays in view while the page scrolls', async ({ page }) => {
   await openAdmin(page)
   // The feature list is the longest settings section.
   await page.goto('/admin/settings/features')
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  // The page loads on first visit, so the list may not be there yet: scroll until it is.
+  await expect
+    .poll(() => page.evaluate(() => (window.scrollTo(0, document.documentElement.scrollHeight), window.scrollY)))
+    .toBeGreaterThan(0)
   await expect(tabs(page)).toBeInViewport()
   await expect(page.getByRole('button', { name: /^OBS：/ })).toBeInViewport()
 })
@@ -103,6 +105,8 @@ test('"More" shows only when the groups do not fit, and holds the ones that do n
 test('away from home, a status light goes to its section of settings', async ({ page }) => {
   await openAdmin(page)
   await tab(page, 'chat').click()
+  // Until the chat page has loaded the route is still home, where the light opens the drawer instead.
+  await expect(page).toHaveURL(/\/admin\/chat-log$/)
   await page.getByRole('button', { name: /^OBS：/ }).click()
   await expect(page).toHaveURL(/\/admin\/settings\/connections#obs$/)
   await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
@@ -123,7 +127,7 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
   await expect(banner.getByText(zh.nav.recording)).toHaveCount(0)
 
   const state = { scene: 'Live', scenes: [], inputs: [], streaming: true, recording: true }
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(
       JSON.stringify({
         type: 'snapshot',
@@ -147,7 +151,7 @@ test('the app bar says when OBS is streaming or recording, and says nothing whil
 async function openWithStream(page: Page, stream: unknown) {
   await mockAdmin(page)
   const status = { id: 'l', type: 'stream.status', version: 1, seq: 1, occurredAt: '', source: 'twitch', payload: stream }
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(
       JSON.stringify({
         type: 'snapshot',
@@ -221,7 +225,7 @@ test('when every connection is fine, a narrower bar shows one "connected" light'
   await page.setViewportSize({ width: 1024, height: 700 })
   await mockAdmin(page, { overview: { client_id: 'cid', status: { state: 'signed_in', user_id: '42', login: 'me' } } })
   const obs = { id: 'o1', type: 'obs.status', version: 1, seq: 1, occurredAt: '2026-11-18T10:00:00.000Z', source: 'obs', payload: { state: 'connected', reason: null } }
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload: { 'chat.message': [], 'obs.status': [obs], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] } })),
   )
   await page.goto('/admin/')
@@ -343,5 +347,5 @@ test('the tab bar can sit at the bottom, also after a restart, and restoring the
   await tabs(page).getByRole('button', { name: zh.nav.edit }).click()
   await page.getByRole('dialog', { name: zh.nav.editor.title }).getByRole('button', { name: zh.nav.editor.restore }).click()
   await expect.poll(() => puts).toEqual([null])
-  expect(Math.round((await tabs(page).boundingBox())!.y)).toBeLessThan(200)
+  await expect.poll(async () => Math.round((await tabs(page).boundingBox())!.y)).toBeLessThan(200)
 })
