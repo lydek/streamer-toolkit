@@ -1,4 +1,4 @@
-// The docked chat panel: docked and saved on wide windows, a slide-in panel below 1000px (API and `/ws/overlay` mocked).
+// The docked chat panel: docked and saved on wide windows, a slide-in panel below 1000px (API and `/ws/admin` mocked).
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
 
@@ -22,7 +22,7 @@ async function open(page: Page, saved: { open: boolean; width: number } | null =
     puts.push(saved)
     return r.fulfill({ status: 204 })
   })
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(
       JSON.stringify({
         type: 'snapshot',
@@ -138,7 +138,7 @@ test('events lists every alert that arrived, even one no OBS overlay plays', asy
     source: 'twitch',
     payload: { kind: 'follow', userId: '7', userLogin: 'fan', userName: 'Fan', durationMs: 6000, sound: { kind: 'built_in', volume: 100 } },
   }
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
     ws.send(
       JSON.stringify({
         type: 'snapshot',
@@ -168,7 +168,7 @@ test('chat from before a restart shows first, and a message a moderator deletes 
   )
   // Each part of the page opens its own socket; the removal goes to all of them.
   const sockets: { send: (m: string) => void }[] = []
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
     sockets.push(ws)
     ws.send(
       JSON.stringify({
@@ -212,7 +212,7 @@ test('badge images, shared chat with 只看本頻道, and display settings that 
     ...chat(2, 'Neko', 'hi from the other channel'),
     payload: { ...chat(2, 'Neko', 'hi from the other channel').payload, sharedFrom: { userId: '99', userLogin: 'pianocat', userName: 'PianoCat' } },
   }
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) =>
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
     ws.send(
       JSON.stringify({
         type: 'snapshot',

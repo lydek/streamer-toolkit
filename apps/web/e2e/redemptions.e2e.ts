@@ -1,5 +1,5 @@
 // Redemption records: the home tile and drawer, and the full page's filters, pages and live refresh, with the admin
-// API and `/ws/overlay` mocked (filtering itself is tested on real SQLite in crates/modules/redemption).
+// API and `/ws/admin` mocked (filtering itself is tested on real SQLite in crates/modules/redemption).
 import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import type { components } from '../src/api/schema'
 import { mockAdmin, openAdmin, scrollsSideways, toLiveHome, zh } from './fixtures'
@@ -31,10 +31,10 @@ async function mockRecords(page: Page, answer: () => Schemas['RedemptionPage']) 
   return queries
 }
 
-/** `/ws/overlay` with a handle to push events later. */
+/** `/ws/admin` with a handle to push events later. */
 async function liveSocket(page: Page) {
   let socket: WebSocketRoute | undefined
-  await page.routeWebSocket(/\/ws\/overlay$/, (ws) => {
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
     socket = ws
     ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 0, payload: { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] } }))
   })

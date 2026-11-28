@@ -93,7 +93,7 @@ CI 依改到的檔案跳過的 job（規則和理由在 `scripts/ci-changes.mjs`
 - UI E2E（`apps/web/e2e/`，Playwright＋Chromium）：
   - 什麼時候跑：不在 PR 的 CI 與 pre-push 裡（它是最慢的一步）。在 GitHub Actions 手動觸發「UI E2E」workflow（`.github/workflows/e2e.yml`），發佈流程建置 zip 前也會先跑，失敗就不發佈。改到管理 UI、Overlay 或 E2E 時，push 前在本機跑一次。Rust 與前端的單元、整合測試仍是每個 PR 的必要檢查，因為它們守住資料規則。
   - 本機執行：先 `pnpm web:build`（Host 內嵌 `apps/web/dist`），再 `pnpm web:e2e`；第一次要先裝 Chromium（見上方「環境」）。
-  - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/overlay` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 只放假的 token，不放任何真的 token 或 secret；Vite 送出與 Host 相同的 CSP，E2E 在這份 CSP 下執行（Host 實際送出的標頭由 `crates/host` 的 Rust 測試涵蓋）。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
+  - 管理 UI 跑在 Vite dev server 上，管理 API 用 `page.route`、`/ws/admin` 用 `page.routeWebSocket`、Tauri IPC 用 `e2e/fixtures.ts` 的假 `invoke` 代替；fixture 只放假的 token，不放任何真的 token 或 secret；Vite 送出與 Host 相同的 CSP，E2E 在這份 CSP 下執行（Host 實際送出的標頭由 `crates/host` 的 Rust 測試涵蓋）。還沒有實際功能用到的抽屜行為（設定欄位、下拉選單、「開啟完整頁」）在 `e2e/harness/` 的測試頁上測。
   - Overlay 對真的 Host 測：`crates/host/examples/e2e_host.rs` 在暫存資料夾啟動 Host（隨機管理 token、假的 secret 儲存、Twitch 與 OBS 都指向沒有服務的位址）。這些測試共用同一個 Host，標上 `@host`，在 Playwright 的 `host` project 一次只跑一個；其他測試在 `admin` project 平行跑。
   - 能用單元測試測的判斷照樣寫單元測試，E2E 不重複。
 - 架構測試（`crates/arch-tests`）：`domain/` 內沒有任何 `sqlx`／`axum` 字樣；`application/` 不使用 `infrastructure`；crate 相依方向正確：模組只依賴共用核心（`crates/core`，package 名稱 `toolkit-core`）與其他模組的公開介面，不依賴 `integrations` 與 `host`；模組不引用其他模組的非公開型別（規則見 [architecture.md](architecture.md)）。

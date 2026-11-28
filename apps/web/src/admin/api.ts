@@ -17,17 +17,21 @@ export class ApiError extends Error {
   }
 }
 
+/** This launch's admin token. A failed fetch is not cached, so the next call asks again. */
+export function adminToken(): Promise<string> {
+  token ??= invoke<string>('get_admin_token').catch((e) => {
+    token = undefined
+    throw e
+  })
+  return token
+}
+
 /** Typed admin API client; paths, bodies and responses come from the Host's OpenAPI document. */
 export const client = createClient<paths>()
 
 client.use({
   async onRequest({ request }) {
-    // A failed fetch is not cached, so the next call asks again.
-    token ??= invoke<string>('get_admin_token').catch((e) => {
-      token = undefined
-      throw e
-    })
-    request.headers.set('Authorization', `Bearer ${await token}`)
+    request.headers.set('Authorization', `Bearer ${await adminToken()}`)
     return request
   },
 })

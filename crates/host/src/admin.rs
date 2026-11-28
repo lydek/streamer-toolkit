@@ -371,13 +371,18 @@ pub(crate) async fn require_token(
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .is_some_and(|given| {
-            constant_time_eq(given.as_bytes(), s.token.expose_secret().as_bytes())
-        });
+        .is_some_and(|given| s.token_matches(given));
     if !ok {
         return StatusCode::UNAUTHORIZED.into_response();
     }
     next.run(req).await
+}
+
+impl AdminState {
+    /// Whether `given` is this launch's admin token, compared in constant time.
+    pub(crate) fn token_matches(&self, given: &str) -> bool {
+        constant_time_eq(given.as_bytes(), self.token.expose_secret().as_bytes())
+    }
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {

@@ -1,6 +1,6 @@
 import { onScopeDispose, reactive, shallowRef, watch } from 'vue'
 import { removes, type Incoming } from '../overlay/chat/chat'
-import type { Schemas } from './api'
+import { adminToken, type Schemas } from './api'
 import { SOON_PAGES } from './tabs'
 
 /** The Twitch status the app bar polls every 2 s (undefined until its first answer); read it instead of polling again. */
@@ -209,8 +209,8 @@ export function applyLive(state: LiveState, msg: Incoming): LiveState {
 }
 
 /**
- * Connects to `/ws/overlay` (read-only, no token) and reconnects until the calling scope ends.
- * `onMessage` also gets every message, snapshots after a reconnect included.
+ * Connects to `/ws/admin`, sends the admin token as the first message (on every reconnect too), and reconnects until
+ * the calling scope ends. `onMessage` also gets every message, snapshots after a reconnect included.
  */
 export function useLiveEvents(retryMs = 2000, onMessage?: (msg: Incoming) => void) {
   const state = shallowRef<LiveState>({ status: 'loading', lastSeq: 0 })
@@ -218,13 +218,20 @@ export function useLiveEvents(retryMs = 2000, onMessage?: (msg: Incoming) => voi
   let retry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   function connect() {
-    ws = new WebSocket(`ws://${location.host}/ws/overlay`)
-    ws.onmessage = (e) => {
+    const socket = new WebSocket(`ws://${location.host}/ws/admin`)
+    ws = socket
+    // The Host sends nothing until the token checks out; without one it closes the socket, and the retry asks again.
+    socket.onopen = () =>
+      adminToken().then(
+        (token) => socket.readyState === socket.OPEN && socket.send(token),
+        () => socket.close(),
+      )
+    socket.onmessage = (e) => {
       const msg = JSON.parse(e.data) as Incoming
       state.value = applyLive(state.value, msg)
       onMessage?.(msg)
     }
-    ws.onclose = () => {
+    socket.onclose = () => {
       // Drop what was known: the reconnect snapshot brings the current values.
       state.value = { status: 'failed', lastSeq: 0 }
       if (!stopped) retry = setTimeout(connect, retryMs)

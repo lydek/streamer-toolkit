@@ -1,5 +1,5 @@
 // The chat log page: 即時 and past periods, filters, search, hiding bots and 在 Twitch 開啟 (API, IPC and
-// `/ws/overlay` mocked).
+// `/ws/admin` mocked).
 import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import { invokes, mockAdmin, zh } from './fixtures'
 
@@ -51,7 +51,7 @@ async function open(page: Page, sockets?: WebSocketRoute[], removals: object[] =
     })
   })
   if (sockets) {
-    await page.routeWebSocket('**/ws/overlay', ws => {
+    await page.routeWebSocket('**/ws/admin', ws => {
       sockets.push(ws)
       ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 10, payload: {
         'chat.message': messages, 'chat.removed': removals, 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],

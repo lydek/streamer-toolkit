@@ -648,6 +648,14 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     }),
             )
             .merge(
+                Router::new()
+                    .route("/ws/admin", get(overlay::admin_ws))
+                    .with_state(overlay::AdminSocketState {
+                        bus: bus.clone(),
+                        admin: admin.clone(),
+                    }),
+            )
+            .merge(
                 overlay::admin_routes(overlays).layer(middleware::from_fn_with_state(
                     admin.clone(),
                     admin::require_token,
