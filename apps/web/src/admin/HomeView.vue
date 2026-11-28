@@ -195,309 +195,75 @@
 
     </main>
 
-    <AppDrawer id="connections" :title="t('home.connections')">
-      <template #now>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-        <h4>{{ t('twitch.heading') }}</h4>
-        <TwitchSignIn :overview="overview" :busy="busy" :run="run" />
-
-        <h4>OBS</h4>
-        <p>
-          {{ t(obs.key) }}
-          <template v-if="live.obs?.reason">— {{ errorMessage(live.obs.reason) }}</template>
-        </p>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="chat" :title="moduleName('chat')" full-page="/chat">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/chat/" />
-        <form @submit.prevent="sendChat">
-          <p>{{ t('simulate.hint') }}</p>
-          <label for="sim-user">{{ t('simulate.userName') }}</label>
-          <InputText id="sim-user" v-model="simUser" autocomplete="off" maxlength="25" />
-          <label for="sim-text">{{ t('simulate.text') }}</label>
-          <InputText id="sim-text" v-model="simText" autocomplete="off" maxlength="500" required />
-          <Button type="submit" :label="t('simulate.send')" icon="pi pi-send" :disabled="busy" />
-        </form>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <ChatNow v-model:log="chatLog" :broadcaster-id="broadcasterId" :disconnected="live.status === 'failed'" />
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="alerts" :title="moduleName('alerts')" full-page="/alerts">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/alerts/" />
-        <form @submit.prevent="sendAlert">
-          <p>{{ t('simulate.hint') }}</p>
-          <span id="sim-kind">{{ t('simulate.kind') }}</span>
-          <SelectButton
-            v-model="simAlert.kind"
-            :options="ALERT_KINDS"
-            :option-label="(k: AlertKind) => t(`alerts.kinds.${k}`)"
-            :allow-empty="false"
-            aria-labelledby="sim-kind"
-          />
-          <label for="sim-alert-user">{{ t('simulate.userName') }}</label>
-          <InputText id="sim-alert-user" v-model="simAlert.userName" autocomplete="off" maxlength="25" />
-          <template v-if="simAlert.kind in AMOUNT_MAX">
-            <label for="sim-amount">{{ t(`alerts.amount.${simAlert.kind}`) }}</label>
-            <InputNumber
-              v-model="simAlert.amount"
-              input-id="sim-amount"
-              :min="1"
-              :max="AMOUNT_MAX[simAlert.kind]"
-              :use-grouping="false"
-              required
-            />
-          </template>
-          <template v-if="simAlert.kind === 'resubscribe' || simAlert.kind === 'cheer'">
-            <label for="sim-alert-message">{{ t('simulate.message') }}</label>
-            <InputText id="sim-alert-message" v-model="simAlert.message" autocomplete="off" maxlength="500" />
-          </template>
-          <Button type="submit" :label="t('simulate.sendAlert')" icon="pi pi-send" :disabled="busy" />
-        </form>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="redemption" :title="moduleName('redemption')" full-page="/redemptions">
-      <template #now>
-        <p v-if="recent.state === 'failed'" role="alert">{{ t('redemption.loadFailed') }}</p>
-        <p v-else-if="recent.state === 'loading'">{{ t('app.loading') }}</p>
-        <RedemptionList v-else-if="recent.state === 'ready'" :records="recent.items" :empty="t('redemption.empty')" />
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="checkin" :title="moduleName('checkin')" full-page="/checkin">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/checkin/" />
-        <form @submit.prevent="sendCheckin">
-          <p>{{ t('simulate.hint') }}</p>
-          <label for="sim-checkin-user">{{ t('simulate.userName') }}</label>
-          <InputText id="sim-checkin-user" v-model="simCheckin.userName" autocomplete="off" maxlength="25" />
-          <label for="sim-checkin-stamps">{{ t('simulate.stamps') }}</label>
-          <InputNumber
-            v-model="simCheckin.stamps"
-            input-id="sim-checkin-stamps"
-            :min="1"
-            :max="100"
-            :use-grouping="false"
-            required
-          />
-          <Button type="submit" :label="t('simulate.sendCheckin')" icon="pi pi-send" :disabled="busy" />
-        </form>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <p v-if="checkinToday.state === 'failed'" role="alert">{{ t('checkin.page.loadFailed') }}</p>
-        <p v-else-if="checkinToday.state === 'loading'">{{ t('app.loading') }}</p>
-        <template v-else-if="checkinToday.state === 'ready'">
-          <p>{{ t('checkin.today', { n: checkinToday.today.count }) }}</p>
-          <ul v-if="checkinToday.today.recent.length" class="recent-checkins">
-            <li v-for="r in checkinToday.today.recent" :key="r.viewer_id">
-              <time :datetime="r.occurred_at">{{ formatTime(r.occurred_at) }}</time> {{ r.user_name }}
-            </li>
-          </ul>
-        </template>
-      </template>
-    </AppDrawer>
-
+    <!-- Each drawer is its own component; they share this page's notice, run and busy (homeDrawer.ts). -->
+    <ConnectionsDrawer :overview="overview" :live="live" />
+    <ChatDrawer v-model:log="chatLog" :title="moduleName('chat')" :broadcaster-id="broadcasterId" :disconnected="live.status === 'failed'" />
+    <AlertsDrawer :title="moduleName('alerts')" />
+    <RedemptionDrawer :title="moduleName('redemption')" :recent="recent" />
+    <CheckinDrawer :title="moduleName('checkin')" :today="checkinToday" />
     <!-- 呈現佇列 opens a drawer like the other tiles; the queue's own heading gives way to the drawer's title. -->
     <AppDrawer id="queue" :title="moduleName('queue')">
       <template #now>
         <QueueArea :status="live.queue" in-drawer />
       </template>
     </AppDrawer>
-
-    <AppDrawer id="sound" :title="moduleName('sound')" full-page="/sounds">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/sound/" />
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <p v-if="sounds.state === 'failed'" role="alert">{{ t('sound.loadFailed') }}</p>
-        <p v-else-if="sounds.state === 'loading'">{{ t('app.loading') }}</p>
-        <template v-else-if="sounds.state === 'ready'">
-          <p v-if="!sounds.items.length">{{ t('sound.empty') }}</p>
-          <ul v-else class="plain sound-list">
-            <li v-for="s in sounds.items" :key="s.id">{{ s.label }}</li>
-          </ul>
-        </template>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="scene" :title="moduleName('scene')" full-page="/scenes">
-      <template #actions>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <SceneList v-if="obsReady(live.obsState)" :state="live.obsState" @error="drawerFailed" />
-        <p v-else>{{ t('scene.notConnected') }}</p>
-      </template>
-    </AppDrawer>
-
-    <!-- 音訊混音, compact: the live scene's inputs with level, fader and mute (monitoring is on its page). -->
-    <AppDrawer id="mixer" :title="moduleName('mixer')" full-page="/mixer">
-      <template #now>
-        <template v-if="obsReady(live.obsState)">
-          <p>
-            <span class="tag">{{ t('scene.onAir') }}</span> <b>{{ live.obsState.scene }}</b>
-          </p>
-          <p v-if="!mixLive.length">{{ t('mixer.none') }}</p>
-          <ul class="plain mix-list">
-            <MixerRow v-for="i in mixLive" :key="i.name" :input="i" :level="meters.get(i.name)" :mic="i.name === mic" compact />
-          </ul>
-        </template>
-        <p v-else>{{ t('scene.notConnected') }}</p>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="counter" :title="moduleName('counter')" full-page="/counters">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/counter/" />
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <p v-if="!live.counters">{{ t('app.loading') }}</p>
-        <p v-else-if="!live.counters.length">{{ t('counter.empty') }}</p>
-        <ul v-else class="plain counter-list">
-          <li v-for="c in live.counters" :key="c.id">
-            <span>{{ c.name }}</span>
-            <output class="counter-value">{{ c.value }}</output>
-            <Button
-              icon="pi pi-plus"
-              :aria-label="`${t('counter.plusOne')}：${c.name}`"
-              outlined
-              @click="stepCounter(c.id, 1).catch(drawerFailed)"
-            />
-          </li>
-        </ul>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="screen-tools" :title="moduleName('screen-tools')" full-page="/screen-tools">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/break/" />
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <p v-if="!live.breakCard">{{ t('app.loading') }}</p>
-        <template v-else>
-          <p>{{ t(live.breakCard.shown ? 'screenTools.break.shown' : 'screenTools.break.hidden') }}</p>
-          <div class="break-quick">
-            <Button
-              v-for="m in [5, 10, 15]"
-              :key="m"
-              :label="t('screenTools.break.forMinutes', { n: m })"
-              severity="secondary"
-              @click="showBreak({ minutes: m }).catch(drawerFailed)"
-            />
-            <Button
-              :label="t('screenTools.break.hide')"
-              text
-              :disabled="!live.breakCard.shown"
-              @click="hideBreak().catch(drawerFailed)"
-            />
-          </div>
-        </template>
-        <h3>{{ t('screenTools.warnings.heading') }}</h3>
-        <WarningSettings :warnings="live.warnings" :inputs="live.obsState?.inputs ?? []" />
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="rehearsal" :title="moduleName('rehearsal')" full-page="/rehearsal">
-      <template #actions>
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <ul class="plain rehearsal-list">
-          <li v-for="id in BUILT_IN" :key="id">
-            <span>{{ t(`rehearsal.scripts.${id}`) }}</span>
-            <Button
-              :label="t('rehearsal.start')"
-              icon="pi pi-play"
-              size="small"
-              outlined
-              @click="runBuiltIn(id, 'normal').catch(drawerFailed)"
-            />
-          </li>
-        </ul>
-        <Button :label="t('rehearsal.stop')" icon="pi pi-stop" severity="danger" text @click="stopScript().catch(() => {})" />
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="image-sizes" :title="moduleName('image-sizes')" full-page="/image-sizes">
-      <template #now>
-        <p>{{ t('imageSizes.tile') }}</p>
-      </template>
-    </AppDrawer>
-
+    <SoundDrawer :title="moduleName('sound')" :sounds="sounds" />
+    <SceneDrawer :title="moduleName('scene')" :live="live" />
+    <MixerDrawer :title="moduleName('mixer')" :live="live" />
+    <CounterDrawer :title="moduleName('counter')" :counters="live.counters" />
+    <ScreenToolsDrawer :title="moduleName('screen-tools')" :live="live" />
+    <RehearsalDrawer :title="moduleName('rehearsal')" />
+    <ImageSizesDrawer :title="moduleName('image-sizes')" />
     <AppDrawer id="stream-info" :title="moduleName('stream-info')" full-page="/stream-info">
       <template #now>
         <p>{{ t('streamInfo.tile') }}</p>
       </template>
     </AppDrawer>
-
-    <AppDrawer id="rewards" :title="moduleName('rewards')" full-page="/rewards">
-      <template #now>
-        <p>{{ t('rewards.tile') }}</p>
-      </template>
-    </AppDrawer>
-
+    <RewardsDrawer :title="moduleName('rewards')" />
     <AppDrawer id="polls" :title="moduleName('polls')" full-page="/polls">
       <template #now>
         <p>{{ t('polls.tile') }}</p>
       </template>
     </AppDrawer>
-
-    <AppDrawer id="commands" :title="moduleName('commands')" full-page="/commands">
-      <template #now>
-        <p>{{ t('bot.tile') }}</p>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="songs" :title="moduleName('songs')" full-page="/songs">
-      <template #now>
-        <p>{{ t('songs.tile') }}</p>
-      </template>
-    </AppDrawer>
-
-    <AppDrawer id="bgm" :title="moduleName('bgm')" full-page="/music">
-      <template #actions>
-        <ObsStatusLink overlay="/overlay/bgm/" />
-        <p v-if="notice" :role="notice.error ? 'alert' : 'status'">{{ notice.text }}</p>
-      </template>
-      <template #now>
-        <MusicPlayer :event="live.bgm" :playlists="playlists" @error="drawerFailed" />
-      </template>
-    </AppDrawer>
+    <CommandsDrawer :title="moduleName('commands')" />
+    <SongsDrawer :title="moduleName('songs')" />
+    <BgmDrawer :title="moduleName('bgm')" :live="live" :playlists="playlists" />
   </div>
 </template>
 
 <script setup lang="ts">
 import Button from 'primevue/button'
 import ToggleSwitch from 'primevue/toggleswitch'
-import InputNumber from 'primevue/inputnumber'
-import InputText from 'primevue/inputtext'
 import SelectButton from 'primevue/selectbutton'
 import { useToast } from 'primevue/usetoast'
 import QueueArea from './QueueArea.vue'
 import StageCard from './StageCard.vue'
-import { simulateAlert, simulateChat, simulateCheckin, testSound } from './simulate'
+import { testSound } from './simulate'
 import BlockClose from './BlockClose.vue'
-import { subjectText } from './queue'
 import { STAGES, useStage } from './stage'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../i18n'
-import { ALERT_KINDS, type AlertKind, alertTitle } from '../overlay/alerts/alerts'
 import { ApiError, type Schemas, api, client } from './api'
 import AppDrawer from './AppDrawer.vue'
+import AlertsDrawer from './AlertsDrawer.vue'
+import BgmDrawer from './BgmDrawer.vue'
+import ChatDrawer from './ChatDrawer.vue'
+import CheckinDrawer from './CheckinDrawer.vue'
+import CommandsDrawer from './CommandsDrawer.vue'
+import ConnectionsDrawer from './ConnectionsDrawer.vue'
+import CounterDrawer from './CounterDrawer.vue'
+import ImageSizesDrawer from './ImageSizesDrawer.vue'
+import MixerDrawer from './MixerDrawer.vue'
+import RedemptionDrawer from './RedemptionDrawer.vue'
+import RehearsalDrawer from './RehearsalDrawer.vue'
+import RewardsDrawer from './RewardsDrawer.vue'
+import SceneDrawer from './SceneDrawer.vue'
+import ScreenToolsDrawer from './ScreenToolsDrawer.vue'
+import SongsDrawer from './SongsDrawer.vue'
+import SoundDrawer from './SoundDrawer.vue'
+import { HOME_DRAWER } from './homeDrawer'
 import ArrangeTiles from './ArrangeTiles.vue'
-import ChatNow from './ChatNow.vue'
 import { EMPTY_LOG, applyChat } from './chatLog'
 import { useDock } from './dock'
 import { useDrawer } from './drawer'
@@ -506,7 +272,6 @@ import {
   COUNT,
   arrangedTiles,
   errorToast,
-  obsLight,
   successToast,
   EXPANDS,
   TILES,
@@ -518,26 +283,17 @@ import {
 } from './home'
 import { isMasked, reveal, saveAfterNumbers, useAfterNumbers } from './afterNumbers'
 import HomeTile from './HomeTile.vue'
-import { FEATURES } from './features'
-import ObsStatusLink from './ObsStatusLink.vue'
 import { obsProblems, useObsSources } from './obsSources'
 import { changesCheckins } from './checkins'
 import { focusReturnTarget, keepFocus } from './page'
-import RedemptionList from './RedemptionList.vue'
-import { mixSections, useMeters, useMic } from './mixer'
-import MixerRow from './MixerRow.vue'
-import SceneList from './SceneList.vue'
+import { mixSections, useMic } from './mixer'
 import { obsReady } from './scenes'
-import { counterTile, stepCounter } from './counters'
+import { stepCounter } from './counters'
 import { hideBreak, showBreak } from './screenTools'
-import { BUILT_IN, runBuiltIn, stopScript } from './rehearsal'
-import { GROUPS } from './tabs'
-import WarningSettings from './WarningSettings.vue'
-import { type FeedItem, changesFeed, feedResult, feedText, feedTile } from './feed'
-import MusicPlayer from './MusicPlayer.vue'
-import { playerLine } from './music'
-import { RECENT, type RedemptionRecord, changesRecords, noFilters, redemptionQuery } from './redemptions'
-import TwitchSignIn from './TwitchSignIn.vue'
+import { changesFeed, feedResult, feedText } from './feed'
+import { changesRecords } from './redemptions'
+import { useHomeData } from './homeData'
+import { tileLines, tileName } from './homeLines'
 import UpdateNotice from './UpdateNotice.vue'
 
 const { t, te, locale } = useI18n()
@@ -550,12 +306,6 @@ const overviewFailed = ref(false)
 const modules = ref<Schemas['ModuleState'][]>()
 const loadFailed = ref(false)
 const busy = ref(false)
-const simUser = ref('')
-const simText = ref('')
-// The Host's limits for the kinds that take an amount (crates/host/src/admin.rs).
-const AMOUNT_MAX: Partial<Record<AlertKind, number>> = { resubscribe: 100000, gift: 100, cheer: 100000, raid: 100000 }
-const simCheckin = reactive({ userName: '', stamps: 3 as number | null })
-const simAlert = reactive({ kind: 'follow' as AlertKind, userName: '', amount: 5 as number | null, message: '' })
 const templateError = ref<string | null>(null)
 const notice = ref<{ text: string; error: boolean }>()
 const tilesEl = ref<HTMLElement>()
@@ -584,70 +334,10 @@ const drawer = useDrawer()
 watch(drawer.current, () => (notice.value = undefined))
 // Kept here, not in the drawer, so messages keep arriving while it is closed.
 const chatLog = shallowRef(EMPTY_LOG)
-// The latest records, for the redemption tile and drawer; reloaded on every change and reconnect.
-const recent = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: RedemptionRecord[] }>({
-  state: 'loading',
-})
-let recentRequest = 0
-async function loadRecent() {
-  const mine = ++recentRequest
-  try {
-    const page = await api(client.GET('/api/admin/redemptions', { params: { query: redemptionQuery(noFilters(), 0, RECENT) } }))
-    if (mine === recentRequest) recent.value = { state: 'ready', items: page.items }
-  } catch {
-    if (mine === recentRequest) recent.value = { state: 'failed' }
-  }
-}
-// Today's check-ins, for the check-in tile and drawer; reloaded on every check-in and reconnect.
-const checkinToday = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; today: Schemas['CheckinToday'] }>({
-  state: 'loading',
-})
-let checkinRequest = 0
-async function loadCheckinToday() {
-  const mine = ++checkinRequest
-  try {
-    const today = await api(client.GET('/api/admin/checkin/today'))
-    if (mine === checkinRequest) checkinToday.value = { state: 'ready', today }
-  } catch {
-    if (mine === checkinRequest) checkinToday.value = { state: 'failed' }
-  }
-}
-// The sound library, for the sound tile and drawer; reloaded when the drawer opens.
-const sounds = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: Schemas['Sound'][] }>({
-  state: 'loading',
-})
-async function loadSounds() {
-  try {
-    sounds.value = { state: 'ready', items: (await api(client.GET('/api/admin/sounds'))).sounds }
-  } catch {
-    sounds.value = { state: 'failed' }
-  }
-}
-watch(drawer.current, (id) => id === 'sound' && void loadSounds())
-// The playlists for the music drawer; reloaded when it opens.
-const playlists = shallowRef<Schemas['MusicPlaylist'][]>([])
-async function loadPlaylists() {
-  try {
-    playlists.value = (await api(client.GET('/api/admin/music'))).playlists
-  } catch (e) {
-    drawerFailed(e)
-  }
-}
-watch(drawer.current, (id) => id === 'bgm' && void loadPlaylists())
-// This stream's alerts, redemptions and check-ins with what became of them; reloaded (at most once a second) when
-// a live message may have changed them.
-const feed = shallowRef<{ state: 'loading' | 'failed' } | { state: 'ready'; items: FeedItem[] }>({ state: 'loading' })
-let feedTimer: ReturnType<typeof setTimeout> | undefined
-async function loadFeed() {
-  feedTimer = undefined
-  try {
-    feed.value = { state: 'ready', items: await api(client.GET('/api/admin/feed')) }
-  } catch {
-    feed.value = { state: 'failed' }
-  }
-}
-const reloadFeedSoon = () => (feedTimer ??= setTimeout(() => void loadFeed(), 1000))
-onBeforeUnmount(() => clearTimeout(feedTimer))
+const { recent, loadRecent, checkinToday, loadCheckinToday, sounds, loadSounds, playlists, feed, reloadFeedSoon } = useHomeData(
+  drawer,
+  (e) => drawerFailed(e),
+)
 const live = useLiveEvents(2000, (msg) => {
   if (changesFeed(msg.type)) reloadFeedSoon()
   chatLog.value = applyChat(chatLog.value, msg)
@@ -658,7 +348,6 @@ const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.valu
 const broadcasterId = computed(() =>
   overview.value?.status.state === 'signed_in' ? overview.value.status.user_id : undefined,
 )
-const obs = computed(() => obsLight(live.value))
 const dock = useDock()
 const stage = useStage({ live: () => live.value, modules: () => modules.value })
 const shownStage = stage.shown
@@ -716,93 +405,16 @@ const pending = computed(() => {
   return obsProblems(obsSources.value, sceneRules.value, off, t)
 })
 
-const lines = computed<Record<string, Line>>(() => {
-  const { status, lastChat, lastAlert } = live.value
-  // The stage blocks show their content on home itself; in edit mode they show only their name.
-  const block: Line = { state: 'ready', text: '' }
-  return {
-    pending: block,
-    checklist: block,
-    summary: block,
-    stats: statsLine(),
-    queue: queueLine(live.value.queue),
-    chat:
-      status === 'open'
-        ? { state: 'ready', text: lastChat ? `${lastChat.payload.userName}：${lastChat.payload.text}` : t('home.chatEmpty') }
-        : { state: status },
-    alerts:
-      status === 'open'
-        ? { state: 'ready', text: lastAlert ? alertTitle(lastAlert.payload) : t('alerts.empty') }
-        : { state: status },
-    redemption: recentLine(recent.value),
-    checkin: checkinLine(checkinToday.value),
-    sound:
-      sounds.value.state === 'ready'
-        ? sounds.value.items.length
-          ? {
-              state: 'ready',
-              num: count(sounds.value.items.length),
-              unit: t('home.units.sound'),
-              text: sounds.value.items.map((s) => s.label).join('、'),
-            }
-          : { state: 'ready', text: t('sound.empty') }
-        : { state: sounds.value.state },
-    scene: status === 'open' ? sceneLine(live.value.obsState) : { state: status },
-    mixer: status === 'open' ? mixerLine() : { state: status },
-    bgm: status !== 'open' ? { state: status } : live.value.bgm ? bgmLine(live.value.bgm.payload) : { state: 'loading' },
-    feed: feed.value.state === 'ready' ? feedTile(feed.value.items) : { state: feed.value.state },
-    counter:
-      status !== 'open'
-        ? { state: status }
-        : live.value.counters
-          ? counterTile(live.value.counters)
-          : { state: 'loading' },
-    rehearsal: { state: 'ready', text: t('rehearsal.tile') },
-    'image-sizes': { state: 'ready', text: t('imageSizes.tile') },
-    'stream-info': { state: 'ready', text: t('streamInfo.tile') },
-    rewards: { state: 'ready', text: t('rewards.tile') },
-    polls: { state: 'ready', text: t('polls.tile') },
-    commands: { state: 'ready', text: t('bot.tile') },
-    songs: { state: 'ready', text: t('songs.tile') },
-    'screen-tools':
-      status !== 'open'
-        ? { state: status }
-        : live.value.breakCard
-          ? breakLine(live.value.breakCard)
-          : { state: 'loading' },
-  }
-})
-const count = (n: number) => n.toLocaleString('zh-TW')
+const lines = computed(() =>
+  tileLines(
+    { live: live.value, recent: recent.value, checkinToday: checkinToday.value, sounds: sounds.value, playlists: playlists.value, feed: feed.value, stats: statsLine(), mixer: mixerLine() },
+    t,
+  ),
+)
 
-function checkinLine(c: typeof checkinToday.value): Line {
-  if (c.state !== 'ready') return { state: c.state }
-  const last = c.today.recent[0]
-  return {
-    state: 'ready',
-    num: count(c.today.count),
-    unit: t('home.units.checkin'),
-    text: last ? t('home.latest', { text: last.user_name }) : t('checkin.page.empty'),
-  }
-}
 
-function sceneLine(obs: (typeof live.value)['obsState']): Line {
-  if (!obs?.scene) return { state: 'ready', text: t('scene.notConnected') }
-  return { state: 'ready', num: obs.scene, text: t('home.sceneCount', { n: obs.scenes.length }) }
-}
 
-function bgmLine(p: Schemas['BgmPlayerPayload']): Line {
-  if (!p.track || p.state === 'stopped' || !p.onAir) return { state: 'ready', text: playerLine(p) }
-  const name = playlists.value.find((l) => l.id === p.playlist)?.name
-  const order = t(p.shuffle ? 'music.rules.shuffle' : 'music.rules.inOrder')
-  const text = [p.state === 'paused' ? t('music.player.pausedShort') : null, name, order].filter(Boolean).join(' · ')
-  return { state: 'ready', num: p.track.title, text }
-}
 
-/** The 畫面工具 tile: whether the break card is on screen. */
-function breakLine(card: Schemas['BreakPayload']): Line {
-  if (!card.shown) return { state: 'ready', num: t('screenTools.break.hiddenShort'), text: t('screenTools.break.hidden') }
-  return { state: 'ready', num: t('screenTools.break.shownShort'), text: card.text || t('screenTools.break.heading') }
-}
 
 // 下播後 numbers: masked ones show 「––」 (a tile's only when it has a number); 整頁不顯示 folds the tiles behind one
 // card, and 「這次看一下」 opens them for this visit only.
@@ -847,7 +459,6 @@ async function toggleMic() {
   micBusy.value = false
 }
 const mixLive = computed(() => (obsReady(live.value.obsState) ? mixSections(live.value.obsState, live.value.obsState.scene).on : []))
-const meters = useMeters(computed(() => drawer.current.value === 'mixer' && obsReady(live.value.obsState)))
 function mixerLine(): Line {
   const { input, reason } = micState.value
   if (!input) return reason ? { state: 'ready', text: reason } : { state: 'loading' }
@@ -876,38 +487,9 @@ function statsLine(): Line {
   return { state: 'ready', num: stage.when.value, text: t('home.statsLine', { redemptions: n('redemptions', s.redemptions), subs: n('subs', s.subs) }) }
 }
 
-/** The small 呈現佇列 tile: how many wait, and what plays. */
-function queueLine(q: Schemas['QueueStatus'] | undefined): Line {
-  if (!q) return { state: 'loading' }
-  const text = q.current ? `${t('queue.playing')}：${subjectText(q.current.subject)}` : t('home.queueIdle')
-  return { state: 'ready', num: count(q.waiting.length), unit: t('home.units.queue'), text }
-}
 
-function recentLine(r: typeof recent.value): Line {
-  if (r.state !== 'ready') return { state: r.state }
-  const last = r.items[0]
-  if (!last) return { state: 'ready', text: t('redemption.empty') }
-  return {
-    state: 'ready',
-    num: count(r.items.length),
-    unit: t('home.units.redemption'),
-    text: `${last.user_name}：${last.reward_title}`,
-  }
-}
 
-const moduleName = (id: string) => {
-  const unbuilt = TILES.find((tile) => tile.id === id)?.unbuilt
-  if (unbuilt) return t(unbuilt.label)
-  // A module's tile goes by its feature's name, as its page does (場景與模式, 休息卡片); the ID stays the module's.
-  const module = TILES.find((tile) => tile.id === id)?.module ?? id
-  const feature = FEATURES.find((f) => f.module === module)
-  if (feature) return t(`features.${feature.id}.name`)
-  if (te(`modules.names.${id}`)) return t(`modules.names.${id}`)
-  if (te(`home.blocks.${id}`)) return t(`home.blocks.${id}`)
-  // A tile that is no module's (e.g. 演練) is named after its page.
-  const page = GROUPS.flatMap((g) => g.pages).find((p) => p.path === `/${id}`)
-  return page ? t(page.label) : id
-}
+const moduleName = (id: string) => tileName(id, t, te)
 
 async function refreshOverview() {
   try {
@@ -959,26 +541,7 @@ async function run(action: () => Promise<unknown>) {
   }
 }
 
-const sendChat = () =>
-  run(async () => {
-    await simulateChat({ userName: simUser.value, text: simText.value })
-    simText.value = ''
-    notify(t('simulate.sent'), false)
-  })
-
-const sendCheckin = () =>
-  run(async () => {
-    const { userName, stamps } = simCheckin
-    await simulateCheckin({ userName, stamps: stamps ?? 0 })
-    notify(t('simulate.checkinSent'), false)
-  })
-
-const sendAlert = () =>
-  run(async () => {
-    const { kind, userName, amount, message } = simAlert
-    await simulateAlert({ kind, userName, amount, message })
-    notify(t('simulate.alertSent'), false)
-  })
+provide(HOME_DRAWER, { notice, busy, run, notify, failed: drawerFailed })
 
 
 // The section itself shows no focus ring, so it only takes focus while it has nothing focusable (loading, failed).
@@ -1082,14 +645,6 @@ onBeforeUnmount(() => {
   background: var(--p-content-hover-background);
 }
 
-.rehearsal-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.25rem 0;
-}
-
 .folded {
   display: grid;
   justify-items: start;
@@ -1103,36 +658,6 @@ onBeforeUnmount(() => {
 .tile-switch {
   font-size: 0.8125rem;
   color: var(--p-text-muted-color);
-}
-
-.break-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.counter-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.counter-value {
-  margin-inline-start: auto;
-  font-size: 1.25rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.sound-list {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.recent-checkins {
-  list-style: none;
-  padding: 0;
-  margin: 0;
 }
 
 .top {
@@ -1192,11 +717,6 @@ onBeforeUnmount(() => {
 .plain {
   list-style: none;
   padding: 0;
-}
-
-.mix-list {
-  display: grid;
-  gap: 0.25rem;
 }
 
 .tile-reason {
@@ -1306,10 +826,6 @@ onBeforeUnmount(() => {
 .layout > main {
   flex: 1;
   min-width: 0;
-}
-
-h4 {
-  margin: 0;
 }
 
 .stage-switch .manual {
