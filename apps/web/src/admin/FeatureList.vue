@@ -59,7 +59,7 @@
         <h4 v-if="s.id" class="feat-cat">{{ t(`nav.categories.${s.id}`) }}</h4>
         <ul class="feat-list">
           <li v-for="f in s.features" :key="f.id" class="feat" :class="{ off: !on(f) }">
-            <i :class="f.icon" class="feat-icon" aria-hidden="true"></i>
+            <span class="feat-icon" :class="`tint-${tintOf(f)}`" aria-hidden="true"><i :class="f.icon"></i></span>
             <span class="feat-text">
               <span class="name">{{ name(f) }}</span>
               <span :id="`fd-${f.id}`" class="desc">{{ t(`features.${f.id}.desc`) }}</span>
@@ -121,7 +121,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Schemas } from './api'
 import { FEATURES, type Feature, type Service, hiddenPages, isOn, servicesOf, turnOffPlan, turnOnPlan, unusedBy } from './features'
-import { servicesDown } from './home'
+import { TILES, servicesDown } from './home'
 import { missingScopes } from './scopes'
 import { useServices } from './services'
 import { GROUPS, SOON_PAGES, showUnbuilt } from './tabs'
@@ -301,6 +301,10 @@ function toggle(f: Feature) {
     then: () => flip([...dependents, f]),
   })
 }
+
+/** A feature's colour: its home tile's (by module, or a tile named after its page), primary for one without a tile. */
+const tintOf = (f: Feature) =>
+  TILES.find((tile) => (f.module && (tile.module ?? tile.id) === f.module) || `/${tile.id}` === f.pages[0])?.tint ?? 'primary'
 </script>
 
 <style scoped>
@@ -373,9 +377,31 @@ function toggle(f: Feature) {
   border-top: 1px solid var(--p-surface-800);
 }
 
+/* The prototype's tinted square per feature, in its home tile's colour. */
 .feat-icon {
-  width: 1.25rem;
-  color: var(--p-text-muted-color);
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+}
+
+.feat.off .feat-icon {
+  opacity: 0.6;
+}
+
+/* Each group is a card, as the prototype. */
+.feat-group {
+  margin-top: 1rem;
+  padding: 0.25rem 1.125rem 0.5rem;
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.feat-group .group-head {
+  margin-top: 0.5rem;
 }
 
 .feat-text {

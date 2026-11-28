@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
-import { twitchOverview } from './home'
+import { TILES, twitchOverview } from './home'
 import { useServices } from './services'
 import { testRouter } from './testRouter'
 
@@ -39,6 +39,18 @@ describe('FeatureList', () => {
       [category('bot'), [name('bot')]],
     ])
     expect(sections('viewers')[2]).toEqual([category('raids'), [name('shoutouts'), name('credits'), name('raids')]])
+  })
+
+  it('gives each feature the tinted square of its home tile, primary without one', () => {
+    const icon = (feature: string) =>
+      list()
+        .findAll('li.feat')
+        .find((li) => li.get('.name').text() === name(feature))!
+        .get('.feat-icon')
+        .classes()
+    expect(icon('alerts')).toContain('tint-yellow')
+    expect(icon('imageSizes')).toContain(`tint-${TILES.find((tile) => tile.id === 'image-sizes')!.tint}`)
+    expect(icon('warnings')).toContain('tint-primary')
   })
 
   it("links a feature not built yet to its page in dev mode only", () => {
