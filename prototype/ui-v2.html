@@ -598,6 +598,7 @@ dialog.dlg::backdrop { background: #000000b0; }
 .studio-pill { cursor: pointer; gap: 0.5rem; }
 .lang-switch span { padding: 0.1875rem 0.5rem; font-size: 0.75rem; white-space: nowrap; }
 .lang-switch { flex: none; flex-wrap: nowrap; }
+.lang-switch[hidden] { display: none; } /* .seg's inline-flex would override [hidden] */
 .pack-sec { display: grid; gap: 0.5rem; padding: 0.875rem 1.25rem 1.25rem; border-top: 1px solid var(--s800); }
 .pack-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
 .pack-list li { display: flex; align-items: center; gap: 0.75rem; padding: 0.375rem 0.5rem; border-radius: var(--radius); background: var(--s950); }
@@ -1732,8 +1733,8 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
     <button class="btn btn-text simulate-open" type="button" data-dialog="simulate"><i class="pi pi-wrench" aria-hidden="true"></i>模擬事件</button>
     <button class="icon-btn chat-mobile" type="button" id="chat-mobile-btn" aria-label="聊天室" aria-expanded="false"><i class="pi pi-comments"></i></button>
     <button class="icon-btn estop" type="button" id="estop" aria-label="緊急停止：停掉正在播的並取消排隊中的呈現"><i class="pi pi-stop-circle"></i></button>
-    <!-- prototype only: preview language, kept in the top bar so it never covers page content -->
-    <div class="seg lang-switch" role="radiogroup" aria-label="介面語言（預覽）"><label><input type="radio" name="ui-lang" value="zh" checked><span>繁中</span></label><label><input type="radio" name="ui-lang" value="en"><span>EN</span></label></div>
+    <!-- prototype only: preview language, kept in the top bar so it never covers page content; hidden unless the URL has ?lang -->
+    <div class="seg lang-switch" hidden role="radiogroup" aria-label="介面語言（預覽）"><label><input type="radio" name="ui-lang" value="zh" checked><span>繁中</span></label><label><input type="radio" name="ui-lang" value="en"><span>EN</span></label></div>
     <button class="icon-btn" type="button" aria-label="設定" data-go="settings"><i class="pi pi-cog"></i></button>
     <span class="tb-break" aria-hidden="true"></span>
   </header>
@@ -6622,6 +6623,7 @@ if (START_PAGE && views[START_PAGE]) show(START_PAGE)
     if (lang === 'en') { apply(document.body); watch() } else restore()
     fitTabs() // tab labels changed width
   }))
+  if (new URLSearchParams(location.search).has('lang')) { document.querySelector('.lang-switch').hidden = false; fitTabs() }
 })()
 </script>
 <script>
