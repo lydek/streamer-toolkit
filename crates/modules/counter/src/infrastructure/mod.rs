@@ -30,6 +30,7 @@ use crate::{
     },
     domain::{Counter, ViewerCount, marathon::MarathonOptions},
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// The counter service the host runs.
 pub type Counters = CounterService<db::SqliteCounters>;
@@ -164,8 +165,7 @@ where
                 id: uuid::Uuid::now_v7().to_string(),
                 event_type: VALUES,
                 version: VALUES_VERSION,
-                occurred_at: chrono::Utc::now()
-                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                occurred_at: time::millis(Timestamp::now()),
                 source: Source::System,
                 payload: serde_json::to_value(payload).expect("counter values serialize"),
             });
@@ -176,10 +176,7 @@ where
                 id: uuid::Uuid::now_v7().to_string(),
                 event_type: MARATHON,
                 version: MARATHON_VERSION,
-                occurred_at: status
-                    .marathon
-                    .anchor
-                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                occurred_at: time::millis(status.marathon.anchor),
                 source: Source::System,
                 payload: serde_json::to_value(MarathonPayload::from(status))
                     .expect("marathon serializes"),

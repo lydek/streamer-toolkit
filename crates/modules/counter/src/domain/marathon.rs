@@ -2,8 +2,8 @@
 //! overlay never reports back): the remaining time is kept as of an anchor time and counted down from there only
 //! while live and not paused.
 
-use chrono::{DateTime, Utc};
 use toolkit_core::events::AlertKind;
+use toolkit_core::time::Timestamp;
 
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
@@ -46,7 +46,7 @@ pub struct Marathon {
     /// As of `anchor`.
     pub remaining_ms: i64,
     /// When `remaining_ms` was last worked out; while live, the last time the toolkit saw the stream live.
-    pub anchor: DateTime<Utc>,
+    pub anchor: Timestamp,
     /// Paused by hand; a stream starting never clears it.
     pub paused: bool,
     /// The stream session the clock has counted in.
@@ -55,7 +55,7 @@ pub struct Marathon {
 }
 
 impl Marathon {
-    pub fn new(now: DateTime<Utc>) -> Self {
+    pub fn new(now: Timestamp) -> Self {
         Self {
             remaining_ms: 0,
             anchor: now,
@@ -70,9 +70,11 @@ impl Marathon {
     }
 
     /// Counts down from the anchor to `now` when `counting`, then moves the anchor to `now`.
-    pub(crate) fn settle(&mut self, now: DateTime<Utc>, counting: bool) {
+    pub(crate) fn settle(&mut self, now: Timestamp, counting: bool) {
         if counting {
-            let elapsed = (now - self.anchor).num_milliseconds().max(0);
+            let elapsed = i64::try_from((now - self.anchor).as_millis())
+                .unwrap_or(i64::MAX)
+                .max(0);
             self.remaining_ms = (self.remaining_ms - elapsed).max(0);
         }
         self.anchor = now;
@@ -137,7 +139,7 @@ impl Clock {
 
     /// Before the first status the anchor stays: it is the last time the stream was seen live, which the first
     /// status still needs to count the time the toolkit was closed.
-    pub(crate) fn settle(&mut self, now: DateTime<Utc>) {
+    pub(crate) fn settle(&mut self, now: Timestamp) {
         if self.seen == Seen::Unknown {
             return;
         }
@@ -148,7 +150,7 @@ impl Clock {
     /// A live status for `session`, which started at `started_at`. The same stream counts since the anchor (also
     /// after a restart, as the stream stayed live), unless the toolkit saw it go offline since; a new stream counts
     /// from its start. A manual pause stays.
-    pub(crate) fn live(&mut self, session: &str, started_at: DateTime<Utc>, now: DateTime<Utc>) {
+    pub(crate) fn live(&mut self, session: &str, started_at: Timestamp, now: Timestamp) {
         let m = &mut self.marathon;
         let same = m.session.as_deref() == Some(session);
         let counted = match (same, self.seen) {
@@ -166,14 +168,14 @@ impl Clock {
 
     /// An offline status: counts up to now if the toolkit saw the stream live, otherwise only up to the anchor (the
     /// last time it saw it live, before it was closed).
-    pub(crate) fn offline(&mut self, now: DateTime<Utc>) {
+    pub(crate) fn offline(&mut self, now: Timestamp) {
         self.settle(now);
         self.seen = Seen::Offline;
     }
 
     /// A pause or resume before the first status gives up the time the toolkit was closed: whether the stream
     /// stayed live is not known yet, so none of it is counted.
-    pub(crate) fn pause(&mut self, paused: bool, now: DateTime<Utc>) {
+    pub(crate) fn pause(&mut self, paused: bool, now: Timestamp) {
         if self.seen == Seen::Unknown {
             self.marathon.settle(now, false);
         }
@@ -183,7 +185,7 @@ impl Clock {
 
     /// Before the first status, time added to a clock already at 0 starts from now: the closed time had nothing
     /// left to take, so it never takes from what is added.
-    pub(crate) fn add(&mut self, ms: i64, now: DateTime<Utc>) {
+    pub(crate) fn add(&mut self, ms: i64, now: Timestamp) {
         if self.seen == Seen::Unknown && self.marathon.remaining_ms == 0 {
             self.marathon.settle(now, false);
         }
@@ -195,12 +197,10 @@ impl Clock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use toolkit_core::time::SignedDuration;
 
-    fn at(min: i64) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-11-21T10:00:00Z")
-            .unwrap()
-            .to_utc()
-            + chrono::TimeDelta::minutes(min)
+    fn at(min: i64) -> Timestamp {
+        "2026-11-21T10:00:00Z".parse::<Timestamp>().unwrap() + SignedDuration::from_mins(min)
     }
 
     fn clock(remaining_min: i64) -> Clock {

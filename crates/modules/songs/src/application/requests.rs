@@ -4,7 +4,6 @@
 
 use std::{future::Future, path::PathBuf, sync::Arc};
 
-use chrono::Utc;
 use toolkit_core::{
     commands::{CommandTable, Declared},
     events::{ChatMessage, Source},
@@ -16,6 +15,7 @@ use super::{RepositoryError, SongRepository, new_id};
 use crate::domain::requests::{
     Found, Outcome, QUEUE_MAX, ReplyVars, Request, RequestState, fill, find, open,
 };
+use toolkit_core::time::Timestamp;
 
 /// The request command's key in the shared command table.
 pub const COMMAND_KEY: &str = "songs.request";
@@ -188,7 +188,7 @@ impl<R: SongRepository + RequestRepository> RequestsService<R> {
                 by_hand,
                 state: RequestState::Queued,
                 position: active.iter().map(|r| r.position).max().unwrap_or(0) + 1,
-                requested_at: Utc::now(),
+                requested_at: Timestamp::now(),
                 finished_at: None,
             })
             .await?;
@@ -302,7 +302,7 @@ impl<R: SongRepository + RequestRepository> RequestsService<R> {
             .cloned()
             .ok_or(RequestError::NotFound)?;
         if active.iter().any(|r| r.state == RequestState::Singing)
-            || !r.move_to(RequestState::Singing, Utc::now())
+            || !r.move_to(RequestState::Singing, Timestamp::now())
         {
             return Err(RequestError::NotAllowed);
         }
@@ -313,7 +313,7 @@ impl<R: SongRepository + RequestRepository> RequestsService<R> {
     pub(crate) async fn finish(&self) -> Result<(), RequestError> {
         let _one = self.lock.lock().await;
         let active = self.repo.active_requests().await?;
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut sung = active
             .iter()
             .find(|r| r.state == RequestState::Singing)
@@ -338,7 +338,7 @@ impl<R: SongRepository + RequestRepository> RequestsService<R> {
             .into_iter()
             .find(|r| r.id == id)
             .ok_or(RequestError::NotFound)?;
-        r.move_to(RequestState::Removed, Utc::now());
+        r.move_to(RequestState::Removed, Timestamp::now());
         self.save(&[r]).await
     }
 

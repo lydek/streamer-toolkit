@@ -9,12 +9,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 /// How many streams the period list goes back.
 const STREAMS: u32 = 50;
@@ -59,8 +59,8 @@ pub(crate) struct ChatPeriod {
 }
 
 /// Microseconds, as stored: a period's ends go back to the server as query bounds and must not move.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 /// Keeps the latest `limit` of `rows` (oldest first, read with one more than `limit`); `true` when any was left out.
@@ -94,7 +94,7 @@ async fn list_periods(pool: &SqlitePool) -> Result<Vec<ChatPeriod>, sqlx::Error>
     let older_left_out = streams.len() > STREAMS as usize;
     streams.truncate(STREAMS as usize);
     let mut periods = Vec::new();
-    let offline = |from: Option<DateTime<Utc>>, to: Option<DateTime<Utc>>| async move {
+    let offline = |from: Option<Timestamp>, to: Option<Timestamp>| async move {
         let (messages, first) = chat::count_between(pool, from, to).await?;
         Ok::<_, sqlx::Error>((messages > 0).then(|| ChatPeriod {
             kind: PeriodKind::Offline,
@@ -105,7 +105,7 @@ async fn list_periods(pool: &SqlitePool) -> Result<Vec<ChatPeriod>, sqlx::Error>
         }))
     };
     // Newest first: the chat since the last stream ended, then each stream and the chat before it.
-    let mut later_start: Option<DateTime<Utc>> = None;
+    let mut later_start: Option<Timestamp> = None;
     for (i, s) in streams.iter().enumerate() {
         if let Some(end) = s.ended_at
             && let Some(p) = offline(Some(end), later_start).await?
@@ -208,10 +208,7 @@ pub(crate) struct ChatLogBody {
     )
 )]
 pub(crate) async fn log(State(pool): State<SqlitePool>, Query(q): Query<LogQuery>) -> Response {
-    let parse = |t: Option<String>| {
-        t.map(|t| DateTime::parse_from_rfc3339(&t).map(|t| t.to_utc()))
-            .transpose()
-    };
+    let parse = |t: Option<String>| t.map(|t| t.parse::<Timestamp>()).transpose();
     let (Ok(from), Ok(to)) = (parse(q.from), parse(q.to)) else {
         return error(StatusCode::BAD_REQUEST, "chat_log.invalid_time");
     };
@@ -226,8 +223,8 @@ pub(crate) async fn log(State(pool): State<SqlitePool>, Query(q): Query<LogQuery
 
 async fn read_log(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    to: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    to: Option<Timestamp>,
 ) -> Result<ChatLogBody, sqlx::Error> {
     // Each read asks for one more than it keeps, to know whether anything was left out.
     let mut messages = chat::messages_between(pool, from, to, MESSAGES + 1).await?;
@@ -245,7 +242,7 @@ async fn read_log(
         "raid" => Some(LogEventKind::Raid),
         _ => None,
     };
-    let mut events: Vec<(DateTime<Utc>, LogEvent)> = activity
+    let mut events: Vec<(Timestamp, LogEvent)> = activity
         .into_iter()
         // A gift's subs are covered by the gift itself.
         .filter(|a| !a.gifted)
@@ -296,6 +293,6 @@ async fn read_log(
     })
 }
 
-fn parse(t: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(t).ok().map(|t| t.to_utc())
+fn parse(t: &str) -> Option<Timestamp> {
+    t.parse::<Timestamp>().ok()
 }

@@ -3,7 +3,6 @@
 
 use std::{collections::HashSet, future::Future, sync::Arc, time::Duration};
 
-use chrono::{DateTime, Utc};
 use tokio::{
     sync::{mpsc, oneshot},
     time::{Instant, timeout_at},
@@ -14,6 +13,7 @@ use toolkit_core::{
 };
 
 use crate::domain::Sighting;
+use toolkit_core::time::Timestamp;
 
 const AVATAR_BATCH: usize = 100;
 const AVATAR_WINDOW: Duration = Duration::from_millis(100);
@@ -32,7 +32,7 @@ pub(crate) struct Recorded {
     /// The toolkit had never seen this viewer before.
     pub(crate) new: bool,
     /// When the viewer was last seen before this sighting; `None` for a new one.
-    pub(crate) last_seen_before: Option<DateTime<Utc>>,
+    pub(crate) last_seen_before: Option<Timestamp>,
 }
 
 /// What a chat message's sender was to the toolkit before it.
@@ -41,14 +41,14 @@ pub struct ChatSeen {
     /// Never seen before (the fallback for 第一次聊天).
     pub new: bool,
     /// When last seen before this message (any sighting, not only chat); `None` for a new viewer.
-    pub last_seen_before: Option<DateTime<Utc>>,
+    pub last_seen_before: Option<Timestamp>,
 }
 
 pub(crate) trait ViewerRepository: Send + Sync + 'static {
     /// Adds the viewer or updates their name, roles (when known) and last seen.
     fn record(
         &self,
-        sightings: &[(Sighting, DateTime<Utc>)],
+        sightings: &[(Sighting, Timestamp)],
     ) -> impl Future<Output = Result<Vec<Recorded>, RepositoryError>> + Send;
     fn set_avatar(
         &self,
@@ -58,7 +58,7 @@ pub(crate) trait ViewerRepository: Send + Sync + 'static {
 }
 
 /// A sighting, when it happened, and who wants to know what the viewer was before it.
-type Job = (Sighting, DateTime<Utc>, Option<oneshot::Sender<ChatSeen>>);
+type Job = (Sighting, Timestamp, Option<oneshot::Sender<ChatSeen>>);
 
 pub struct ViewerService {
     tx: mpsc::UnboundedSender<Job>,
@@ -150,7 +150,7 @@ impl ViewerService {
     /// viewer look seen later than they were.
     fn see(&self, sighting: Sighting, source: Source) {
         if source == Source::Twitch {
-            let _ = self.tx.send((sighting, Utc::now(), None));
+            let _ = self.tx.send((sighting, Timestamp::now(), None));
         }
     }
 
@@ -171,7 +171,7 @@ impl ViewerService {
         if source == Source::Twitch {
             let _ = self
                 .tx
-                .send((Sighting::from_chat(m), Utc::now(), Some(seen)));
+                .send((Sighting::from_chat(m), Timestamp::now(), Some(seen)));
         }
         async move { answer.await.unwrap_or_default() }
     }

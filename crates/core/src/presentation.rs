@@ -11,6 +11,7 @@ use std::{
     time::Duration,
 };
 
+use crate::time::{self, Timestamp};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Notify, watch};
 use utoipa::ToSchema;
@@ -296,8 +297,7 @@ async fn play(presenter: Arc<Presenter>) {
                             stage: item.stage,
                             subject: item.subject.clone(),
                             show_ms: millis(item.show),
-                            started_at: chrono::Utc::now()
-                                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                            started_at: time::millis(Timestamp::now()),
                             problem: None,
                         });
                         Ok((
@@ -437,7 +437,7 @@ impl Recent {
                 key,
                 subject,
                 source,
-                queued_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                queued_at: time::millis(Timestamp::now()),
                 outcome: None,
             });
             items.1.truncate(Self::KEEP);

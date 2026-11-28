@@ -24,6 +24,7 @@ use toolkit_core::{modules::Modules, streaming::StreamingState};
 use utoipa::{IntoParams, ToSchema};
 
 use integrations::tls::HttpsClient;
+use toolkit_core::time::{self, Timestamp};
 
 /// How many log lines the page and the report show at most.
 const LOG_LINES: usize = 200;
@@ -231,7 +232,7 @@ pub(crate) async fn report(State(s): State<DiagnosticsState>) -> Json<Diagnostic
         .unwrap_or_default();
     Json(DiagnosticReport {
         app_version: s.app_version.clone(),
-        generated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        generated_at: time::secs(Timestamp::now()),
         connections,
         disabled_modules: s
             .modules

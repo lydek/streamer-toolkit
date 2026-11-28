@@ -1,12 +1,12 @@
 //! Viewers in SQLite (`viewers`).
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{Recorded, RepositoryError, ViewerRepository},
     domain::Sighting,
 };
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -27,7 +27,7 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 impl ViewerRepository for SqliteViewers {
     async fn record(
         &self,
-        sightings: &[(Sighting, DateTime<Utc>)],
+        sightings: &[(Sighting, Timestamp)],
     ) -> Result<Vec<Recorded>, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let mut results = Vec::with_capacity(sightings.len());
@@ -52,9 +52,9 @@ impl ViewerRepository for SqliteViewers {
 async fn record_sighting(
     conn: &mut SqliteConnection,
     s: &Sighting,
-    at: DateTime<Utc>,
+    at: Timestamp,
 ) -> Result<Recorded, RepositoryError> {
-    let at = at.to_rfc3339_opts(SecondsFormat::Micros, true);
+    let at = time::micros(at);
     let role = |f: fn(&crate::domain::Roles) -> bool| s.roles.as_ref().map(f);
     // A NULL role (not shown by this event) keeps the stored one; a new viewer starts without roles.
     // A new row's first sighting is this one; an existing row keeps its earlier first sighting.
@@ -90,9 +90,7 @@ async fn record_sighting(
     Ok(Recorded {
         no_avatar,
         new: last_seen.is_none(),
-        last_seen_before: last_seen
-            .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
-            .map(|t| t.to_utc()),
+        last_seen_before: last_seen.and_then(|t| t.parse::<Timestamp>().ok()),
     })
 }
 
@@ -368,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn identical_timestamps_only_mark_one_sighting_new() {
         let repo = SqliteViewers::new(pool().await);
-        let at = Utc::now();
+        let at = Timestamp::now();
         let sighting = Sighting::from_chat(&chat("fan", "Fan", vec![]));
         let results = repo
             .record(&[(sighting.clone(), at), (sighting, at)])

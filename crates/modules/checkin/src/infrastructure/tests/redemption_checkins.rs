@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::Timestamp;
 
 struct Wired {
     modules: Arc<Modules>,
@@ -58,7 +59,7 @@ async fn redeem(w: &Wired, event_id: &str, user: &str, reward: &str, at: &str) {
         id: event_id.into(),
         event_type: REDEMPTION_RECORDED.into(),
         payload: serde_json::to_value(payload).unwrap(),
-        occurred_at: DateTime::parse_from_rfc3339(at).unwrap().to_utc(),
+        occurred_at: at.parse::<Timestamp>().unwrap(),
     };
     let mut tx = w.pool.begin().await.unwrap();
     w.outbox.publish(&mut tx, &event).await.unwrap();
@@ -79,7 +80,7 @@ async fn redeeming_the_reward_checks_in_for_the_day_it_happened() {
     let w = wired("redeem-day").await;
     // Redeemed at 23:50 in Taipei on 11-16, delivered (say, after a restart) the next day.
     redeem(&w, "e1", "7", "w-1", "2026-11-16T15:50:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(
         rows(&w.pool).await,
         [("7".into(), "2026-11-16".into(), "redemption".into())]
@@ -91,16 +92,16 @@ async fn redeeming_the_reward_checks_in_for_the_day_it_happened() {
 async fn one_check_in_per_redemption_and_per_day() {
     let w = wired("redeem-once").await;
     redeem(&w, "e1", "7", "w-1", "2026-11-16T01:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     // Delivered again, e.g. after a crash before the delivery was marked.
     sqlx::query("UPDATE outbox_deliveries SET state = 'pending'")
         .execute(&w.pool)
         .await
         .unwrap();
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     // A second redemption the same business day.
     redeem(&w, "e2", "7", "w-1", "2026-11-16T05:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(count(&w.pool).await, 1);
     let delivered: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM outbox_deliveries WHERE state = 'delivered'")
@@ -118,7 +119,7 @@ async fn chat_then_redemption_on_the_same_day_counts_once() {
         .receive_chat(&chat("7", "!打卡", "2026-11-16T01:00:00Z"), Source::Twitch);
     wait_for_count(&w.pool, 1).await;
     redeem(&w, "e1", "7", "w-1", "2026-11-16T02:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(
         rows(&w.pool).await,
         [("7".into(), "2026-11-16".into(), "chat".into())]
@@ -141,17 +142,13 @@ async fn paused_keeps_redemptions_and_applies_them_in_order_after_enabling() {
     redeem(&w, "e1", "7", "w-1", "2026-11-16T15:00:00Z").await;
     redeem(&w, "e2", "8", "w-1", "2026-11-16T15:10:00Z").await;
     redeem(&w, "e3", "7", "w-1", "2026-11-16T16:30:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(count(&w.pool).await, 0);
     let backlog = w.outbox.backlog(modules::CHECKIN).await.unwrap();
     assert_eq!(backlog.pending, 3);
     assert_eq!(
         backlog.oldest,
-        Some(
-            DateTime::parse_from_rfc3339("2026-11-16T15:00:00Z")
-                .unwrap()
-                .to_utc()
-        )
+        Some("2026-11-16T15:00:00Z".parse::<Timestamp>().unwrap())
     );
     assert!(
         delivery_states(&w.pool).await.iter().all(|d| d.2 == 0),
@@ -159,7 +156,7 @@ async fn paused_keeps_redemptions_and_applies_them_in_order_after_enabling() {
     );
 
     w.modules.set_enabled(modules::CHECKIN, true).unwrap();
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(
         rows(&w.pool).await,
         [
@@ -184,7 +181,7 @@ async fn closed_skips_redemptions_from_the_closed_period() {
     w.outbox.skip_pending(modules::CHECKIN).await.unwrap();
     w.modules.set_enabled(modules::CHECKIN, true).unwrap();
     redeem(&w, "e3", "9", "w-1", "2026-11-16T03:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(
         rows(&w.pool).await,
         [("9".into(), "2026-11-16".into(), "redemption".into())]
@@ -203,7 +200,7 @@ async fn the_dispatcher_skips_while_closed() {
     let w = wired("closed-dispatch").await;
     w.modules.close(modules::CHECKIN).unwrap();
     redeem(&w, "e1", "7", "w-1", "2026-11-16T01:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(delivery_states(&w.pool).await[0].1, "skipped");
     let _ = std::fs::remove_dir_all(&w.dir);
 }
@@ -212,7 +209,7 @@ async fn the_dispatcher_skips_while_closed() {
 async fn other_rewards_or_no_reward_never_check_in() {
     let w = wired("redeem-other").await;
     redeem(&w, "e1", "7", "w-other", "2026-11-16T01:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     w.service
         .config()
         .update(
@@ -221,7 +218,7 @@ async fn other_rewards_or_no_reward_never_check_in() {
         )
         .unwrap();
     redeem(&w, "e2", "7", "w-1", "2026-11-16T01:00:00Z").await;
-    w.outbox.dispatch(Utc::now()).await.unwrap();
+    w.outbox.dispatch(Timestamp::now()).await.unwrap();
     assert_eq!(count(&w.pool).await, 0);
     let _ = std::fs::remove_dir_all(&w.dir);
 }

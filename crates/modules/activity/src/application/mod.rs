@@ -9,7 +9,6 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 use toolkit_core::{
     events::{Alert, Source},
@@ -17,6 +16,7 @@ use toolkit_core::{
 };
 
 use crate::domain::{self, Record};
+use toolkit_core::time::Timestamp;
 
 const PURGE_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -30,17 +30,17 @@ pub(crate) trait ActivityRepository: Send + Sync + 'static {
     /// Deletes records from before `cutoff`; returns how many.
     fn delete_before(
         &self,
-        cutoff: DateTime<Utc>,
+        cutoff: Timestamp,
     ) -> impl Future<Output = Result<u64, RepositoryError>> + Send;
     fn count_before(
         &self,
-        cutoff: DateTime<Utc>,
+        cutoff: Timestamp,
     ) -> impl Future<Output = Result<u64, RepositoryError>> + Send;
     /// Deletes records from before `cutoff` (none for `None`) in a transaction that commits only if `save` then
     /// returns `true`; returns how many were deleted, or `None` when `save` failed and nothing was deleted.
     fn delete_before_if_saved(
         &self,
-        cutoff: Option<DateTime<Utc>>,
+        cutoff: Option<Timestamp>,
         save: impl FnOnce() -> bool + Send,
     ) -> impl Future<Output = Result<Option<u64>, RepositoryError>> + Send;
 }
@@ -71,7 +71,7 @@ impl ActivityService {
         let worker = repo.clone();
         tokio::spawn(async move {
             while let Some((alert, session)) = rx.recv().await {
-                let record = Record::from_alert(alert, session.await, Utc::now());
+                let record = Record::from_alert(alert, session.await, Timestamp::now());
                 if let Err(e) = worker.insert(&record).await {
                     tracing::error!(error = %e, "activity record not stored");
                 }
@@ -111,7 +111,7 @@ pub(crate) async fn expired<R: ActivityRepository>(
     repo: &R,
     next: RecordRetention,
 ) -> Result<u64, RepositoryError> {
-    match domain::cutoff(next, Utc::now()) {
+    match domain::cutoff(next, Timestamp::now()) {
         Some(cutoff) => repo.count_before(cutoff).await,
         None => Ok(0),
     }
@@ -129,7 +129,7 @@ pub(crate) async fn set_retention<R: ActivityRepository>(
     }
     let save = || settings::update(data_dir, |s| s.record_retention = Some(next)).is_ok();
     match repo
-        .delete_before_if_saved(domain::cutoff(next, Utc::now()), save)
+        .delete_before_if_saved(domain::cutoff(next, Timestamp::now()), save)
         .await
     {
         Ok(Some(deleted)) => Ok(deleted),
@@ -165,7 +165,7 @@ async fn purge<R: ActivityRepository>(
     repo: &R,
     retention: RecordRetention,
 ) -> Result<u64, RepositoryError> {
-    match domain::cutoff(retention, Utc::now()) {
+    match domain::cutoff(retention, Timestamp::now()) {
         Some(cutoff) => repo.delete_before(cutoff).await,
         None => Ok(0),
     }

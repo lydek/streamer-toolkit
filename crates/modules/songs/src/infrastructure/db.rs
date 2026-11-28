@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
         song_key,
     },
 };
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -36,8 +36,8 @@ fn duplicate(e: &sqlx::Error) -> bool {
         .is_some_and(|d| d.is_unique_violation())
 }
 
-pub(crate) fn time(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+pub(crate) fn time(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 #[derive(sqlx::FromRow)]
@@ -59,10 +59,7 @@ impl From<SongRow> for Song {
             artist: r.artist,
             category_id: r.category_id,
             youtube_url: r.youtube_url,
-            last_sung_at: r
-                .last_sung_at
-                .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
-                .map(|t| t.to_utc()),
+            last_sung_at: r.last_sung_at.and_then(|t| t.parse::<Timestamp>().ok()),
             request_count: u32::try_from(r.request_count).unwrap_or(0),
         }
     }
@@ -224,8 +221,8 @@ struct RequestRow {
     finished_at: Option<String>,
 }
 
-fn parse_time(t: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(t).ok().map(|t| t.to_utc())
+fn parse_time(t: &str) -> Option<Timestamp> {
+    t.parse::<Timestamp>().ok()
 }
 
 impl TryFrom<RequestRow> for Request {

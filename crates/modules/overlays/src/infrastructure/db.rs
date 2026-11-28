@@ -1,6 +1,5 @@
 //! Screen tools in SQLite (`overlays_break_card`, `overlays_warnings`, `overlays_appearance`, `overlays_media`).
 
-use chrono::{DateTime, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
@@ -12,6 +11,7 @@ use crate::{
         warnings::WarningSettings,
     },
 };
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -44,7 +44,7 @@ impl OverlayRepository for SqliteOverlays {
             return Ok(None);
         };
         let ends_at = ends_at
-            .map(|t| DateTime::parse_from_rfc3339(&t).map(|t| t.to_utc()))
+            .map(|t| t.parse::<Timestamp>())
             .transpose()
             .map_err(storage)?;
         Ok(Some(BreakCard {
@@ -269,8 +269,8 @@ fn media_entry((id, title, format, duration_ms): MediaRow) -> Result<MediaEntry,
     })
 }
 
-pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+pub(crate) fn rfc3339(t: Timestamp) -> String {
+    time::millis(t)
 }
 
 #[cfg(test)]

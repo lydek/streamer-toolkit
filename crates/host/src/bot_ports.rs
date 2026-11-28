@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use bot::{BotLookups, BoxFuture, ChatSender};
-use chrono::{SecondsFormat, Utc};
 use integrations::{
     tls::HttpsClient,
     twitch::{auth::TwitchAuth, helix::Helix},
@@ -18,6 +17,7 @@ use toolkit_core::{
 use utoipa::ToSchema;
 
 use crate::admin::chat_send::{Posted, post_chat};
+use toolkit_core::time::{self, Timestamp};
 
 const SCOPE: &str = "user:write:chat";
 
@@ -97,7 +97,7 @@ pub(crate) fn announce_returning(bus: Arc<EventBus>) -> bot::application::OnRetu
             id: uuid::Uuid::now_v7().to_string(),
             event_type: RETURNING,
             version: 1,
-            occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Twitch,
             payload: serde_json::to_value(&payload).expect("tag serializes"),
         });

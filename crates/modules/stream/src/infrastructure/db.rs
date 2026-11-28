@@ -1,12 +1,12 @@
 //! Stream sessions in SQLite (`stream_sessions`).
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqlitePool, migrate::Migrator};
 
 use crate::{
     application::{RepositoryError, SessionRepository},
     domain::Session,
 };
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -46,14 +46,12 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 /// Fixed width, so text order is time order.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
-fn parse_time(s: &str) -> Result<DateTime<Utc>, RepositoryError> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|t| t.to_utc())
-        .map_err(storage)
+fn parse_time(s: &str) -> Result<Timestamp, RepositoryError> {
+    s.parse::<Timestamp>().map_err(storage)
 }
 
 impl SessionRepository for SqliteSessions {
@@ -72,7 +70,7 @@ impl SessionRepository for SqliteSessions {
     async fn open(
         &self,
         twitch_id: &str,
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
     ) -> Result<Session, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         // A stream whose end was missed (e.g. the toolkit was closed through it) ended before this one started; a
@@ -101,7 +99,7 @@ impl SessionRepository for SqliteSessions {
         row.try_into()
     }
 
-    async fn end(&self, id: &str, at: DateTime<Utc>) -> Result<(), RepositoryError> {
+    async fn end(&self, id: &str, at: Timestamp) -> Result<(), RepositoryError> {
         sqlx::query("UPDATE stream_sessions SET ended_at = ? WHERE id = ?")
             .bind(time_text(at))
             .bind(id)
@@ -128,8 +126,8 @@ impl SessionRepository for SqliteSessions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatestSession {
     pub id: String,
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
+    pub started_at: Timestamp,
+    pub ended_at: Option<Timestamp>,
     pub peak_viewers: Option<u32>,
 }
 
@@ -148,8 +146,7 @@ pub async fn sessions(pool: &SqlitePool, limit: u32) -> Result<Vec<LatestSession
     .fetch_all(pool)
     .await?;
     let parse = |s: &str| {
-        DateTime::parse_from_rfc3339(s)
-            .map(|t| t.to_utc())
+        s.parse::<Timestamp>()
             .map_err(|e| sqlx::Error::Decode(e.into()))
     };
     rows.into_iter()
@@ -168,6 +165,7 @@ pub async fn sessions(pool: &SqlitePool, limit: u32) -> Result<Vec<LatestSession
 pub(crate) mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
+    use toolkit_core::time::SignedDuration;
 
     pub(crate) async fn pool() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -184,7 +182,7 @@ pub(crate) mod tests {
         let repo = SqliteSessions::new(pool().await);
         let start = parse_time("2026-11-19T10:00:00Z").unwrap();
         let first = repo.open("9001", start).await.unwrap();
-        repo.end(&first.id, start + chrono::TimeDelta::hours(2))
+        repo.end(&first.id, start + SignedDuration::from_hours(2))
             .await
             .unwrap();
         assert!(repo.latest().await.unwrap().unwrap().ended_at.is_some());
@@ -208,7 +206,7 @@ pub(crate) mod tests {
         for viewers in [40, 58, 51] {
             repo.raise_peak(&s.id, viewers).await.unwrap();
         }
-        let end = start + chrono::TimeDelta::hours(2);
+        let end = start + SignedDuration::from_hours(2);
         repo.end(&s.id, end).await.unwrap();
         assert_eq!(
             latest_session(&pool).await.unwrap(),

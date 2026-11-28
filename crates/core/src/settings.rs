@@ -9,6 +9,7 @@ use std::{
     sync::Mutex,
 };
 
+use crate::time::Timestamp;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -518,7 +519,7 @@ fn back_up(path: &Path) -> bool {
     if kept {
         return false;
     }
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
+    let stamp = Timestamp::now().strftime("%Y%m%dT%H%M%S%3fZ");
     let backup = path.with_extension(format!("json.{stamp}.bak"));
     match write_synced(&backup, &current) {
         Ok(()) => {

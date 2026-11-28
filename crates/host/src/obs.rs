@@ -38,6 +38,7 @@ use toolkit_core::{
 use utoipa::ToSchema;
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 pub(crate) const STATUS_EVENT: &str = "obs.status";
 const STATUS_VERSION: u32 = 1;
@@ -116,7 +117,7 @@ pub(crate) fn publish_state(bus: &EventBus, state: &StreamingState) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: STATE_EVENT,
         version: STATE_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::Obs,
         payload: serde_json::to_value(state).expect("state serializes"),
     });
@@ -127,7 +128,7 @@ pub(crate) fn publish(bus: &EventBus, status: ObsStatus) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: STATUS_EVENT,
         version: STATUS_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::Obs,
         payload: serde_json::to_value(ObsStatusPayload::from(status)).expect("status serializes"),
     });

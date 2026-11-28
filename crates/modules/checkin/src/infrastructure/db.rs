@@ -1,6 +1,5 @@
 //! SQLite repository for check-ins. Rows map to the domain here; nothing else sees them.
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
 use uuid::Uuid;
 
@@ -8,6 +7,7 @@ use crate::{
     application::{CheckinRepository, Deducted, Outcome, RepositoryError},
     domain::{CheckIn, Deduction, ImportedViewer, Trigger, TwitchUserId, Viewer, available},
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// This module's migrations; the host merges them with the other modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -73,8 +73,9 @@ pub(crate) async fn deductions(
                 user_name,
                 amount: u32::try_from(amount).unwrap_or(0),
                 reason,
-                deducted_at: DateTime::parse_from_rfc3339(&deducted_at)
-                    .map(|t| t.to_utc().to_rfc3339_opts(SecondsFormat::Millis, true))
+                deducted_at: deducted_at
+                    .parse::<Timestamp>()
+                    .map(time::millis)
                     .unwrap_or(deducted_at),
             },
         )
@@ -137,8 +138,8 @@ pub(crate) async fn list_viewers(
 /// `exclude` (lowercase) are left out.
 pub async fn top_checkins(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     exclude: &[&str],
     limit: u32,
 ) -> Result<Vec<(String, u64)>, sqlx::Error> {
@@ -164,7 +165,7 @@ pub async fn top_checkins(
 /// How many viewers checked in on `day`, and the latest `recent` of them (viewer ID, name, time).
 pub(crate) async fn day_summary(
     pool: &SqlitePool,
-    day: chrono::NaiveDate,
+    day: jiff::civil::Date,
     recent: u32,
 ) -> Result<(u64, Vec<(String, String, String)>), RepositoryError> {
     let day = day.to_string();
@@ -186,9 +187,7 @@ pub(crate) async fn day_summary(
     let rows = rows
         .into_iter()
         .map(|(id, name, at)| {
-            let at = DateTime::parse_from_rfc3339(&at)
-                .map(|t| t.to_utc().to_rfc3339_opts(SecondsFormat::Millis, true))
-                .unwrap_or(at);
+            let at = at.parse::<Timestamp>().map(time::millis).unwrap_or(at);
             (id, name, at)
         })
         .collect();
@@ -200,8 +199,8 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 /// Fixed width, so text order is time order.
-pub(crate) fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+pub(crate) fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 fn trigger_text(t: Trigger) -> &'static str {
@@ -294,7 +293,7 @@ impl CheckinRepository for SqliteCheckins {
     async fn import(
         &self,
         viewers: &[ImportedViewer],
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let now = time_text(now);
@@ -419,7 +418,7 @@ impl CheckinRepository for SqliteCheckins {
         &self,
         viewer_id: &str,
         d: &Deduction,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<Deducted, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let totals: Option<(i64, i64)> = sqlx::query_as(
@@ -474,8 +473,8 @@ pub struct CheckedInEntry {
 /// Check-ins from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
 pub async fn checked_in_between(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     limit: u32,
 ) -> Result<Vec<CheckedInEntry>, sqlx::Error> {
     sqlx::query_as(
@@ -529,8 +528,8 @@ pub(crate) mod tests {
         pool
     }
 
-    pub(crate) fn utc(s: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(s).unwrap().to_utc()
+    pub(crate) fn utc(s: &str) -> Timestamp {
+        s.parse::<Timestamp>().unwrap()
     }
 
     pub(crate) fn viewer(id: &str) -> Viewer {

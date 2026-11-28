@@ -27,6 +27,7 @@ use crate::{
     application::{SoundError, SoundService},
     domain::{Cue, MAX_BYTES},
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// Same shape as the host's admin error body: a stable `<area>.<reason>` code.
 #[derive(Serialize, ToSchema)]
@@ -201,7 +202,7 @@ fn publish_stopped(bus: &EventBus) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: STOPPED,
         version: STOPPED_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::Simulation,
         payload: serde_json::json!({}),
     });
@@ -216,7 +217,7 @@ fn publish_play(bus: &EventBus, id: &str, volume: u8, source: Source) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: PLAY,
         version: PLAY_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source,
         payload: serde_json::to_value(payload).expect("serializable"),
     });

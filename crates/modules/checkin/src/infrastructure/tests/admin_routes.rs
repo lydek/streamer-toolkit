@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::{SignedDuration, Timestamp};
 
 async fn send(
     app: &axum::Router,
@@ -156,7 +157,7 @@ async fn seed(pool: &SqlitePool, user: &str, name: &str, at: &str) {
         domain::{BusinessDay, CheckIn, Trigger},
     };
     let rule = BusinessDay::new("Asia/Taipei", 0).unwrap();
-    let at = DateTime::parse_from_rfc3339(at).unwrap().to_utc();
+    let at = at.parse::<Timestamp>().unwrap();
     let viewer = Viewer {
         twitch_id: TwitchUserId(user.into()),
         login: format!("login{user}"),
@@ -363,14 +364,14 @@ async fn manual_check_ins_follow_the_one_per_day_rule() {
 #[tokio::test]
 async fn today_counts_the_current_business_day() {
     let a = api("today").await;
-    let now = Utc::now();
+    let now = Timestamp::now();
     let today = a.service.config().rules().day.day_of(now);
-    seed(&a.pool, "1", "Ann", &now.to_rfc3339()).await;
+    seed(&a.pool, "1", "Ann", &now.to_string()).await;
     seed(
         &a.pool,
         "2",
         "Bob",
-        &(now + chrono::Duration::milliseconds(1)).to_rfc3339(),
+        &(now + SignedDuration::from_millis(1)).to_string(),
     )
     .await;
     seed(&a.pool, "3", "Old", "2026-01-01T01:00:00Z").await;
@@ -501,7 +502,7 @@ async fn import_previews_then_sets_baselines_once() {
         .config()
         .rules()
         .day
-        .day_of(Utc::now())
+        .day_of(Timestamp::now())
         .to_string();
     let file =
         serde_json::json!({ "1": { "totalCheckIns": 12, "lastCheckInDate": today } }).to_string();
@@ -818,7 +819,7 @@ async fn a_pack_preset_needs_the_pack_installed() {
 #[tokio::test]
 async fn the_month_starts_with_the_business_day() {
     let a = api("month-start").await;
-    let utc = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+    let utc = |s: &str| s.parse::<Timestamp>().unwrap();
     // Asia/Taipei, reset at 0: 11/22 09:00 local belongs to November, which began 10/31 16:00 UTC.
     assert_eq!(
         a.service.month_start(utc("2026-11-22T01:00:00Z")),

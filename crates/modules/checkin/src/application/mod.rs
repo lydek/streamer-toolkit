@@ -8,8 +8,8 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use tokio::sync::{mpsc, oneshot};
+use toolkit_core::time::Timestamp;
 use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
     events::{ChatMessage, Source},
@@ -74,7 +74,7 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
     fn import(
         &self,
         viewers: &[ImportedViewer],
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 
     /// The viewer's stored profile image URL.
@@ -129,7 +129,7 @@ pub(crate) trait CheckinRepository: Send + Sync + 'static {
         &self,
         viewer_id: &str,
         deduction: &Deduction,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> impl Future<Output = Result<Deducted, RepositoryError>> + Send;
 }
 
@@ -263,7 +263,7 @@ pub(crate) struct Redeemed {
     pub(crate) viewer: Viewer,
     pub(crate) reward_id: String,
     /// The Twitch redemption time; a redemption delivered late still counts for the day it happened.
-    pub(crate) occurred_at: DateTime<Utc>,
+    pub(crate) occurred_at: Timestamp,
 }
 
 /// Redeeming the configured reward checks the viewer in, once per redemption and once per business day. Other
@@ -272,7 +272,7 @@ pub(crate) async fn redeemed<R: CheckinRepository>(
     repo: &R,
     rules: &Rules,
     r: &Redeemed,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Option<Outcome>, RepositoryError> {
     if rules
         .reward
@@ -429,11 +429,11 @@ pub(crate) enum ManualError {
 enum Job {
     Chat {
         viewer: Viewer,
-        occurred_at: DateTime<Utc>,
+        occurred_at: Timestamp,
     },
     Manual {
         viewer_id: String,
-        day: Option<NaiveDate>,
+        day: Option<jiff::civil::Date>,
         reply: oneshot::Sender<Result<Outcome, ManualError>>,
     },
     Deduct {
@@ -554,7 +554,7 @@ impl CheckinService {
                         occurred_at,
                     } => {
                         let check_in =
-                            CheckIn::at(&rules.day, occurred_at, Trigger::Chat, Utc::now());
+                            CheckIn::at(&rules.day, occurred_at, Trigger::Chat, Timestamp::now());
                         match repo.check_in(&viewer, &check_in).await {
                             Ok(Outcome::Repeat) if worker_config.style().show_repeat => {
                                 if let Ok(Some(c)) = repeated(&*repo, &rules, &viewer).await {
@@ -576,7 +576,8 @@ impl CheckinService {
                         day,
                         reply,
                     } => {
-                        let result = manual(&*repo, &rules, &viewer_id, day, Utc::now()).await;
+                        let result =
+                            manual(&*repo, &rules, &viewer_id, day, Timestamp::now()).await;
                         if let Ok((viewer, outcome)) = &result
                             && let Some(c) = checked_in(viewer, outcome, &rules)
                         {
@@ -589,7 +590,8 @@ impl CheckinService {
                         deduction,
                         reply,
                     } => {
-                        let _ = reply.send(repo.deduct(&viewer_id, &deduction, Utc::now()).await);
+                        let _ =
+                            reply.send(repo.deduct(&viewer_id, &deduction, Timestamp::now()).await);
                     }
                     Job::Push { viewer_id, reply } => {
                         let found = pushed(&*repo, &rules, &viewer_id).await;
@@ -721,7 +723,7 @@ impl CheckinService {
     pub(crate) async fn check_in_manually(
         &self,
         viewer_id: &str,
-        day: Option<NaiveDate>,
+        day: Option<jiff::civil::Date>,
     ) -> Result<Outcome, ManualError> {
         let (reply, answer) = oneshot::channel();
         let job = Job::Manual {
@@ -748,10 +750,10 @@ impl CheckinService {
     }
 
     /// When this month started, by the business day: its first day's start in the check-in time zone and reset hour.
-    pub fn month_start(&self, now: DateTime<Utc>) -> DateTime<Utc> {
+    pub fn month_start(&self, now: Timestamp) -> Timestamp {
         let rules = self.config.rules();
         let today = rules.day.day_of(now);
-        let first = today.with_day(1).expect("every month has a first day");
+        let first = today.first_of_month();
         rules.day.window(first).0
     }
 
@@ -817,8 +819,8 @@ async fn manual<R: CheckinRepository>(
     repo: &R,
     rules: &Rules,
     viewer_id: &str,
-    day: Option<NaiveDate>,
-    now: DateTime<Utc>,
+    day: Option<jiff::civil::Date>,
+    now: Timestamp,
 ) -> Result<(Viewer, Outcome), ManualError> {
     let viewer = repo
         .find_viewer(viewer_id)
@@ -846,7 +848,7 @@ pub(crate) async fn import<R: CheckinRepository>(
     repo: &R,
     viewers: &[ImportedViewer],
     apply: bool,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<ImportCounts, RepositoryError> {
     let known = repo.known_viewers().await?;
     let updated = viewers
@@ -863,13 +865,11 @@ pub(crate) async fn import<R: CheckinRepository>(
 }
 
 /// The time the event happened; an unreadable one falls back to the time received.
-pub(crate) fn parse_time(text: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(text)
-        .map(|t| t.to_utc())
-        .unwrap_or_else(|_| {
-            tracing::warn!("unreadable event time; using the time received");
-            Utc::now()
-        })
+pub(crate) fn parse_time(text: &str) -> Timestamp {
+    text.parse::<Timestamp>().unwrap_or_else(|_| {
+        tracing::warn!("unreadable event time; using the time received");
+        Timestamp::now()
+    })
 }
 
 #[cfg(test)]

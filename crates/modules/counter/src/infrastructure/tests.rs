@@ -6,6 +6,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use toolkit_core::time::{SignedDuration, Timestamp};
 use toolkit_core::{
     commands::Declared,
     events::{ChatBadge, ChatMessage},
@@ -732,7 +733,7 @@ async fn the_marathon_is_kept_across_a_restart_and_a_manual_pause_survives_a_str
 
     let (dir, pool, session) = (r.dir.clone(), r.pool.clone(), r.session.clone());
     let restarted = restart(dir, pool, session).await;
-    let started_at = chrono::Utc::now() - chrono::TimeDelta::minutes(30);
+    let started_at = Timestamp::now() - SignedDuration::from_mins(30);
     restarted
         .service
         .stream_status(crate::application::StreamState::Live { started_at })

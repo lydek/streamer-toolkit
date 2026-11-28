@@ -1,17 +1,17 @@
 //! What a start, an end or a check does to the current session.
 
-use chrono::{DateTime, TimeDelta, Utc};
 use toolkit_core::events::StreamChange;
+use toolkit_core::time::{SignedDuration, Timestamp};
 
 /// Get Streams can still say "not live" this long after a stream started; a check that soon is not an end.
-pub(crate) const START_LAG: TimeDelta = TimeDelta::minutes(3);
+pub(crate) const START_LAG: SignedDuration = SignedDuration::from_mins(3);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Session {
     pub(crate) id: String,
     pub(crate) twitch_id: String,
-    pub(crate) started_at: DateTime<Utc>,
-    pub(crate) ended_at: Option<DateTime<Utc>>,
+    pub(crate) started_at: Timestamp,
+    pub(crate) ended_at: Option<Timestamp>,
 }
 
 impl Session {
@@ -25,7 +25,7 @@ pub(crate) enum Step {
     /// A stream this session is not: open its session, or reopen the one with that Twitch ID.
     Open {
         twitch_id: String,
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
     },
     /// The live stream ended now.
     End,
@@ -33,11 +33,11 @@ pub(crate) enum Step {
     Keep,
 }
 
-pub(crate) fn step(current: Option<&Session>, change: &StreamChange, now: DateTime<Utc>) -> Step {
+pub(crate) fn step(current: Option<&Session>, change: &StreamChange, now: Timestamp) -> Step {
     let live = current.filter(|s| s.live());
     let open = |id: &str, started_at: &str| {
         // Twitch always sends RFC 3339; if not, the stream started about now.
-        let started_at = DateTime::parse_from_rfc3339(started_at).map_or(now, |t| t.to_utc());
+        let started_at = started_at.parse::<Timestamp>().map_or(now, |t| t);
         match current {
             // A late check (or start) for a stream older than the current session never brings it back.
             Some(c) if started_at < c.started_at => Step::Keep,
@@ -74,8 +74,8 @@ mod tests {
     use super::*;
     use toolkit_core::events::LiveStream;
 
-    fn at(s: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(s).unwrap().to_utc()
+    fn at(s: &str) -> Timestamp {
+        s.parse::<Timestamp>().unwrap()
     }
 
     fn session(twitch_id: &str, ended: bool) -> Session {

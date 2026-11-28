@@ -1,7 +1,7 @@
 //! Redemption record aggregate: one record per Twitch redemption, and the status rules it must keep
 //! (docs/modules/redemption.md).
 
-use chrono::{DateTime, Utc};
+use toolkit_core::time::Timestamp;
 use uuid::Uuid;
 
 /// Internal ID (UUID v7); Twitch's own ID is kept separately in [`TwitchRedemptionId`].
@@ -56,8 +56,8 @@ pub(crate) struct Redemption {
     pub(crate) reward: Reward,
     pub(crate) user_input: String,
     pub(crate) status: Status,
-    pub(crate) redeemed_at: DateTime<Utc>,
-    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) redeemed_at: Timestamp,
+    pub(crate) updated_at: Timestamp,
 }
 
 impl Redemption {
@@ -68,8 +68,8 @@ impl Redemption {
         reward: Reward,
         user_input: String,
         status: Status,
-        redeemed_at: DateTime<Utc>,
-        now: DateTime<Utc>,
+        redeemed_at: Timestamp,
+        now: Timestamp,
     ) -> Self {
         Self {
             id: RedemptionId::new(),
@@ -88,7 +88,7 @@ impl Redemption {
     pub(crate) fn change_status(
         &mut self,
         to: Status,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<bool, InvalidTransition> {
         use Status::*;
         let allowed = match (self.status, to) {
@@ -129,8 +129,8 @@ mod tests {
             },
             String::new(),
             status,
-            DateTime::UNIX_EPOCH,
-            DateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
         )
     }
 
@@ -144,14 +144,14 @@ mod tests {
             (Unknown, Fulfilled),
             (Unknown, Canceled),
         ];
-        let now = DateTime::from_timestamp(60, 0).unwrap();
+        let now = Timestamp::from_second(60).unwrap();
         for from in all {
             for to in all {
                 let mut r = redemption(from);
                 let result = r.change_status(to, now);
                 if from == to {
                     assert_eq!(result, Ok(false), "{from:?} again is a no-op");
-                    assert_eq!(r.updated_at, DateTime::UNIX_EPOCH);
+                    assert_eq!(r.updated_at, Timestamp::UNIX_EPOCH);
                 } else if allowed.contains(&(from, to)) {
                     assert_eq!(result, Ok(true), "{from:?} -> {to:?}");
                     assert_eq!((r.status, r.updated_at), (to, now));
@@ -170,9 +170,9 @@ mod tests {
     #[test]
     fn canceled_never_becomes_valid_again() {
         let mut r = redemption(Unfulfilled);
-        r.change_status(Canceled, DateTime::UNIX_EPOCH).unwrap();
-        assert!(r.change_status(Unfulfilled, DateTime::UNIX_EPOCH).is_err());
-        assert!(r.change_status(Fulfilled, DateTime::UNIX_EPOCH).is_err());
+        r.change_status(Canceled, Timestamp::UNIX_EPOCH).unwrap();
+        assert!(r.change_status(Unfulfilled, Timestamp::UNIX_EPOCH).is_err());
+        assert!(r.change_status(Fulfilled, Timestamp::UNIX_EPOCH).is_err());
         assert_eq!(r.status, Canceled);
     }
 

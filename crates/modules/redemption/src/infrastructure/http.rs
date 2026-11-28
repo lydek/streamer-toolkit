@@ -7,7 +7,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use utoipa::{IntoParams, ToSchema};
@@ -21,6 +20,7 @@ use crate::{
     domain::{Redemption, Status},
     infrastructure::db,
 };
+use toolkit_core::time::{self, Timestamp};
 
 const DEFAULT_LIMIT: u32 = 50;
 const MAX_LIMIT: u32 = 100;
@@ -91,7 +91,7 @@ pub struct PlayedEntry {
 
 impl From<Redemption> for RedemptionRecord {
     fn from(r: Redemption) -> Self {
-        let time = |t: DateTime<Utc>| t.to_rfc3339_opts(SecondsFormat::Millis, true);
+        let time = |t: Timestamp| time::millis(t);
         Self {
             id: r.id.0.to_string(),
             twitch_id: r.twitch_id.0,
@@ -162,13 +162,9 @@ pub fn routes(pool: SqlitePool, service: Arc<RedemptionService>) -> Router {
 
 fn filter(q: RedemptionQuery) -> Result<ListFilter, ()> {
     let text = |v: Option<String>| v.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
-    let time = |v: Option<String>| -> Result<Option<DateTime<Utc>>, ()> {
+    let time = |v: Option<String>| -> Result<Option<Timestamp>, ()> {
         text(v)
-            .map(|s| {
-                DateTime::parse_from_rfc3339(&s)
-                    .map(|t| t.to_utc())
-                    .map_err(|_| ())
-            })
+            .map(|s| s.parse::<Timestamp>().map_err(|_| ()))
             .transpose()
     };
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT);

@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::{self, Timestamp};
 
 /// A channel points reward of the signed-in channel, for picking the check-in reward. `title` is raw Twitch text.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -75,8 +76,8 @@ pub(crate) struct CheckinDeadLetter {
     reward_title: Option<String>,
 }
 
-fn rfc3339(t: chrono::DateTime<chrono::Utc>) -> String {
-    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+fn rfc3339(t: Timestamp) -> String {
+    time::millis(t)
 }
 
 #[utoipa::path(

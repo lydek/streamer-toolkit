@@ -8,12 +8,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use chrono::SecondsFormat;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use utoipa::ToSchema;
 
 use super::{ChatMessagePayload, db};
+use toolkit_core::time;
 
 /// How many messages the admin window loads; the same as its live log keeps.
 const RECENT: u32 = 200;
@@ -41,7 +41,7 @@ impl From<db::StoredMessage> for StoredChatMessage {
     fn from(m: db::StoredMessage) -> Self {
         Self {
             id: m.id,
-            sent_at: m.sent_at.to_rfc3339_opts(SecondsFormat::Millis, true),
+            sent_at: time::millis(m.sent_at),
             deleted: m.deleted,
             payload: m.payload,
         }

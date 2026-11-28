@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::{self, SignedDuration, Timestamp};
 
 #[tokio::test]
 async fn checkin_can_be_closed_and_its_dead_letters_handled() {
@@ -517,8 +518,7 @@ async fn the_stream_summary_adds_up_the_latest_session_and_needs_the_token() {
     // A stream that ended after this Host started, one follow and one redemption in it; an older stream's
     // follow and a redemption before the start do not count.
     let started = "2026-11-19T10:00:00.000000Z";
-    let ended = (chrono::Utc::now() + chrono::TimeDelta::hours(1))
-        .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+    let ended = time::micros(Timestamp::now() + SignedDuration::from_hours(1));
     sqlx::query(
         "INSERT INTO stream_sessions (id, twitch_stream_id, started_at, ended_at, peak_viewers) VALUES              ('old', 'a', '2026-11-18T10:00:00.000000Z', '2026-11-18T12:00:00.000000Z', 9), ('s1', 'b', ?, ?, 58)",
     )
@@ -662,11 +662,8 @@ async fn the_leaderboard_ranks_each_module_s_records_without_bots() {
     let mut config = test_config();
     let pool = db::memory_migrated().await;
     config.db = pool.clone();
-    let now = chrono::Utc::now();
-    let at = |mins: i64| {
-        (now - chrono::TimeDelta::minutes(mins))
-            .to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
-    };
+    let now = Timestamp::now();
+    let at = |mins: i64| time::micros(now - SignedDuration::from_mins(mins));
     for (id, login, name, bits) in [
         ("a1", "fish", "小魚", 100),
         ("a2", "fish", "小魚", 50),

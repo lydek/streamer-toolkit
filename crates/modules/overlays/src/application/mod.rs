@@ -3,14 +3,13 @@
 
 use std::{future::Future, path::PathBuf, sync::Mutex};
 
-use chrono::{DateTime, Utc};
-
 use crate::domain::{
     BreakCard, BreakSettings, Countdown,
     appearance::Appearance,
     media::{MediaEntry, MediaRule},
     warnings::{Conditions, WarningSettings, Warnings},
 };
+use toolkit_core::time::Timestamp;
 
 mod media;
 mod playback;
@@ -157,7 +156,7 @@ impl<R: OverlayRepository> OverlayService<R> {
         let card = self.break_card().await?;
         (self.publish)(&card);
         let settings = self.repo.warning_settings().await?.unwrap_or_default();
-        self.apply_warning_settings(settings, Utc::now());
+        self.apply_warning_settings(settings, Timestamp::now());
         (self.publish_appearance)(self.appearance().await?);
         self.reload_library().await
     }
@@ -198,7 +197,7 @@ impl<R: OverlayRepository> OverlayService<R> {
     }
 
     /// Takes what the host saw at `now`; announces only a change.
-    pub fn see(&self, conditions: Conditions, now: DateTime<Utc>) {
+    pub fn see(&self, conditions: Conditions, now: Timestamp) {
         let mut w = self.warnings.lock().unwrap();
         let next = w.warnings.next(&w.settings, &conditions, now);
         w.conditions = conditions;
@@ -208,7 +207,7 @@ impl<R: OverlayRepository> OverlayService<R> {
         }
     }
 
-    fn apply_warning_settings(&self, settings: WarningSettings, now: DateTime<Utc>) {
+    fn apply_warning_settings(&self, settings: WarningSettings, now: Timestamp) {
         let mut w = self.warnings.lock().unwrap();
         // Another input starts its own wait.
         if settings.mic_input != w.settings.mic_input {
@@ -222,7 +221,7 @@ impl<R: OverlayRepository> OverlayService<R> {
     pub async fn set_warning_settings(
         &self,
         settings: WarningSettings,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(WarningSettings, Warnings), OverlayError> {
         let settings = settings.normalized().ok_or(OverlayError::Invalid)?;
         let _one = self.lock.lock().await;
@@ -259,7 +258,7 @@ impl<R: OverlayRepository> OverlayService<R> {
     pub async fn show_break(
         &self,
         countdown: Countdown,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<BreakCard, OverlayError> {
         self.change(|card| card.show(countdown, now)).await
     }

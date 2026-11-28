@@ -1,7 +1,6 @@
 use super::*;
 use crate::infrastructure::db::tests::{chat, count, data_dir, pool, wait_for_count};
 use axum::{body::Body, http::Request};
-use chrono::DateTime;
 use toolkit_core::{events::Source, outbox::Outbox, settings::CheckinSettings};
 use tower::ServiceExt;
 

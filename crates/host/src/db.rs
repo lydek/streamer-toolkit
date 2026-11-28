@@ -11,6 +11,7 @@ use sqlx::{
     migrate::{MigrateError, Migration, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
+use toolkit_core::time::Timestamp;
 
 /// The database file in the data folder.
 pub const DB_FILE: &str = "toolkit.db";
@@ -126,7 +127,7 @@ async fn backup(pool: &SqlitePool, data_dir: &Path) -> Result<PathBuf, DbError> 
 
 /// UTC time for backup file names, e.g. `20261117T093000123Z`.
 pub(crate) fn stamp() -> impl std::fmt::Display {
-    chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ")
+    Timestamp::now().strftime("%Y%m%dT%H%M%S%3fZ")
 }
 
 /// A consistent copy taken through SQLite (`VACUUM INTO`), never a raw copy of the open file. It refuses an

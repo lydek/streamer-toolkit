@@ -10,7 +10,6 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 use toolkit_core::{
     events::{ChannelPointsRedemption, RedemptionChange, RedemptionStatus, Source},
@@ -18,6 +17,7 @@ use toolkit_core::{
 };
 
 use crate::domain::{Redemption, Reward, Status, TwitchRedemptionId, Viewer};
+use toolkit_core::time::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
 #[error("redemption.storage_failed: {0}")]
@@ -103,7 +103,7 @@ async fn record_retrying<R: RedemptionRepository>(
 ) -> Result<Option<Redemption>, RepositoryError> {
     let mut delays = RETRY_DELAYS.iter();
     loop {
-        match record(repo, event.clone(), Utc::now()).await {
+        match record(repo, event.clone(), Timestamp::now()).await {
             Err(e) => {
                 let Some(delay) = delays.next() else {
                     return Err(e);
@@ -122,12 +122,11 @@ async fn record_retrying<R: RedemptionRepository>(
 pub(crate) async fn record<R: RedemptionRepository>(
     repo: &R,
     event: ChannelPointsRedemption,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Option<Redemption>, RepositoryError> {
     let twitch_id = TwitchRedemptionId(event.id);
     let status = status(event.status);
-    let redeemed_at = DateTime::parse_from_rfc3339(&event.redeemed_at)
-        .map(|t| t.to_utc())
+    let redeemed_at = event.redeemed_at.parse::<Timestamp>()
         .unwrap_or_else(|_| {
             tracing::warn!(redemption = %twitch_id.0, "unreadable redemption time; using the time received");
             now
@@ -179,8 +178,8 @@ pub(crate) async fn record<R: RedemptionRepository>(
 /// Filters and page of the record list; `to` is exclusive. Text filters match part of the name, ignoring case.
 #[derive(Debug, Default)]
 pub(crate) struct ListFilter {
-    pub(crate) from: Option<DateTime<Utc>>,
-    pub(crate) to: Option<DateTime<Utc>>,
+    pub(crate) from: Option<Timestamp>,
+    pub(crate) to: Option<Timestamp>,
     /// Login or display name.
     pub(crate) viewer: Option<String>,
     pub(crate) reward: Option<String>,

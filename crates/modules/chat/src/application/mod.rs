@@ -13,11 +13,11 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, TimeDelta, Utc};
 use tokio::{
     sync::{mpsc, oneshot},
     time::{Instant, timeout_at},
 };
+use toolkit_core::time::{SignedDuration, Timestamp};
 use toolkit_core::{
     events::{ChatMessage, ChatRemoval, Source},
     modules::{self, Modules},
@@ -46,7 +46,7 @@ pub(crate) type ToStore = (ChatMessage, Option<String>, bool);
 
 /// Clearing a viewer or the whole chat reaches back this far: Twitch clears what its chat window still shows, not
 /// the broadcaster's history. shortcut: a fixed window, not Twitch's own; widen it if older messages show up.
-const CLEAR_REACH: TimeDelta = TimeDelta::hours(24);
+const CLEAR_REACH: SignedDuration = SignedDuration::from_hours(24);
 
 /// What a moderator took down, in which channel (broadcaster user ID), and for a viewer or the whole chat the
 /// oldest message it reaches; the admin window and storage use the same boundary.
@@ -55,7 +55,7 @@ pub struct Removal {
     pub channel: String,
     pub removal: ChatRemoval,
     /// `None` for one message, which is taken down whatever its age.
-    pub since: Option<DateTime<Utc>>,
+    pub since: Option<Timestamp>,
 }
 
 pub(crate) trait ChatRepository: Send + Sync + 'static {
@@ -261,7 +261,7 @@ impl ChatService {
         }
         let since = match removal {
             ChatRemoval::Message { .. } => None,
-            ChatRemoval::User { .. } | ChatRemoval::All => Some(Utc::now() - CLEAR_REACH),
+            ChatRemoval::User { .. } | ChatRemoval::All => Some(Timestamp::now() - CLEAR_REACH),
         };
         let removal = Removal {
             channel,
@@ -546,9 +546,9 @@ mod tests {
         let removals = removals.lock().unwrap();
         assert_eq!(removals[0].since, None);
         assert_eq!(removals[1].channel, "42");
-        let reach = Utc::now() - removals[1].since.unwrap();
+        let reach = Timestamp::now() - removals[1].since.unwrap();
         assert!(
-            reach >= CLEAR_REACH && reach < CLEAR_REACH + TimeDelta::seconds(5),
+            reach >= CLEAR_REACH && reach < CLEAR_REACH + SignedDuration::from_secs(5),
             "{reach}"
         );
         let _ = std::fs::remove_dir_all(dir);

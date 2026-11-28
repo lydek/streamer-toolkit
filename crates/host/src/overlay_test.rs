@@ -21,6 +21,7 @@ use toolkit_core::{
 use utoipa::ToSchema;
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 const COUNTER_TEST: &str = "counter.test";
 const MARATHON_TEST: &str = "marathon.test";
@@ -151,7 +152,7 @@ pub(crate) async fn test_overlay(
         id: uuid::Uuid::now_v7().to_string(),
         event_type,
         version: VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::Simulation,
         payload,
     });

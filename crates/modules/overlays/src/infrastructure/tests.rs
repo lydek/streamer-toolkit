@@ -2,6 +2,7 @@ use super::*;
 use axum::{body::Body, http::Request};
 use serde_json::{Value, json};
 use std::time::Duration;
+use toolkit_core::time::{SignedDuration, Timestamp};
 use tower::ServiceExt;
 
 struct Rig {
@@ -109,7 +110,7 @@ async fn defaults_until_saved_and_settings_round_trip() {
 #[tokio::test]
 async fn show_counts_down_by_minutes_or_until_a_time() {
     let r = rig().await;
-    let before = Utc::now();
+    let before = Timestamp::now();
     let (status, card) = send(
         &r.app,
         "POST",
@@ -119,14 +120,16 @@ async fn show_counts_down_by_minutes_or_until_a_time() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(card["shown"], true);
-    let ends = DateTime::parse_from_rfc3339(card["endsAt"].as_str().unwrap()).unwrap();
-    let minutes = (ends.to_utc() - before).num_seconds();
+    let ends = (card["endsAt"].as_str().unwrap())
+        .parse::<Timestamp>()
+        .unwrap();
+    let minutes = (ends - before).as_secs();
     assert!(
         (599..=601).contains(&minutes),
         "about 10 minutes, got {minutes}s"
     );
 
-    let until = db::rfc3339(Utc::now() + chrono::Duration::minutes(90));
+    let until = db::rfc3339(Timestamp::now() + SignedDuration::from_mins(90));
     let (status, card) = send(
         &r.app,
         "POST",
@@ -143,7 +146,7 @@ async fn show_counts_down_by_minutes_or_until_a_time() {
         json!({"minutes": 5, "until": until}),
         json!({"minutes": 0}),
         json!({"until": "not a time"}),
-        json!({"until": db::rfc3339(Utc::now() - chrono::Duration::minutes(1))}),
+        json!({"until": db::rfc3339(Timestamp::now() - SignedDuration::from_mins(1))}),
     ] {
         let (status, body) = send(&r.app, "POST", &format!("{BREAK_URL}/show"), Some(bad)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -226,7 +229,8 @@ async fn warnings_show_and_clear_with_what_the_host_sees() {
     assert_eq!(w["micSeconds"], 30);
     assert_eq!(w["micInput"], Value::Null);
 
-    r.service.see(seen(false, false, Some(true)), Utc::now());
+    r.service
+        .see(seen(false, false, Some(true)), Timestamp::now());
     let w = snapshot_warnings(&r.bus);
     assert_eq!(w["chatOverlayDown"], true);
     assert_eq!(w["twitchDown"], true);
@@ -246,13 +250,14 @@ async fn warnings_show_and_clear_with_what_the_host_sees() {
     );
     assert_eq!(snapshot_warnings(&r.bus)["micSeconds"], 10);
 
-    r.service.see(seen(true, true, Some(false)), Utc::now());
+    r.service
+        .see(seen(true, true, Some(false)), Timestamp::now());
     let w = snapshot_warnings(&r.bus);
     assert_eq!(w["chatOverlayDown"], false);
     assert_eq!(w["twitchDown"], false);
     assert_eq!(w["micMutedSince"], Value::Null);
 
-    r.service.see(seen(true, true, None), Utc::now());
+    r.service.see(seen(true, true, None), Timestamp::now());
     assert_eq!(snapshot_warnings(&r.bus)["micMissing"], true);
     let (_, w) = send(&r.app, "GET", WARNINGS_URL, None).await;
     assert_eq!(w["micMissing"], true);
@@ -275,9 +280,13 @@ async fn warning_settings_survive_a_restart_and_unchanged_sights_announce_nothin
     assert_eq!(w["micInput"], "Mic");
 
     let (_, mut events) = again.bus.subscribe();
-    again.service.see(seen(true, true, Some(false)), Utc::now());
+    again
+        .service
+        .see(seen(true, true, Some(false)), Timestamp::now());
     assert!(events.try_recv().is_ok());
-    again.service.see(seen(true, true, Some(false)), Utc::now());
+    again
+        .service
+        .see(seen(true, true, Some(false)), Timestamp::now());
     assert!(
         events.try_recv().is_err(),
         "the same sight again is not announced"
@@ -289,7 +298,7 @@ fn the_warnings_event_type_matches_what_the_bus_sends() {
     let bus = EventBus::default();
     bus.retain(warnings::WARNINGS, 1);
     let w = crate::domain::warnings::Warnings {
-        mic_muted_since: Some(Utc::now()),
+        mic_muted_since: Some(Timestamp::now()),
         ..Default::default()
     };
     bus.publish(Event {

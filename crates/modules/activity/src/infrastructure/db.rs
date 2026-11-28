@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{SqliteConnection, SqlitePool, migrate::Migrator};
 use toolkit_core::records::RecordTable;
 
@@ -10,6 +9,7 @@ use crate::{
     application::{ActivityRepository, RepositoryError},
     domain::Record,
 };
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -49,8 +49,8 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 /// Fixed width, so text order is time order.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 /// What happened in one stream session, as the host's stream summary shows it.
@@ -87,8 +87,8 @@ pub struct ActivityEntry {
 /// gift hands out are left out (the gift stands for them), so a big gift never pushes the rest past the limit.
 pub async fn activity_between(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     limit: u32,
 ) -> Result<Vec<ActivityEntry>, sqlx::Error> {
     sqlx::query_as(
@@ -119,8 +119,8 @@ pub enum Ranking {
 pub async fn ranking(
     pool: &SqlitePool,
     by: Ranking,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     exclude: &[&str],
     limit: u32,
 ) -> Result<Vec<(String, u64)>, sqlx::Error> {
@@ -224,7 +224,7 @@ impl ActivityRepository for SqliteActivity {
         Ok(result.rows_affected() == 1)
     }
 
-    async fn delete_before(&self, cutoff: DateTime<Utc>) -> Result<u64, RepositoryError> {
+    async fn delete_before(&self, cutoff: Timestamp) -> Result<u64, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let deleted = self
             .delete_all(&mut tx, &time_text(cutoff))
@@ -236,7 +236,7 @@ impl ActivityRepository for SqliteActivity {
 
     async fn delete_before_if_saved(
         &self,
-        cutoff: Option<DateTime<Utc>>,
+        cutoff: Option<Timestamp>,
         save: impl FnOnce() -> bool + Send,
     ) -> Result<Option<u64>, RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
@@ -255,7 +255,7 @@ impl ActivityRepository for SqliteActivity {
         Ok(Some(deleted))
     }
 
-    async fn count_before(&self, cutoff: DateTime<Utc>) -> Result<u64, RepositoryError> {
+    async fn count_before(&self, cutoff: Timestamp) -> Result<u64, RepositoryError> {
         let cutoff = time_text(cutoff);
         let mut conn = self.pool.acquire().await.map_err(storage)?;
         let n: i64 =
@@ -405,9 +405,7 @@ pub(crate) mod tests {
                 .unwrap();
         }
         let repo = SqliteActivity::new(pool.clone(), vec![Arc::new(Other)]);
-        let cutoff = DateTime::parse_from_rfc3339("2026-11-10T00:00:00Z")
-            .unwrap()
-            .to_utc();
+        let cutoff = "2026-11-10T00:00:00Z".parse::<Timestamp>().unwrap();
         assert_eq!(repo.count_before(cutoff).await.unwrap(), 1);
         assert_eq!(
             repo.delete_before_if_saved(Some(cutoff), || false)
@@ -462,7 +460,7 @@ pub(crate) mod tests {
                 .unwrap();
             }
         }
-        let at = |t: &str| DateTime::parse_from_rfc3339(t).unwrap().to_utc();
+        let at = |t: &str| t.parse::<Timestamp>().unwrap();
         let (from, until) = (
             Some(at("2026-11-19T09:00:00Z")),
             Some(at("2026-11-19T10:30:00Z")),

@@ -1,6 +1,5 @@
 //! Chat messages in SQLite (`chat_messages`).
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool, migrate::Migrator};
 use toolkit_core::{
     events::ChatRemoval,
@@ -9,6 +8,7 @@ use toolkit_core::{
 
 use super::{ChatMessagePayload, chat_payload};
 use crate::application::{ChatRepository, Removal, RepositoryError, ToStore};
+use toolkit_core::time::{self, Timestamp};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -38,8 +38,8 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 /// Fixed width, so text order is time order.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 impl ChatRepository for SqliteChat {
@@ -47,8 +47,10 @@ impl ChatRepository for SqliteChat {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         for (m, session, first) in messages {
             // Twitch's time; a message without a readable one counts as arriving now.
-            let sent_at = DateTime::parse_from_rfc3339(&m.sent_at)
-                .map_or_else(|_| Utc::now(), |t| t.to_utc());
+            let sent_at = m
+                .sent_at
+                .parse::<Timestamp>()
+                .unwrap_or_else(|_| Timestamp::now());
             let payload = serde_json::to_string(&ChatMessagePayload {
                 first_chat: *first,
                 ..chat_payload(m.clone())
@@ -155,7 +157,7 @@ impl RecordTable for ChatRecords {
 pub struct StoredMessage {
     /// Twitch's message ID (the `chat.message` event's `id`).
     pub id: String,
-    pub sent_at: DateTime<Utc>,
+    pub sent_at: Timestamp,
     pub deleted: bool,
     pub payload: ChatMessagePayload,
 }
@@ -178,8 +180,8 @@ pub async fn recent_messages(
 /// Stored messages from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
 pub async fn messages_between(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     limit: u32,
 ) -> Result<Vec<StoredMessage>, sqlx::Error> {
     let mut query = QueryBuilder::<Sqlite>::new(
@@ -197,8 +199,8 @@ pub async fn messages_between(
 
 fn push_time_range(
     query: &mut QueryBuilder<Sqlite>,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
 ) {
     if let Some(from) = from {
         query.push(" WHERE sent_at >= ").push_bind(time_text(from));
@@ -217,8 +219,8 @@ fn push_time_range(
 /// name of their latest message in that time, so a rename shows.
 pub async fn top_chatters(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     exclude: &[&str],
     limit: u32,
 ) -> Result<Vec<(String, u64)>, sqlx::Error> {
@@ -244,14 +246,14 @@ pub async fn top_chatters(
 
 pub async fn count_between(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
-) -> Result<(u32, Option<DateTime<Utc>>), sqlx::Error> {
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
+) -> Result<(u32, Option<Timestamp>), sqlx::Error> {
     let mut query = QueryBuilder::<Sqlite>::new("SELECT COUNT(*), MIN(sent_at) FROM chat_messages");
     push_time_range(&mut query, from, until);
     let (n, first): (i64, Option<String>) = query.build_query_as().fetch_one(pool).await?;
     let first = first
-        .map(|s| DateTime::parse_from_rfc3339(&s).map(|t| t.to_utc()))
+        .map(|s| s.parse::<Timestamp>())
         .transpose()
         .map_err(|e| sqlx::Error::Decode(e.into()))?;
     Ok((n.try_into().unwrap_or(u32::MAX), first))
@@ -262,9 +264,9 @@ fn stored(
 ) -> Result<StoredMessage, sqlx::Error> {
     Ok(StoredMessage {
         id,
-        sent_at: DateTime::parse_from_rfc3339(&sent_at)
-            .map_err(|e| sqlx::Error::Decode(e.into()))?
-            .to_utc(),
+        sent_at: sent_at
+            .parse::<Timestamp>()
+            .map_err(|e| sqlx::Error::Decode(e.into()))?,
         deleted,
         payload: serde_json::from_str(&payload).map_err(|e| sqlx::Error::Decode(e.into()))?,
     })
@@ -290,16 +292,16 @@ pub async fn session_chat_counts(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use chrono::TimeDelta;
     use sqlx::sqlite::SqlitePoolOptions;
     use toolkit_core::events::{ChatMessage, Fragment};
+    use toolkit_core::time::SignedDuration;
 
     /// A removal in channel `42`, a viewer or the whole chat reaching back a day.
     fn removal(removal: ChatRemoval) -> Removal {
         Removal {
             channel: "42".into(),
             since: (!matches!(removal, ChatRemoval::Message { .. }))
-                .then(|| Utc::now() - TimeDelta::hours(24)),
+                .then(|| Timestamp::now() - SignedDuration::from_hours(24)),
             removal,
         }
     }
@@ -338,8 +340,8 @@ pub(crate) mod tests {
     async fn stores_once_counts_per_session_and_reads_back_oldest_first() {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
-        let now = Utc::now();
-        let at = |mins: i64| time_text(now - TimeDelta::minutes(mins));
+        let now = Timestamp::now();
+        let at = |mins: i64| time_text(now - SignedDuration::from_mins(mins));
         repo.store(&[
             (message("m1", "7", "hi", &at(3)), Some("s1".into()), false),
             (
@@ -376,9 +378,9 @@ pub(crate) mod tests {
     async fn removals_clear_the_text_and_keep_the_message() {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
-        let now = Utc::now();
-        let at = |mins: i64| time_text(now - TimeDelta::minutes(mins));
-        let old = time_text(now - TimeDelta::days(3));
+        let now = Timestamp::now();
+        let at = |mins: i64| time_text(now - SignedDuration::from_mins(mins));
+        let old = time_text(now - time::days(3));
         repo.store(&[
             (message("m1", "7", "one", &at(5)), None, false),
             (message("m2", "7", "two", &at(4)), None, false),
@@ -430,7 +432,7 @@ pub(crate) mod tests {
     async fn a_message_after_a_clear_stays_until_the_next_clear() {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
-        let at = |mins: i64| time_text(Utc::now() - TimeDelta::minutes(mins));
+        let at = |mins: i64| time_text(Timestamp::now() - SignedDuration::from_mins(mins));
         let deleted = |pool: SqlitePool| async move {
             recent_messages(&pool, 10)
                 .await
@@ -462,7 +464,7 @@ pub(crate) mod tests {
     async fn clearing_a_viewer_or_the_chat_stays_in_its_channel() {
         let pool = pool().await;
         let repo = SqliteChat::new(pool.clone());
-        let at = time_text(Utc::now() - TimeDelta::minutes(5));
+        let at = time_text(Timestamp::now() - SignedDuration::from_mins(5));
         let other = |id: &str| ChatMessage {
             broadcaster_id: "99".into(),
             ..message(id, "7", "elsewhere", &at)
@@ -516,7 +518,7 @@ pub(crate) mod tests {
         ])
         .await
         .unwrap();
-        let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+        let at = |s: &str| s.parse::<Timestamp>().unwrap();
         let ids = |v: Vec<StoredMessage>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();
         assert_eq!(
             ids(
@@ -648,7 +650,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         }
-        let at = |t: &str| DateTime::parse_from_rfc3339(t).unwrap().to_utc();
+        let at = |t: &str| t.parse::<Timestamp>().unwrap();
         let (from, until) = (
             Some(at("2026-11-19T09:00:00Z")),
             Some(at("2026-11-19T10:30:00Z")),

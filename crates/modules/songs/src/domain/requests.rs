@@ -1,9 +1,8 @@
 //! Song requests (docs/modules/songs.md 點歌, 狀態轉換, 回覆): matching a viewer's words, the states a request
 //! goes through, and filling in a reply.
 
-use chrono::{DateTime, Utc};
-
 use super::{Category, Song, normalize};
+use toolkit_core::time::Timestamp;
 
 /// Queued requests at most.
 pub(crate) const QUEUE_MAX: usize = 100;
@@ -60,14 +59,14 @@ pub struct Request {
     pub(crate) state: RequestState,
     /// Order among the queued ones, smallest first.
     pub(crate) position: i64,
-    pub(crate) requested_at: DateTime<Utc>,
+    pub(crate) requested_at: Timestamp,
     /// When it was sung or removed.
-    pub(crate) finished_at: Option<DateTime<Utc>>,
+    pub(crate) finished_at: Option<Timestamp>,
 }
 
 impl Request {
     /// Moves to `next` if the table allows it.
-    pub(crate) fn move_to(&mut self, next: RequestState, now: DateTime<Utc>) -> bool {
+    pub(crate) fn move_to(&mut self, next: RequestState, now: Timestamp) -> bool {
         if !self.state.can_become(next) {
             return false;
         }

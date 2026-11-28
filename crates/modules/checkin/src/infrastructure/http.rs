@@ -11,7 +11,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
@@ -25,6 +24,7 @@ use crate::{
     domain::{Deduction, ImportEntry, ImportedViewer, Rules, SkipReason},
     infrastructure::db,
 };
+use toolkit_core::time::Timestamp;
 
 /// Largest import file accepted.
 pub const IMPORT_MAX_BYTES: usize = 5 * 1024 * 1024;
@@ -320,7 +320,7 @@ async fn import(
         return error(StatusCode::BAD_REQUEST, "checkin.import_invalid");
     };
     let repo = db::SqliteCheckins::new(s.pool.clone());
-    match application::import(&repo, &viewers, apply, Utc::now()).await {
+    match application::import(&repo, &viewers, apply, Timestamp::now()).await {
         Ok(counts) => Json(ImportSummary {
             added: counts.added,
             updated: counts.updated,
@@ -435,7 +435,7 @@ pub(crate) async fn list_viewers(
     )
 )]
 pub(crate) async fn today(State(s): State<Arc<HttpState>>) -> Response {
-    let day = s.service.config().rules().day.day_of(Utc::now());
+    let day = s.service.config().rules().day.day_of(Timestamp::now());
     match db::day_summary(&s.pool, day, RECENT).await {
         Ok((count, recent)) => Json(CheckinToday {
             business_day: day.to_string(),
@@ -479,7 +479,7 @@ pub(crate) async fn manual_check_in(
         .filter(|d| !d.is_empty())
     {
         None => None,
-        Some(text) => match NaiveDate::parse_from_str(text, "%Y-%m-%d") {
+        Some(text) => match jiff::civil::Date::strptime("%Y-%m-%d", text) {
             Ok(day) => Some(day),
             Err(_) => return error(StatusCode::BAD_REQUEST, "checkin.invalid_date"),
         },
