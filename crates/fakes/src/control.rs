@@ -167,6 +167,9 @@ pub fn send_event(
         _ => {}
     }
     let mut event = events::event(twitch_type, p, &id).expect("every kind has an event");
+    if let (true, Some(at)) = (twitch_type == "stream.online", twitch.started_at()) {
+        event["started_at"] = json!(at); // the same start as /helix/streams
+    }
     match twitch_type {
         "channel.channel_points_custom_reward_redemption.add" => twitch.redeemed(&mut event),
         "channel.channel_points_custom_reward_redemption.update" => {

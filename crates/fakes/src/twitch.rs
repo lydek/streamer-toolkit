@@ -88,7 +88,8 @@ impl Drop for Open {
 struct World {
     /// Scopes asked for at the last device login; `/validate` grants them.
     scopes: Vec<String>,
-    live: bool,
+    /// When the stream went online (`send online`); `None` while offline.
+    live: Option<String>,
     subscriptions: Vec<Value>,
     eventsub_connects: u32,
     eventsub_open: u32,
@@ -140,7 +141,7 @@ impl FakeTwitch {
         Self(Arc::new(Inner {
             world: Mutex::new(World {
                 scopes: Vec::new(),
-                live: false,
+                live: None,
                 subscriptions: Vec::new(),
                 eventsub_connects: 0,
                 eventsub_open: 0,
@@ -241,7 +242,7 @@ impl FakeTwitch {
         TwitchSnapshot {
             eventsub_open: w.eventsub_open,
             irc_open: w.irc_open,
-            live: w.live,
+            live: w.live.is_some(),
             subscriptions: w
                 .subscriptions
                 .iter()
@@ -266,9 +267,19 @@ impl FakeTwitch {
         Open(self.clone(), socket)
     }
 
-    /// Whether `/helix/streams` reports the broadcaster live.
+    /// Whether `/helix/streams` reports the broadcaster live; going live stamps the start time, staying live keeps it.
     pub fn set_live(&self, live: bool) {
-        self.0.world.lock().unwrap().live = live;
+        let mut w = self.0.world.lock().unwrap();
+        w.live = if live {
+            w.live.take().or_else(|| Some(now()))
+        } else {
+            None
+        };
+    }
+
+    /// When the stream went online, while it is.
+    pub fn started_at(&self) -> Option<String> {
+        self.0.world.lock().unwrap().live.clone()
     }
 
     /// Sends `event` as a notification of `kind` to every EventSub session, as Twitch does only for a type the app
@@ -465,13 +476,13 @@ async fn users(RawQuery(query): RawQuery) -> Response {
 async fn streams(State(fake): State<FakeTwitch>) -> Response {
     let (live, c) = {
         let w = fake.0.world.lock().unwrap();
-        (w.live, w.channel.clone())
+        (w.live.clone(), w.channel.clone())
     };
-    let data = if live {
+    let data = if let Some(started_at) = live {
         json!([{"id": "fake-stream", "user_id": BROADCASTER_ID, "user_login": BROADCASTER_LOGIN,
                 "user_name": BROADCASTER_NAME, "game_id": c.category_id, "game_name": c.category_name(),
                 "type": "live", "title": c.title, "tags": c.tags, "language": c.language,
-                "viewer_count": 42, "started_at": TIMESTAMP}])
+                "viewer_count": 42, "started_at": started_at}])
     } else {
         json!([])
     };
@@ -741,6 +752,38 @@ mod tests {
         assert_eq!(id, id_for("viewer_a"));
         assert_ne!(id, id_for("viewer_b"));
         assert!(id.bytes().all(|b| b.is_ascii_digit()));
+    }
+
+    #[test]
+    fn the_stream_starts_when_it_goes_online() {
+        let fake = FakeTwitch::new(Duration::from_secs(10));
+        assert_eq!(fake.started_at(), None);
+        let before = now();
+        fake.set_live(true);
+        let started = fake.started_at().unwrap();
+        assert!(started >= before && started <= now());
+        fake.set_live(true);
+        assert_eq!(
+            fake.started_at(),
+            Some(started),
+            "staying live keeps the start"
+        );
+        fake.set_live(false);
+        assert_eq!(fake.started_at(), None);
+    }
+
+    #[tokio::test]
+    async fn helix_streams_reports_the_start_time() {
+        let fake = FakeTwitch::new(Duration::from_secs(10));
+        fake.set_live(true);
+        let body = to_bytes(streams(State(fake.clone())).await.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body["data"][0]["started_at"],
+            json!(fake.started_at().unwrap())
+        );
     }
 
     #[test]
