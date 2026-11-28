@@ -301,10 +301,12 @@ test('最近事件 says what became of each alert and 重播 queues it again', a
   })
   await page.goto('/admin/alert-log')
   const recent = page.getByRole('region', { name: zh.alerts.recent.title })
-  const rows = recent.getByRole('listitem')
+  const rows = recent.locator('tbody tr')
   await expect(rows).toHaveCount(3)
   await expect(rows.nth(0)).toContainText(zh.alerts.recent.outcome.pending)
   await expect(rows.nth(1)).toContainText(zh.alerts.recent.outcome.sound_missing)
+  // Each outcome is a tag with an icon as well as its words, never colour alone.
+  await expect(rows.nth(1).locator('.outcome.bad i.pi-exclamation-triangle')).toHaveCount(1)
   await expect(rows.nth(2)).toContainText(zh.alerts.recent.outcome.cleared)
   await expect(rows.nth(2)).toContainText(zh.alerts.recent.simulated)
 

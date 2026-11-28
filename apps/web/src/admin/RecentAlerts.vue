@@ -4,17 +4,36 @@
     <h2 id="recent-alerts">{{ t('alerts.recent.title') }}</h2>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="recent && !recent.length" class="muted">{{ t('alerts.recent.empty') }}</p>
-    <ul v-else-if="recent" class="plain recent">
-      <li v-for="r in recent" :key="r.id">
-        <time :datetime="r.occurredAt">{{ clock(r.occurredAt) }}</time>
-        <span class="what">
-          {{ alertTitle(r.payload) }}
-          <span v-if="r.source === 'simulation'" class="tag">{{ t('alerts.recent.simulated') }}</span>
-        </span>
-        <span class="outcome" :class="{ bad: isBad(r.outcome) }">{{ t(`alerts.recent.outcome.${r.outcome ?? 'pending'}`) }}</span>
-        <Button :label="t('alerts.recent.replay')" text size="small" :disabled="busy === r.id" @click="replay(r.id)" />
-      </li>
-    </ul>
+    <!-- A table in a card, as the prototype; one outcome per alert, as the Host records it. -->
+    <div v-else-if="recent" class="tbl-wrap">
+      <table class="table recent">
+        <thead>
+          <tr>
+            <th scope="col">{{ t('alerts.recent.cols.when') }}</th>
+            <th scope="col">{{ t('alerts.recent.cols.what') }}</th>
+            <th scope="col">{{ t('alerts.recent.cols.outcome') }}</th>
+            <th scope="col"><span class="sr-only">{{ t('alerts.recent.replay') }}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in recent" :key="r.id">
+            <td><time :datetime="r.occurredAt">{{ clock(r.occurredAt) }}</time></td>
+            <td class="what">
+              {{ alertTitle(r.payload) }}
+              <span v-if="r.source === 'simulation'" class="tag">{{ t('alerts.recent.simulated') }}</span>
+            </td>
+            <td>
+              <span class="outcome" :class="look(r.outcome).kind">
+                <i :class="look(r.outcome).icon" aria-hidden="true"></i>{{ t(`alerts.recent.outcome.${r.outcome ?? 'pending'}`) }}
+              </span>
+            </td>
+            <td class="end">
+              <Button :label="t('alerts.recent.replay')" icon="pi pi-replay" text size="small" :disabled="busy === r.id" @click="replay(r.id)" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 </template>
 
@@ -54,7 +73,14 @@ const clock = (at: string) => {
   const d = new Date(at)
   return `${two(d.getHours())}:${two(d.getMinutes())}`
 }
-const isBad = (o: Schemas['Outcome'] | null) => o !== null && o !== 'played'
+/** The outcome tag's look: played (green), waiting, a problem the streamer can fix (the sound file missing), or not
+ *  played on purpose or by circumstance (grey). The words always say which; the colour is never the only cue. */
+function look(o: Schemas['Outcome'] | null): { kind: string; icon: string } {
+  if (o === null) return { kind: 'wait', icon: 'pi pi-clock' }
+  if (o === 'played') return { kind: 'ok', icon: 'pi pi-check' }
+  if (o === 'sound_missing') return { kind: 'bad', icon: 'pi pi-exclamation-triangle' }
+  return { kind: 'skip', icon: 'pi pi-minus' }
+}
 
 async function replay(id: string) {
   busy.value = id
@@ -76,12 +102,8 @@ time {
   color: var(--p-text-muted-color);
 }
 
-.recent li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  padding: 0.25rem 0;
+.recent .end {
+  text-align: end;
 }
 
 time {
@@ -89,7 +111,6 @@ time {
 }
 
 .what {
-  flex: 1 1 12rem;
   overflow-wrap: anywhere;
 }
 
@@ -103,10 +124,28 @@ time {
 }
 
 .outcome {
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.outcome.ok {
+  background: color-mix(in srgb, var(--p-green-400) 18%, transparent);
+  color: var(--p-green-300);
 }
 
 .outcome.bad {
-  color: var(--p-yellow-400);
+  background: color-mix(in srgb, var(--p-yellow-400) 18%, transparent);
+  color: var(--p-yellow-300);
+}
+
+.outcome.wait,
+.outcome.skip {
+  background: var(--p-surface-800);
+  color: var(--p-text-muted-color);
 }
 </style>
