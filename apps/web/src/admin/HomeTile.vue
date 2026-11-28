@@ -85,8 +85,23 @@ const shown = useThrottled(() => props.line, () => (props.immediate ? 0 : 3000))
 }
 
 .tile-actions :deep(.p-button) {
+  max-width: 100%;
   padding: 0.1875rem 0.5rem;
   font-size: 0.8125rem;
+}
+
+/* A label stays on one line (cut short rather than one character a line); the button keeps its full name. */
+.tile-actions :deep(.p-button-label) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Two tiles a row: the buttons use the tile's full width instead of lining up with the text column. */
+@container view (max-width: 40rem) {
+  .tile-actions {
+    padding-left: 1.125rem;
+  }
 }
 
 .tile.acts {

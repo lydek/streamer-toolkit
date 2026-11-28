@@ -2,7 +2,9 @@
   <!-- Sticky on every page (docs/decisions.md 管理 UI 版面); its height is --appbar-h for other sticky parts. -->
   <header ref="bar" class="app-bar" :class="{ scrolled }">
     <div class="bar-top">
-      <span class="brand"><i class="pi pi-video" aria-hidden="true"></i>{{ t('app.name') }}</span>
+      <span class="brand"><i class="pi pi-video" aria-hidden="true"></i><span class="brand-name">{{ t('app.name') }}</span></span>
+      <!-- Screen readers hear going live or ending, never the ticking timer. -->
+      <span class="sr-only" aria-live="polite">{{ liveState }}</span>
       <div class="bar-status">
         <!-- What OBS is sending out right now; nothing while it is idle or not connected. -->
         <!-- Twitch's view: live since when and for how many viewers, or ended; nothing until Twitch has answered. -->
@@ -13,8 +15,6 @@
         <span v-else-if="live.stream?.state === 'offline'" class="live-pill offline">
           <span class="dot" aria-hidden="true"></span>{{ t('nav.offline') }}
         </span>
-        <!-- Screen readers hear going live or ending, never the ticking timer. -->
-        <span class="sr-only" aria-live="polite">{{ liveState }}</span>
         <span v-if="live.obsState?.streaming" class="on-air">{{ t('nav.streaming') }}</span>
         <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
@@ -44,6 +44,8 @@
           v-bind="lightAttrs"
           @click="openConnections(summary.service, $event.currentTarget)"
         />
+      </div>
+      <div class="bar-tools">
         <Button
           v-if="problems.length"
           class="problem"
@@ -467,15 +469,45 @@ onBeforeUnmount(() => {
   color: var(--p-primary-color);
 }
 
-/* One unit: when the row is too narrow the whole group moves to the next line, so settings does not end up alone
-   on a line; only when the group is wider than the bar itself (very large text) do its buttons wrap. */
-.bar-status {
+/* Wide: name, status and tools on one row. Each group wraps as one unit, so settings never ends up alone on a line;
+   only a group wider than the bar itself (very large text) wraps inside. */
+.bar-status,
+.bar-tools {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
   align-items: center;
   gap: 0.5rem;
+}
+
+.bar-status:empty {
+  display: none;
+}
+
+/* Phone-wide bars: the name gives its room to the tools (screen readers still hear it), so they share one row. */
+@container top (max-width: 30rem) {
+  .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Narrow (the prototype's rule): the tools stay beside the name, the status takes the second row. */
+@container top (max-width: 52rem) {
+  .bar-tools {
+    order: 1;
+  }
+
+  .bar-status {
+    order: 2;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .estop {
