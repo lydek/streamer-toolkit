@@ -281,6 +281,8 @@ details.more > summary:hover { color: var(--s0); }
 .stamps i { width: 0.625rem; height: 0.625rem; border-radius: 50%; background: var(--s700); }
 .stamps i.on { background: var(--green); }
 .stamp-cell { display: flex; align-items: center; gap: 0.625rem; white-space: nowrap; }
+.stamp-bar { display: block; width: 8rem; height: 0.5rem; border-radius: 999px; background: var(--s700); overflow: hidden; }
+.stamp-bar i { display: block; height: 100%; background: var(--green); }
 
 /* sounds */
 .sound-list { list-style: none; margin: 0; padding: 0; border-radius: var(--radius); background: var(--s900); }
@@ -362,6 +364,12 @@ body.dock-left .rail { right: auto; left: 0; border-right: 1px solid var(--s700)
 .brand[data-go]:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
 .pill .meta { color: var(--s300); font-variant-numeric: tabular-nums; }
 .pill.live { background: var(--t-red); }
+.on-air { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.125rem 0.5rem; border-radius: 999px; background: var(--t-red); color: var(--red); font-size: 0.8125rem; font-weight: 600; }
+.on-air::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--red); }
+.sim-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.sim-rows li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.sim-rows .what { min-width: 8rem; font-weight: 600; }
+.sim-rows .select { width: auto; }
 .pill.live:hover { background: #45293a; }
 .pill.live .dot { background: var(--red); box-shadow: 0 0 0 0 var(--red); animation: live 1.8s ease-out infinite; }
 .pill.offline .dot { background: var(--s500); animation: none; }
@@ -1007,8 +1015,6 @@ body.l-tabs .tabbar > button[aria-current="page"] { color: var(--primary); borde
 body.l-side .fp-head > [data-go="home"], body.l-side .page-head > [data-go="home"],
 body.l-tabs .fp-head > [data-go="home"], body.l-tabs .page-head > [data-go="home"] { display: none; }
 body.l-side .topbar [data-go="settings"] { display: none; }
-/* console */
-.console { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; align-items: start; }
 .w { grid-column: span 4; min-width: 0; }
 .w-attn { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: 0.5rem; }
 .w-stats { grid-column: 1 / -1; }
@@ -1033,11 +1039,6 @@ body.l-tabs .w-chat { display: none; }
 .feed a { color: var(--primary); }
 @media (max-width: 1200px) { .w, .w-feed, .w-queue, .w-song, .w-scene, .w-quick, .w-chat { grid-column: span 6; grid-row: auto; } }
 @media (max-width: 800px) { .w, .w-feed, .w-queue, .w-song, .w-scene, .w-quick, .w-chat { grid-column: 1 / -1; } body.l-side .sidenav { display: none; } }
-.proto-layout { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0.75rem; z-index: 6; display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.25rem 0.25rem 0.75rem;
-  border: 1px dashed var(--s600); border-radius: 999px; background: var(--s950); font-size: 0.8125rem; }
-.proto-layout span { color: var(--s500); margin-right: 0.25rem; }
-.proto-layout button { padding: 0.25rem 0.75rem; border: 0; border-radius: 999px; background: none; color: var(--s300); cursor: pointer; }
-.proto-layout button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 /* layout picker previews */
 .layouts { grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr)); }
 .lp { display: grid; gap: 0.25rem; height: 5.5rem; padding: 0.375rem; border-radius: 4px; background: var(--s950); box-shadow: inset 0 0 0 1px var(--s700); }
@@ -1185,7 +1186,6 @@ body.tabs-bottom .tabbar > button[aria-current="page"] { border-top-color: var(-
 body.tabs-bottom .tabbar > .tb-menu { top: auto; bottom: 100%; }
 body.tabs-bottom .shell { padding-bottom: 5rem; }
 body.tabs-bottom .dock { height: calc(100vh - 3.25rem); }
-body.tabs-bottom .proto-layout { bottom: 4rem; }
 .tabs-edit { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; max-height: 22rem; overflow-y: auto; }
 .tabs-edit li { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem; border-radius: var(--radius); }
 .tabs-edit li.on { background: var(--s800); }
@@ -1223,7 +1223,6 @@ body.tabs-bottom .proto-layout { bottom: 4rem; }
   .modes button { font-size: 0; padding: 0.375rem 0.5rem; }
   .modes button .pi { font-size: 0.875rem; }
   .brand h1 { font-size: 1.0625rem; }
-  .proto-layout { display: none; }
 }
 /* group sub-tabs (second row) */
 .subtabs { display: flex; flex-wrap: wrap; gap: 0.375rem; margin: -0.75rem 0 1.25rem; }
@@ -1459,7 +1458,8 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
 }
 /* Narrow: icon buttons stay beside the brand, status pills wrap to their own line. */
 @media (max-width: 600px) {
-  .topbar .pill { order: 3; }
+  .topbar .pill, .topbar > .on-air { order: 3; }
+  .topbar > .simulate-open { order: 1; }
 }
 /* ===== responsive rules (F1 F2 F3 F7 F8) ===== */
 /* F7: the top bar sizes by its own width, so docking chat squeezes it the same way as a narrow window */
@@ -1469,14 +1469,16 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
   .topbar > .pill.ok { display: none; }
   .modes button[aria-pressed="false"] { font-size: 0; gap: 0; padding-inline: 0.5rem; }
   .modes button[aria-pressed="false"] .pi { font-size: 0.875rem; }
+  .topbar > .simulate-open { font-size: 0; gap: 0; } /* icon only; the text stays the accessible name */
+  .topbar > .simulate-open .pi { font-size: 1rem; }
 }
 @container top (max-width: 60rem) { #live-meta { display: none; } }
 @container top (min-width: 34rem) and (max-width: 52rem) {
-  .topbar > .icon-btn { order: 1; }
+  .topbar > .icon-btn, .topbar > .simulate-open { order: 1; }
   .topbar { row-gap: 0.625rem; }
   .tb-break { margin-top: -0.625rem; }
   .tb-break { display: block; order: 2; flex-basis: 100%; height: 0; }
-  .topbar > .modes, .topbar > .pill { order: 3; }
+  .topbar > .modes, .topbar > .pill, .topbar > .on-air { order: 3; }
 }
 /* sub-tabs never wrap: one row that scrolls, faded at the edge */
 .subtabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent); }
@@ -1720,10 +1722,14 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
       <button type="button" aria-pressed="false" data-mode="休息"><i class="pi pi-moon"></i>休息</button>
     </div>
     <button class="pill live" type="button" id="live" data-open="connections"><span class="dot"></span><span id="live-text" aria-live="polite">直播中</span><span class="meta" id="live-meta"></span></button>
+    <!-- OBS's own output, apart from Twitch's live state: OBS can stream before Twitch reports live, and record without streaming -->
+    <span class="on-air">串流中</span>
+    <span class="on-air">錄影中</span>
     <button class="pill ok" type="button" data-open="connections"><span class="dot" style="background:var(--green)"></span>Twitch 已連線</button>
     <button class="pill" type="button" data-open="connections"><span class="dot" style="background:var(--yellow)"></span>OBS 重新連線中</button>
     <button class="icon-btn" type="button" aria-label="排列" id="arrange-btn"><i class="pi pi-pencil"></i></button>
     <button class="icon-btn conn-alert" type="button" aria-label="連線有問題：OBS 重新連線中" data-go="settings" data-section-go="connections"><i class="pi pi-exclamation-triangle"></i></button>
+    <button class="btn btn-text simulate-open" type="button" data-dialog="simulate"><i class="pi pi-wrench" aria-hidden="true"></i>模擬事件</button>
     <button class="icon-btn chat-mobile" type="button" id="chat-mobile-btn" aria-label="聊天室" aria-expanded="false"><i class="pi pi-comments"></i></button>
     <button class="icon-btn estop" type="button" id="estop" aria-label="緊急停止：停掉正在播的並取消排隊中的呈現"><i class="pi pi-stop-circle"></i></button>
     <!-- prototype only: preview language, kept in the top bar so it never covers page content -->
@@ -1950,82 +1956,6 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
   </div>
 </section>
 
-<!-- ================= CONSOLE (dashboard home for the side-nav and tab layouts) ================= -->
-<section id="view-console" hidden>
-  <div class="console">
-    <section class="w w-attn" aria-labelledby="w-attn-h">
-      <h2 id="w-attn-h" class="sr-only">需要處理</h2>
-      <button class="pending-item" type="button" data-go="checkin"><i class="pi pi-exclamation-triangle" aria-hidden="true"></i><span>打卡有 2 筆兌換一直無法處理</span><i class="pi pi-angle-right" aria-hidden="true"></i></button>
-      <button class="pending-item" type="button" data-go="song" style="background:var(--t-primary)"><i class="pi pi-inbox" aria-hidden="true" style="color:var(--primary)"></i><span>點歌有 2 首待審核</span><i class="pi pi-angle-right" aria-hidden="true"></i></button>
-      <button class="pending-item" type="button" data-go="obssrc"><i class="pi pi-clone" aria-hidden="true"></i><span>打卡 Overlay 在 OBS 有 2 個來源</span><i class="pi pi-angle-right" aria-hidden="true"></i></button>
-      <button class="pending-item" type="button" data-go="bgm"><i class="pi pi-headphones" aria-hidden="true"></i><span>背景音樂 Overlay 不在直播中的場景</span><i class="pi pi-angle-right" aria-hidden="true"></i></button>
-    </section>
-
-    <section class="w w-stats" aria-label="本場直播">
-      <ul class="stats">
-        <li><i class="pi pi-heart" style="color:var(--red)"></i><b>3</b><span>追隨</span></li>
-        <li><i class="pi pi-star-fill" style="color:var(--primary)"></i><b>5</b><span>訂閱</span></li>
-        <li><i class="pi pi-bolt" style="color:var(--yellow)"></i><b>1,200</b><span>小奇點</span></li>
-        <li><i class="pi pi-gift" style="color:var(--red)"></i><b>42</b><span>兌換</span></li>
-        <li><i class="pi pi-check-square" style="color:var(--green)"></i><b>24</b><span>今天打卡</span></li>
-        <li><i class="pi pi-sparkles" style="color:var(--green)"></i><b>8</b><span>第一次聊天</span></li>
-      </ul>
-    </section>
-
-    <section class="w w-feed card" aria-labelledby="w-feed-h">
-      <div class="w-head"><h2 id="w-feed-h">事件流</h2><span class="muted">兌換、打卡、特效依時間排在一起</span></div>
-      <ol class="feed">
-        <li><time>21:42</time><i class="pi pi-gift" style="color:var(--red)"></i><span><b>小魚</b> 兌換「點歌」：晴天 → <a href="#song" data-go="song">進入待審核</a></span></li>
-        <li><time>21:40</time><i class="pi pi-star-fill" style="color:var(--primary)"></i><span><b>阿凱</b> 訂閱了 → 特效、音效「叮咚」</span><span class="parts"><span class="ok"><i class="pi pi-check"></i>已播</span></span></li>
-        <li><time>21:36</time><i class="pi pi-check-square" style="color:var(--green)"></i><span><b>莓莓</b> 打卡 3/10 → 集點卡</span><span class="parts"><span class="ok"><i class="pi pi-check"></i>已播</span></span></li>
-        <li><time>21:34</time><i class="pi pi-gift" style="color:var(--red)"></i><span><b>橘子</b> 兌換「喝水提醒」→ 音效「喝水」</span><span class="parts"><span class="skip"><i class="pi pi-clock"></i>排隊中</span></span></li>
-        <li><time>21:31</time><i class="pi pi-bolt" style="color:var(--yellow)"></i><span><b>莓莓</b> 100 小奇點 → 特效</span><span class="parts"><span class="bad"><i class="pi pi-times"></i>音效失敗</span></span><button class="icon-btn" type="button" aria-label="重播"><i class="pi pi-replay"></i></button></li>
-      </ol>
-    </section>
-
-    <section class="w w-queue card" aria-labelledby="w-q-h">
-      <div class="w-head"><h2 id="w-q-h">呈現佇列</h2><span class="muted pq-sum">排隊 2 個 · 約 15 秒</span><button class="btn btn-text" type="button" data-clear-queue>清空排隊</button></div>
-      <ol class="pq-list" style="padding:0 1rem 1rem">
-        <li class="playing"><span class="pq-tag">播放中</span><span class="pq-t">特效「阿凱 訂閱了」</span><button class="btn btn-text" type="button">跳過</button></li>
-        <li><span class="pq-tag">2</span><span class="pq-t">打卡卡片「小魚」</span></li>
-        <li><span class="pq-tag">3</span><span class="pq-t">音效「喝水」</span></li>
-      </ol>
-    </section>
-
-    <section class="w w-song card" aria-labelledby="w-song-h">
-      <div class="w-head"><h2 id="w-song-h">點歌</h2><button class="btn btn-text" type="button" data-go="song">全部</button></div>
-      <div class="w-body"><b style="font-size:1.25rem">晴天</b><span class="muted">周杰倫 · @小魚 · 伴奏已就緒</span>
-        <div style="display:flex;gap:.5rem;margin:.5rem 0"><button class="btn btn-primary" type="button" data-toast="success:已移到已唱歌單。"><i class="pi pi-check"></i>唱完了</button><button class="btn btn-secondary" type="button"><i class="pi pi-microphone"></i>練唱</button></div>
-        <span class="muted" style="font-size:.8125rem">接下來：小幸運、告白氣球、突然好想你</span></div>
-    </section>
-
-    <section class="w w-scene card" aria-labelledby="w-sc-h">
-      <div class="w-head"><h2 id="w-sc-h">場景與音樂</h2><button class="btn btn-text" type="button" data-go="scene">全部</button></div>
-      <div class="w-body">
-        <div class="scenes-mini"><button type="button">開場</button><button type="button" aria-pressed="true">遊戲畫面</button><button type="button">聊天</button><button type="button">唱歌</button><button type="button">休息中</button><button type="button">結尾</button></div>
-        <div class="w-music"><i class="pi pi-headphones" style="color:var(--yellow)"></i><span><b>Lo-fi Morning</b> <span class="muted">· 聊天時段</span></span><button class="icon-btn" type="button" aria-label="暫停"><i class="pi pi-pause"></i></button><button class="icon-btn" type="button" aria-label="下一首"><i class="pi pi-step-forward"></i></button></div>
-      </div>
-    </section>
-
-    <section class="w w-quick card" aria-labelledby="w-qk-h">
-      <div class="w-head"><h2 id="w-qk-h">快速操作</h2></div>
-      <div class="w-body quick">
-        <div class="ctr"><span>死亡次數</span><button class="icon-btn" type="button" aria-label="減一"><i class="pi pi-minus"></i></button><b>12</b><button class="btn btn-primary" type="button" aria-label="加一"><i class="pi pi-plus"></i></button></div>
-        <div class="soundboard"><button type="button"><i class="pi pi-play"></i>叮咚</button><button type="button"><i class="pi pi-play"></i>歡呼</button><button type="button"><i class="pi pi-play"></i>拍手</button></div>
-        <ul class="items-mini"><li><span>點歌獎勵</span><label class="switch"><input type="checkbox" role="switch" aria-label="開放兌換：點歌"><span></span></label></li></ul>
-      </div>
-    </section>
-
-    <section class="w w-chat card" aria-labelledby="w-ch-h">
-      <div class="w-head"><h2 id="w-ch-h">聊天室</h2><button class="btn btn-text" type="button" data-go="chat">全部</button></div>
-      <div class="mini-log" style="margin:0 1rem 1rem;max-height:none">
-        <div><b style="color:#7dd3fc">小魚</b>：今天唱什麼？</div><div><b style="color:#86efac">阿凱</b>：晚安～</div><div><span class="av-sm">新</span><b>新朋友</b>：第一次來 <span class="tag first-tag">第一次聊天</span></div><div><b style="color:#f9a8d4">莓莓</b>：好耶</div><div><b style="color:#fdba74">橘子</b>：主播喝水</div>
-      </div>
-    </section>
-  </div>
-  <p class="muted" style="font-size:.8125rem;margin-top:1rem">中控台的區塊可以拖曳排列、隱藏（之後）。</p>
-</section>
-
 <!-- ================= WORKSPACE HOME (composable: widget grid + stream phases) ================= -->
 <section id="view-ws" hidden>
   <section class="update-notice" aria-labelledby="upd-h" id="upd-notice">
@@ -2082,7 +2012,7 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
             <li><i class="pi pi-users" style="color:var(--blue)"></i><b>58</b><span>最高觀眾</span></li><li><i class="pi pi-heart" style="color:var(--red)"></i><b>3</b><span>追隨</span></li>
             <li><i class="pi pi-star-fill" style="color:var(--primary)"></i><b>5</b><span>訂閱</span></li><li><i class="pi pi-bolt" style="color:var(--yellow)"></i><b>1,200</b><span>小奇點</span></li>
             <li><i class="pi pi-comments" style="color:var(--blue)"></i><b>1,204</b><span>聊天訊息</span></li><li><i class="pi pi-microphone" style="color:var(--primary)"></i><b>14</b><span>唱了幾首</span></li></ul>
-          <div class="w-body" style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-secondary" type="button" data-toast="success:已匯出本場紀錄。"><i class="pi pi-download"></i>匯出本場紀錄</button><button class="btn btn-secondary" type="button" data-toast="success:死亡次數已歸零。">每場歸零的計數器歸零</button><button class="btn btn-secondary" type="button" data-toast="success:已匯出備份。"><i class="pi pi-database"></i>備份</button></div></div></div>
+          <div class="w-body" style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-secondary" type="button" data-toast="success:已匯出本場紀錄。"><i class="pi pi-download"></i>匯出本場紀錄</button><button class="btn btn-secondary" type="button" data-go="settings" data-section-go="backup"><i class="pi pi-database"></i>備份</button></div></div></div>
 
         <div class="wg" data-w="fulfill"><div class="wg-m card">
           <div class="w-head"><h2>還沒處理的兌換</h2><span class="muted">3 筆未完成</span></div>
@@ -2099,7 +2029,7 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
             <li><time>21:40</time><i class="pi pi-star-fill" style="color:var(--primary)"></i><span><b>阿凱</b> 訂閱了 → 特效、音效「叮咚」</span><span class="parts"><span class="ok"><i class="pi pi-check"></i>已播</span></span></li>
             <li><time>21:36</time><i class="pi pi-check-square" style="color:var(--green)"></i><span><b>莓莓</b> 打卡 3/10 → 集點卡</span><span class="parts"><span class="ok"><i class="pi pi-check"></i>已播</span></span></li>
             <li><time>21:34</time><i class="pi pi-gift" style="color:var(--red)"></i><span><b>橘子</b> 兌換「喝水提醒」→ 音效「喝水」</span><span class="parts"><span class="skip"><i class="pi pi-clock"></i>排隊中</span></span></li>
-            <li><time>21:31</time><i class="pi pi-bolt" style="color:var(--yellow)"></i><span><b>莓莓</b> 100 小奇點 → 特效</span><span class="parts"><span class="bad"><i class="pi pi-times"></i>音效失敗</span></span><button class="icon-btn" type="button" aria-label="重播"><i class="pi pi-replay"></i></button></li>
+            <li><time>21:31</time><i class="pi pi-bolt" style="color:var(--yellow)"></i><span><b>莓莓</b> 100 小奇點 → 特效</span><span class="parts"><span class="bad"><i class="pi pi-exclamation-triangle"></i>已播，但音效檔案不見了</span></span><button class="icon-btn" type="button" aria-label="重播"><i class="pi pi-replay"></i></button></li>
           </ol></div></div>
 
         <div class="wg" data-w="queue"><div class="wg-m card">
@@ -2287,7 +2217,7 @@ body:not(.l-tabs) .appbar > .topbar { margin-bottom: 0.875rem; }
             <ul class="modlist">
             <li data-feat="home" data-pages="home" data-ready><div class="mod"><span class="badge-icon tint-primary"><i class="pi pi-home"></i></span><span class="mname">首頁<small class="muted" id="fd-home">功能磚與待處理</small></span><span class="muted feat-fixed"><i class="pi pi-lock" aria-hidden="true"></i>一定開著</span></div></li>
             <li data-feat="streaminfo" data-pages="streaminfo" data-scope="channel:manage:broadcast"><div class="mod"><span class="badge-icon tint-blue"><i class="pi pi-pencil"></i></span><span class="mname">直播資訊<small class="muted" id="fd-streaminfo">改標題、分類與標籤</small></span><span class="feat-tags"><span class="ftag scope" title="channel:manage:broadcast">需要 Twitch 權限</span><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="streaminfo">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="直播資訊" aria-describedby="fd-streaminfo"><span></span></label></div></li>
-            <li data-feat="rehearsal" data-pages="rehearsal"><div class="mod"><span class="badge-icon tint-primary"><i class="pi pi-play-circle"></i></span><span class="mname">演練<small class="muted" id="fd-rehearsal">開播前用模擬事件確認畫面</small></span><span class="feat-tags"><span class="ftag soon" hidden>即將推出</span></span><button class="btn btn-text feat-open" type="button" data-go="rehearsal">頁面</button><label class="switch"><input type="checkbox" role="switch" checked aria-label="演練" aria-describedby="fd-rehearsal"><span></span></label></div></li>
+            <li data-feat="rehearsal" data-pages="rehearsal" data-ready><div class="mod"><span class="badge-icon tint-primary"><i class="pi pi-play-circle"></i></span><span class="mname">演練<small class="muted" id="fd-rehearsal">開播前用模擬事件確認畫面</small></span><button class="btn btn-text feat-open" type="button" data-go="rehearsal">頁面</button><span class="muted feat-fixed"><i class="pi pi-lock" aria-hidden="true"></i>一定開著</span></div></li>
             </ul>
           </section>
           <section class="card feat-group" data-feat-group="song" aria-labelledby="fg-song">
@@ -2586,7 +2516,7 @@ primevue 4 — MIT
   <header class="fp-head">
     <button class="btn btn-secondary" type="button" data-go="home"><i class="pi pi-arrow-left"></i>回首頁</button>
     <span class="badge-icon tint-yellow" aria-hidden="true"><i class="pi pi-bell"></i></span>
-    <div><h1>特效</h1><span class="sub">今天 6 次</span></div>
+    <div><h1>特效</h1></div>
     <div class="actions"><button class="chip fulfilled src-link" type="button" data-go="obssrc">在 OBS：7 個場景，含直播中</button></div>
   </header>
   <div class="fp-body">
@@ -2624,8 +2554,8 @@ primevue 4 — MIT
         <table class="tbl">
           <thead><tr><th>時間</th><th>事件</th><th>結果</th><th></th></tr></thead>
           <tbody>
-            <tr><td class="when">21:40</td><td>阿凱 訂閱了</td><td><span class="parts"><span class="ok"><i class="pi pi-check"></i>動畫</span><span class="ok"><i class="pi pi-check"></i>音效</span></span></td><td class="num"><button class="btn btn-text" type="button" data-toast="info:已加入呈現佇列（重播）。"><i class="pi pi-replay"></i>重播</button></td></tr>
-            <tr><td class="when">21:31</td><td>莓莓 送出 100 小奇點</td><td><span class="parts"><span class="ok"><i class="pi pi-check"></i>動畫</span><span class="bad"><i class="pi pi-times"></i>音效：檔案不見了</span></span></td><td class="num"><button class="btn btn-text" type="button" data-toast="info:已加入呈現佇列（重播）。"><i class="pi pi-replay"></i>重播</button></td></tr>
+            <tr><td class="when">21:40</td><td>阿凱 訂閱了</td><td><span class="parts"><span class="ok"><i class="pi pi-check"></i>已播</span></span></td><td class="num"><button class="btn btn-text" type="button" data-toast="info:已加入呈現佇列（重播）。"><i class="pi pi-replay"></i>重播</button></td></tr>
+            <tr><td class="when">21:31</td><td>莓莓 送出 100 小奇點</td><td><span class="parts"><span class="bad"><i class="pi pi-exclamation-triangle"></i>已播，音效檔不見了</span></span></td><td class="num"><button class="btn btn-text" type="button" data-toast="info:已加入呈現佇列（重播）。"><i class="pi pi-replay"></i>重播</button></td></tr>
             <tr><td class="when">20:58</td><td>小雨 揪團 12 人</td><td><span class="parts"><span class="skip"><i class="pi pi-minus"></i>已清空，沒有播</span></span></td><td class="num"><button class="btn btn-text" type="button" data-toast="info:已加入呈現佇列（重播）。"><i class="pi pi-replay"></i>重播</button></td></tr>
           </tbody>
         </table>
@@ -2697,16 +2627,16 @@ primevue 4 — MIT
         <thead><tr><th>觀眾</th><th class="num">累計（永久）</th><th class="num">可用印章</th><th>集點卡</th><th>最後打卡</th><th></th></tr></thead>
         <tbody>
           <tr><td><span class="who"><span class="avatar" style="background:#3a3f6b">魚</span>小魚 <small>fish_tw</small></span></td><td class="num">47 次</td><td class="num">12</td>
-            <td><span class="stamp-cell"><span class="stamps" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>7/10</span></td>
+            <td><span class="stamp-cell" data-total="47"></span></td>
             <td class="when">今天</td><td class="num"><button class="icon-btn" type="button" aria-label="把集點卡推到畫面" data-toast="info:已把集點卡推到畫面（不寫紀錄）。"><i class="pi pi-desktop"></i></button><button class="icon-btn" type="button" aria-label="扣印章" data-dialog="deduct"><i class="pi pi-minus-circle"></i></button><button class="btn btn-secondary" type="button" disabled style="opacity:.5"><i class="pi pi-check"></i>今天已打卡</button></td></tr>
           <tr><td><span class="who"><span class="avatar" style="background:#3f5a4a">凱</span>阿凱 <small>kai_0921</small></span></td><td class="num">30 次</td><td class="num">5</td>
-            <td><span class="stamp-cell"><span class="stamps" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>10/10</span></td>
+            <td><span class="stamp-cell" data-total="30"></span></td>
             <td class="when">今天</td><td class="num"><button class="icon-btn" type="button" aria-label="把集點卡推到畫面" data-toast="info:已把集點卡推到畫面（不寫紀錄）。"><i class="pi pi-desktop"></i></button><button class="icon-btn" type="button" aria-label="扣印章" data-dialog="deduct"><i class="pi pi-minus-circle"></i></button><button class="btn btn-secondary" type="button" disabled style="opacity:.5"><i class="pi pi-check"></i>今天已打卡</button></td></tr>
           <tr><td><span class="who"><span class="avatar" style="background:#5a3f4f">莓</span>莓莓 <small>berry_b</small></span></td><td class="num">13 次</td><td class="num">3</td>
-            <td><span class="stamp-cell"><span class="stamps" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>3/10</span></td>
+            <td><span class="stamp-cell" data-total="13"></span></td>
             <td class="when">11/16</td><td class="num"><button class="icon-btn" type="button" aria-label="把集點卡推到畫面" data-toast="info:已把集點卡推到畫面（不寫紀錄）。"><i class="pi pi-desktop"></i></button><button class="icon-btn" type="button" aria-label="扣印章" data-dialog="deduct"><i class="pi pi-minus-circle"></i></button><button class="btn btn-secondary" type="button">登記今天</button></td></tr>
           <tr><td><span class="who"><span class="avatar" style="background:#4b4a2f">橘</span>橘子 <small>orange_juice</small></span></td><td class="num">1 次</td><td class="num">1</td>
-            <td><span class="stamp-cell"><span class="stamps" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>1/10</span></td>
+            <td><span class="stamp-cell" data-total="1"></span></td>
             <td class="when">10/02</td><td class="num"><button class="icon-btn" type="button" aria-label="把集點卡推到畫面" data-toast="info:已把集點卡推到畫面（不寫紀錄）。"><i class="pi pi-desktop"></i></button><button class="icon-btn" type="button" aria-label="扣印章" data-dialog="deduct"><i class="pi pi-minus-circle"></i></button><button class="btn btn-secondary" type="button">登記今天</button></td></tr>
         </tbody>
       </table>
@@ -3846,7 +3776,7 @@ primevue 4 — MIT
   <header class="fp-head">
     <button class="btn btn-secondary" type="button" data-go="home"><i class="pi pi-arrow-left"></i>回首頁</button>
     <span class="badge-icon tint-blue" aria-hidden="true"><i class="pi pi-clone"></i></span>
-    <div><h1>OBS 來源</h1><span class="sub">每個 Overlay 在 OBS 加一次就好</span></div>
+    <div><h1>OBS 來源</h1></div>
   </header>
   <div class="fp-body">
     <div class="sec-head obs-bar"><label for="obs-scene" class="muted">場景</label><select id="obs-scene" class="select" style="max-width:16rem"><option value="開場">開場</option><option value="遊戲畫面" selected>遊戲畫面（直播中）</option><option value="遊戲畫面（小窗）">遊戲畫面（小窗）</option><option value="聊天">聊天</option><option value="唱歌">唱歌</option><option value="唱歌（無鏡頭）">唱歌（無鏡頭）</option><option value="畫畫">畫畫</option><option value="合作連線">合作連線</option><option value="比賽畫面">比賽畫面</option><option value="休息中">休息中</option><option value="技術問題">技術問題</option><option value="結尾">結尾</option><option value="結尾名單">結尾名單</option><option value="測試用">測試用</option></select><span class="obs-dup" role="alert" title="同一個來源放在多個場景沒關係，同一個場景放兩次才會疊"><i class="pi pi-exclamation-triangle" aria-hidden="true"></i>「打卡」有 2 個來源，集點卡會疊兩張<button class="btn btn-text" type="button" data-toast="success:已移除多的那一個。" onclick="this.parentElement.remove()">移除多的</button></span></div>
@@ -4274,6 +4204,21 @@ primevue 4 — MIT
     <button class="btn btn-secondary" type="button" data-close="export"><i class="pi pi-download"></i>先匯出備份</button>
     <button class="btn btn-danger" type="button" data-close="ok">刪除並改成 <span id="keep-n3">7</span> 天</button>
   </div>
+</dialog>
+<!-- 模擬事件: one test event per overlay, to check each one works in OBS; marked source=simulation, never in real records -->
+<dialog class="dlg dlg-wide" id="dlg-simulate" aria-labelledby="sim-h">
+  <div class="dlg-body">
+    <h2 id="sim-h">模擬事件</h2>
+    <ul class="sim-rows">
+      <li><span class="what">聊天室</span><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：聊天室 · 送一則訊息">送一則訊息</button></li>
+      <li><span class="what">特效</span><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：特效 · 追隨">追隨</button><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：特效 · 新訂閱">新訂閱</button><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：特效 · 小奇點">小奇點</button><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：特效 · 揪團">揪團</button></li>
+      <li><span class="what">音效</span><select class="select" aria-label="選一個音效"><option>叮咚</option><option>喝水</option></select><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：音效 · 播放">播放</button></li>
+      <li><span class="what">打卡卡片</span><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：打卡卡片 · 一般打卡">一般打卡</button><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：打卡卡片 · 集滿">集滿</button></li>
+      <li><span class="what">計數器</span><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：計數器 · 顯示測試值">顯示測試值</button></li>
+      <li><span class="what">背景音樂</span><button class="btn btn-secondary" type="button" data-toast="info:已送出測試：背景音樂 · 播 5 秒">播 5 秒</button></li>
+    </ul>
+  </div>
+  <div class="dlg-foot"><button class="btn btn-text" type="button" data-close autofocus>關閉</button></div>
 </dialog>
 <dialog class="dlg" id="dlg-skip" aria-labelledby="skip-h">
   <div class="dlg-body">
@@ -5337,7 +5282,27 @@ function renderCard() {
   const card = document.getElementById('scard'), rep = document.querySelector('input[name="cprev"]:checked').value === 'rep'
   card.style.setProperty('--cbg', ce.bg.value); card.style.setProperty('--cst', ce.st.value); card.style.setProperty('--cols', ce.cols.value)
   document.getElementById('ce-cols-out').textContent = ce.cols.value
-  const fill = (t) => t.replaceAll('#觀眾#', '小魚').replaceAll('#章數#', '7').replaceAll('#次數#', '47').replaceAll('#格數#', '10')
+  // 集點卡 progress from the lifetime count and 集點卡格數 (docs/modules/checkin.md): up to 20 slots as dots, more as a bar; text "stamps/slots" either way
+{
+  const renderStamps = () => {
+    const slots = Math.min(100, Math.max(1, Math.round(+document.getElementById('slots').value) || 10))
+    document.querySelectorAll('.stamp-cell[data-total]').forEach((c) => {
+      const total = +c.dataset.total, on = total ? (total - 1) % slots + 1 : 0
+      const shown = document.createElement('span'); shown.setAttribute('aria-hidden', 'true')
+      if (slots <= 20) {
+        shown.className = 'stamps'
+        for (let i = 0; i < slots; i++) { const d = document.createElement('i'); if (i < on) d.className = 'on'; shown.append(d) }
+      } else {
+        shown.className = 'stamp-bar'
+        const f = document.createElement('i'); f.style.width = (on / slots) * 100 + '%'; shown.append(f)
+      }
+      c.replaceChildren(shown, `${on}/${slots}`)
+    })
+  }
+  document.getElementById('slots').addEventListener('input', renderStamps)
+  renderStamps()
+}
+const fill = (t) => t.replaceAll('#觀眾#', '小魚').replaceAll('#章數#', '7').replaceAll('#次數#', '47').replaceAll('#格數#', '10')
   document.getElementById('sc-title').textContent = fill(ce.title.value)
   document.getElementById('sc-sub').textContent = fill(ce.sub.value)
   card.classList.toggle('rep', rep)
@@ -5348,26 +5313,9 @@ function renderCard() {
 Object.values(ce).forEach((el) => el.addEventListener('input', renderCard))
 document.querySelectorAll('input[name="cprev"]').forEach((r) => r.addEventListener('change', renderCard))
 renderCard()
-// ---- prototype: three layouts over the same pages ----
-let layout = localStorage.getItem('proto-layout') || 'tiles'
+// ---- every page change closes the 更多 menu ----
 const baseShow = show
-show = (name) => {
-  const target = layout !== 'tiles' && name === 'home' ? 'console' : name
-  baseShow(target)
-  if (target === 'console') document.getElementById('arrange-btn').hidden = true
-  document.querySelectorAll('[data-nav]').forEach((b) => (b.dataset.nav === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')))
-  document.getElementById('tb-menu').hidden = true
-}
-var setLayout = function (l) {
-  layout = l; localStorage.setItem('proto-layout', l)
-  document.body.classList.toggle('l-side', l === 'side'); document.body.classList.toggle('l-tabs', l === 'tabs')
-  document.querySelectorAll('[data-layout]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === l)))
-  if (l === 'tabs') { saved.open = true; render() }
-  const current = Object.entries(views).find(([, el]) => !el.hidden)?.[0] || 'home'
-  show(current === 'console' ? 'home' : current)
-}
-document.querySelectorAll('[data-layout]').forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)))
-document.getElementById('tb-more').addEventListener('click', (e) => { const m = document.getElementById('tb-menu'); m.hidden = !m.hidden; e.currentTarget.setAttribute('aria-expanded', String(!m.hidden)) })
+show = (name) => { baseShow(name); document.getElementById('tb-menu').hidden = true }
 {
   // renderTabs rebuilds #tb-menu and #tb-more, so look them up each time
   new MutationObserver((list) => {
@@ -5377,15 +5325,6 @@ document.getElementById('tb-more').addEventListener('click', (e) => { const m = 
   }).observe(document.body, { attributes: true, attributeFilter: ['hidden'], subtree: true })
   document.addEventListener('keydown', (e) => { const m = document.getElementById('tb-menu'); if (e.key === 'Escape' && m && !m.hidden) m.hidden = true })
 }
-setLayout(layout)
-
-// layout picker in Settings mirrors the prototype switch
-document.querySelectorAll('input[name="layoutpick"]').forEach((r) => {
-  r.checked = r.value === layout
-  r.addEventListener('change', () => { setLayout(r.value); show('settings') })
-})
-const _setLayout = setLayout
-setLayout = (l) => { _setLayout(l); document.querySelectorAll('input[name="layoutpick"]').forEach((r) => { r.checked = r.value === l }) }
 // ---- composable shell: nav / chat / home are independent; presets reproduce the three layouts ----
 // Small-size content of every widget, generated so each feature has a "tile" form.
 const WG = {
@@ -5422,7 +5361,6 @@ const DEFAULTS = {
   pre: [['checklist', 'w'], ...['scene', 'mixer', 'song', 'rewards', 'bot', 'overlays', 'bgm', 'sound', 'alerts', 'chat'].map((id) => [id, 's'])],
   post: [['summary', 'w'], ['fulfill', 'w'], ...['credits', 'counter', 'viewers', 'redemption', 'checkin', 'song', 'chat'].map((id) => [id, 's'])],
 }
-const PRESETS = { tiles: { nav: 'none', chat: 'hide', home: 'phase' }, tabs: { nav: 'top', chat: 'dock', home: 'phase' } }
 const ui = Object.assign({ nav: 'none', chat: 'hide' }, JSON.parse(localStorage.getItem('proto-ui') || '{}'))
 if (ui.nav !== 'top') ui.nav = 'none'
 ui.home = 'phase'
@@ -5645,17 +5583,10 @@ function applyUi() {
   document.body.classList.toggle('l-tabs', ui.nav === 'top')
   document.body.classList.toggle('chat-dock', ui.chat === 'dock')
   saved.open = ui.chat === 'dock'; render()
-  const preset = Object.entries(PRESETS).find(([, v]) => v.nav === ui.nav && v.chat === ui.chat && v.home === ui.home)?.[0]
-  document.querySelectorAll('[data-layout]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === preset)))
-  document.querySelectorAll('input[name="layoutpick"]').forEach((r) => { r.checked = r.value === preset })
-  for (const k of ['nav', 'chat', 'home']) document.querySelectorAll(`input[name="ui${k}"]`).forEach((r) => { r.checked = r.value === ui[k] })
   renderWs(); wsSave()
 }
-setLayout = (l) => { Object.assign(ui, PRESETS[l]); applyUi(); const cur = Object.entries(views).find(([, el]) => !el.hidden)?.[0]; show(!cur || cur === 'ws' || cur === 'console' || cur === 'home' ? 'home' : cur) }
-for (const k of ['nav', 'chat', 'home']) document.querySelectorAll(`input[name="ui${k}"]`).forEach((r) => r.addEventListener('change', () => { ui[k] = r.value; applyUi() }))
 const layoutShow = show
-show = (name) => { layoutShow(name === 'home' || name === 'console' ? 'ws' : name); document.querySelectorAll('[data-nav]').forEach((b) => (b.dataset.nav === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'))) }
-layout = 'ws'
+show = (name) => { layoutShow(name === 'home' ? 'ws' : name); document.querySelectorAll('[data-nav]').forEach((b) => (b.dataset.nav === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'))) }
 applyUi()
 show('home')
 // ---- 下播後 numbers: the streamer picks 顯示數字, 遮起來 (each shows –– until clicked) or 整頁不顯示 ----
@@ -5817,8 +5748,7 @@ splitPage('scene', 'modes', '模式', 'pi-sliders-v', 'tint-blue', 'section[aria
 document.querySelector('#view-modes .sub').textContent = '一鍵設好場景、來源、音訊；頁首可以直接切換'
 splitPage('alerts', 'alertlog', '最近事件', 'pi-history', 'tint-yellow', 'section[aria-labelledby="ae-h"]')
 splitPage('alerts', 'alertev', '每種事件', 'pi-list', 'tint-yellow', 'section[aria-labelledby="alert-snd"]')
-document.querySelector('#view-alertev .sub').textContent = '9 種事件'
-document.querySelector('#view-alertlog .sub').textContent = '今天 6 次'
+document.querySelector('#view-alertev .fp-head h1').insertAdjacentHTML('afterend', '<span class="sub">9 種事件</span>') // 特效 itself has no subtitle (no daily count)
 splitPage('avatar', 'avoutfit', '換裝', 'pi-user', 'tint-yellow', 'section[aria-labelledby="vt-h"]')
 splitPage('avatar', 'avjump', '跳跳', 'pi-microphone', 'tint-green', 'section[aria-labelledby="jp-h"]')
 document.querySelector('#view-avoutfit .sub').textContent = 'veadotube mini · 觀眾兌換後選衣服'
@@ -6425,10 +6355,11 @@ document.addEventListener('click', (e) => {
 
   // ---- a whole group on or off: 全部開啟 asks once for outside features it needs and for Twitch permissions ----
   document.querySelectorAll('.feat-group').forEach((g) => {
+    const mine = () => [...g.querySelectorAll('li[data-feat]')].filter((li) => sw(li) && !sw(li).disabled)
+    if (mine().length < 2) return // as the app: only a group with more than one built, switchable feature gets the bulk buttons
     const box = document.createElement('div'); box.className = 'fg-bulk'
     box.innerHTML = '<button class="btn btn-text" type="button" data-bulk="on">全部開啟</button><button class="btn btn-text" type="button" data-bulk="off">全部關閉</button>'
     g.querySelector('.card-head').append(box)
-    const mine = () => [...g.querySelectorAll('li[data-feat]')].filter((li) => sw(li) && !sw(li).disabled)
     box.addEventListener('click', (e) => {
       const b = e.target.closest('[data-bulk]'); if (!b) return
       const gname = g.querySelector('.card-head h2').textContent.trim()
