@@ -20,7 +20,7 @@
         {{ t('obsSources.duplicate', { name: rowName(d), n: d.sources.length, effect: t(`obsSources.twice.${d.entry.id}`) }) }}
       </span>
     </div>
-    <div class="table-scroll">
+    <div class="table-scroll tbl-wrap card">
     <table class="table">
       <thead>
         <tr>
@@ -264,10 +264,32 @@ tbody th[scope='row'] {
   font-size: 0.8125rem;
 }
 
+/* The table is a card, as the prototype; its heads and buttons keep to one line. */
+.card {
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.table th[scope='col'],
+.end :deep(.p-button) {
+  white-space: nowrap;
+}
+
+/* A narrow window lays each row out as lines (the shared table rule); the copy button closes its row. */
+@container view (max-width: 45rem) {
+  .end {
+    margin-left: auto;
+  }
+}
+
 /* Wide and tall enough: the page fits the window; the table's rows scroll under its fixed head. */
 @media (min-width: 601px) and (min-height: 560px) {
   .table-scroll {
-    max-height: calc(100vh - var(--appbar-h, 0px) - var(--page-top-h, 0px) - 7rem);
+    /* Also the containing block of the rows' screen-reader-only text: absolutely placed against the page, it
+       escaped this scroll box and stretched the page, giving it a second scrollbar. */
+    position: relative;
+    max-height: calc(100vh - var(--appbar-h, 0px) - var(--page-top-h, 0px) - 8rem);
     overflow: auto;
   }
 
@@ -275,7 +297,7 @@ tbody th[scope='row'] {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--p-surface-950);
+    background: var(--p-surface-900);
   }
 }
 </style>
