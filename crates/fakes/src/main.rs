@@ -1,5 +1,6 @@
-//! `fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>]`: runs the fake OBS and the
-//! fake Twitch on `127.0.0.1` until stopped. Point the app's OBS settings at the OBS port, and a dev build at the
+//! `fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>] [--host-port <port>]`: runs the
+//! fake OBS and the fake Twitch on `127.0.0.1` until stopped. `--host-port` is the app's Host port, which the fake
+//! OBS's overlay browser sources point at (default 47811). Point the app's OBS settings at the OBS port, and a dev build at the
 //! Twitch port with `TOOLKIT_FAKE_SERVICES=127.0.0.1:<port>`. Without `--password` the fake OBS asks for none.
 //! `fake-services [--port <twitch port>] send|obs|eventsub|poll|prediction|scenario …` controls a running one (see `USAGE`).
 //! `--ui` also opens the control panel (built with `--features ui`); closing it stops the fakes.
@@ -8,7 +9,7 @@ use fakes::{
     control::{self, SCENARIOS},
     events::KINDS,
     metrics::{self, Recorder},
-    obs::FakeObs,
+    obs::{DEFAULT_HOST_PORT, FakeObs},
     twitch::FakeTwitch,
 };
 use tokio::net::TcpListener;
@@ -17,7 +18,7 @@ use tokio::net::TcpListener;
 const DEFAULT_OBS_PORT: u16 = 4466;
 const DEFAULT_TWITCH_PORT: u16 = 4467;
 const USAGE: &str = "usage:
-  fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>] [--ui]
+  fake-services [--obs-port <port>] [--twitch-port <port>] [--password <password>] [--host-port <port>] [--ui]
   fake-services [--port <twitch port>] send <kind> [--user <login>] [--count <n>] [--message <text>]
                 [--reward <title>] [--bits <n>] [--tier 1000|2000|3000] [--months <n>] [--id <id>]
                 [--status fulfilled|canceled] [--first]
@@ -80,6 +81,7 @@ struct Args {
     obs_port: u16,
     twitch_port: u16,
     password: Option<String>,
+    host_port: u16,
     ui: bool,
 }
 
@@ -88,6 +90,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
         obs_port: DEFAULT_OBS_PORT,
         twitch_port: DEFAULT_TWITCH_PORT,
         password: None,
+        host_port: DEFAULT_HOST_PORT,
         ui: false,
     };
     while let Some(arg) = args.next() {
@@ -97,6 +100,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--obs-port" => parsed.obs_port = port(value()?)?,
             "--twitch-port" => parsed.twitch_port = port(value()?)?,
             "--password" => parsed.password = Some(value()?),
+            "--host-port" => parsed.host_port = port(value()?)?,
             "--ui" => parsed.ui = true,
             _ => return Err(format!("unknown argument {arg}")),
         }
@@ -187,7 +191,7 @@ fn main() {
     );
     // One timeline for both fakes, so `stats` sees OBS and Twitch calls together.
     let recorder = Recorder::default();
-    let fake_obs = FakeObs::with_recorder(args.password, recorder.clone());
+    let fake_obs = FakeObs::for_host(args.password, recorder.clone(), args.host_port);
     let fake_twitch = FakeTwitch::with_recorder(std::time::Duration::from_secs(10), recorder);
     let app = fake_twitch
         .router()
@@ -225,9 +229,17 @@ mod tests {
     fn arguments_have_defaults_and_reject_unknown_ones() {
         let a = args(&[]).unwrap();
         assert_eq!(
-            (a.obs_port, a.twitch_port, a.password, a.ui),
-            (DEFAULT_OBS_PORT, DEFAULT_TWITCH_PORT, None, false)
+            (a.obs_port, a.twitch_port, a.password, a.host_port, a.ui),
+            (
+                DEFAULT_OBS_PORT,
+                DEFAULT_TWITCH_PORT,
+                None,
+                DEFAULT_HOST_PORT,
+                false
+            )
         );
+        assert_eq!(args(&["--host-port", "47812"]).unwrap().host_port, 47812);
+        assert!(args(&["--host-port", "x"]).is_err());
         assert!(args(&["--ui"]).unwrap().ui);
         let a = args(&[
             "--obs-port",

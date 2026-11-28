@@ -50,3 +50,8 @@ test('the panel is built and opened unless --no-ui', () => {
   assert.ok(!plain.build.includes('--features'))
   assert.ok(!plain.run.includes('--ui'))
 })
+
+test('the fake OBS overlays point at the dev:fake Host port', () => {
+  const { run } = fakesArgs(['node', 'dev-fake.mjs', '--no-ui'])
+  assert.deepEqual(run.slice(run.indexOf('--host-port'), run.indexOf('--host-port') + 2), ['--host-port', String(HOST_PORT)])
+})

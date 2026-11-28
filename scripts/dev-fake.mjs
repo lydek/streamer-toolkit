@@ -23,7 +23,7 @@ export function fakesArgs(argv) {
   const ui = !argv.includes('--no-ui')
   return {
     build: ['build', '-q', '-p', 'fakes', ...(ui ? ['--features', 'ui'] : [])],
-    run: ['--obs-port', String(OBS_PORT), '--twitch-port', String(TWITCH_PORT), ...(ui ? ['--ui'] : [])],
+    run: ['--obs-port', String(OBS_PORT), '--twitch-port', String(TWITCH_PORT), '--host-port', String(HOST_PORT), ...(ui ? ['--ui'] : [])],
   }
 }
 

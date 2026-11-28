@@ -183,10 +183,14 @@ fn db(mul: f64) -> f64 {
     }
 }
 
+/// The Host port of a normal dev folder; `pnpm dev:fake` passes its own (`--host-port`).
+pub const DEFAULT_HOST_PORT: u16 = 47811;
+
 impl World {
     /// A collection like a real stream's: 12 scenes, 40 sources (8 with audio), 2 groups, 2 scenes used inside other
-    /// scenes, and some items hidden or locked. "Starting", "Live" and "Break" stay small for the tests.
-    fn sample() -> Self {
+    /// scenes, and some items hidden or locked. "Starting", "Live" and "Break" stay small for the tests. Its overlay
+    /// browser sources point at a Host on `host_port`.
+    fn sample(host_port: u16) -> Self {
         let mut w = World {
             scenes: Vec::new(),
             inputs: Vec::new(),
@@ -211,7 +215,7 @@ impl World {
                 at: Instant::now(),
             },
         };
-        let overlay = |path: &str, width: u32, height: u32| json!({"url": format!("http://127.0.0.1:47811/overlay/{path}/"), "width": width, "height": height});
+        let overlay = |path: &str, width: u32, height: u32| json!({"url": format!("http://127.0.0.1:{host_port}/overlay/{path}/"), "width": width, "height": height});
         let audio = [
             ("Mic", "wasapi_input_capture"),
             ("Desktop Audio", "wasapi_output_capture"),
@@ -1171,8 +1175,13 @@ impl FakeObs {
 
     /// Logs requests and events into `recorder`, shared with the fake Twitch for one timeline.
     pub fn with_recorder(password: Option<String>, recorder: Recorder) -> Self {
+        Self::for_host(password, recorder, DEFAULT_HOST_PORT)
+    }
+
+    /// As `with_recorder`, with the overlay browser sources pointing at a Host on `host_port`.
+    pub fn for_host(password: Option<String>, recorder: Recorder, host_port: u16) -> Self {
         Self {
-            world: Arc::new(Mutex::new(World::sample())),
+            world: Arc::new(Mutex::new(World::sample(host_port))),
             events: broadcast::channel(1024).0,
             close: broadcast::channel(1).0,
             password,
@@ -1554,7 +1563,30 @@ mod tests {
     use super::*;
 
     fn world() -> World {
-        World::sample()
+        World::sample(DEFAULT_HOST_PORT)
+    }
+
+    #[test]
+    fn overlay_sources_point_at_the_host_port() {
+        let urls = |w: &World| -> Vec<String> {
+            w.inputs
+                .iter()
+                .filter_map(|i| i.settings["url"].as_str().map(str::to_owned))
+                .filter(|u| u.contains("/overlay/"))
+                .collect()
+        };
+        let default = urls(&world());
+        assert!(!default.is_empty());
+        assert!(
+            default
+                .iter()
+                .all(|u| u.starts_with("http://127.0.0.1:47811/overlay/"))
+        );
+        assert!(
+            urls(&World::sample(47812))
+                .iter()
+                .all(|u| u.starts_with("http://127.0.0.1:47812/overlay/"))
+        );
     }
 
     #[test]
