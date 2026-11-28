@@ -136,6 +136,7 @@ import InputNumber from 'primevue/inputnumber'
 import SelectButton from 'primevue/selectbutton'
 import { ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { errorMessage } from '../i18n'
 import { ApiError, type Schemas } from './api'
 import FilePick from './FilePick.vue'
@@ -162,7 +163,11 @@ const FITS: Fit[] = ['pad', 'crop', 'manual']
 const BACKGROUNDS = ['dark', 'light']
 
 const { t } = useI18n()
-const kind = ref<ImageKind>('badge')
+const route = useRoute()
+/** `?kind=badge|points` (the home drawer's two entries) opens that kind; anything else opens the badge. */
+const kindAsked = () => (KINDS.find((k) => k === route.query.kind) ?? 'badge')
+const kind = ref<ImageKind>(kindAsked())
+watch(() => route.query.kind, () => (kind.value = kindAsked()))
 const fit = ref<Fit>('pad')
 const file = shallowRef<File>()
 const sized = shallowRef<Schemas['SizedImages']>()
