@@ -65,6 +65,7 @@
         <Button
           :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
           rounded
+          class="play-big"
           :aria-label="t(playing ? 'music.player.pause' : 'music.player.play')"
           :disabled="!status || (!playing && !chosen)"
           @click="playing ? send({ action: 'pause' }) : send({ action: 'play', playlist: chosen })"
@@ -310,5 +311,20 @@ async function saveSoundVolume() {
 
 .vol-row output {
   text-align: right;
+}
+
+/* The prototype's big yellow play button; dark icon on yellow for contrast (WCAG 1.4.11 and 1.4.3). */
+.play-big {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-color: var(--p-yellow-400);
+  background: var(--p-yellow-400);
+  color: #2a2205;
+}
+
+.play-big:not(:disabled):hover {
+  border-color: var(--p-yellow-300);
+  background: var(--p-yellow-300);
+  color: #2a2205;
 }
 </style>

@@ -194,6 +194,7 @@ describe('MusicPage player', () => {
     await receive(snapshot(player()))
     expect(wrapper.text()).toContain(t('music.player.stopped'))
     expect(control(wrapper, 'play').element.disabled).toBe(true)
+    expect(control(wrapper, 'play').classes()).toContain('play-big')
 
     wrapper.findAllComponents(Select)[0].vm.$emit('update:modelValue', 'p1')
     await flushPromises()
@@ -205,6 +206,8 @@ describe('MusicPage player', () => {
     expect(wrapper.text()).toContain(t('music.player.playing', { title: 'Lo-fi Morning' }))
     expect(wrapper.get('output[for="player-position"]').text()).toBe('1:05 / 3:08')
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    // The one big play button (the prototype's yellow one) becomes 暫停 while playing.
+    expect(control(wrapper, 'pause').classes()).toContain('play-big')
     await control(wrapper, 'pause').trigger('click')
     expect(post).toHaveBeenLastCalledWith('/api/admin/music/player', { body: { action: 'pause' } })
     await slide(wrapper, 'player-position', 120_000)
