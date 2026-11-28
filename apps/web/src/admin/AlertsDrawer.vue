@@ -1,6 +1,8 @@
 <template>
   <AppDrawer id="alerts" :title="title" full-page="/alerts">
     <template #actions>
+      <!-- The latest alerts first, as the prototype; replay works as on 最近事件. -->
+      <RecentAlerts compact :notify="notify" />
       <ObsStatusLink overlay="/overlay/alerts/" />
       <form @submit.prevent="sendAlert">
         <p>{{ t('simulate.hint') }}</p>
@@ -48,6 +50,7 @@ import AppDrawer from './AppDrawer.vue'
 import DrawerNotice from './DrawerNotice.vue'
 import { useHomeDrawer } from './homeDrawer'
 import ObsStatusLink from './ObsStatusLink.vue'
+import RecentAlerts from './RecentAlerts.vue'
 import { simulateAlert } from './simulate'
 
 defineProps<{ title: string }>()

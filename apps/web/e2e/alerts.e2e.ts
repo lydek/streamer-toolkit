@@ -11,6 +11,17 @@ const modules = [
   { id: 'alerts', enabled: true, closed: false },
 ]
 
+/** An alert's payload as the Host sends it, for the recent-alerts mocks. */
+const payload = (kind: string, userName: string, extra: object = {}) => ({
+  kind,
+  userId: '7',
+  userLogin: userName.toLowerCase(),
+  userName,
+  durationMs: 6000,
+  sound: { kind: 'built_in', volume: 100 },
+  ...extra,
+})
+
 async function openSimulator(page: Page) {
   await openAdmin(page, { modules })
   await page.locator('[data-drawer-tile="alerts"]').click()
@@ -276,15 +287,7 @@ test('跳過 takes the alert playing off the overlay and the next one follows', 
 
 test('最近事件 says what became of each alert and 重播 queues it again', async ({ page }) => {
   await mockAdmin(page)
-  const payload = (kind: string, userName: string, extra: object = {}) => ({
-    kind,
-    userId: '7',
-    userLogin: userName.toLowerCase(),
-    userName,
-    durationMs: 6000,
-    sound: { kind: 'built_in', volume: 100 },
-    ...extra,
-  })
+
   const replays: string[] = []
   await page.route('**/api/admin/alerts/recent', (r) =>
     r.fulfill({
@@ -313,4 +316,34 @@ test('最近事件 says what became of each alert and 重播 queues it again', a
   await rows.nth(1).getByRole('button', { name: zh.alerts.recent.replay }).click()
   await expect(page.getByText(zh.alerts.recent.replayed)).toBeVisible()
   expect(replays).toEqual(['/api/admin/alerts/recent/a2/replay'])
+})
+
+test('the alerts drawer lists the latest five alerts above the simulator, as 最近事件 does', async ({ page }) => {
+  await openAdmin(page, { modules })
+  const items = Array.from({ length: 7 }, (_, i) => ({
+    id: `a${i}`,
+    occurredAt: `2026-11-19T13:${String(50 - i).padStart(2, '0')}:00.000Z`,
+    source: 'twitch',
+    outcome: 'played',
+    payload: payload('follow', `Viewer${i}`),
+  }))
+  await page.route('**/api/admin/alerts/recent', (r) => r.fulfill({ json: items }))
+  await page.locator('[data-drawer-tile="alerts"]').click()
+  const drawer = page.locator('#drawer-alerts')
+  const rows = drawer.getByRole('region', { name: zh.alerts.recent.title }).locator('tbody tr')
+  await expect(rows).toHaveCount(5)
+  await expect(rows.first()).toContainText('Viewer0')
+  await expect(rows.first()).toContainText(zh.alerts.recent.outcome.played)
+})
+
+test('a failed replay in the modal alerts drawer says so inside the drawer', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await openAdmin(page, { modules })
+  const item = { id: 'a1', occurredAt: '2026-11-19T13:50:00.000Z', source: 'twitch', outcome: 'played', payload: payload('follow', 'Viewer') }
+  await page.route('**/api/admin/alerts/recent', (r) => r.fulfill({ json: [item] }))
+  await page.route('**/api/admin/alerts/recent/*/replay', (r) => r.fulfill({ status: 500, json: { code: 'internal' } }))
+  await page.locator('[data-drawer-tile="alerts"]').click()
+  const drawer = page.locator('#drawer-alerts')
+  await drawer.getByRole('button', { name: zh.alerts.recent.replay }).click()
+  await expect(drawer.getByRole('alert')).toBeVisible()
 })
