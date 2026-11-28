@@ -375,14 +375,22 @@ void api(client.GET('/api/admin/polls/templates')).then((list) => (templates.val
 
 .options {
   display: grid;
+  /* One column no wider than the form: an auto column grew to the 20rem boxes and pushed a 320px window sideways. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   justify-items: start;
 }
 
+/* Capped at the column, so the 20rem box shrinks on a narrow window. */
 .option {
   display: inline-flex;
   gap: 0.25rem;
   align-items: center;
+  max-width: 100%;
+}
+
+.option > .p-inputtext {
+  min-width: 0;
 }
 
 .saved {
