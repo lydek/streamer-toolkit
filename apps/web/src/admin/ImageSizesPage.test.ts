@@ -142,3 +142,20 @@ it('pads with a chosen color, and keeps the last results showing while new ones 
   await flushPromises()
   expect(wrapper.get('.results').attributes('aria-busy')).toBe('false')
 })
+
+it('opens the kind asked for in the address, and the badge without one or with a wrong one', async () => {
+  for (const [query, pressed] of [
+    ['?kind=points', 'points'],
+    ['?kind=badge', 'badge'],
+    ['', 'badge'],
+    ['?kind=nope', 'badge'],
+  ] as const) {
+    const router = testRouter()
+    await router.push(`/image-sizes${query}`)
+    const wrapper = mount(ImageSizesPage, { global: { plugins: [router, i18n, PrimeVue] }, attachTo: document.body })
+    await flushPromises()
+    const on = wrapper.findAll('[aria-labelledby="is-kind"] [aria-pressed="true"]').map((b) => b.text())
+    expect(on, query || 'none').toEqual([t(`imageSizes.kinds.${pressed}`)])
+    wrapper.unmount()
+  }
+})
