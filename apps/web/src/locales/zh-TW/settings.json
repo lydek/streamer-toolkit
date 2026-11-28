@@ -18,6 +18,7 @@
   },
   "record": {
     "export": "匯出本場紀錄",
+    "backup": "備份",
     "exported": "已匯出本場紀錄。",
     "at": "時間",
     "kind": "事件種類",

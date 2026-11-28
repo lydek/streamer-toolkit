@@ -62,6 +62,10 @@
       </ul>
       <div v-if="session.endedAt" class="export">
         <Button :label="t('record.export')" icon="pi pi-download" outlined :disabled="exporting" @click="exportIt" />
+        <!-- After the stream, a way to 設定 › 資料與備份 (its heading takes focus). -->
+        <RouterLink to="/settings/backup#backup" class="p-button p-button-outlined backup-link">
+          <i class="pi pi-database" aria-hidden="true"></i>{{ t('record.backup') }}
+        </RouterLink>
         <p v-if="exportNotice" :role="exportNotice.error ? 'alert' : 'status'">{{ exportNotice.text }}</p>
       </div>
     </template>
