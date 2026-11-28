@@ -183,6 +183,14 @@ fn db(mul: f64) -> f64 {
     }
 }
 
+/// Whether OBS gives an input of `kind` audio: capture devices, media sources, and browser sources with "Control
+/// audio via OBS" (`reroute_audio`).
+fn has_audio(kind: &str, settings: &Value) -> bool {
+    kind.starts_with("wasapi_")
+        || kind == "ffmpeg_source"
+        || (kind == "browser_source" && settings["reroute_audio"] == true)
+}
+
 /// The global audio sources `GetSpecialInputs` names.
 const MIC: &str = "Mic";
 const DESKTOP_AUDIO: &str = "Desktop Audio";
@@ -977,7 +985,7 @@ impl World {
                     uuid: uuid.clone(),
                     kind: kind.into(),
                     settings: settings.clone(),
-                    audio: kind.starts_with("wasapi_"),
+                    audio: has_audio(kind, &settings),
                     volume_mul: 1.0,
                     muted: false,
                     monitor: "OBS_MONITORING_TYPE_NONE",
@@ -1210,7 +1218,7 @@ impl FakeObs {
                 uuid,
                 kind: kind.into(),
                 settings: json!({}),
-                audio: kind.starts_with("wasapi_"),
+                audio: has_audio(kind, &json!({})),
                 volume_mul: 1.0,
                 muted: false,
                 monitor: "OBS_MONITORING_TYPE_NONE",
@@ -1636,6 +1644,25 @@ mod tests {
         );
         assert_eq!(events, ["SceneItemRemoved"]);
         assert!(w.inputs.iter().any(|i| i.name == MIC));
+    }
+
+    #[test]
+    fn new_media_and_audio_browser_sources_have_audio() {
+        let mut w = world();
+        let mut mute = |name: &str, kind: &str, settings: Value| {
+            let data = json!({"sceneName": "Live", "inputName": name, "inputKind": kind, "inputSettings": settings});
+            w.handle("CreateInput", &data).0.unwrap();
+            w.handle("GetInputMute", &json!({ "inputName": name }))
+                .0
+                .is_ok()
+        };
+        assert!(mute("Clip", "ffmpeg_source", json!({})));
+        assert!(mute(
+            "Video page",
+            "browser_source",
+            json!({"reroute_audio": true})
+        ));
+        assert!(!mute("Chat page", "browser_source", json!({})));
     }
 
     #[test]
