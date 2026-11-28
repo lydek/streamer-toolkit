@@ -120,31 +120,37 @@ test('away from home, a status light goes to its section of settings', async ({ 
   await expect(page.getByRole('heading', { name: 'OBS' })).toBeFocused()
 })
 
-test('the app bar says when OBS is streaming or recording, and says nothing while it is idle', async ({ page }) => {
+test('the app bar says what OBS is sending out, and says nothing while it is idle', async ({ page }) => {
   const banner = page.getByRole('banner')
   await openAdmin(page)
   await expect(banner.getByText(zh.nav.streaming)).toHaveCount(0)
   await expect(banner.getByText(zh.nav.recording)).toHaveCount(0)
 
-  const state = { scene: 'Live', scenes: [], inputs: [], streaming: true, recording: true }
-  await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
-    ws.send(
-      JSON.stringify({
-        type: 'snapshot',
-        version: 1,
-        seq: 1,
-        payload: {
-          'chat.message': [],
-          'obs.status': [],
-          'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
-          'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
-        },
-      }),
-    ),
-  )
-  await page.reload()
-  await expect(banner.getByText(zh.nav.streaming)).toBeVisible()
-  await expect(banner.getByText(zh.nav.recording)).toBeVisible()
+  // Before Twitch has answered, the pill holds only OBS's part.
+  for (const [streaming, recording, text] of [
+    [true, false, zh.nav.streaming],
+    [false, true, zh.nav.recording],
+    [true, true, `${zh.nav.streaming}·${zh.nav.recording}`],
+  ] as const) {
+    const state = { scene: 'Live', scenes: [], inputs: [], streaming, recording }
+    await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
+      ws.send(
+        JSON.stringify({
+          type: 'snapshot',
+          version: 1,
+          seq: 1,
+          payload: {
+            'chat.message': [],
+            'obs.status': [],
+            'obs.state': [{ id: 's', type: 'obs.state', version: 1, seq: 1, occurredAt: '', source: 'obs', payload: state }],
+            'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
+          },
+        }),
+      ),
+    )
+    await page.reload()
+    await expect(banner.locator('.live-pill')).toHaveText(text)
+  }
 })
 
 /** Opens home with the live state `stream` in the snapshot. */

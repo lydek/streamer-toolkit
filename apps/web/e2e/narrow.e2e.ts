@@ -2,9 +2,11 @@
 import { type Page, expect, test } from '@playwright/test'
 import { mockAdmin, scrollsSideways, zh } from './fixtures'
 
-/** Opens home with Twitch live and OBS streaming and recording, so every status pill shows. */
+/** Opens home at its fullest: Twitch live, OBS streaming and recording while reconnecting (phones show the warning),
+ *  and chat docked (340px) wherever the window is wide enough for it. */
 async function openLive(page: Page) {
   await mockAdmin(page)
+  await page.route('**/api/admin/chat-dock', (r) => r.fulfill({ json: { open: true, width: 340 } }))
   const startedAt = new Date(Date.now() - 3600_000).toISOString()
   const event = (type: string, source: string, payload: unknown) => [{ id: type, type, version: 1, seq: 1, occurredAt: '', source, payload }]
   await page.routeWebSocket(/\/ws\/admin$/, (ws) =>
@@ -14,7 +16,9 @@ async function openLive(page: Page) {
         version: 1,
         seq: 1,
         payload: {
-          'chat.message': [], 'obs.status': [], 'presentation.queue': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
+          'chat.message': [], 'presentation.queue': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [],
+          // OBS reconnecting: phones show the connection warning too.
+          'obs.status': event('obs.status', 'obs', { state: 'reconnecting' }),
           'obs.state': event('obs.state', 'obs', { scene: 'Live', scenes: [], inputs: [], streaming: true, recording: true }),
           'stream.status': event('stream.status', 'twitch', { state: 'live', startedAt, viewers: 42 }),
         },
@@ -25,12 +29,20 @@ async function openLive(page: Page) {
   await expect(page.getByRole('banner').locator('.live-pill')).toBeVisible()
 }
 
-/** How many rows the app bar's top line takes: its visible items grouped by where they start. */
+/** The app bar's top line: its visible items grouped into rows by where they start, each row left to right. */
 const barRows = (page: Page) =>
   page.locator('.bar-top').evaluate((top) => {
-    const items = [...top.querySelectorAll(':scope > .brand, :scope > .bar-status > *, :scope > .bar-tools > *')]
-    const tops = items.filter((e) => (e as HTMLElement).offsetParent).map((e) => e.getBoundingClientRect().top)
-    return tops.sort((a, b) => a - b).filter((t, i, all) => i === 0 || t - all[i - 1] > 12).length
+    const items = [...top.querySelectorAll<HTMLElement>(':scope > .brand, :scope > .bar-status > *, :scope > .bar-tools > *')]
+      .filter((e) => e.offsetParent)
+      .map((e) => ({ box: e.getBoundingClientRect(), button: e.matches('button'), stop: e.matches('.estop') }))
+      .sort((a, b) => a.box.top - b.box.top)
+    const rows: (typeof items)[] = []
+    for (const item of items) {
+      const row = rows.at(-1)
+      if (row && item.box.top - row.at(-1)!.box.top <= 12) row.push(item)
+      else rows.push([item])
+    }
+    return rows.map((row) => row.sort((a, b) => a.box.left - b.box.left).map(({ button, stop }) => ({ button, stop })))
   })
 
 test.describe('on a phone', () => {
@@ -48,11 +60,25 @@ test.describe('on a phone', () => {
   })
 })
 
-for (const width of [800, 390, 320]) {
-  test(`at ${width}px the app bar keeps to two rows, the tools beside the name`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 800 })
+for (const [width, height, lines] of [
+  [1440, 900, 1],
+  [1280, 720, 1],
+  [1024, 768, 2],
+  [800, 800, 2],
+  [390, 844, 2],
+  [360, 800, 2],
+  [320, 800, 2],
+]) {
+  test(`at ${width}px the app bar takes ${lines} row(s), the tools beside the name and the stop last`, async ({ page }) => {
+    await page.setViewportSize({ width, height })
     await openLive(page)
-    expect(await barRows(page)).toBeLessThanOrEqual(2)
+    if (width >= 1000) await expect(page.getByRole('complementary', { name: zh.dock.title })).toBeVisible()
+    if (width < 600) await expect(page.getByRole('banner').locator('.problem')).toBeVisible()
+    const rows = await barRows(page)
+    expect(rows).toHaveLength(lines)
+    expect(rows[0].at(-1)?.stop).toBe(true)
+    // No button ends up alone on a row.
+    for (const row of rows) if (row.some((i) => i.button)) expect(row.length).toBeGreaterThan(1)
     const settings = page.getByRole('banner').getByRole('button', { name: zh.settings.title, exact: true })
     const brand = page.getByRole('banner').locator('.brand')
     const [s, b] = await Promise.all([settings.boundingBox(), brand.boundingBox()])

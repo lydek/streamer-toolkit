@@ -6,17 +6,15 @@
       <!-- Screen readers hear going live or ending, never the ticking timer. -->
       <span class="sr-only" aria-live="polite">{{ liveState }}</span>
       <div class="bar-status">
-        <!-- What OBS is sending out right now; nothing while it is idle or not connected. -->
-        <!-- Twitch's view: live since when and for how many viewers, or ended; nothing until Twitch has answered. -->
-        <span v-if="live.stream?.state === 'live'" class="live-pill">
-          <span class="dot" aria-hidden="true"></span>{{ t('nav.live') }}
-          <span class="live-meta">{{ liveMeta }}</span>
+        <!-- One pill. Twitch's view: live since when and for how many viewers, or ended; nothing until Twitch has
+             answered. Then what OBS is sending out, which can start before Twitch reports live; nothing while idle. -->
+        <span v-if="liveState || obsOut" class="live-pill" :class="{ offline: live.stream?.state !== 'live' }">
+          <template v-if="liveState">
+            <span class="dot" aria-hidden="true"></span>{{ liveState }}
+            <span v-if="liveMeta" class="live-meta">{{ liveMeta }}</span>
+          </template>
+          <span v-if="obsOut" class="obs-out">{{ obsOut }}</span>
         </span>
-        <span v-else-if="live.stream?.state === 'offline'" class="live-pill offline">
-          <span class="dot" aria-hidden="true"></span>{{ t('nav.offline') }}
-        </span>
-        <span v-if="live.obsState?.streaming" class="on-air">{{ t('nav.streaming') }}</span>
-        <span v-if="live.obsState?.recording" class="on-air">{{ t('nav.recording') }}</span>
         <!-- Narrower bars show only lights with a problem (one "connected" light when there is none); phones show a
              warning button instead, and only while a connection has a problem. -->
         <!-- A service the broadcaster does not use (設定 › 功能) has no light and is never a problem. -->
@@ -76,15 +74,6 @@
           @click="toggleChat"
         />
         <Button
-          class="estop"
-          icon="pi pi-stop-circle"
-          text
-          rounded
-          :aria-label="t('queue.stop')"
-          :disabled="stopping"
-          @click="stop"
-        />
-        <Button
           icon="pi pi-cog"
           text
           rounded
@@ -93,7 +82,18 @@
           data-page-opener="settings"
           @click="router.push('/settings')"
         />
+        <!-- Always last, set apart from chat and settings. -->
+        <Button
+          class="estop"
+          icon="pi pi-stop-circle"
+          text
+          rounded
+          :aria-label="t('queue.stop')"
+          :disabled="stopping"
+          @click="stop"
+        />
       </div>
+      <span class="bar-break" aria-hidden="true"></span>
     </div>
     <Teleport to="#bottom-tabs" defer :disabled="tabBar.position !== 'bottom'">
     <nav ref="tabsEl" class="tabs" :class="{ bottom: tabBar.position === 'bottom' }" :aria-label="t('nav.label')">
@@ -213,6 +213,11 @@ const liveMeta = computed(() => {
   const hms = clockText(now.value - Date.parse(s.startedAt))
   return s.viewers === undefined ? hms : `${hms} · ${t('nav.viewers', { n: s.viewers })}`
 })
+const obsOut = computed(() =>
+  [live.value.obsState?.streaming && t('nav.streaming'), live.value.obsState?.recording && t('nav.recording')]
+    .filter(Boolean)
+    .join('·'),
+)
 const twitch = computed(() => twitchLight(overview.value, overviewFailed.value))
 const obs = computed(() => obsLight(live.value))
 const summary = computed(() => summaryLight(unused.value, twitch.value, obs.value))
@@ -512,16 +517,8 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-/* Phone-wide bars: the name gives its room to the tools (screen readers still hear it), so they share one row. */
-@container top (max-width: 30rem) {
-  .brand-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
+.bar-break {
+  display: none;
 }
 
 /* Narrow (the prototype's rule): the tools stay beside the name, the status takes the second row. */
@@ -538,7 +535,22 @@ onBeforeUnmount(() => {
 }
 
 .estop {
+  position: relative;
+  /* PrimeVue clips its buttons; the divider sits outside. */
+  overflow: visible;
+  margin-left: 0.5rem;
   color: var(--p-red-400, #f87171);
+}
+
+/* The divider sits halfway between settings and the stop. */
+.estop::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: -0.5rem;
+  width: 1px;
+  height: 60%;
+  background: var(--p-surface-600);
 }
 
 .live-pill {
@@ -573,31 +585,23 @@ onBeforeUnmount(() => {
   background: var(--p-surface-500);
 }
 
-/* Phones keep only 「直播中」. */
-@container top (max-width: 37.5rem) {
+/* Narrower bars (chat docked at 1280px, phones) keep only 「直播中」. */
+@container top (max-width: 60rem) {
   .live-meta {
     display: none;
   }
 }
 
-.on-air {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  background: var(--p-red-950, #450a0a);
-  color: var(--p-red-200, #fecaca);
-  font-size: 0.875rem;
-  white-space: nowrap;
+/* OBS's output after Twitch's state, behind a thin rule; on its own while Twitch has not answered. */
+.obs-out {
+  color: var(--p-red-400, #f87171);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
-.on-air::before {
-  content: '';
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--p-red-500, #ef4444);
+.obs-out:not(:first-child) {
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--p-surface-600);
 }
 
 .all-healthy,
@@ -742,8 +746,44 @@ onBeforeUnmount(() => {
   color: var(--p-primary-color);
 }
 
-/* Below 600px: the status lights give way to the warning button, and the group tabs become a bottom bar. */
+/* Below 600px: the status lights give way to the warning button, and the group tabs become a bottom bar. The icon
+   buttons stay beside the name; status, warning and simulate take the second line. After the container rules above,
+   so it wins over them. */
 @media (max-width: 599.98px) {
+  .bar-top {
+    gap: 0 0.5rem;
+  }
+
+  .bar-tools {
+    display: contents;
+  }
+
+  .bar-tools > * {
+    order: 1;
+  }
+
+  /* The break itself is the gap between the lines. */
+  .bar-break {
+    display: block;
+    order: 2;
+    flex-basis: 100%;
+    height: 0.5rem;
+  }
+
+  .bar-status {
+    flex-basis: auto;
+  }
+
+  .bar-status,
+  .bar-tools > .problem,
+  .bar-tools > .simulate-open {
+    order: 3;
+  }
+
+  .obs-out:not(:first-child) {
+    padding-left: 0.375rem;
+  }
+
   .bar-status > .light {
     display: none;
   }
@@ -805,6 +845,24 @@ onBeforeUnmount(() => {
     margin: 0 -1rem;
     padding-inline: 1rem;
     scroll-padding-inline: 1rem;
+  }
+}
+
+/* Smallest phones (about 375px and below): the logo stands for the name (screen readers still hear it), so the
+   warning and simulate join the icon buttons and no button wraps alone. After the phone rules, so it wins. */
+@container top (max-width: 21rem) {
+  .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .bar-tools > .problem,
+  .bar-tools > .simulate-open {
+    order: 1;
   }
 }
 </style>
