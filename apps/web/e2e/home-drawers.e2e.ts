@@ -1,15 +1,20 @@
 // Home drawers' quick controls, with the admin API and the live socket mocked.
-import { type Page, expect, test } from '@playwright/test'
+import { type Page, type WebSocketRoute, expect, test } from '@playwright/test'
 import { mockAdmin, toLiveHome, zh } from './fixtures'
 
-/** Home with `extra` in the live snapshot (each a list of one event of that type). */
+/** Home with `extra` in the live snapshot (each a list of one event of that type); `send` pushes a later live message. */
 async function openHome(page: Page, modules: string[], extra: Record<string, unknown>, homeTiles: string[] | null = null) {
   await mockAdmin(page, { modules: modules.map((id) => ({ id, enabled: true, closed: false })), homeTiles })
   const payload: Record<string, unknown[]> = { 'chat.message': [], 'obs.status': [], 'obs.state': [], 'presentation.queue': [], 'stream.status': [], 'bgm.player': [], 'counter.values': [], 'counter.marathon': [], 'screen.break': [], 'screen.warnings': [], 'screen.appearance': [], 'leaderboard.update': [], 'twitch.contest': [], 'chat.text_size': [] }
   for (const [type, p] of Object.entries(extra)) payload[type] = [{ id: type, type, version: 1, seq: 1, occurredAt: '', source: 'e2e', payload: p }]
-  await page.routeWebSocket(/\/ws\/admin$/, (ws) => ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload })))
+  let socket: WebSocketRoute | undefined
+  await page.routeWebSocket(/\/ws\/admin$/, (ws) => {
+    socket = ws
+    ws.send(JSON.stringify({ type: 'snapshot', version: 1, seq: 1, payload }))
+  })
   await page.goto('/admin/')
   await toLiveHome(page)
+  return { send: (msg: object) => socket!.send(JSON.stringify(msg)) }
 }
 
 test('the counter drawer counts down and up, as the counter page does', async ({ page }) => {
@@ -144,4 +149,37 @@ test('the chat bot drawer says why it cannot read the bot, as the pages do', asy
   await page.route('**/api/admin/bot/greetings', (r) => r.fulfill({ json: {} }))
   await page.locator('[data-drawer-tile="commands"]').click()
   await expect(page.locator('#drawer-commands').getByRole('alert')).toHaveText(zh.errors.twitch.scope_required)
+})
+
+test('the song drawer shows the song being sung and the next three, and 唱完了 works as on the page', async ({ page }) => {
+  await openHome(page, ['songs'], {}, ['songs'])
+  const req = (id: string, title: string) => ({ id, song_id: `s-${id}`, title, artist: '', viewer: null, by_hand: false, requested_at: '2026-11-28T12:00:00.000Z', finished_at: null })
+  let board = { singing: req('r1', '晴天'), queued: [req('r2', '小幸運'), req('r3', '告白氣球'), req('r4', '突然好想你'), req('r5', '倒數')], sung: [] as unknown[] }
+  await page.route('**/api/admin/song-requests', (r) => r.fulfill({ json: board }))
+  const finished: string[] = []
+  await page.route('**/api/admin/song-requests/finish', (r) => {
+    finished.push('finish')
+    board = { singing: null as never, queued: board.queued, sung: [] }
+    return r.fulfill({ status: 204 })
+  })
+  await page.locator('[data-drawer-tile="songs"]').click()
+  const drawer = page.locator('#drawer-songs')
+  await expect(drawer.locator('[data-singing]')).toContainText('晴天')
+  await expect(drawer.locator('.next li')).toHaveText(['小幸運', '告白氣球', '突然好想你'])
+  await drawer.getByRole('button', { name: zh.songs.finish }).click()
+  await expect.poll(() => finished).toEqual(['finish'])
+  await expect(drawer.getByText(zh.songs.nothingNow)).toBeVisible()
+})
+
+test('the open song drawer follows a request changed elsewhere', async ({ page }) => {
+  const home = await openHome(page, ['songs'], {}, ['songs'])
+  const req = (id: string, title: string) => ({ id, song_id: `s-${id}`, title, artist: '', viewer: null, by_hand: false, requested_at: '2026-11-28T12:00:00.000Z', finished_at: null })
+  let board = { singing: req('r1', 'Song A'), queued: [] as unknown[], sung: [] as unknown[] }
+  await page.route('**/api/admin/song-requests', (r) => r.fulfill({ json: board }))
+  await page.locator('[data-drawer-tile="songs"]').click()
+  const drawer = page.locator('#drawer-songs')
+  await expect(drawer.locator('[data-singing]')).toContainText('Song A')
+  board = { ...board, singing: req('r2', 'Song B') }
+  home.send({ id: 'c1', type: 'songs.changed', version: 1, seq: 2, occurredAt: '', source: 'e2e', payload: {} })
+  await expect(drawer.locator('[data-singing]')).toContainText('Song B')
 })

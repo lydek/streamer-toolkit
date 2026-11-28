@@ -226,7 +226,7 @@
       </template>
     </AppDrawer>
     <CommandsDrawer :title="moduleName('commands')" />
-    <SongsDrawer :title="moduleName('songs')" />
+    <SongsDrawer :title="moduleName('songs')" :changed="songsChanged" />
     <BgmDrawer :title="moduleName('bgm')" :live="live" :playlists="playlists" />
   </div>
 </template>
@@ -338,7 +338,9 @@ const { recent, loadRecent, checkinToday, loadCheckinToday, sounds, loadSounds, 
   drawer,
   (e) => drawerFailed(e),
 )
+const songsChanged = ref(0)
 const live = useLiveEvents(2000, (msg) => {
+  if (msg.type === 'songs.changed' || msg.type === 'snapshot') songsChanged.value++
   if (changesFeed(msg.type)) reloadFeedSoon()
   chatLog.value = applyChat(chatLog.value, msg)
   if (changesRecords(msg)) void loadRecent()
