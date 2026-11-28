@@ -108,7 +108,16 @@
     "license": "以 MIT 授權釋出。",
     "licenseLabel": "授權",
     "version": "版本",
-    "thirdParty": "第三方授權"
+    "thirdParty": "第三方授權",
+    "checkNow": {
+      "button": "檢查新版",
+      "checking": "檢查中……",
+      "available": "有新版 {version}",
+      "availableSkipped": "有新版 {version}（之前略過）",
+      "upToDate": "已是最新版",
+      "failed": "檢查失敗，請稍後再試",
+      "unavailable": "開發版沒有新版來源"
+    }
   },
   "backup": {
     "export": "匯出備份",

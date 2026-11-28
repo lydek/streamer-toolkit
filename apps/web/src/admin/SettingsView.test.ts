@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { invoke } from '@tauri-apps/api/core'
 import { i18n } from '../i18n'
 import FeatureList from './FeatureList.vue'
 import SettingsView from './SettingsView.vue'
@@ -23,7 +24,7 @@ const GETS: Record<string, unknown> = {
   '/api/admin/checkin/rewards': [{ id: 'w-1', title: '打卡' }],
   '/api/admin/checkin/outbox': { pending: 0, oldest_pending_at: null, dead_letters: [] },
   '/api/admin/sounds': { sounds: [], slots: {} },
-  '/api/admin/update': { current: '0.1.0', available: null, check: true },
+  '/api/admin/update': { current: '0.1.0', available: null, check: true, can_check: true },
 }
 
 async function mountSettings() {
@@ -471,5 +472,56 @@ describe('SettingsView', () => {
       expect(client.POST.mock.calls[0][1]).toEqual({ params: { path: { event_id: 'e1' } } })
       wrapper.unmount()
     })
+  })
+
+  it('檢查新版 in About checks now and says what it found, leaving the automatic check alone', async () => {
+    const t = i18n.global.t
+    const wrapper = await mountSettings()
+    const button = () => wrapper.findAll('button').find((b) => b.text() === t('settings.checkNow.button'))!
+    const said = () => wrapper.get('.check-now').text()
+    const answers = [
+      [{ result: 'available', version: '0.2.0', skipped: false }, t('settings.checkNow.available', { version: '0.2.0' })],
+      [{ result: 'available', version: '0.2.0', skipped: true }, t('settings.checkNow.availableSkipped', { version: '0.2.0' })],
+      [{ result: 'up_to_date', version: null, skipped: false }, t('settings.checkNow.upToDate')],
+      [{ result: 'failed', version: null, skipped: false }, t('settings.checkNow.failed')],
+    ] as const
+    for (const [answer, text] of answers) {
+      let finish: (v: unknown) => void = () => {}
+      client.POST.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+      await button().trigger('click')
+      expect(said()).toContain(t('settings.checkNow.checking'))
+      expect(button().attributes('disabled')).toBeDefined()
+      finish(ok(answer))
+      await flushPromises()
+      expect(said()).toContain(text)
+    }
+    expect(client.POST).toHaveBeenCalledWith('/api/admin/update/check-now')
+    expect(client.PUT).not.toHaveBeenCalledWith('/api/admin/update/check', expect.anything())
+  })
+
+  it('a new version found by 檢查新版 can be downloaded from About, as the header notice would', async () => {
+    const t = i18n.global.t
+    const wrapper = await mountSettings()
+    const find = (label: string) => wrapper.findAll('button').find((b) => b.text() === label)
+    expect(find(t('update.download'))).toBeUndefined()
+    client.POST.mockResolvedValueOnce(ok({ result: 'available', version: '0.2.0', skipped: true }))
+    await find(t('settings.checkNow.button'))!.trigger('click')
+    await flushPromises()
+    await find(t('update.download'))!.trigger('click')
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('open_download_page')
+    client.POST.mockResolvedValueOnce(ok({ result: 'up_to_date', version: null, skipped: false }))
+    await find(t('settings.checkNow.button'))!.trigger('click')
+    await flushPromises()
+    expect(find(t('update.download'))).toBeUndefined()
+  })
+
+  it('檢查新版 is off in a build with nowhere to look, and says why', async () => {
+    GETS['/api/admin/update'] = { current: '0.1.0', available: null, check: true, can_check: false }
+    const wrapper = await mountSettings()
+    await flushPromises()
+    const button = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('settings.checkNow.button'))!
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('#check-now-why').text()).toBe(i18n.global.t('settings.checkNow.unavailable'))
+    GETS['/api/admin/update'] = { current: '0.1.0', available: null, check: true, can_check: true }
   })
 })

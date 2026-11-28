@@ -196,7 +196,33 @@
         <section v-show="section === 'about'" aria-labelledby="about">
           <h2 id="about" tabindex="-1">{{ t('settings.about') }}</h2>
           <FormPanel>
-            <FormRow :label="t('settings.version')">{{ t('app.name') }} {{ version }}</FormRow>
+            <FormRow :label="t('settings.version')">
+              {{ t('app.name') }} {{ version }}
+              <!-- Looks now, whatever the automatic check is set to; a dev build has nowhere to look. -->
+              <span class="check-now">
+                <Button
+                  :label="t('settings.checkNow.button')"
+                  icon="pi pi-refresh"
+                  size="small"
+                  outlined
+                  :disabled="!canCheck || checking"
+                  :aria-describedby="canCheck ? undefined : 'check-now-why'"
+                  @click="checkNow"
+                />
+                <span v-if="!canCheck" id="check-now-why" class="muted">{{ t('settings.checkNow.unavailable') }}</span>
+                <span v-else-if="checking" role="status">{{ t('settings.checkNow.checking') }}</span>
+                <span v-else-if="checkResult" :role="checkResult.result === 'failed' ? 'alert' : 'status'">{{ checkText(checkResult) }}</span>
+                <!-- The header notice stays away while the check is off or this version was skipped: download from here. -->
+                <Button
+                  v-if="!checking && checkResult?.result === 'available'"
+                  :label="t('update.download')"
+                  icon="pi pi-external-link"
+                  size="small"
+                  text
+                  @click="download"
+                />
+              </span>
+            </FormRow>
             <FormRow :label="t('settings.licenseLabel')">{{ t('settings.license') }}</FormRow>
             <details class="more" @toggle="loadLicenses">
               <summary>{{ t('settings.thirdParty') }}</summary>
@@ -213,6 +239,7 @@
 </template>
 
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import ToggleSwitch from 'primevue/toggleswitch'
@@ -453,7 +480,38 @@ async function loadGeneral() {
 }
 
 async function loadUpdateCheck() {
-  checkSaved.value = (await api(client.GET('/api/admin/update'))).check
+  const state = await api(client.GET('/api/admin/update'))
+  checkSaved.value = state.check
+  canCheck.value = state.can_check
+}
+
+// 「檢查新版」 in About: its own answer, apart from the automatic check and the skipped release.
+const canCheck = ref(true)
+const checking = ref(false)
+const checkResult = ref<Schemas['ManualCheck']>()
+const checkText = (c: Schemas['ManualCheck']) =>
+  c.result === 'available'
+    ? t(c.skipped ? 'settings.checkNow.availableSkipped' : 'settings.checkNow.available', { version: c.version })
+    : t(`settings.checkNow.${c.result === 'up_to_date' ? 'upToDate' : c.result}`)
+async function checkNow() {
+  checking.value = true
+  checkResult.value = undefined
+  try {
+    checkResult.value = await api(client.POST('/api/admin/update/check-now'))
+  } catch {
+    checkResult.value = { result: 'failed', version: null, skipped: false }
+  } finally {
+    checking.value = false
+  }
+}
+
+// The command opens a fixed releases page; it takes no URL.
+async function download() {
+  try {
+    await invoke('open_download_page')
+  } catch (e) {
+    toast.add(errorToast(errorMessage(String(e))))
+  }
 }
 
 async function loadObs() {
@@ -749,6 +807,14 @@ onBeforeUnmount(() => {
 .form-panel + .form-panel,
 p + .form-panel {
   margin-top: 1rem;
+}
+
+.check-now {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: 0.75rem;
 }
 
 /* The about panel's third-party licenses, under its rows. */

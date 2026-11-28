@@ -9295,6 +9295,26 @@
         }
       }
     },
+    "/api/admin/update/check-now": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "「檢查新版」: looks up the newest release now and answers what it found, whatever the automatic check is set\nto. Changes neither that setting nor the skipped release; a release found also updates the notice.",
+        "operationId": "check_now",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/update/dismiss": {
       "put": {
         "tags": [
@@ -11521,6 +11541,15 @@
           }
         }
       },
+      "CheckResult": {
+        "type": "string",
+        "enum": [
+          "available",
+          "up_to_date",
+          "failed",
+          "unavailable"
+        ]
+      },
       "CheckinChangedEvent": {
         "type": "object",
         "description": "A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's\nID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.",
@@ -13384,6 +13413,29 @@
               "type": "string"
             },
             "description": "Scopes a feature needs, kept for every later sign-in too; each must be in `FEATURE_SCOPES`."
+          }
+        }
+      },
+      "ManualCheck": {
+        "type": "object",
+        "required": [
+          "result",
+          "skipped"
+        ],
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/CheckResult"
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "Whether the broadcaster skipped that release before (it is still reported: they asked)."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The newer release, `major.minor.patch`, when `result` is `available`."
           }
         }
       },
@@ -17798,7 +17850,8 @@
         "type": "object",
         "required": [
           "current",
-          "check"
+          "check",
+          "can_check"
         ],
         "properties": {
           "available": {
@@ -17807,6 +17860,10 @@
               "null"
             ],
             "description": "The newer release to tell the broadcaster about; `null`: no notice."
+          },
+          "can_check": {
+            "type": "boolean",
+            "description": "Whether this build can look up releases at all (a dev build cannot), for 「檢查新版」 in Settings → About."
           },
           "check": {
             "type": "boolean",
