@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::Timestamp;
 
 const SOUND_ID: &str = "0190a5b0-0000-7000-8000-000000000001";
 
@@ -331,9 +332,7 @@ async fn a_pushed_card_shows_without_a_record_and_hide_clears_it() {
         Arc::new(Modules::load(dir.clone())),
         dir.clone(),
     ));
-    let at = DateTime::parse_from_rfc3339("2026-11-20T01:00:00Z")
-        .unwrap()
-        .to_utc();
+    let at = "2026-11-20T01:00:00Z".parse::<Timestamp>().unwrap();
     let rule = BusinessDay::new("Asia/Taipei", 0).unwrap();
     let viewer = Viewer {
         twitch_id: TwitchUserId("1".into()),

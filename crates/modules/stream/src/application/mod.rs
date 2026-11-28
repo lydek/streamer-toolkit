@@ -2,11 +2,11 @@
 
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
 use tokio::sync::{mpsc, oneshot};
 use toolkit_core::events::StreamChange;
 
 use crate::domain::{self, Session, Step};
+use toolkit_core::time::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
 #[error("stream.storage_failed: {0}")]
@@ -20,12 +20,12 @@ pub(crate) trait SessionRepository: Send + Sync + 'static {
     fn open(
         &self,
         twitch_id: &str,
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
     ) -> impl Future<Output = Result<Session, RepositoryError>> + Send;
     fn end(
         &self,
         id: &str,
-        at: DateTime<Utc>,
+        at: Timestamp,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
     /// Keeps `viewers` as the session's peak when no check counted more.
     fn raise_peak(
@@ -42,7 +42,7 @@ pub(crate) enum Broadcast {
     Unknown,
     Offline,
     Live {
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
         viewers: Option<u32>,
     },
 }
@@ -88,7 +88,7 @@ impl StreamService {
                     report(&Broadcast::Unknown);
                     continue;
                 }
-                let now = Utc::now();
+                let now = Timestamp::now();
                 let result = match domain::step(current.as_ref(), &change, now) {
                     Step::Open {
                         twitch_id,

@@ -5,7 +5,6 @@ pub(crate) mod http;
 
 use std::sync::Arc;
 
-use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
@@ -19,6 +18,7 @@ use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 use crate::{application::RedemptionService, domain::Redemption};
+use toolkit_core::time::{self, Timestamp};
 
 /// Outbox event type of [`RedemptionRecorded`].
 pub const REDEMPTION_RECORDED: &str = "redemption.recorded";
@@ -79,7 +79,7 @@ fn publish_changed_id(bus: &EventBus, id: String) {
         id: Uuid::now_v7().to_string(),
         event_type: CHANGED,
         version: CHANGED_VERSION,
-        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         // Simulated redemptions are never stored, so every change comes from Twitch.
         source: Source::Twitch,
         payload: serde_json::to_value(payload).expect("serializable"),
@@ -232,7 +232,7 @@ mod tests {
                 result: PlayResult::Played,
             })
             .unwrap(),
-            occurred_at: Utc::now(),
+            occurred_at: Timestamp::now(),
         };
         let twitch_id: String =
             sqlx::query_scalar("SELECT twitch_redemption_id FROM redemption_records")
@@ -365,7 +365,7 @@ mod tests {
             e.user_login = login.into();
             e.reward_title = reward.into();
             e.redeemed_at = format!("2026-11-16T{:02}:00:00Z", 10 + n);
-            crate::application::record(&repo, e, Utc::now())
+            crate::application::record(&repo, e, Timestamp::now())
                 .await
                 .unwrap();
         }

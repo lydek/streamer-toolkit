@@ -1,7 +1,6 @@
 //! Screen tools (thin module): plain structs with simple checks.
 
-use chrono::{DateTime, Duration, Utc};
-
+use toolkit_core::time::{SignedDuration, Timestamp};
 pub mod appearance;
 pub mod media;
 pub mod warnings;
@@ -86,25 +85,29 @@ fn time_of_day(s: &str) -> bool {
 pub struct BreakCard {
     pub settings: BreakSettings,
     pub shown: bool,
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
 }
 
 /// When a shown card's countdown ends.
 #[derive(Debug, Clone, Copy)]
 pub enum Countdown {
     Minutes(u32),
-    Until(DateTime<Utc>),
+    Until(Timestamp),
 }
 
 impl BreakCard {
     /// Shows the card counting down from `now`; `None` for 0 or more than a day of minutes, or an end not within
     /// the next day.
-    pub(crate) fn show(&mut self, countdown: Countdown, now: DateTime<Utc>) -> Option<()> {
+    pub(crate) fn show(&mut self, countdown: Countdown, now: Timestamp) -> Option<()> {
         let ends_at = match countdown {
             Countdown::Minutes(m) if (1..=MINUTES_MAX).contains(&m) => {
-                now + Duration::minutes(i64::from(m))
+                now + SignedDuration::from_mins(i64::from(m))
             }
-            Countdown::Until(t) if t > now && t <= now + Duration::minutes(MINUTES_MAX.into()) => t,
+            Countdown::Until(t)
+                if t > now && t <= now + SignedDuration::from_mins(MINUTES_MAX.into()) =>
+            {
+                t
+            }
             _ => return None,
         };
         self.shown = true;
@@ -122,11 +125,8 @@ impl BreakCard {
 mod tests {
     use super::*;
 
-    fn at(min: i64) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-11-22T12:00:00Z")
-            .unwrap()
-            .to_utc()
-            + Duration::minutes(min)
+    fn at(min: i64) -> Timestamp {
+        "2026-11-22T12:00:00Z".parse::<Timestamp>().unwrap() + SignedDuration::from_mins(min)
     }
 
     #[test]

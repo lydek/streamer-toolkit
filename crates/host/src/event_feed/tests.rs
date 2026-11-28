@@ -1,15 +1,13 @@
 use super::*;
+use toolkit_core::time::{self, SignedDuration, Timestamp};
 
-fn at(min: i64) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-11-21T10:00:00Z")
-        .unwrap()
-        .to_utc()
-        + chrono::TimeDelta::minutes(min)
+fn at(min: i64) -> Timestamp {
+    "2026-11-21T10:00:00Z".parse::<Timestamp>().unwrap() + SignedDuration::from_mins(min)
 }
 
 /// Stored the way the modules store times: microseconds.
 fn stored(min: i64) -> String {
-    at(min).to_rfc3339_opts(SecondsFormat::Micros, true)
+    time::micros(at(min))
 }
 
 fn activity(id: &str, kind: &str, min: i64, gifted: bool) -> ActivityEntry {
@@ -73,7 +71,7 @@ fn remembered_item(
         key: key.map(Into::into),
         subject,
         source,
-        queued_at: at(min).to_rfc3339_opts(SecondsFormat::Millis, true),
+        queued_at: time::millis(at(min)),
         outcome,
     }
 }
@@ -85,7 +83,7 @@ fn alert(id: &str, kind: AlertKind, min: i64) -> Alert {
         user_login: Some("kai".into()),
         user_name: Some("阿凱".into()),
         kind,
-        occurred_at: at(min).to_rfc3339(),
+        occurred_at: at(min).to_string(),
     }
 }
 

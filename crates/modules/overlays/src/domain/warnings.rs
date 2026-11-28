@@ -1,7 +1,7 @@
 //! On-stream warnings: which ones are on, and what the toolkit last saw of the chat overlay, Twitch and the mic.
 
-use chrono::{DateTime, Utc};
 use toolkit_core::streaming::Input;
+use toolkit_core::time::Timestamp;
 
 /// The longest wait before a muted mic warns: an hour.
 pub(crate) const MIC_SECONDS_MAX: u32 = 3600;
@@ -63,19 +63,14 @@ pub struct Warnings {
     pub chat_overlay_down: bool,
     pub twitch_down: bool,
     /// Since when the watched mic has been muted; the warning shows `mic_seconds` later.
-    pub mic_muted_since: Option<DateTime<Utc>>,
+    pub mic_muted_since: Option<Timestamp>,
     /// The watched input is no longer in OBS: pick another.
     pub mic_missing: bool,
 }
 
 impl Warnings {
     /// The state after seeing `c` at `now`; a mic still muted keeps the time it was first seen muted.
-    pub(crate) fn next(
-        &self,
-        settings: &WarningSettings,
-        c: &Conditions,
-        now: DateTime<Utc>,
-    ) -> Self {
+    pub(crate) fn next(&self, settings: &WarningSettings, c: &Conditions, now: Timestamp) -> Self {
         let watched = settings.mic_input.as_deref().and_then(|name| {
             c.inputs
                 .as_ref()
@@ -95,8 +90,8 @@ impl Warnings {
 mod tests {
     use super::*;
 
-    fn at(s: i64) -> DateTime<Utc> {
-        DateTime::from_timestamp(1_800_000_000 + s, 0).unwrap()
+    fn at(s: i64) -> Timestamp {
+        Timestamp::from_second(1_800_000_000 + s).unwrap()
     }
 
     fn mic(muted: bool) -> Conditions {

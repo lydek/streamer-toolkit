@@ -9,6 +9,7 @@ use crate::{
         marathon::{Marathon, MarathonOptions},
     },
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// The most viewers a search returns.
 const SEARCH_LIMIT: u32 = 20;
@@ -275,9 +276,9 @@ impl CounterRepository for SqliteCounters {
         let number = |n: i64| u32::try_from(n).map_err(|e| RepositoryError(e.to_string()));
         Ok(Some(Marathon {
             remaining_ms,
-            anchor: chrono::DateTime::parse_from_rfc3339(&anchor)
-                .map_err(|e| RepositoryError(e.to_string()))?
-                .to_utc(),
+            anchor: anchor
+                .parse::<Timestamp>()
+                .map_err(|e| RepositoryError(e.to_string()))?,
             paused,
             session,
             options: MarathonOptions {
@@ -298,7 +299,7 @@ impl CounterRepository for SqliteCounters {
              bits_minutes = excluded.bits_minutes, max_hours = excluded.max_hours",
         )
         .bind(m.remaining_ms)
-        .bind(m.anchor.to_rfc3339_opts(chrono::SecondsFormat::Micros, true))
+        .bind(time::micros(m.anchor))
         .bind(m.paused)
         .bind(&m.session)
         .bind(m.options.sub_minutes)

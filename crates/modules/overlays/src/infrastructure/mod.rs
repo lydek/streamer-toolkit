@@ -20,7 +20,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
@@ -35,6 +34,7 @@ use crate::{
     application::{OverlayError, OverlayService, PlaybackDeps, Publishers, RepositoryError},
     domain::{BreakCard, BreakSettings, Countdown, CountdownMode},
 };
+use toolkit_core::time::Timestamp;
 
 /// The screen tools service the host runs.
 pub type Overlays = OverlayService<db::SqliteOverlays>;
@@ -143,7 +143,7 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>, deps: Deps) -> Arc<Overlays> 
         id: uuid::Uuid::now_v7().to_string(),
         event_type,
         version,
-        occurred_at: db::rfc3339(Utc::now()),
+        occurred_at: db::rfc3339(Timestamp::now()),
         source: Source::System,
         payload,
     };
@@ -325,15 +325,13 @@ pub(crate) async fn show_break(
         Ok(Json(ShowBreakBody {
             minutes: None,
             until: Some(t),
-        })) => DateTime::parse_from_rfc3339(&t)
-            .ok()
-            .map(|t| Countdown::Until(t.to_utc())),
+        })) => t.parse::<Timestamp>().ok().map(Countdown::Until),
         _ => None,
     };
     let Some(countdown) = countdown else {
         return error(StatusCode::BAD_REQUEST, "overlays.invalid");
     };
-    break_body(s.show_break(countdown, Utc::now()).await)
+    break_body(s.show_break(countdown, Timestamp::now()).await)
 }
 
 #[utoipa::path(

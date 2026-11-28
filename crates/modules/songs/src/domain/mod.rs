@@ -2,8 +2,7 @@
 //! and how an imported file becomes additions and updates.
 
 use std::collections::{HashMap, HashSet};
-
-use chrono::{DateTime, Utc};
+use toolkit_core::time::Timestamp;
 
 pub mod requests;
 
@@ -23,7 +22,7 @@ pub struct Song {
     pub(crate) artist: String,
     pub(crate) category_id: Option<String>,
     pub(crate) youtube_url: Option<String>,
-    pub(crate) last_sung_at: Option<DateTime<Utc>>,
+    pub(crate) last_sung_at: Option<Timestamp>,
     pub(crate) request_count: u32,
 }
 

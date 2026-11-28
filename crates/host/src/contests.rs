@@ -4,8 +4,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use toolkit_core::time::{self, Timestamp};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::{Contest, Poll, PollStatus, Prediction, PredictionStatus, Source},
@@ -201,7 +201,7 @@ impl Contests {
             id: uuid::Uuid::now_v7().to_string(),
             event_type: CONTEST,
             version: CONTEST_VERSION,
-            occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Twitch,
             payload: serde_json::to_value(&next).expect("contest serializes"),
         });

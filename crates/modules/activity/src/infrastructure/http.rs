@@ -155,6 +155,7 @@ mod tests {
     use axum::{body::Body, http::Request};
     use std::time::Duration;
     use toolkit_core::events::{Alert, AlertKind, Source};
+    use toolkit_core::time::{self, Timestamp};
     use tower::ServiceExt;
 
     fn data_dir(name: &str) -> PathBuf {
@@ -203,7 +204,7 @@ mod tests {
             || async { Some("session-1".into()) },
             Vec::new(),
         );
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = Timestamp::now().to_string();
         service.receive(follow("m1", &now), Source::Twitch);
         service.receive(follow("m1", &now), Source::Twitch);
         service.receive(follow("m2", &now), Source::Simulation);
@@ -231,7 +232,7 @@ mod tests {
         })
         .unwrap();
         let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
-        let days_ago = |d: i64| (chrono::Utc::now() - chrono::TimeDelta::days(d)).to_rfc3339();
+        let days_ago = |d: i64| (Timestamp::now() - time::days(d)).to_string();
         service.receive(follow("old", &days_ago(40)), Source::Twitch);
         service.receive(follow("week", &days_ago(8)), Source::Twitch);
         service.receive(follow("new", &days_ago(0)), Source::Twitch);
@@ -328,7 +329,7 @@ mod tests {
         })
         .unwrap();
         let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
-        let old = (chrono::Utc::now() - chrono::TimeDelta::days(400)).to_rfc3339();
+        let old = (Timestamp::now() - time::days(400)).to_string();
         service.receive(follow("old", &old), Source::Twitch);
         until(&pool, 1).await;
         // Broken now: a start must not fall back to 30 days and delete the year-old record.
@@ -357,7 +358,7 @@ mod tests {
         })
         .unwrap();
         let service = start(pool.clone(), dir.clone(), || async { None }, Vec::new());
-        let old = (chrono::Utc::now() - chrono::TimeDelta::days(40)).to_rfc3339();
+        let old = (Timestamp::now() - time::days(40)).to_string();
         service.receive(follow("old", &old), Source::Twitch);
         until(&pool, 1).await;
         // settings.json can no longer be written (a folder in its place).

@@ -15,7 +15,6 @@ use axum::{
     routing::get,
 };
 use checkin::{CheckedInEntry, CheckinService};
-use chrono::{DateTime, SecondsFormat, Utc};
 use overlays::application::RecentMedia;
 use serde::{Deserialize, Serialize};
 use sound::SoundService;
@@ -30,6 +29,7 @@ use activity::ActivityEntry;
 use redemption::RedeemedEntry;
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 /// How many items the feed lists.
 const ITEMS: usize = 50;
@@ -38,7 +38,7 @@ const ITEMS: usize = 50;
 pub(crate) struct FeedState {
     pub(crate) pool: SqlitePool,
     /// Before the first stream, the feed starts here.
-    pub(crate) launched_at: DateTime<Utc>,
+    pub(crate) launched_at: Timestamp,
     pub(crate) alerts: Arc<AlertsService>,
     pub(crate) sounds: Arc<SoundService>,
     pub(crate) checkin: Arc<CheckinService>,
@@ -217,12 +217,12 @@ pub(crate) struct Remembered {
     pub(crate) media: Vec<RecentMedia>,
 }
 
-fn parse(at: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(at).ok().map(|t| t.to_utc())
+fn parse(at: &str) -> Option<Timestamp> {
+    at.parse::<Timestamp>().ok()
 }
 
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Millis, true)
+fn time_text(t: Timestamp) -> String {
+    time::millis(t)
 }
 
 fn amount(kind: &str, e: &ActivityEntry) -> Option<u32> {
@@ -246,11 +246,7 @@ fn alert_amount(kind: &AlertKind) -> Option<u32> {
 }
 
 /// Merges the records with what this launch remembers, adds the simulations (kept only in memory), newest first.
-pub(crate) fn compose(
-    from: DateTime<Utc>,
-    records: Records,
-    remembered: Remembered,
-) -> Vec<FeedItem> {
+pub(crate) fn compose(from: Timestamp, records: Records, remembered: Remembered) -> Vec<FeedItem> {
     let alert_outcomes: HashMap<&str, Option<Outcome>> = remembered
         .alerts
         .iter()
@@ -268,7 +264,7 @@ pub(crate) fn compose(
         .iter()
         .filter_map(|m| m.item.key.clone().map(|k| (k, m)))
         .collect();
-    let mut items: Vec<(DateTime<Utc>, FeedItem)> = Vec::new();
+    let mut items: Vec<(Timestamp, FeedItem)> = Vec::new();
     let mut push = |at: &str, item: FeedItem| {
         if let Some(t) = parse(at).filter(|t| *t >= from) {
             items.push((

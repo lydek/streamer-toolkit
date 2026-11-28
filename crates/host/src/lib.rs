@@ -61,6 +61,7 @@ use axum::{
 };
 use rust_embed::Embed;
 use tokio::net::TcpListener;
+use toolkit_core::time::Timestamp;
 
 // frame-src is added per port by `admin_csp`.
 const ADMIN_CSP: &str = "script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; \
@@ -258,7 +259,7 @@ fn watch_warnings(
                     inputs: None,
                 }
             };
-            screen_tools.see(conditions, chrono::Utc::now());
+            screen_tools.see(conditions, Timestamp::now());
         }
     });
 }
@@ -443,10 +444,8 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     let state = match e["payload"]["state"].as_str() {
                         Some("live") => e["payload"]["startedAt"]
                             .as_str()
-                            .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
-                            .map(|t| counter::StreamState::Live {
-                                started_at: t.to_utc(),
-                            }),
+                            .and_then(|t| t.parse::<Timestamp>().ok())
+                            .map(|t| counter::StreamState::Live { started_at: t }),
                         Some("offline") => Some(counter::StreamState::Offline),
                         _ => None,
                     };
@@ -490,7 +489,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
                     id: uuid::Uuid::now_v7().to_string(),
                     event_type: toolkit_core::presentation::REDEMPTION_PLAYED.into(),
                     payload: serde_json::to_value(&played).expect("serializable"),
-                    occurred_at: chrono::Utc::now(),
+                    occurred_at: Timestamp::now(),
                 };
                 // A failed write (a busy or full disk) is tried again with the same event ID, so it is kept once.
                 let mut waits = [1, 5, 30].into_iter();
@@ -525,7 +524,7 @@ fn router_with_chat(config: HostConfig) -> Result<(Router, Arc<ChatService>), Ho
     ));
     let activity_routes = activity::routes(config.db.clone(), config.data_dir.clone(), records());
     let chat_routes = chat::routes(config.db.clone()).merge(chat_log::routes(config.db.clone()));
-    let launched_at = chrono::Utc::now();
+    let launched_at = Timestamp::now();
     let stream_summary = stream_summary::routes(config.db.clone(), launched_at);
     let ranks = leaderboard::LeaderboardState {
         pool: config.db.clone(),

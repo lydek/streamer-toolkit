@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::sync::Notify;
 use toolkit_core::commands::{Allowed, CommandEntry};
 use toolkit_core::events::{Alert, AlertKind, ChatBadge};
+use toolkit_core::time::{self, SignedDuration, Timestamp};
 
 /// Posts into a list; `hold` keeps each send waiting until released, as a slow Twitch answer would.
 #[derive(Default)]
@@ -340,7 +341,7 @@ async fn a_timer_posts_while_live_only_when_chat_was_not_too_quiet() {
     // Not live: nothing is due.
     wait_minutes(10).await;
     assert!(b.service.next_times().is_empty());
-    b.service.stream_status(Some(Utc::now()));
+    b.service.stream_status(Some(Timestamp::now()));
     assert_eq!(b.service.next_times().len(), 1);
 
     // One line in the first five minutes: too quiet, skipped.
@@ -378,7 +379,7 @@ async fn a_timer_with_no_minimum_posts_every_interval_from_the_stream_start() {
     let b = timed("timer-every", 5, 0);
     // Joined two minutes into the stream: the first one is three minutes away.
     b.service
-        .stream_status(Some(Utc::now() - chrono::Duration::minutes(2)));
+        .stream_status(Some(Timestamp::now() - SignedDuration::from_mins(2)));
     wait_minutes(2).await;
     assert!(posted(&b).is_empty());
     wait_minutes(1).await;
@@ -471,12 +472,11 @@ async fn a_first_chat_is_greeted_when_its_mark_comes_but_never_the_streamer() {
 #[tokio::test(start_paused = true)]
 async fn a_returning_viewer_is_tagged_once_per_stream_after_the_set_days() {
     let b = bot("return", &[]);
-    let days_ago =
-        |d: i64| Some(Utc::now() - chrono::Duration::days(d) - chrono::Duration::hours(1));
+    let days_ago = |d: i64| Some(Timestamp::now() - time::days(d) - SignedDuration::from_hours(1));
     let m = message("m1", "7", "我回來了", vec![]);
     // Not live: nothing.
     b.service.receive_return(&m, days_ago(10));
-    b.service.stream_status(Some(Utc::now()));
+    b.service.stream_status(Some(Timestamp::now()));
     // Six days is not long enough (7 by default); new viewers and the streamer never count.
     b.service.receive_return(&m, days_ago(6));
     b.service
@@ -493,7 +493,7 @@ async fn a_returning_viewer_is_tagged_once_per_stream_after_the_set_days() {
     // The next stream, set to post instead of tagging.
     b.service.greetings.write().unwrap().returning.post = true;
     b.service.stream_status(None);
-    b.service.stream_status(Some(Utc::now()));
+    b.service.stream_status(Some(Timestamp::now()));
     b.service
         .receive_return(&message("m5", "7", "又來了", vec![]), days_ago(8));
     settle().await;

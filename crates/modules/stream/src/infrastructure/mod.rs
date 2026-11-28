@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use chrono::SecondsFormat;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
@@ -12,6 +11,7 @@ use toolkit_core::{
 use utoipa::{OpenApi, ToSchema};
 
 use crate::application::{Broadcast, StreamService};
+use toolkit_core::time::{self, Timestamp};
 
 pub mod db;
 
@@ -78,7 +78,7 @@ fn payload(live: &Broadcast) -> StreamStatusPayload {
             viewers,
         } => StreamStatusPayload {
             state: StreamStateName::Live,
-            started_at: Some(started_at.to_rfc3339_opts(SecondsFormat::Millis, true)),
+            started_at: Some(time::millis(*started_at)),
             viewers: *viewers,
         },
     }
@@ -93,7 +93,7 @@ pub fn start(pool: SqlitePool, bus: Arc<EventBus>) -> StreamService {
             id: uuid::Uuid::now_v7().to_string(),
             event_type: STATUS,
             version: STATUS_VERSION,
-            occurred_at: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Twitch,
             payload: serde_json::to_value(payload(live)).expect("status serializes"),
         });

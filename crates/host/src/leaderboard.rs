@@ -15,7 +15,6 @@ use axum::{
     routing::get,
 };
 use checkin::CheckinService;
-use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use toolkit_core::{
@@ -25,6 +24,7 @@ use toolkit_core::{
 use utoipa::ToSchema;
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 /// Common chat bots, left out of the leaderboard and hidden by the chat log's 隱藏機器人.
 // shortcut: a fixed list; a broadcaster's own list waits for viewer roles (phase 7).
@@ -108,13 +108,13 @@ enum LeaderboardType {
 pub(crate) struct LeaderboardState {
     pub(crate) pool: SqlitePool,
     pub(crate) checkin: Arc<CheckinService>,
-    pub(crate) launched_at: DateTime<Utc>,
+    pub(crate) launched_at: Timestamp,
 }
 
 /// Works out every board now.
 pub(crate) async fn boards(
     s: &LeaderboardState,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<LeaderboardPayload, sqlx::Error> {
     // The latest stream, live or ended; events after it ended belong to no stream's board.
     let (stream_from, stream_until) = stream::latest_session(&s.pool)
@@ -169,13 +169,13 @@ pub(crate) fn start(state: LeaderboardState, bus: Arc<EventBus>) {
         let mut tick = tokio::time::interval(EVERY);
         loop {
             tick.tick().await;
-            match boards(&state, Utc::now()).await {
+            match boards(&state, Timestamp::now()).await {
                 Ok(next) if last.as_ref() != Some(&next) => {
                     bus.publish(Event {
                         id: uuid::Uuid::now_v7().to_string(),
                         event_type: UPDATE,
                         version: UPDATE_VERSION,
-                        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                        occurred_at: time::millis(Timestamp::now()),
                         source: Source::System,
                         payload: serde_json::to_value(&next).expect("leaderboard serializes"),
                     });
@@ -205,7 +205,7 @@ pub(crate) fn routes(state: LeaderboardState) -> Router {
     )
 )]
 pub(crate) async fn leaderboard(State(s): State<LeaderboardState>) -> Response {
-    match boards(&s, Utc::now()).await {
+    match boards(&s, Timestamp::now()).await {
         Ok(b) => Json(b).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "leaderboard not read");

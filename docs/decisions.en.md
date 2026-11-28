@@ -1,4 +1,4 @@
-<!-- source: docs/decisions.md source-sha256: eb1e1b120b67dc9ef02568dad38814e46d4a547988bc5c5436e0079af653e664 -->
+<!-- source: docs/decisions.md source-sha256: 60685a6ca05b33c874eac49bb9987299e16acd08818d77892602b1ebb389695e -->
 [繁體中文](decisions.md) | **English**
 
 # Technical decisions
@@ -66,7 +66,7 @@ Everything below is decided (2026-11-12). Change an item only when it causes a r
 | Domain event dispatch | Custom outbox dispatcher: events are written to the outbox table in the same transaction as the business data, dispatched in the background with delivery state tracked per subscriber, retried on failure and shown in the UI, and resent after a restart; when disabling a module the streamer chooses "pause" (events kept and delivered after re-enabling) or "off" (after a warning, events from the disabled period skipped); events past the retry cap move to a dead-letter queue; fully delivered events are cleaned up periodically; subscribers deduplicate by event ID with an inbox table (details in architecture.en.md) |
 | Migrations | Each module has its own folder, files use timestamp versions (globally unique); `host` merges them into a single SQLx Migrator at startup; rules and dev command in architecture.en.md |
 | Error handling | `thiserror` (domain/application, mapped to error codes) + `anyhow` (only in the host composition root and startup); error codes use `<area>.<reason>` (e.g. `twitch.sign_in_required`), the API returns `{"code": …}`, the UI shows the message for the resource key `errors.<code>`, and logs use a `code` field too |
-| Time | `chrono` + `chrono-tz` |
+| Time | `jiff` (the time zone data is built into the program; the Windows time zone settings are not read); stored and sent times are UTC RFC 3339 ending in `Z`, with the formats kept in `toolkit_core::time` |
 | IDs | UUID v7 (`uuid`); external IDs (e.g. Twitch redemption IDs) stored in separate columns |
 | Randomness | `fastrand`: the background music's shuffled order; never used for anything security-related |
 | Twitch | Hand-written serde types (only the Helix, OAuth and EventSub fields we use) + custom EventSub WebSocket connection (`tokio-tungstenite`); chat via EventSub `channel.chat.message`, and the follow, sub, Bits and raid alerts via EventSub too (subscription list in architecture.en.md) |

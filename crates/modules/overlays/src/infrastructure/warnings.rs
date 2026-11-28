@@ -9,7 +9,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use toolkit_core::events::Source;
 use utoipa::ToSchema;
@@ -19,6 +18,7 @@ use crate::{
     application::OverlayError,
     domain::warnings::{WarningSettings, Warnings},
 };
+use toolkit_core::time::Timestamp;
 
 pub(crate) const WARNINGS: &str = "screen.warnings";
 pub(crate) const WARNINGS_VERSION: u32 = 1;
@@ -137,7 +137,7 @@ pub(crate) async fn set_warnings(
         mic_seconds: b.mic_seconds,
         mic_input: b.mic_input,
     };
-    match s.set_warning_settings(settings, Utc::now()).await {
+    match s.set_warning_settings(settings, Timestamp::now()).await {
         Ok((settings, warnings)) => {
             Json(WarningsPayload::new(&settings, &warnings)).into_response()
         }

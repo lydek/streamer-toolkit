@@ -29,6 +29,7 @@ use crate::{
     OVERLAY_CSP,
     admin::{ErrorBody, error},
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// The built-in templates, one folder per [`ChatTemplate`] ID. `default` is also what overlays get while the
 /// user template is missing or broken.
@@ -607,7 +608,7 @@ fn publish_text_size(bus: &EventBus, text_size: Option<u16>) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: TEXT_SIZE_EVENT,
         version: TEXT_SIZE_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::System,
         payload: serde_json::json!({ "textSize": text_size }),
     });
@@ -618,7 +619,7 @@ fn publish_changed(bus: &EventBus, overlay: &str) {
         id: uuid::Uuid::now_v7().to_string(),
         event_type: CHANGED_EVENT,
         version: CHANGED_VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::System,
         payload: serde_json::to_value(TemplateChangedPayload {
             overlay: overlay.into(),

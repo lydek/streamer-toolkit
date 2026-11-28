@@ -65,7 +65,7 @@
 | Domain event 分派 | 自寫 outbox dispatcher：事件與業務資料同一個交易寫入 outbox 表，背景分派、每個訂閱者各自追蹤投遞狀態、失敗重試並顯示在 UI、重啟後補送；停用模組時實況主選「暫停」（事件保留、重新啟用後補送）或「關閉」（先警告，略過停用期間的事件）；重試超過上限移入 dead-letter；投遞完成的事件定期清除；訂閱者以 inbox 表依事件 ID 去重（細節見 architecture.md） |
 | Migration | 各模組自己的目錄，檔名用時間戳版本（全域唯一）；啟動時由 host 合併成單一 SQLx Migrator；規則與開發指令見 architecture.md |
 | 錯誤處理 | `thiserror`（domain／application，對應錯誤碼）＋`anyhow`（只用在 host 組合根與啟動流程）；錯誤碼格式 `<區域>.<原因>`（例：`twitch.sign_in_required`），API 回 `{"code": …}`，UI 以資源鍵 `errors.<錯誤碼>` 顯示，記錄檔欄位也叫 `code` |
-| 時間 | `chrono`＋`chrono-tz` |
+| 時間 | `jiff`（時區資料內建在程式裡，不讀 Windows 的時區設定）；儲存與傳出的時間是 UTC、結尾 `Z` 的 RFC 3339，格式集中在 `toolkit_core::time` |
 | ID | UUID v7（`uuid`）；外部 ID（如 Twitch 兌換 ID）另存欄位 |
 | 亂數 | `fastrand`：背景音樂的隨機播放順序，不用在任何安全用途 |
 | Twitch | 自寫 serde 型別（只定義用到的 Helix、OAuth 與 EventSub 欄位）＋自寫 EventSub WebSocket 連線（`tokio-tungstenite`）；聊天走 EventSub `channel.chat.message`，特效的追隨、訂閱、小奇點、揪團也走 EventSub（訂閱清單見 architecture.md） |

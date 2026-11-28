@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use toolkit_core::time::{self, Timestamp};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
@@ -44,7 +44,7 @@ pub(crate) fn announce_changes(bus: Arc<EventBus>) -> songs::Changed {
             id: uuid::Uuid::now_v7().to_string(),
             event_type: CHANGED,
             version: 1,
-            occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::System,
             payload: serde_json::json!({}),
         });

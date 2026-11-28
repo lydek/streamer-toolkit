@@ -1,8 +1,9 @@
 //! Check-in rules (docs/modules/checkin.md): one check-in per viewer per business day, the business day judged in
 //! the broadcaster's time zone from the time the check-in happened, and a stamp card derived from the total.
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
-use chrono_tz::Tz;
+use jiff::civil::{Date, DateTime};
+use jiff::tz::{AmbiguousOffset, TimeZone};
+use toolkit_core::time::{SignedDuration, Timestamp};
 
 pub(crate) mod style;
 use toolkit_core::commands::Allowed;
@@ -32,23 +33,24 @@ pub(crate) enum Trigger {
 pub(crate) struct InvalidSettings;
 
 /// When a business day starts and which day an instant belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BusinessDay {
-    tz: Tz,
+    tz: TimeZone,
     reset_hour: u32,
 }
 
 impl BusinessDay {
     pub(crate) fn new(time_zone: &str, reset_hour: u32) -> Result<Self, InvalidSettings> {
-        let tz = time_zone.parse::<Tz>().map_err(|_| InvalidSettings)?;
-        if reset_hour > 23 {
+        let tz = TimeZone::get(time_zone).map_err(|_| InvalidSettings)?;
+        // Only the zone's own spelling, as before: the name is stored and shown as given.
+        if tz.iana_name() != Some(time_zone) || reset_hour > 23 {
             return Err(InvalidSettings);
         }
         Ok(Self { tz, reset_hour })
     }
 
-    pub(crate) fn time_zone(&self) -> &'static str {
-        self.tz.name()
+    pub(crate) fn time_zone(&self) -> &str {
+        self.tz.iana_name().expect("made from an IANA name")
     }
 
     pub(crate) fn reset_hour(&self) -> u32 {
@@ -56,26 +58,36 @@ impl BusinessDay {
     }
 
     /// The local calendar date, counted from the reset hour instead of midnight.
-    pub(crate) fn day_of(&self, at: DateTime<Utc>) -> NaiveDate {
-        let local = at.with_timezone(&self.tz).naive_local();
-        (local - Duration::hours(i64::from(self.reset_hour))).date()
+    pub(crate) fn day_of(&self, at: Timestamp) -> Date {
+        let local = self.tz.to_datetime(at);
+        (local - SignedDuration::from_hours(i64::from(self.reset_hour))).date()
     }
 
     /// `[start, end)` of `day` in UTC.
-    pub(crate) fn window(&self, day: NaiveDate) -> (DateTime<Utc>, DateTime<Utc>) {
-        let start =
-            |d: NaiveDate| self.instant(d.and_hms_opt(self.reset_hour, 0, 0).expect("hour <= 23"));
-        (start(day), start(day + Duration::days(1)))
+    pub(crate) fn window(&self, day: Date) -> (Timestamp, Timestamp) {
+        let hour = i8::try_from(self.reset_hour).expect("hour <= 23");
+        let start = |d: Date| self.instant(d.at(hour, 0, 0, 0));
+        (
+            start(day),
+            start(day.tomorrow().expect("a day before 9999-12-31")),
+        )
     }
 
     /// The first instant at or after a local wall-clock time; a time skipped by a DST jump moves to when the clock
     /// reads it again, a repeated one takes its first occurrence.
-    fn instant(&self, mut local: NaiveDateTime) -> DateTime<Utc> {
+    fn instant(&self, mut local: DateTime) -> Timestamp {
         loop {
-            if let Some(t) = self.tz.from_local_datetime(&local).earliest() {
-                return t.to_utc();
-            }
-            local += Duration::minutes(15);
+            let offset = match self.tz.to_ambiguous_timestamp(local).offset() {
+                AmbiguousOffset::Unambiguous { offset } => offset,
+                AmbiguousOffset::Fold { before, .. } => before,
+                AmbiguousOffset::Gap { .. } => {
+                    local += SignedDuration::from_mins(15);
+                    continue;
+                }
+            };
+            return offset
+                .to_timestamp(local)
+                .expect("a time inside the supported range");
         }
     }
 }
@@ -220,18 +232,18 @@ pub(crate) struct Rules {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckIn {
     pub(crate) id: Uuid,
-    pub(crate) day: NaiveDate,
+    pub(crate) day: Date,
     /// `[start, end)` of `day` under the rules in force; any check-in of the viewer inside it, or already labelled
     /// `day`, makes this one a repeat. Settings changed today therefore never allow a second one.
-    pub(crate) window: (DateTime<Utc>, DateTime<Utc>),
-    pub(crate) occurred_at: DateTime<Utc>,
+    pub(crate) window: (Timestamp, Timestamp),
+    pub(crate) occurred_at: Timestamp,
     pub(crate) trigger: Trigger,
-    pub(crate) recorded_at: DateTime<Utc>,
+    pub(crate) recorded_at: Timestamp,
 }
 
 impl CheckIn {
     /// A back-filled check-in for `day`, placed at the start of that day.
-    pub(crate) fn for_day(rule: &BusinessDay, day: NaiveDate, now: DateTime<Utc>) -> Self {
+    pub(crate) fn for_day(rule: &BusinessDay, day: Date, now: Timestamp) -> Self {
         let window = rule.window(day);
         Self {
             id: Uuid::now_v7(),
@@ -245,9 +257,9 @@ impl CheckIn {
 
     pub(crate) fn at(
         rule: &BusinessDay,
-        occurred_at: DateTime<Utc>,
+        occurred_at: Timestamp,
         trigger: Trigger,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Self {
         let day = rule.day_of(occurred_at);
         Self {
@@ -282,7 +294,7 @@ pub(crate) struct ImportedViewer {
     pub(crate) name: Option<String>,
     pub(crate) profile_image: Option<String>,
     pub(crate) total: u64,
-    pub(crate) last_day: Option<NaiveDate>,
+    pub(crate) last_day: Option<Date>,
 }
 
 /// An entry as read from the import file, before the rules.
@@ -320,7 +332,7 @@ impl ImportedViewer {
             .ok_or(SkipReason::InvalidTotal)?;
         let last_day = e
             .last_date
-            .map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| SkipReason::InvalidDate))
+            .map(|d| Date::strptime("%Y-%m-%d", d).map_err(|_| SkipReason::InvalidDate))
             .transpose()?;
         let text = |t: Option<&str>| {
             t.map(str::trim)
@@ -370,11 +382,11 @@ mod deduction_tests {
 mod tests {
     use super::*;
 
-    fn utc(s: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(s).unwrap().to_utc()
+    fn utc(s: &str) -> Timestamp {
+        s.parse().unwrap()
     }
 
-    fn date(s: &str) -> NaiveDate {
+    fn date(s: &str) -> Date {
         s.parse().unwrap()
     }
 
@@ -431,6 +443,12 @@ mod tests {
     fn bad_settings_are_refused() {
         assert_eq!(BusinessDay::new("Mars/Olympus", 0), Err(InvalidSettings));
         assert_eq!(BusinessDay::new("UTC", 24), Err(InvalidSettings));
+        // Only the zone's own spelling, which is stored and shown as given.
+        assert_eq!(BusinessDay::new("asia/taipei", 0), Err(InvalidSettings));
+        assert_eq!(
+            BusinessDay::new("Asia/Taipei", 0).unwrap().time_zone(),
+            "Asia/Taipei"
+        );
         assert!(CardSlots::new(0).is_err() && CardSlots::new(101).is_err());
         assert!(
             RewardId::new("").is_err()

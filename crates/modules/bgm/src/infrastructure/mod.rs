@@ -33,6 +33,7 @@ use crate::{
     },
     domain::MAX_BYTES,
 };
+use toolkit_core::time::{self, Timestamp};
 
 const PLAYER: &str = "bgm.player";
 const PLAYER_VERSION: u32 = 1;
@@ -387,7 +388,7 @@ pub fn start(
             id: uuid::Uuid::now_v7().to_string(),
             event_type: PLAYER,
             version: PLAYER_VERSION,
-            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::System,
             payload: serde_json::to_value(BgmPlayerPayload::from(status))
                 .expect("player status serializes"),
@@ -793,7 +794,7 @@ pub(crate) async fn test_player(
             id: uuid::Uuid::now_v7().to_string(),
             event_type: TEST,
             version: TEST_VERSION,
-            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Simulation,
             payload: serde_json::to_value(payload).expect("test payload serializes"),
         });

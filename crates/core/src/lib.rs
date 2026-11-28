@@ -12,6 +12,7 @@ pub mod presentation;
 pub mod records;
 pub mod settings;
 pub mod streaming;
+pub mod time;
 pub mod twitch;
 
 /// Default Host port; OBS Browser Source URLs depend on it staying stable.

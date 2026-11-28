@@ -8,8 +8,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use chrono::{DateTime, Utc};
-
 use toolkit_core::{
     commands::{Allowed, CommandEntry, CommandError, CommandTable},
     events::{Alert, ChatMessage, Source},
@@ -21,6 +19,7 @@ use crate::domain::{
     self, Counter, ViewerCount, ViewerCounter,
     marathon::{Clock, Marathon, MarathonOptions},
 };
+use toolkit_core::time::Timestamp;
 
 /// Alert IDs remembered so a redelivered alert adds no time twice.
 const SEEN_ALERTS: usize = 500;
@@ -140,7 +139,7 @@ pub struct MarathonStatus {
 /// A stream status, for the per-stream reset and the marathon clock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamState {
-    Live { started_at: DateTime<Utc> },
+    Live { started_at: Timestamp },
     Offline,
 }
 
@@ -508,7 +507,7 @@ impl<R: CounterRepository> CounterService<R> {
     /// in memory when saving fails.
     async fn change_marathon(
         &self,
-        change: impl FnOnce(&mut Clock, DateTime<Utc>),
+        change: impl FnOnce(&mut Clock, Timestamp),
     ) -> Result<MarathonStatus, RepositoryError> {
         let mut guard = self.clock.lock().await;
         let mut clock = match guard.take() {
@@ -517,11 +516,11 @@ impl<R: CounterRepository> CounterService<R> {
                 self.repo
                     .load_marathon()
                     .await?
-                    .unwrap_or_else(|| Marathon::new(Utc::now())),
+                    .unwrap_or_else(|| Marathon::new(Timestamp::now())),
             ),
         };
         let before = clock.clone();
-        change(&mut clock, Utc::now());
+        change(&mut clock, Timestamp::now());
         if let Err(e) = self.repo.save_marathon(&clock.marathon).await {
             *guard = Some(before);
             return Err(e);

@@ -9,21 +9,21 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use utoipa::ToSchema;
 
 use crate::admin::{ErrorBody, error};
+use toolkit_core::time::{self, Timestamp};
 
 #[derive(Clone)]
 pub(crate) struct SummaryState {
     pool: SqlitePool,
     /// When this Host started: a stream that ended after it ended "just now" (home shows 下播後).
-    launched_at: DateTime<Utc>,
+    launched_at: Timestamp,
 }
 
-pub(crate) fn routes(pool: SqlitePool, launched_at: DateTime<Utc>) -> Router {
+pub(crate) fn routes(pool: SqlitePool, launched_at: Timestamp) -> Router {
     Router::new()
         .route("/api/admin/stream/summary", get(stream_summary))
         .route("/api/admin/stream/record", get(stream_record))
@@ -53,8 +53,8 @@ pub(crate) struct StreamSummary {
     first_chats: u32,
 }
 
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Millis, true)
+fn time_text(t: Timestamp) -> String {
+    time::millis(t)
 }
 
 /// The latest stream session and what happened during it; `null` before the first stream.
@@ -160,8 +160,8 @@ async fn record(pool: &SqlitePool) -> Result<Option<StreamRecord>, sqlx::Error> 
         return Ok(None);
     };
     let at = |t: &str| {
-        DateTime::parse_from_rfc3339(t)
-            .map(|t| time_text(t.to_utc()))
+        t.parse::<Timestamp>()
+            .map(time_text)
             .unwrap_or_else(|_| t.to_owned())
     };
     let mut rows: Vec<RecordRow> = activity::session_entries(pool, &session.id)
@@ -218,7 +218,7 @@ async fn record(pool: &SqlitePool) -> Result<Option<StreamRecord>, sqlx::Error> 
 
 async fn summary(
     pool: &SqlitePool,
-    launched_at: DateTime<Utc>,
+    launched_at: Timestamp,
 ) -> Result<Option<StreamSummary>, sqlx::Error> {
     let Some(session) = stream::latest_session(pool).await? else {
         return Ok(None);
@@ -461,7 +461,7 @@ mod tests {
         assert_eq!(record(&pool).await.unwrap(), None, "no stream yet");
         seed(&pool).await;
         let record = record(&pool).await.unwrap().unwrap();
-        let stats = summary(&pool, Utc::now()).await.unwrap().unwrap();
+        let stats = summary(&pool, Timestamp::now()).await.unwrap().unwrap();
         let count = |kinds: &[RecordKind]| {
             record
                 .rows

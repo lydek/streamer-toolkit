@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use axum::{Json, Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
+use toolkit_core::time::{self, Timestamp};
 use toolkit_core::{
     bus::{Event, EventBus},
     events::Source,
@@ -91,7 +92,7 @@ fn publish(bus: &EventBus, event_type: &'static str, payload: serde_json::Value)
         id: uuid::Uuid::now_v7().to_string(),
         event_type,
         version: VERSION,
-        occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::System,
         payload,
     });

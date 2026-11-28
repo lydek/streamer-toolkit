@@ -13,6 +13,7 @@ use toolkit_core::{
 use utoipa::ToSchema;
 
 use crate::application::{ChatService, Removal};
+use toolkit_core::time::{self, Timestamp};
 
 pub mod db;
 pub mod http;
@@ -244,7 +245,7 @@ fn publish_first(bus: &EventBus, id: &str) {
             id: uuid::Uuid::now_v7().to_string(),
             event_type: CHAT_FIRST,
             version: CHAT_FIRST_VERSION,
-            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Twitch,
             payload: serde_json::to_value(ChatFirstPayload {
                 message_id: id.to_owned(),
@@ -294,7 +295,9 @@ fn publish_removal(
     let reached = |e: &toolkit_core::bus::Envelope| {
         e.payload["broadcasterId"].as_str() == Some(channel.as_str())
             && since.is_none_or(|since| {
-                chrono::DateTime::parse_from_rfc3339(&e.occurred_at).map_or(true, |t| t >= since)
+                e.occurred_at
+                    .parse::<Timestamp>()
+                    .map_or(true, |t| t >= since)
             })
     };
     let gone = |e: &toolkit_core::bus::Envelope| match removal {
@@ -307,13 +310,13 @@ fn publish_removal(
             id: uuid::Uuid::now_v7().to_string(),
             event_type: CHAT_REMOVED,
             version: CHAT_REMOVED_VERSION,
-            occurred_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            occurred_at: time::millis(Timestamp::now()),
             source: Source::Twitch,
             payload: serde_json::to_value(ChatRemovedPayload {
                 broadcaster_id: since.map(|_| channel.clone()),
                 message_id,
                 user_id,
-                since: since.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Micros, true)),
+                since: since.map(time::micros),
             })
             .expect("removal serializes"),
         },
@@ -493,7 +496,7 @@ mod tests {
             pool.clone(),
             || async { Some("s1".to_owned()) },
         );
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = Timestamp::now().to_string();
         chat.receive(db::tests::message("m1", "7", "hi", &now), Source::Twitch);
         chat.receive(db::tests::message("m2", "8", "bye", &now), Source::Twitch);
         chat.receive(
@@ -561,7 +564,7 @@ mod tests {
             pool.clone(),
             || async { Some("s1".to_owned()) },
         );
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = Timestamp::now().to_string();
         let (_, mut rx) = bus.subscribe();
         let next = |rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>| {
             serde_json::from_str::<serde_json::Value>(&rx.try_recv().unwrap()).unwrap()

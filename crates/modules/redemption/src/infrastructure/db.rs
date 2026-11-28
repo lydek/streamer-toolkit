@@ -2,7 +2,6 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqlitePool, migrate::Migrator};
 use toolkit_core::{
     outbox::{Outbox, OutboxEvent},
@@ -15,6 +14,7 @@ use crate::{
     domain::{Redemption, RedemptionId, Reward, Status, TwitchRedemptionId, Viewer},
     infrastructure::{REDEMPTION_RECORDED, RedemptionRecorded},
 };
+use toolkit_core::time::{self, Timestamp};
 
 /// This module's migrations; the host merges them with the other modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -30,8 +30,8 @@ pub async fn record_count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
 /// shows it.
 pub async fn count_between(
     pool: &SqlitePool,
-    from: DateTime<Utc>,
-    until: Option<DateTime<Utc>>,
+    from: Timestamp,
+    until: Option<Timestamp>,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT COUNT(*) FROM redemption_records WHERE redeemed_at >= ?1 AND (?2 IS NULL OR redeemed_at < ?2)",
@@ -58,8 +58,8 @@ pub struct RedeemedEntry {
 /// Redemptions from `from` until `until` (open ends when `None`), oldest first; at most the latest `limit`.
 pub async fn redeemed_between(
     pool: &SqlitePool,
-    from: Option<DateTime<Utc>>,
-    until: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
+    until: Option<Timestamp>,
     limit: u32,
 ) -> Result<Vec<RedeemedEntry>, sqlx::Error> {
     sqlx::query_as(
@@ -185,7 +185,7 @@ pub(crate) async fn record_played(
     .bind(&played.redemption_id)
     .bind(text(serde_json::to_value(played.what).map_err(storage)?))
     .bind(text(serde_json::to_value(played.result).map_err(storage)?))
-    .bind(time_text(Utc::now()))
+    .bind(time_text(Timestamp::now()))
     .execute(pool)
     .await
     .map_err(storage)?;
@@ -279,14 +279,12 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 }
 
 /// Fixed width, so text order is time order.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
-fn parse_time(s: &str) -> Result<DateTime<Utc>, RepositoryError> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|t| t.to_utc())
-        .map_err(storage)
+fn parse_time(s: &str) -> Result<Timestamp, RepositoryError> {
+    s.parse::<Timestamp>().map_err(storage)
 }
 
 fn status_text(s: Status) -> &'static str {
@@ -517,7 +515,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         }
-        let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().to_utc();
+        let at = |s: &str| s.parse::<Timestamp>().unwrap();
         let from = at("2026-11-19T10:00:00Z");
         assert_eq!(count_between(&pool, from, None).await.unwrap(), 3);
         assert_eq!(
@@ -635,8 +633,8 @@ pub(crate) mod tests {
             .unwrap()
     }
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        DateTime::from_timestamp(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_second(secs).unwrap()
     }
 
     #[tokio::test]

@@ -10,7 +10,6 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Utc};
 use tokio::{
     sync::mpsc,
     time::{Instant, sleep},
@@ -26,6 +25,7 @@ use crate::domain::{
     self, Cooldowns, MESSAGE_MAX_CHARS, QUEUE_EXPIRY, QUEUE_MAX, RateWindow, SentMessages, Vars,
     next_due,
 };
+use toolkit_core::time::{SignedDuration, Timestamp};
 
 /// How often due timers are looked at.
 const TICK: Duration = Duration::from_secs(1);
@@ -72,7 +72,7 @@ struct State {
     /// The text being posted while Twitch has not answered yet: chat may bring it back before the answer.
     in_flight: Option<String>,
     cooldowns: Cooldowns,
-    live_since: Option<DateTime<Utc>>,
+    live_since: Option<Timestamp>,
     /// The stream's start on the runtime's clock, which timers count from; `None` while not live.
     live_start: Option<Instant>,
     /// Per timer ID: when it is next due, and the chat lines since its last send this stream.
@@ -165,7 +165,7 @@ impl BotService {
 
     /// The stream started (`Some` with its start; repeated by each check) or ended. Timers start counting from the
     /// start of each stream, and stop when it ends.
-    pub fn stream_status(&self, live_since: Option<DateTime<Utc>>) {
+    pub fn stream_status(&self, live_since: Option<Timestamp>) {
         let mut state = self.state.lock().unwrap();
         if state.live_since == live_since {
             return;
@@ -175,7 +175,7 @@ impl BotService {
         // A new stream greets returning viewers again.
         state.returned.clear();
         state.live_start = live_since.map(|t| {
-            let ago = (Utc::now() - t).to_std().unwrap_or_default();
+            let ago = std::time::Duration::try_from(Timestamp::now() - t).unwrap_or_default();
             Instant::now().checked_sub(ago).unwrap_or_else(Instant::now)
         });
         drop(state);
@@ -203,15 +203,15 @@ impl BotService {
     }
 
     /// When each timer is next due, on the wall clock; empty while not live.
-    pub fn next_times(&self) -> std::collections::HashMap<String, DateTime<Utc>> {
+    pub fn next_times(&self) -> std::collections::HashMap<String, Timestamp> {
         let state = self.state.lock().unwrap();
         let now = Instant::now();
         state
             .timers
             .iter()
             .filter_map(|(id, (due, _))| {
-                let left = chrono::Duration::from_std(due.saturating_duration_since(now)).ok()?;
-                Some((id.clone(), Utc::now() + left))
+                let left = SignedDuration::try_from(due.saturating_duration_since(now)).ok()?;
+                Some((id.clone(), Timestamp::now() + left))
             })
             .collect()
     }
@@ -423,12 +423,14 @@ impl BotService {
 
     /// A chat message from Twitch with when its sender was last seen before it: a returning viewer's first message
     /// this stream, after the set days, is tagged (只提示我) or greeted, once per stream; never the streamer's.
-    pub fn receive_return(&self, m: &ChatMessage, last_seen_before: Option<DateTime<Utc>>) {
+    pub fn receive_return(&self, m: &ChatMessage, last_seen_before: Option<Timestamp>) {
         let g = self.greetings.read().unwrap().returning.clone();
         if !self.on() || !g.enabled || m.user_id == m.broadcaster_id {
             return;
         }
-        let Some(away) = last_seen_before.and_then(|t| (Utc::now() - t).to_std().ok()) else {
+        let Some(away) =
+            last_seen_before.and_then(|t| std::time::Duration::try_from(Timestamp::now() - t).ok())
+        else {
             return;
         };
         let days = away.as_secs() / DAY.as_secs();
@@ -517,7 +519,7 @@ async fn render(m: &Outgoing, state: &Mutex<State>, lookups: &dyn BotLookups) ->
         .lock()
         .unwrap()
         .live_since
-        .and_then(|t| (Utc::now() - t).to_std().ok());
+        .and_then(|t| std::time::Duration::try_from(Timestamp::now() - t).ok());
     let counters = |name: &str| values.iter().find(|(n, _)| n == name).map(|(_, v)| *v);
     domain::render(
         &m.template,

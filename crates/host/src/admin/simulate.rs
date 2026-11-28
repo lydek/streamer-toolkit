@@ -1,4 +1,5 @@
 use super::*;
+use toolkit_core::time::{self, Timestamp};
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +55,7 @@ pub(crate) fn send_chat(s: &AdminState, user_name: &str, text: &str) -> Result<(
             reply: None,
             twitch_badges: Vec::new(),
             shared_from: None,
-            sent_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            sent_at: time::millis(Timestamp::now()),
         },
         Source::Simulation,
     );
@@ -124,7 +125,7 @@ fn simulated_alerts(body: SimulatedAlert) -> Result<Vec<Alert>, &'static str> {
         },
         AlertKindName::Raid => AlertKind::Raid { viewers: amount()? },
     };
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let now = time::millis(Timestamp::now());
     // Like the simulated chat, every simulated viewer is the "simulator" account.
     let alert = |user_name: Option<String>, kind| Alert {
         id: uuid::Uuid::now_v7().to_string(),

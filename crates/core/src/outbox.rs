@@ -11,11 +11,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool, migrate::Migrator};
 use tokio::sync::Notify;
 
 use crate::modules::Modules;
+use crate::time::{self, Timestamp};
 
 /// The outbox tables belong to `core`; the host merges these migrations with the modules'.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
@@ -32,7 +32,7 @@ pub struct OutboxEvent {
     pub id: String,
     pub event_type: String,
     pub payload: serde_json::Value,
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 pub type Handled<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
@@ -61,7 +61,7 @@ pub struct Outbox {
 pub struct Backlog {
     pub pending: u64,
     /// `occurred_at` of the oldest one.
-    pub oldest: Option<DateTime<Utc>>,
+    pub oldest: Option<Timestamp>,
 }
 
 /// An event that failed [`MAX_ATTEMPTS`] times and waits for the broadcaster to retry or skip it.
@@ -70,7 +70,7 @@ pub struct DeadLetter {
     pub event: OutboxEvent,
     pub attempts: i64,
     pub last_error: String,
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: Timestamp,
 }
 
 #[derive(sqlx::FromRow)]
@@ -85,8 +85,8 @@ struct DeadRow {
 }
 
 /// Fixed width, so text order is time order.
-fn time_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+fn time_text(t: Timestamp) -> String {
+    time::micros(t)
 }
 
 impl Outbox {
@@ -115,7 +115,7 @@ impl Outbox {
         conn: &mut SqliteConnection,
         event: &OutboxEvent,
     ) -> sqlx::Result<()> {
-        let now = time_text(Utc::now());
+        let now = time_text(Timestamp::now());
         sqlx::query(
             "INSERT INTO outbox_events (id, event_type, payload, occurred_at, published_at) VALUES (?, ?, ?, ?, ?)",
         )
@@ -166,7 +166,7 @@ impl Outbox {
         tokio::spawn(async move {
             let mut cleaned: Option<Instant> = None;
             loop {
-                if let Err(e) = this.dispatch(Utc::now()).await {
+                if let Err(e) = this.dispatch(Timestamp::now()).await {
                     tracing::error!(code = "outbox.dispatch_failed", error = %e, "outbox not dispatched");
                 }
                 if cleaned.is_none_or(|t| t.elapsed() >= CLEANUP_EVERY) {
@@ -185,14 +185,14 @@ impl Outbox {
 
     /// Delivers due events to every subscriber, each in publish order. A failing event holds back the ones after
     /// it for that subscriber only, until it succeeds or moves to the dead letters.
-    pub async fn dispatch(&self, now: DateTime<Utc>) -> sqlx::Result<()> {
+    pub async fn dispatch(&self, now: Timestamp) -> sqlx::Result<()> {
         for module in self.modules() {
             self.deliver_to(module, now).await?;
         }
         Ok(())
     }
 
-    async fn deliver_to(&self, module: &str, now: DateTime<Utc>) -> sqlx::Result<()> {
+    async fn deliver_to(&self, module: &str, now: Timestamp) -> sqlx::Result<()> {
         let now_text = time_text(now);
         loop {
             // Checked per event, so a module disabled mid-way stops at once.
@@ -230,14 +230,14 @@ impl Outbox {
             };
             let result = match (
                 serde_json::from_str(&payload),
-                DateTime::parse_from_rfc3339(&occurred_at),
+                occurred_at.parse::<Timestamp>(),
             ) {
                 (Ok(payload), Ok(at)) => {
                     let event = OutboxEvent {
                         id: id.clone(),
                         event_type,
                         payload,
-                        occurred_at: at.to_utc(),
+                        occurred_at: at,
                     };
                     handler.handle(&event).await
                 }
@@ -316,7 +316,7 @@ impl Outbox {
         sqlx::query(
             "UPDATE outbox_deliveries SET state = 'skipped', updated_at = ? WHERE subscriber = ? AND state = 'pending'",
         )
-        .bind(time_text(Utc::now()))
+        .bind(time_text(Timestamp::now()))
         .bind(module)
         .execute(&self.pool)
         .await
@@ -332,9 +332,7 @@ impl Outbox {
         .await?;
         Ok(Backlog {
             pending: u64::try_from(pending).unwrap_or(0),
-            oldest: oldest
-                .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
-                .map(|t| t.to_utc()),
+            oldest: oldest.and_then(|t| t.parse::<Timestamp>().ok()),
         })
     }
 
@@ -346,7 +344,7 @@ impl Outbox {
         .bind(module)
         .fetch_all(&self.pool)
         .await?;
-        let time = |t: &str| DateTime::parse_from_rfc3339(t).ok().map(|t| t.to_utc());
+        let time = |t: &str| t.parse::<Timestamp>().ok();
         Ok(rows
             .into_iter()
             .filter_map(|r| {
@@ -367,7 +365,7 @@ impl Outbox {
 
     /// Puts a dead letter back in line with a fresh set of attempts; `false` when there is no such dead letter.
     pub async fn retry(&self, module: &str, event_id: &str) -> sqlx::Result<bool> {
-        let now = time_text(Utc::now());
+        let now = time_text(Timestamp::now());
         let changed = sqlx::query(
             "UPDATE outbox_deliveries SET state = 'pending', attempts = 0, next_attempt_at = ?, updated_at = ?              WHERE subscriber = ? AND event_id = ? AND state = 'dead'",
         )
@@ -390,7 +388,7 @@ impl Outbox {
         sqlx::query(
             "UPDATE outbox_deliveries SET state = 'skipped', updated_at = ?              WHERE subscriber = ? AND event_id = ? AND state = 'dead'",
         )
-        .bind(time_text(Utc::now()))
+        .bind(time_text(Timestamp::now()))
         .bind(module)
         .bind(event_id)
         .execute(&self.pool)
@@ -432,6 +430,7 @@ impl Outbox {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::time::SignedDuration;
     use sqlx::sqlite::SqlitePoolOptions;
     use std::sync::Mutex;
 
@@ -520,7 +519,7 @@ pub(crate) mod tests {
             id: id.into(),
             event_type: "thing.done".into(),
             payload: serde_json::json!({ "n": id }),
-            occurred_at: DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+            occurred_at: Timestamp::from_second(1_700_000_000).unwrap(),
         }
     }
 
@@ -548,8 +547,8 @@ pub(crate) mod tests {
         pool
     }
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        Utc::now() + chrono::Duration::seconds(secs)
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::now() + SignedDuration::from_secs(secs)
     }
 
     #[tokio::test]

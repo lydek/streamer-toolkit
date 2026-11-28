@@ -29,6 +29,7 @@ use crate::{
     admin::{ErrorBody, error},
     db::{self, SqlitePool},
 };
+use toolkit_core::time::{self, Timestamp};
 
 const FORMAT: &str = "streamer-toolkit-backup";
 /// The newest format this version reads. A backup of both kinds is written as 1, which older versions read too; one
@@ -471,7 +472,7 @@ async fn export_snapshot(
         contents: contents.to_vec(),
         app_version: app_version.into(),
         schema_version,
-        created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        created_at: time::secs(Timestamp::now()),
         records,
         files: Vec::new(),
     };

@@ -1,6 +1,6 @@
 //! An activity record and how long records are kept.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use toolkit_core::time::{self, Timestamp};
 use toolkit_core::{
     events::{Alert, AlertKind},
     settings::RecordRetention,
@@ -22,11 +22,11 @@ pub(crate) struct Record {
     pub(crate) gifted: bool,
     pub(crate) message: Option<String>,
     pub(crate) session_id: Option<String>,
-    pub(crate) occurred_at: DateTime<Utc>,
+    pub(crate) occurred_at: Timestamp,
 }
 
 impl Record {
-    pub(crate) fn from_alert(alert: Alert, session_id: Option<String>, now: DateTime<Utc>) -> Self {
+    pub(crate) fn from_alert(alert: Alert, session_id: Option<String>, now: Timestamp) -> Self {
         let text = |m: String| (!m.is_empty()).then_some(m);
         let mut r = Record {
             twitch_message_id: alert.id,
@@ -43,8 +43,7 @@ impl Record {
             message: None,
             session_id,
             // Twitch always sends RFC 3339; if not, it happened about now.
-            occurred_at: DateTime::parse_from_rfc3339(&alert.occurred_at)
-                .map_or(now, |t| t.to_utc()),
+            occurred_at: alert.occurred_at.parse::<Timestamp>().map_or(now, |t| t),
         };
         match alert.kind {
             AlertKind::Follow => {}
@@ -83,9 +82,9 @@ impl Record {
 }
 
 /// Records from before this time are past `retention`; `None` keeps them all.
-pub(crate) fn cutoff(retention: RecordRetention, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+pub(crate) fn cutoff(retention: RecordRetention, now: Timestamp) -> Option<Timestamp> {
     match retention {
-        RecordRetention::Days(days) => Some(now - TimeDelta::days(days.into())),
+        RecordRetention::Days(days) => Some(now - time::days(days.into())),
         RecordRetention::Forever => None,
     }
 }
@@ -94,8 +93,8 @@ pub(crate) fn cutoff(retention: RecordRetention, now: DateTime<Utc>) -> Option<D
 mod tests {
     use super::*;
 
-    fn at(s: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(s).unwrap().to_utc()
+    fn at(s: &str) -> Timestamp {
+        s.parse::<Timestamp>().unwrap()
     }
 
     #[test]

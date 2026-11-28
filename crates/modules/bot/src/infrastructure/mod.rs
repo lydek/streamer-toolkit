@@ -21,6 +21,7 @@ use crate::{
     application::{BotService, command_key},
     domain::{MESSAGE_MAX_CHARS, command_name},
 };
+use toolkit_core::time;
 
 const COMMANDS_MAX: usize = 100;
 const COOLDOWN_MAX_SECONDS: u32 = 3600;
@@ -265,9 +266,7 @@ fn timer_views(s: &BotService) -> Vec<BotTimerView> {
             every_minutes: t.every_minutes,
             min_chat_lines: t.min_chat_lines,
             enabled: t.enabled,
-            next_at: next
-                .get(&t.id)
-                .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+            next_at: next.get(&t.id).map(|at| time::secs(*at)),
         })
         .collect()
 }

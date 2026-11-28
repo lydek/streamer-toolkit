@@ -2,11 +2,11 @@
 //! except the status (EventSub: lowercase, and none until the end, or the lock; Helix: uppercase) and the times
 //! (EventSub: `ends_at`/`locks_at`, then `ended_at`/`locked_at`; Helix: the start plus the duration or window).
 
-use chrono::{DateTime, SecondsFormat, TimeDelta};
 use serde::Deserialize;
 use toolkit_core::events::{
     Poll, PollChoice, PollStatus, Prediction, PredictionOutcome, PredictionStatus,
 };
+use toolkit_core::time::{self, SignedDuration, Timestamp};
 
 #[derive(Deserialize)]
 struct PollJson {
@@ -74,9 +74,11 @@ pub fn poll_from_json(value: serde_json::Value) -> Option<Poll> {
 
 /// `start` (RFC 3339) plus `seconds`, as RFC 3339; `None` when either is missing or does not parse.
 fn plus_seconds(start: Option<&str>, seconds: Option<i64>) -> Option<String> {
-    let start = DateTime::parse_from_rfc3339(start?).ok()?;
-    let end = start + TimeDelta::try_seconds(seconds?)?;
-    Some(end.to_utc().to_rfc3339_opts(SecondsFormat::Millis, true))
+    let start = start?.parse::<Timestamp>().ok()?;
+    let end = start
+        .checked_add(SignedDuration::from_secs(seconds?))
+        .ok()?;
+    Some(time::millis(end))
 }
 
 #[derive(Deserialize)]

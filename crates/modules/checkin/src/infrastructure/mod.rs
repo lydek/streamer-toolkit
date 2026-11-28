@@ -6,7 +6,6 @@ pub(crate) mod http;
 
 use std::{path::PathBuf, sync::Arc};
 
-use chrono::{SecondsFormat, Utc};
 use redemption::{REDEMPTION_RECORDED, RedemptionRecorded};
 use serde::{Deserialize, Serialize};
 use sound::{PlaySound, SoundService};
@@ -30,6 +29,7 @@ use crate::{
     },
     domain::{TwitchUserId, Viewer, style::fill},
 };
+use toolkit_core::time::{self, Timestamp};
 
 const STAMPED: &str = "checkin.stamped";
 const STAMPED_VERSION: u32 = 1;
@@ -139,7 +139,7 @@ fn publish_card(
         id: Uuid::now_v7().to_string(),
         event_type: STAMPED,
         version: STAMPED_VERSION,
-        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: card.source,
         payload: serde_json::to_value(payload).expect("serializable"),
     });
@@ -177,7 +177,7 @@ fn publish_hidden(bus: &EventBus) {
         id: Uuid::now_v7().to_string(),
         event_type: HIDDEN,
         version: HIDDEN_VERSION,
-        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         source: Source::System,
         payload: serde_json::to_value(CheckinHiddenPayload {}).expect("serializable"),
     });
@@ -219,7 +219,7 @@ fn publish_changed(bus: &EventBus, c: &CheckedIn) {
         id: Uuid::now_v7().to_string(),
         event_type: CHANGED,
         version: CHANGED_VERSION,
-        occurred_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        occurred_at: time::millis(Timestamp::now()),
         // Simulated check-ins are never recorded, so every recorded one is real.
         source: Source::Twitch,
         payload: serde_json::to_value(CheckinChangedPayload {
@@ -312,7 +312,7 @@ impl Subscriber for RedemptionCheckins {
                 occurred_at: event.occurred_at,
             };
             let rules = self.config.rules();
-            let outcome = application::redeemed(&self.repo, &rules, &redeemed, Utc::now())
+            let outcome = application::redeemed(&self.repo, &rules, &redeemed, Timestamp::now())
                 .await
                 .map_err(|e| e.to_string())?;
             if outcome == Some(application::Outcome::Repeat) && self.config.style().show_repeat {
