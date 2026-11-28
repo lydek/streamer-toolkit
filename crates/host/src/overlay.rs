@@ -1,6 +1,7 @@
 //! Read-only overlay channel: the first WebSocket message is a snapshot, then events follow in `seq` order.
 //! Overlay pages connect with `?kind=chat|alerts|checkin|sound|bgm|counter|marathon|break|warnings|leaderboard|polls`; the Host counts open sockets per kind so it
-//! knows whether an overlay is in OBS. Sockets without a known kind (old pages) count as other.
+//! knows whether an overlay is in OBS, and sends each kind only the events its page reads. Sockets without a known
+//! kind (old pages) count as other and get everything but chat, check-in and redemption events.
 //! The admin window reads the same stream from `/ws/admin`, after sending the admin token; it is not counted.
 
 use std::{
@@ -65,6 +66,61 @@ impl OverlayKind {
             "polls" => Some(Self::Polls),
             _ => None,
         }
+    }
+}
+
+/// Shared by the built-in overlays that follow the theme and text size (`followAppearance`).
+const APPEARANCE: &str = "screen.appearance";
+/// The presentation queue stopping every stage, or skipping one (`stopsStage`).
+const STOPPED: &str = "presentation.stopped";
+const SKIPPED: &str = "presentation.skipped";
+
+impl OverlayKind {
+    /// The event types this overlay's page reads, from its snapshot or live; it gets no others.
+    fn reads(self) -> &'static [&'static str] {
+        match self {
+            Self::Chat => &[
+                "chat.message",
+                "chat.removed",
+                "chat.text_size",
+                "template.changed",
+                APPEARANCE,
+            ],
+            Self::Alerts => &[
+                "alert",
+                "screen.media",
+                "template.changed",
+                STOPPED,
+                SKIPPED,
+                APPEARANCE,
+            ],
+            Self::Checkin => &[
+                "checkin.stamped",
+                "checkin.hidden",
+                STOPPED,
+                SKIPPED,
+                APPEARANCE,
+            ],
+            Self::Sound => &["sound.play", "sound.stopped", STOPPED, SKIPPED],
+            Self::Bgm => &["bgm.player", "bgm.test"],
+            Self::Counter => &["counter.values", "counter.test", APPEARANCE],
+            Self::Marathon => &["counter.marathon", "marathon.test", APPEARANCE],
+            Self::Break => &["screen.break", APPEARANCE],
+            Self::Warnings => &["screen.warnings", APPEARANCE],
+            Self::Leaderboard => &["leaderboard.update", APPEARANCE],
+            Self::Polls => &["twitch.contest", APPEARANCE],
+        }
+    }
+}
+
+/// Whether a socket of `kind` gets events of `event_type`. Without a known kind (older or custom pages) everything
+/// but viewers' chat, check-ins and redemptions; how much further to go is a product decision.
+fn sends(kind: Option<OverlayKind>, event_type: &str) -> bool {
+    match kind {
+        Some(kind) => kind.reads().contains(&event_type),
+        None => !["chat.", "checkin.", "redemption."]
+            .iter()
+            .any(|area| event_type.starts_with(area)),
     }
 }
 
@@ -207,7 +263,7 @@ pub(crate) async fn ws(
     let kind = OverlayKind::parse(query.kind.as_deref());
     ws.on_upgrade(move |socket| async move {
         let _open = s.connections.open(kind);
-        serve(socket, s.bus).await;
+        serve(socket, s.bus, |event_type| sends(kind, event_type)).await;
     })
 }
 
@@ -280,20 +336,22 @@ pub(crate) async fn admin_ws(ws: WebSocketUpgrade, State(s): State<AdminSocketSt
             let _ = socket.send(Message::Close(Some(close))).await;
             return;
         }
-        serve(socket, s.bus).await;
+        serve(socket, s.bus, |_| true).await;
     })
 }
 
-async fn serve(mut socket: WebSocket, bus: Arc<EventBus>) {
-    let (snapshot, mut events) = bus.subscribe();
+/// The snapshot, then live events, both limited to the types `wanted` accepts.
+async fn serve(mut socket: WebSocket, bus: Arc<EventBus>, wanted: impl Fn(&str) -> bool) {
+    let (snapshot, mut events) = bus.subscribe_for(&wanted);
     if socket.send(Message::Text(snapshot.into())).await.is_err() {
         return;
     }
     loop {
         tokio::select! {
             event = events.recv() => match event {
-                Ok(text) => {
-                    if socket.send(Message::Text(text.as_ref().into())).await.is_err() {
+                Ok(event) if !wanted(event.event_type) => {}
+                Ok(event) => {
+                    if socket.send(Message::Text(event.text.as_ref().into())).await.is_err() {
                         return;
                     }
                 }
@@ -377,6 +435,63 @@ struct SnapshotPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_overlay_gets_only_what_its_page_reads() {
+        use OverlayKind::*;
+        let kinds = [
+            Chat,
+            Alerts,
+            Checkin,
+            Sound,
+            Bgm,
+            Counter,
+            Marathon,
+            Break,
+            Warnings,
+            Leaderboard,
+            Polls,
+        ];
+        for kind in kinds {
+            for private in [
+                "chat.first",
+                "checkin.changed",
+                "redemption.changed",
+                "presentation.queue",
+                "obs.status",
+                "songs.changed",
+                "bot.returning",
+            ] {
+                assert!(!sends(Some(kind), private), "{kind:?} gets {private}");
+            }
+            assert_eq!(sends(Some(kind), "chat.message"), kind == Chat, "{kind:?}");
+            assert_eq!(sends(Some(kind), "alert"), kind == Alerts, "{kind:?}");
+        }
+        assert!(sends(Some(Checkin), "checkin.stamped"));
+        assert!(sends(Some(Sound), "presentation.stopped"));
+        assert!(sends(Some(Polls), APPEARANCE) && !sends(Some(Bgm), APPEARANCE));
+        // No kind or an unknown one: older pages keep everything but viewers' chat, check-ins and redemptions.
+        for kept in [
+            "alert",
+            "sound.play",
+            "template.changed",
+            STOPPED,
+            "obs.status",
+            "stream.status",
+        ] {
+            assert!(sends(None, kept), "{kept}");
+        }
+        for dropped in [
+            "chat.message",
+            "chat.removed",
+            "chat.first",
+            "checkin.stamped",
+            "checkin.changed",
+            "redemption.changed",
+        ] {
+            assert!(!sends(None, dropped), "{dropped}");
+        }
+    }
 
     #[test]
     fn sockets_count_per_kind_until_they_close() {

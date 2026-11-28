@@ -3,6 +3,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    ops::Deref,
     sync::{Arc, Mutex},
 };
 
@@ -38,8 +39,23 @@ pub struct Event {
     pub payload: Value,
 }
 
+/// One event as sent: its JSON text, and its type so a subscriber can skip it without parsing.
+#[derive(Debug, Clone)]
+pub struct Published {
+    pub event_type: &'static str,
+    pub text: Arc<str>,
+}
+
+impl Deref for Published {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.text
+    }
+}
+
 pub struct EventBus {
-    tx: broadcast::Sender<Arc<str>>,
+    tx: broadcast::Sender<Published>,
     state: Mutex<State>,
 }
 
@@ -85,7 +101,10 @@ impl EventBus {
         let text: Arc<str> = serde_json::to_string(&envelope)
             .expect("envelope serializes")
             .into();
-        let _ = self.tx.send(text);
+        let _ = self.tx.send(Published {
+            event_type: envelope.event_type,
+            text,
+        });
         if let Some((keep, recent)) = state.retained.get_mut(envelope.event_type) {
             if recent.len() == *keep {
                 recent.pop_front();
@@ -125,12 +144,24 @@ impl EventBus {
     }
 
     /// Subscribes and takes the snapshot atomically: `{"type":"snapshot","seq":N,"payload":{<type>:[...]}}`.
-    pub fn subscribe(&self) -> (String, broadcast::Receiver<Arc<str>>) {
+    pub fn subscribe(&self) -> (String, broadcast::Receiver<Published>) {
+        self.subscribe_for(|_| true)
+    }
+
+    /// As `subscribe`, but the snapshot lists only the retained types `wanted` accepts; every other retained type is
+    /// still there, empty, so the snapshot keeps its shape. Live events are not filtered here: check `event_type`.
+    pub fn subscribe_for(
+        &self,
+        wanted: impl Fn(&str) -> bool,
+    ) -> (String, broadcast::Receiver<Published>) {
         let state = self.state.lock().unwrap();
+        let none = VecDeque::new();
         let retained: HashMap<_, _> = state
             .retained
             .iter()
-            .map(|(event_type, (_, recent))| (*event_type, recent))
+            .map(|(event_type, (_, recent))| {
+                (*event_type, if wanted(event_type) { recent } else { &none })
+            })
             .collect();
         let snapshot = json!({
             "type": "snapshot",
@@ -185,6 +216,30 @@ mod tests {
         assert_eq!(next["occurredAt"], "2026-11-13T10:00:00Z");
         // Viewer text stays raw data; overlays escape it when rendering.
         assert_eq!(next["payload"]["text"], "<b>hi</b>");
+    }
+
+    #[test]
+    fn a_filtered_snapshot_keeps_every_key_and_events_carry_their_type() {
+        let bus = EventBus::default();
+        bus.retain("chat.message", 2);
+        bus.retain("obs.status", 1);
+        bus.publish(event("a", "chat.message"));
+        bus.publish(event("o", "obs.status"));
+
+        let (snapshot, mut rx) = bus.subscribe_for(|t| t != "chat.message");
+        let snapshot: Value = serde_json::from_str(&snapshot).unwrap();
+        assert_eq!(
+            snapshot["payload"]["chat.message"],
+            json!([]),
+            "the key stays, empty"
+        );
+        assert_eq!(snapshot["payload"]["obs.status"][0]["id"], "o");
+
+        bus.publish(event("b", "chat.message"));
+        let next = rx.try_recv().unwrap();
+        assert_eq!(next.event_type, "chat.message");
+        let next: Value = serde_json::from_str(&next).unwrap();
+        assert_eq!(next["id"], "b");
     }
 
     #[test]
