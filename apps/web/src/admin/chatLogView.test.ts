@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LoggedChat } from './chatLog'
-import { type Entry, type LogEvent, filterEntries, merge } from './chatLogView'
+import { DOCK_FILTERS, type Entry, LOG_FILTERS, type LogEvent, filterEntries, merge } from './chatLogView'
 
 // The Host's list (crates/host/src/leaderboard.rs), in part.
 const BOTS: ReadonlySet<string> = new Set(['nightbot', 'streamelements'])
@@ -56,5 +56,13 @@ describe('chat log view', () => {
     expect(ids(filterEntries(entries, 'all', 'kai', BOTS))).toEqual(['redemption', 'raid', 'cheer'])
     // No login, no mentions.
     expect(ids(filterEntries(entries, 'mentions', '', NONE))).toEqual([])
+  })
+})
+
+describe('chat panel filters', () => {
+  it('are the chat log page’s message filters, plus 事件 for events', () => {
+    // The panel runs each one through the same messageMatches, so a filter shows the same messages on both.
+    expect(DOCK_FILTERS.filter((f) => f !== 'events').every((f) => (LOG_FILTERS as readonly string[]).includes(f))).toBe(true)
+    expect(DOCK_FILTERS).toEqual(['all', 'mentions', 'events', 'mods', 'first', 'commands'])
   })
 })

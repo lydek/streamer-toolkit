@@ -48,9 +48,10 @@
       "all": "全部",
       "mentions": "提到我",
       "events": "事件",
-      "mods": "管理員和 VIP"
+      "mods": "管理員和 VIP",
+      "first": "第一次聊天",
+      "commands": "!指令"
     },
-    "modsLater": "需要觀眾身分資料，之後開放",
     "send": "發言",
     "sendPlaceholder": "在聊天室發言…",
     "signInFirst": "登入 Twitch 後就能發言",

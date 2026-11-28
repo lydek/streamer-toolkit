@@ -24,7 +24,7 @@
       @keydown="resizeByKey"
     ></div>
     <div class="head">
-      <h2><i class="pi pi-comments" aria-hidden="true"></i>{{ t('dock.title') }}</h2>
+      <h2><i class="pi pi-comments" aria-hidden="true"></i>{{ t('dock.title') }}<span class="count">{{ log.messages.length }}</span></h2>
       <ChatDisplayMenu dock-side icon-only />
       <Button
         icon="pi pi-search"
@@ -66,11 +66,9 @@
           :key="f"
           type="button"
           :aria-pressed="filter === f"
-          :disabled="f === 'mods'"
-          :title="f === 'mods' ? t('dock.modsLater') : undefined"
           @click="filter = f"
         >
-          {{ t(`dock.filter.${f}`) }}
+          <i v-if="FILTER_ICONS[f]" :class="FILTER_ICONS[f]" aria-hidden="true"></i>{{ t(`dock.filter.${f}`) }}
         </button>
       </div>
     </div>
@@ -111,12 +109,12 @@ import ChatDisplayMenu from './ChatDisplayMenu.vue'
 import RewardPicker from './RewardPicker.vue'
 import ChatNow from './ChatNow.vue'
 import { pause, resume, useChatHistory } from './chatLog'
+import { DOCK_FILTERS as FILTERS, FILTER_ICONS, messageMatches } from './chatLogView'
 import { DOCK_MAX, DOCK_MIN, DOCK_WIDE_QUERY, clampWidth, saveDock, shownWidth, useDock } from './dock'
 import { followDrag } from './drag'
 import { useModules } from './features'
 import { errorToast, twitchOverview, useLiveEvents } from './home'
 
-const FILTERS = ['all', 'mentions', 'events', 'mods'] as const
 const EVENT_LIMIT = 100
 
 const { t } = useI18n()
@@ -182,9 +180,9 @@ const matches = (text: string) => !query.value.trim() || text.toLowerCase().incl
 const shownLog = computed(() => {
   const login = broadcaster.value?.login.toLowerCase()
   const mention = new RegExp(`@${login}\\b`, 'i')
+  const f = filter.value === 'events' ? 'all' : filter.value
   const messages = log.value.messages.filter(
-    (m) =>
-      matches(`${m.payload.userName} ${m.payload.text}`) && (filter.value !== 'mentions' || (!!login && mention.test(m.payload.text))),
+    (m) => matches(`${m.payload.userName} ${m.payload.text}`) && messageMatches(m, f, login ? mention : undefined),
   )
   return { ...log.value, messages }
 })
@@ -325,6 +323,13 @@ onBeforeUnmount(() => {
   color: var(--p-blue-400);
 }
 
+.head .count {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
 .head :deep(.p-button) {
   flex: none;
   width: 2rem;
@@ -353,6 +358,9 @@ onBeforeUnmount(() => {
 }
 
 .filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   flex: none;
   padding: 0.125rem 0.625rem;
   border: 1px solid var(--p-surface-500);

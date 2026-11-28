@@ -5,6 +5,22 @@ import type { LoggedChat } from './chatLog'
 export const LOG_FILTERS = ['all', 'mentions', 'commands', 'first', 'mods', 'subscribers', 'highlights', 'redemptions', 'alerts'] as const
 export type LogFilter = (typeof LOG_FILTERS)[number]
 
+/** The chat panel's filters, in the prototype's order: 事件 lists events, the rest are the chat log page's message
+ *  filters (`messageMatches`), so both show the same messages. */
+export const DOCK_FILTERS = ['all', 'mentions', 'events', 'mods', 'first', 'commands'] as const
+
+/** The prototype's icon before each filter's name, shared with the chat panel (its 事件 included); none for the rest. */
+export const FILTER_ICONS: Partial<Record<LogFilter | 'events', string>> = {
+  mentions: 'pi pi-at',
+  first: 'pi pi-sparkles',
+  mods: 'pi pi-shield',
+  subscribers: 'pi pi-star',
+  highlights: 'pi pi-bolt',
+  redemptions: 'pi pi-gift',
+  alerts: 'pi pi-heart',
+  events: 'pi pi-heart',
+}
+
 export type LogEvent = Schemas['LogEvent']
 
 /** One line of the chat log, placed by its time. */
@@ -21,7 +37,8 @@ export function merge(messages: LoggedChat[], events: LogEvent[]): Entry[] {
 
 const ALERTS = new Set<LogEvent['kind']>(['follow', 'subscribe', 'resubscribe', 'gift', 'raid'])
 
-function messageMatches(m: LoggedChat, filter: LogFilter, mention: RegExp | undefined): boolean {
+/** Whether message `m` passes `filter`; the chat panel uses the same rules as the chat log page. */
+export function messageMatches(m: LoggedChat, filter: LogFilter, mention: RegExp | undefined): boolean {
   const p = m.payload
   switch (filter) {
     case 'all':
