@@ -125,6 +125,7 @@ use crate::{
         update::update,
         update::set_check,
         update::dismiss,
+        update::check_now,
     ),
     components(schemas(
         overlay::Snapshot,

@@ -12,7 +12,7 @@ use axum::{
     extract::{State, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use integrations::{
     releases::{self, Version},
@@ -34,6 +34,8 @@ pub(crate) struct Updates {
     latest: Mutex<Option<Version>>,
     /// Checks at once when the check is turned back on.
     wake: Notify,
+    /// Where releases are looked up; `None` (dev builds and tests) means nothing can be checked.
+    source: Option<(HttpsClient, String)>,
 }
 
 /// Starts the check loop; without a `url` nothing is ever checked.
@@ -48,6 +50,7 @@ pub(crate) fn start(
         current,
         latest: Mutex::new(None),
         wake: Notify::new(),
+        source: url.clone().map(|url| (http.clone(), url)),
     });
     let Some(url) = url else {
         return updates;
@@ -74,6 +77,7 @@ pub(crate) fn routes(updates: Arc<Updates>) -> Router {
         .route("/api/admin/update", get(update))
         .route("/api/admin/update/check", put(set_check))
         .route("/api/admin/update/dismiss", put(dismiss))
+        .route("/api/admin/update/check-now", post(check_now))
         .with_state(updates)
 }
 
@@ -97,6 +101,8 @@ pub(crate) struct UpdateState {
     available: Option<String>,
     /// Whether the new-version check is on (Settings → General).
     check: bool,
+    /// Whether this build can look up releases at all (a dev build cannot), for 「檢查新版」 in Settings → About.
+    can_check: bool,
 }
 
 #[utoipa::path(get, path = "/api/admin/update", tag = "admin", responses((status = 200, body = UpdateState)))]
@@ -111,7 +117,55 @@ pub(crate) async fn update(State(s): State<Arc<Updates>>) -> Json<UpdateState> {
             .map(text),
         current: s.current.clone(),
         check: set.update_check,
+        can_check: s.source.is_some(),
     })
+}
+
+#[derive(Serialize, ToSchema, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CheckResult {
+    /// A release newer than the running version.
+    Available,
+    UpToDate,
+    /// The lookup failed (offline, GitHub unreachable, an answer it could not read).
+    Failed,
+    /// This build has no release source (a dev build).
+    Unavailable,
+}
+
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ManualCheck {
+    result: CheckResult,
+    /// The newer release, `major.minor.patch`, when `result` is `available`.
+    version: Option<String>,
+    /// Whether the broadcaster skipped that release before (it is still reported: they asked).
+    skipped: bool,
+}
+
+/// 「檢查新版」: looks up the newest release now and answers what it found, whatever the automatic check is set
+/// to. Changes neither that setting nor the skipped release; a release found also updates the notice.
+#[utoipa::path(post, path = "/api/admin/update/check-now", tag = "admin", responses((status = 200, body = ManualCheck)))]
+pub(crate) async fn check_now(State(s): State<Arc<Updates>>) -> Json<ManualCheck> {
+    let answer = |result, version: Option<Version>, skipped| {
+        Json(ManualCheck {
+            result,
+            version: version.map(text),
+            skipped,
+        })
+    };
+    let Some((http, url)) = &s.source else {
+        return answer(CheckResult::Unavailable, None, false);
+    };
+    let Some(found) = releases::latest_version(http, url).await else {
+        return answer(CheckResult::Failed, None, false);
+    };
+    *s.latest.lock().unwrap() = Some(found);
+    if newer(&s.current, Some(found), None).is_none() {
+        return answer(CheckResult::UpToDate, None, false);
+    }
+    let dismissed = settings::load(&s.data_dir).dismissed_version;
+    let skipped = newer(&s.current, Some(found), dismissed.as_deref()).is_none();
+    answer(CheckResult::Available, Some(found), skipped)
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -270,6 +324,7 @@ mod tests {
             current: "0.1.0".into(),
             latest: Mutex::new(Some((0, 2, 0))),
             wake: Notify::new(),
+            source: None,
         });
         assert_eq!(state(&updates).await.0.as_deref(), Some("0.2.0"));
 
@@ -297,5 +352,72 @@ mod tests {
 
         *updates.latest.lock().unwrap() = Some((0, 3, 0));
         assert_eq!(state(&updates).await.0.as_deref(), Some("0.3.0"));
+    }
+
+    #[tokio::test]
+    async fn checking_now_answers_what_it_found_without_touching_the_settings() {
+        let dir = temp_dir("now");
+        settings::update(&dir, |s| s.update_check = false).unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let http = integrations::tls::https_client(integrations::tls::client_config().unwrap());
+        let updates = start(
+            dir.clone(),
+            "0.1.0".into(),
+            http.clone(),
+            Some(fake_github(hits.clone()).await),
+        );
+        let Json(found) = check_now(State(updates.clone())).await;
+        assert_eq!(
+            (found.result, found.version.as_deref(), found.skipped),
+            (CheckResult::Available, Some("9.0.0"), false)
+        );
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "checked although the automatic check is off"
+        );
+        assert!(!settings::load(&dir).update_check, "the setting stays off");
+
+        // A release the broadcaster skipped is still reported, marked; the skip stays.
+        settings::update(&dir, |s| s.dismissed_version = Some("9.0.0".into())).unwrap();
+        let Json(skipped) = check_now(State(updates.clone())).await;
+        assert_eq!(
+            (skipped.result, skipped.skipped),
+            (CheckResult::Available, true)
+        );
+        assert_eq!(
+            settings::load(&dir).dismissed_version.as_deref(),
+            Some("9.0.0")
+        );
+
+        // Already on the newest.
+        let newest = start(
+            temp_dir("now-newest"),
+            "9.0.0".into(),
+            http.clone(),
+            Some(fake_github(hits.clone()).await),
+        );
+        assert_eq!(
+            check_now(State(newest)).await.0.result,
+            CheckResult::UpToDate
+        );
+
+        // Nothing answers: failed. No release source (a dev build): unavailable, and GET says it cannot check.
+        let failing = start(
+            temp_dir("now-fail"),
+            "0.1.0".into(),
+            http.clone(),
+            Some("http://127.0.0.1:9/releases/latest".into()),
+        );
+        assert_eq!(
+            check_now(State(failing)).await.0.result,
+            CheckResult::Failed
+        );
+        let dev = start(temp_dir("now-dev"), "0.1.0".into(), http, None);
+        assert_eq!(
+            check_now(State(dev.clone())).await.0.result,
+            CheckResult::Unavailable
+        );
+        assert!(!update(State(dev)).await.0.can_check);
     }
 }

@@ -2766,6 +2766,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/update/check-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 「檢查新版」: looks up the newest release now and answers what it found, whatever the automatic check is set
+         *     to. Changes neither that setting nor the skipped release; a release found also updates the notice.
+         */
+        post: operations["check_now"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/update/dismiss": {
         parameters: {
             query?: never;
@@ -3600,6 +3620,8 @@ export interface components {
         CheckBody: {
             enabled: boolean;
         };
+        /** @enum {string} */
+        CheckResult: "available" | "up_to_date" | "failed" | "unavailable";
         /**
          * @description A `checkin.changed` event exactly as `/ws/overlay` sends it: a viewer checked in. It carries only the viewer's
          *     ID, so viewer text stays off this event; the admin UI reloads its lists. Not kept in snapshots.
@@ -4271,6 +4293,13 @@ export interface components {
         LoginBody: {
             /** @description Scopes a feature needs, kept for every later sign-in too; each must be in `FEATURE_SCOPES`. */
             add_scopes?: string[];
+        };
+        ManualCheck: {
+            result: components["schemas"]["CheckResult"];
+            /** @description Whether the broadcaster skipped that release before (it is still reported: they asked). */
+            skipped: boolean;
+            /** @description The newer release, `major.minor.patch`, when `result` is `available`. */
+            version?: string | null;
         };
         ManualCheckIn: {
             result: components["schemas"]["ManualCheckInResult"];
@@ -5787,6 +5816,8 @@ export interface components {
         UpdateState: {
             /** @description The newer release to tell the broadcaster about; `null`: no notice. */
             available?: string | null;
+            /** @description Whether this build can look up releases at all (a dev build cannot), for 「檢查新版」 in Settings → About. */
+            can_check: boolean;
             /** @description Whether the new-version check is on (Settings → General). */
             check: boolean;
             /** @description The running version. */
@@ -13708,6 +13739,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    check_now: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualCheck"];
                 };
             };
         };
