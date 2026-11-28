@@ -1,7 +1,8 @@
 <template>
-  <!-- 最近事件 on the alerts page: what became of each alert this launch, and 重播 with the current settings. -->
-  <section aria-labelledby="recent-alerts">
-    <h2 id="recent-alerts">{{ t('alerts.recent.title') }}</h2>
+  <!-- 最近事件 on the alerts page: what became of each alert this launch, and 重播 with the current settings.
+       `compact` (the alerts drawer): the latest five under a smaller heading. -->
+  <section :aria-labelledby="headingId" :class="{ compact }">
+    <component :is="compact ? 'h3' : 'h2'" :id="headingId">{{ t('alerts.recent.title') }}</component>
     <p v-if="failed" role="alert">{{ failed }}</p>
     <p v-else-if="recent && !recent.length" class="muted">{{ t('alerts.recent.empty') }}</p>
     <!-- A table in a card, as the prototype; one outcome per alert, as the Host records it. -->
@@ -16,7 +17,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in recent" :key="r.id">
+          <tr v-for="r in compact ? recent.slice(0, COMPACT_ROWS) : recent" :key="r.id">
             <td><time :datetime="r.occurredAt">{{ clock(r.occurredAt) }}</time></td>
             <td class="what">
               {{ alertTitle(r.payload) }}
@@ -49,6 +50,12 @@ import { errorToast, successToast } from './home'
 
 // Outcomes change as the queue plays; read the list again this often while the page is open.
 const POLL_MS = 2000
+const COMPACT_ROWS = 5
+
+/** `notify`: where to say a replay's result (the drawer's notice; a toast without it). */
+const props = defineProps<{ compact?: boolean; notify?: (text: string, error: boolean) => void }>()
+// Its own id in the drawer, so it never clashes with the page's.
+const headingId = props.compact ? 'recent-alerts-drawer' : 'recent-alerts'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -82,14 +89,17 @@ function look(o: Schemas['Outcome'] | null): { kind: string; icon: string } {
   return { kind: 'skip', icon: 'pi pi-minus' }
 }
 
+const say = (text: string, error: boolean) =>
+  props.notify ? props.notify(text, error) : toast.add(error ? errorToast(text) : successToast(text))
+
 async function replay(id: string) {
   busy.value = id
   try {
     await api(client.POST('/api/admin/alerts/recent/{id}/replay', { params: { path: { id } } }))
-    toast.add(successToast(t('alerts.recent.replayed')))
+    say(t('alerts.recent.replayed'), false)
     await load()
   } catch (e) {
-    toast.add(errorToast(e instanceof ApiError ? errorMessage(e.code) : String(e)))
+    say(e instanceof ApiError ? errorMessage(e.code) : String(e), true)
   } finally {
     busy.value = undefined
   }
@@ -97,6 +107,15 @@ async function replay(id: string) {
 </script>
 
 <style scoped>
+.compact h3 {
+  margin: 0 0 0.375rem;
+  font-size: 0.9375rem;
+}
+
+.compact .tbl-wrap {
+  margin-top: 0;
+}
+
 .muted,
 time {
   color: var(--p-text-muted-color);
