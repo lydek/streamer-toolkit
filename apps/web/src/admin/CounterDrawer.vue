@@ -11,6 +11,7 @@
         <li v-for="c in counters" :key="c.id">
           <span>{{ c.name }}</span>
           <output class="counter-value">{{ c.value }}</output>
+          <Button icon="pi pi-minus" :aria-label="t('counter.minusOneFor', { name: c.name })" outlined @click="stepCounter(c.id, -1).catch(failed)" />
           <Button icon="pi pi-plus" :aria-label="`${t('counter.plusOne')}：${c.name}`" outlined @click="stepCounter(c.id, 1).catch(failed)" />
         </li>
       </ul>
@@ -28,7 +29,7 @@ import type { LiveState } from './home'
 import { useHomeDrawer } from './homeDrawer'
 import ObsStatusLink from './ObsStatusLink.vue'
 
-defineProps<{ title: string; counters: LiveState['counters'] }>()
+defineProps<{ title: string; counters?: LiveState['counters'] }>()
 const { t } = useI18n()
 const { failed } = useHomeDrawer()
 </script>

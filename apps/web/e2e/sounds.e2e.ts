@@ -86,9 +86,14 @@ async function library(page: Page, sounds: Schemas['Sound'][], slots: Record<str
   return s
 }
 
-test('the tile counts sounds; its drawer lists them as text', async ({ page }) => {
+test('the tile counts sounds; its drawer plays each one in OBS (names as text)', async ({ page }) => {
   await mockAdmin(page, { modules })
   await library(page, [sound('s1', HTML)])
+  const played: string[] = []
+  await page.route('**/api/admin/sounds/*/play', (r) => {
+    played.push(new URL(r.request().url()).pathname)
+    return r.fulfill({ status: 204 })
+  })
   await page.goto('/admin/')
   const tile = page.locator('[data-drawer-tile="sound"]')
   await expect(page.getByRole('region', { name: zh.home.tiles }).locator(tile)).toContainText(`1${zh.home.units.sound}`)
@@ -96,6 +101,8 @@ test('the tile counts sounds; its drawer lists them as text', async ({ page }) =
   const drawer = page.locator('#drawer-sound')
   await expect(drawer.getByText(HTML)).toBeVisible()
   await expect(drawer.locator('img')).toHaveCount(0)
+  await drawer.getByRole('button', { name: HTML }).click()
+  await expect.poll(() => played).toEqual(['/api/admin/sounds/s1/play'])
   await drawer.getByRole('link', { name: zh.drawer.fullPage }).click()
   await expect(page).toHaveURL(/\/admin\/sounds$/)
   await expect(page.getByRole('heading', { name: zh.modules.names.sound, exact: true })).toBeVisible()
