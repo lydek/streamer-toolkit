@@ -1,7 +1,11 @@
 <template>
+  <!-- The prototype's banner: a tinted bar with an icon, the text and the buttons in one row (wrapping when narrow). -->
   <section v-if="available" class="update" aria-labelledby="update-heading">
-    <h2 id="update-heading">{{ t('update.available', { version: available }) }}</h2>
-    <p>{{ t('update.current', { version: current }) }}</p>
+    <i class="pi pi-download" aria-hidden="true"></i>
+    <div class="text">
+      <h2 id="update-heading">{{ t('update.available', { version: available }) }}</h2>
+      <p>{{ t('update.current', { version: current }) }}</p>
+    </div>
     <div class="actions">
       <Button :label="t('update.download')" icon="pi pi-external-link" :disabled="busy" @click="download" />
       <Button :label="t('update.dismiss')" severity="secondary" outlined :disabled="busy" @click="dismiss" />
@@ -68,15 +72,40 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 <style scoped>
 .update {
-  border: 1px solid var(--p-primary-color);
-  border-radius: 6px;
-  padding: 0 1rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
   margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--p-primary-400) 14%, var(--p-surface-900));
+}
+
+.update > .pi {
+  color: var(--p-primary-color);
+  font-size: 1.25rem;
+}
+
+.text {
+  min-width: 0;
+}
+
+.text h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.text p {
+  margin: 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  margin-left: auto;
 }
 </style>
