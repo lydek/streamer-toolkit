@@ -181,7 +181,8 @@ async fn open_connections_follow_the_clients() {
     assert_eq!(f.obs.snapshot().open, 1);
     let t = f.twitch.snapshot();
     assert_eq!((t.eventsub_open, t.irc_open), (1, 1));
-    assert_eq!(t.subscriptions.len(), 14);
+    // Every type the app subscribes to: the preloaded token has every scope, the scope-gated ones included.
+    assert_eq!(t.subscriptions.len(), 21);
     assert_eq!(t.irc_joins, ["fake_streamer"]);
 
     f.obs.drop_connections();

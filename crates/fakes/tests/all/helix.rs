@@ -24,14 +24,10 @@ async fn start(fake: &FakeTwitch) -> String {
     base
 }
 
-/// Signed in as the dev builds are, plus the poll and prediction scopes 投票與預測 asks for.
+/// Signed in as the dev builds are, with every scope (投票與預測 needs the poll and prediction ones).
 fn client(base: &str) -> Helix {
     let http = tls::https_client(tls::client_config().unwrap());
-    let mut token: serde_json::Value = serde_json::from_str(&fake_stored_token()).unwrap();
-    for scope in ["channel:manage:polls", "channel:manage:predictions"] {
-        token["scopes"].as_array_mut().unwrap().push(json!(scope));
-    }
-    let store = Arc::new(InMemory::with(token.to_string()));
+    let store = Arc::new(InMemory::with(fake_stored_token()));
     let auth = TwitchAuth::new(
         "fake-client".into(),
         &format!("http://{base}/oauth2"),

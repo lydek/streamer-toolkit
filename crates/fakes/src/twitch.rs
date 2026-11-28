@@ -34,6 +34,25 @@ pub const BROADCASTER_ID: &str = "1000";
 pub const BROADCASTER_LOGIN: &str = "fake_streamer";
 /// The access token of `integrations::twitch::auth::fake_stored_token` (a fakes test checks they match).
 pub const PRELOADED_TOKEN: &str = "fake-access";
+/// The scopes of that stored token: every scope the app asks for, so the dev build can use every feature without
+/// signing in again (a fakes test checks they match `MVP_SCOPES` and `FEATURE_SCOPES`).
+pub const PRELOADED_SCOPES: &[&str] = &[
+    "user:read:chat",
+    "moderator:read:followers",
+    "channel:read:subscriptions",
+    "channel:read:redemptions",
+    "bits:read",
+    "channel:manage:broadcast",
+    "channel:manage:redemptions",
+    "channel:manage:polls",
+    "channel:manage:predictions",
+    "user:write:chat",
+    "moderator:manage:chat_messages",
+    "moderation:read",
+    "channel:read:vips",
+    "moderator:manage:shoutouts",
+    "channel:manage:raids",
+];
 const BROADCASTER_NAME: &str = "Fake_Streamer";
 const TIMESTAMP: &str = "2026-11-26T12:00:00Z";
 /// The rewards the channel starts with, made in the Twitch dashboard rather than by the app: `(id, title, cost)`.
@@ -86,7 +105,7 @@ impl Drop for Open {
 }
 
 struct World {
-    /// Scopes asked for at the last device login; `/validate` grants them.
+    /// The preloaded token's, then those asked for at the last device login; `/validate` grants them.
     scopes: Vec<String>,
     /// When the stream went online (`send online`); `None` while offline.
     live: Option<String>,
@@ -140,7 +159,7 @@ impl FakeTwitch {
     pub fn with_recorder(keepalive: Duration, recorder: Recorder) -> Self {
         Self(Arc::new(Inner {
             world: Mutex::new(World {
-                scopes: Vec::new(),
+                scopes: PRELOADED_SCOPES.iter().map(|s| s.to_string()).collect(),
                 live: None,
                 subscriptions: Vec::new(),
                 eventsub_connects: 0,
@@ -437,10 +456,11 @@ async fn token(State(fake): State<FakeTwitch>) -> Response {
 }
 
 async fn validate(State(fake): State<FakeTwitch>, headers: HeaderMap) -> Response {
-    let authorized = headers
+    let token = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.starts_with("OAuth "));
+        .and_then(|v| v.strip_prefix("OAuth "));
+    let authorized = token.is_some_and(|t| fake.0.world.lock().unwrap().tokens.contains(t));
     if !authorized {
         return (
             StatusCode::UNAUTHORIZED,
@@ -784,6 +804,22 @@ mod tests {
             body["data"][0]["started_at"],
             json!(fake.started_at().unwrap())
         );
+    }
+
+    #[tokio::test]
+    async fn validate_knows_the_preloaded_token_and_its_scopes_only() {
+        let fake = FakeTwitch::new(Duration::from_secs(10));
+        let ask = |token: &str| {
+            let mut headers = HeaderMap::new();
+            headers.insert("Authorization", format!("OAuth {token}").parse().unwrap());
+            validate(State(fake.clone()), headers)
+        };
+        let ok = ask(PRELOADED_TOKEN).await;
+        assert_eq!(ok.status(), StatusCode::OK);
+        let body: Value =
+            serde_json::from_slice(&to_bytes(ok.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(body["scopes"], json!(PRELOADED_SCOPES));
+        assert_eq!(ask("made-up").await.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

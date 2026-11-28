@@ -11,14 +11,14 @@ use fakes::{
     control,
     metrics::Recorder,
     obs::FakeObs,
-    twitch::{FakeTwitch, PRELOADED_TOKEN},
+    twitch::{FakeTwitch, PRELOADED_SCOPES, PRELOADED_TOKEN},
 };
 use integrations::{
     obs::{Obs, ObsControl, ObsState, ObsStatus},
     secrets::InMemory,
     tls,
     twitch::{
-        MVP_SCOPES,
+        FEATURE_SCOPES, MVP_SCOPES,
         auth::{AuthStatus, TwitchAuth, fake_stored_token},
         helix::Helix,
     },
@@ -142,6 +142,9 @@ fn obs_client(
 fn the_preloaded_token_is_the_one_the_dev_build_uses() {
     let stored: Value = serde_json::from_str(&fake_stored_token()).unwrap();
     assert_eq!(stored["access_token"], PRELOADED_TOKEN);
+    let every: Vec<&str> = MVP_SCOPES.iter().chain(FEATURE_SCOPES).copied().collect();
+    assert_eq!(stored["scopes"], serde_json::json!(every));
+    assert_eq!(PRELOADED_SCOPES, every.as_slice());
 }
 
 #[tokio::test]
