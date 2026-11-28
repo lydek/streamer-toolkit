@@ -115,11 +115,12 @@ main :is(form, p) {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  padding: 0.75rem 0.75rem 0 0;
+  /* The bar's own padding, so a line under the heading or a search box lines up with it, not with the card's edge. */
+  padding: 0.75rem 0.75rem 0;
 }
 
 .tbl-top .tbl-head {
-  padding-top: 0;
+  padding: 0;
 }
 
 .empty-cell {

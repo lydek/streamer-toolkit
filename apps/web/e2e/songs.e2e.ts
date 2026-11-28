@@ -60,3 +60,13 @@ test('in the right column the add form is two rows: the song picker, then the vi
   expect(mid(viewer)).toBeGreaterThan(pick!.y + pick!.height)
   expect(Math.abs(mid(viewer) - mid(add))).toBeLessThan(8)
 })
+
+test('the song list’s search box keeps the card’s padding instead of touching its edge', async ({ page }) => {
+  await mockAdmin(page, { modules })
+  await page.route('**/api/admin/song-list', (r) => r.fulfill({ json: { songs: [], categories: [] } }))
+  await page.goto('/admin/song-list')
+  const search = page.getByRole('searchbox', { name: zh.songList.search })
+  await expect(search).toBeVisible()
+  const [box, card] = await Promise.all([search.boundingBox(), search.locator('xpath=ancestor::*[contains(@class,"tbl-wrap")][1]').boundingBox()])
+  expect(box!.x - card!.x).toBeGreaterThanOrEqual(11)
+})
