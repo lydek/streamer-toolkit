@@ -50,7 +50,8 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
   let today: Schemas['CheckinToday'] = {
     business_day: '2026-11-16',
     count: 1,
-    recent: [{ viewer_id: 'v1', user_name: HTML, occurred_at: '2026-11-16T10:00:00.000Z' }],
+    full_today: 0,
+    recent: [{ viewer_id: 'v1', user_name: HTML, occurred_at: '2026-11-16T10:00:00.000Z', stamps: 3, card_slots: 10 }],
   }
   await page.route('**/api/admin/checkin/today', (r) => r.fulfill({ json: today }))
   const changed = await liveSocket(page)
@@ -66,7 +67,7 @@ test('the tile shows today’s count; its drawer lists recent check-ins as text 
   await expect(drawer.locator('img')).toHaveCount(0)
   expect(await page.evaluate(() => '__xss' in window)).toBe(false)
 
-  today = { ...today, count: 2, recent: [{ viewer_id: 'v9', user_name: 'Newest', occurred_at: '2026-11-16T10:05:00.000Z' }, ...today.recent] }
+  today = { ...today, count: 2, recent: [{ viewer_id: 'v9', user_name: 'Newest', occurred_at: '2026-11-16T10:05:00.000Z', stamps: 1, card_slots: 10 }, ...today.recent] }
   await changed(1)
   await expect(drawer.getByText('Newest')).toBeVisible()
   await expect(tile).toContainText(`2${zh.home.units.checkin}`)
@@ -217,10 +218,17 @@ test('the card dots keep ten to a row on a narrow window', async ({ page }) => {
   }
 })
 
-test('the drawer lists redemptions that kept failing, retries or skips them as in settings, and shows avatars', async ({ page }) => {
+test('the drawer lists redemptions that kept failing, retries or skips them as in settings, and shows avatars and cards', async ({ page }) => {
   await mockAdmin(page, { modules })
   await page.route('**/api/admin/checkin/today', (r) =>
-    r.fulfill({ json: { business_day: '2026-11-16', count: 1, recent: [{ viewer_id: 'v1', user_name: '阿凱', occurred_at: '2026-11-16T10:00:00.000Z' }] } }),
+    r.fulfill({
+      json: {
+        business_day: '2026-11-16',
+        count: 1,
+        full_today: 1,
+        recent: [{ viewer_id: 'v1', user_name: '阿凱', occurred_at: '2026-11-16T10:00:00.000Z', stamps: 10, card_slots: 10 }],
+      },
+    }),
   )
   let dead = [{ event_id: 'e1', occurred_at: '2026-11-16T09:00:00.000Z', user_name: '小魚', reward_title: '每日打卡', error: 'database is locked' }]
   await page.route('**/api/admin/checkin/outbox', (r) => r.fulfill({ json: { pending: 0, oldest_pending_at: null, dead_letters: dead } }))
@@ -236,6 +244,8 @@ test('the drawer lists redemptions that kept failing, retries or skips them as i
   await page.locator('[data-drawer-tile="checkin"]').click()
   const drawer = page.locator('#drawer-checkin')
   await expect(drawer.locator('.recent-checkins .avatar')).toHaveText('阿')
+  await expect(drawer.locator('.recent-checkins li')).toContainText('10/10')
+  await expect(drawer.getByText(zh.checkin.fullToday.replace('{n}', '1'))).toBeVisible()
   await expect(drawer.getByText('database is locked')).toBeVisible()
   await drawer.getByRole('button', { name: zh.checkin.outbox.retry }).click()
   await expect.poll(() => acts).toEqual(['/api/admin/checkin/outbox/e1/retry'])

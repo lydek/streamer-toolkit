@@ -107,6 +107,7 @@
   },
   "checkin": {
     "today": "今天 {n} 人打卡",
+    "fullToday": "其中 {n} 人集點卡已滿",
     "page": {
       "cols": {
         "viewer": "觀眾",
