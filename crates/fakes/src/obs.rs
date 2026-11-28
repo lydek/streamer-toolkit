@@ -183,6 +183,10 @@ fn db(mul: f64) -> f64 {
     }
 }
 
+/// The global audio sources `GetSpecialInputs` names.
+const MIC: &str = "Mic";
+const DESKTOP_AUDIO: &str = "Desktop Audio";
+
 /// The Host port of a normal dev folder; `pnpm dev:fake` passes its own (`--host-port`).
 pub const DEFAULT_HOST_PORT: u16 = 47811;
 
@@ -793,7 +797,7 @@ impl World {
                 json!({"inputKind": input.kind, "inputSettings": input.settings})
             }
             "GetSpecialInputs" => {
-                json!({"desktop1": "Desktop Audio", "desktop2": null, "mic1": "Mic",
+                json!({"desktop1": DESKTOP_AUDIO, "desktop2": null, "mic1": MIC,
                 "mic2": null, "mic3": null, "mic4": null})
             }
             "GetInputMute" => json!({"inputMuted": self.inputs[self.audio_input(data)?].muted}),
@@ -926,6 +930,7 @@ impl World {
                 event["sourceUuid"] = json!(uuid);
                 event["sceneItemId"] = json!(removed.id);
                 events.push(("SceneItemRemoved", event));
+                self.drop_unused_input(&removed.source, events);
                 Value::Null
             }
             "SetSceneItemIndex" => {
@@ -1042,7 +1047,6 @@ impl World {
                 json!({"sceneName": STRESS, "sceneItemId": item.id}),
                 events,
             )?;
-            self.drop_unused_input(&item.source, events);
         }
         if n > 0 {
             return Ok(());
@@ -1103,12 +1107,14 @@ impl World {
         result.map(drop).map_err(|(_, e)| e)
     }
 
-    /// Removes input `name` once no scene holds it, as OBS drops a source nothing uses, with `InputRemoved`.
+    /// Removes input `name` once no scene holds it, as OBS drops a source nothing uses, with `InputRemoved`. The global
+    /// audio sources (`GetSpecialInputs`) stay: OBS keeps them outside any scene.
     fn drop_unused_input(&mut self, name: &str, events: &mut Vec<Event>) {
-        let used = self
-            .scenes
-            .iter()
-            .any(|s| s.items.iter().any(|i| i.source == name));
+        let used = [MIC, DESKTOP_AUDIO].contains(&name)
+            || self
+                .scenes
+                .iter()
+                .any(|s| s.items.iter().any(|i| i.source == name));
         if let Some(at) = self
             .inputs
             .iter()
@@ -1564,6 +1570,72 @@ mod tests {
 
     fn world() -> World {
         World::sample(DEFAULT_HOST_PORT)
+    }
+
+    #[test]
+    fn removing_the_last_scene_item_of_a_source_drops_the_input() {
+        let mut w = world();
+        let ok = |w: &mut World, request: &str, data: Value| {
+            let (result, events) = w.handle(request, &data);
+            (
+                result.unwrap(),
+                events.into_iter().map(|(kind, _)| kind).collect::<Vec<_>>(),
+            )
+        };
+        let (made, _) = ok(
+            &mut w,
+            "CreateInput",
+            json!({"sceneName": "Live", "inputName": "Clip", "inputKind": "ffmpeg_source"}),
+        );
+        let (also, _) = ok(
+            &mut w,
+            "CreateSceneItem",
+            json!({"sceneName": "Break", "sourceName": "Clip"}),
+        );
+        let (_, events) = ok(
+            &mut w,
+            "RemoveSceneItem",
+            json!({"sceneName": "Live", "sceneItemId": made["sceneItemId"]}),
+        );
+        assert_eq!(events, ["SceneItemRemoved"], "still in Break");
+        let (_, events) = ok(
+            &mut w,
+            "RemoveSceneItem",
+            json!({"sceneName": "Break", "sceneItemId": also["sceneItemId"]}),
+        );
+        assert_eq!(events, ["SceneItemRemoved", "InputRemoved"]);
+        assert!(w.inputs.iter().all(|i| i.name != "Clip"));
+
+        // The global mic stays when its last scene item goes.
+        for (scene, id) in w
+            .scenes
+            .iter()
+            .flat_map(|s| {
+                s.items
+                    .iter()
+                    .filter(|i| i.source == MIC)
+                    .map(|i| (s.name.clone(), i.id))
+            })
+            .collect::<Vec<_>>()
+        {
+            ok(
+                &mut w,
+                "RemoveSceneItem",
+                json!({"sceneName": scene, "sceneItemId": id}),
+            );
+        }
+        let (added, _) = ok(
+            &mut w,
+            "CreateSceneItem",
+            json!({"sceneName": "Live", "sourceName": MIC}),
+        );
+        let (_, events) = ok(
+            &mut w,
+            "RemoveSceneItem",
+            json!({"sceneName": "Live", "sceneItemId": added["sceneItemId"]}),
+        );
+        assert_eq!(events, ["SceneItemRemoved"]);
+        assert!(w.inputs.iter().any(|i| i.name == MIC));
     }
 
     #[test]
