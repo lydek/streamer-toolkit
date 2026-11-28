@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { client } from './api'
-import { addOverlay, obsPresence, obsProblems, overlayRows, sourceSize, useObsSources } from './obsSources'
+import { OVERLAYS, addOverlay, obsPresence, obsProblems, overlayRows, sourceSize, useObsSources } from './obsSources'
 
 const source = (name: string, overlay: string, scenes: string[]) => ({ name, overlay, scenes })
 
@@ -39,6 +39,13 @@ describe('overlayRows', () => {
     // The marathon and the break card have switches of their own.
     expect(ids).toContain('marathon')
     expect(ids).toContain('break')
+  })
+
+  it('has one row per overlay, so 投票與預測 is listed once and goes with its module', () => {
+    const ids = OVERLAYS.map((o) => o.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(overlayRows([]).filter((r) => r.key === 'polls')).toHaveLength(1)
+    expect(overlayRows([], new Set(['polls'])).map((r) => r.key)).not.toContain('polls')
   })
 })
 
