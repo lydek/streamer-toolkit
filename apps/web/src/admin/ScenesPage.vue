@@ -38,7 +38,7 @@
           </template>
         </div>
         <p v-if="state.studioMode" class="muted">{{ t('scene.studioNote') }}</p>
-        <SceneList :state="state" @error="report" />
+        <SceneList :state="state" list @error="report" />
       </section>
 
       <!-- In studio mode everything here edits the preview scene; otherwise the scene on air. -->
@@ -69,6 +69,7 @@
           <caption>{{ t('scene.order') }}</caption>
           <thead>
             <tr>
+              <th scope="col" class="grip"><span class="sr-only">{{ t('scene.dragHint') }}</span></th>
               <th scope="col">{{ t('scene.item') }}</th>
               <th scope="col">{{ t('scene.kind') }}</th>
               <th scope="col">{{ t('scene.position') }}</th>
@@ -96,6 +97,8 @@
                 @drop="onDrop($event, item)"
                 @dragend="dragged = over = null"
               >
+                <!-- Mouse dragging only; the arrow buttons and the menu move it from the keyboard. -->
+                <td class="grip" aria-hidden="true"><i class="pi pi-bars"></i></td>
                 <th scope="row">
                   <!-- A group folds its items away; they are numbered under it (9.1) and fade while it is hidden. -->
                   <span class="num">{{ item.num }}</span>
@@ -117,11 +120,11 @@
                     :aria-controls="`editor-${item.id}`"
                     @click="open = open === item.id ? null : item.id"
                   >
-                    <i class="pi pi-angle-right" aria-hidden="true"></i>{{ item.source }}
+                    <i class="pi pi-angle-right" aria-hidden="true"></i><i :class="kindIcon(item.kind)" class="kind" aria-hidden="true"></i>{{ item.source }}
                   </button>
                   <RouterLink v-if="duplicates.has(item.source)" to="/obs-sources" class="dup">{{ t('scene.duplicate') }}</RouterLink>
                 </th>
-                <td>{{ kindText(item.kind) }}</td>
+                <td class="kind-cell">{{ kindText(item.kind) }}</td>
                 <td class="geo">{{ geoText(item) }}</td>
                 <td>
                   <ToggleSwitch
@@ -132,11 +135,15 @@
                   />
                 </td>
                 <td>
-                  <ToggleSwitch
-                    :model-value="item.locked"
+                  <Button
+                    :icon="item.locked ? 'pi pi-lock' : 'pi pi-lock-open'"
+                    text
+                    rounded
+                    :class="{ locked: item.locked }"
                     :disabled="busy.has(item.id)"
+                    :aria-pressed="item.locked"
                     :aria-label="t('scene.lockItem', { item: item.source })"
-                    @update:model-value="(v: boolean) => change(item, { locked: v })"
+                    @click="change(item, { locked: !item.locked })"
                   />
                 </td>
                 <td class="move">
@@ -169,7 +176,7 @@
                 </td>
               </tr>
               <tr v-if="open === item.id" :id="`editor-${item.id}`" class="editor">
-                <td colspan="6">
+                <td colspan="7">
                   <!-- Tabs only when there is more than one thing to edit. -->
                   <nav v-if="tabsOf(item).length > 1" class="editor-tabs" :aria-label="t('scene.editItem', { item: item.source })">
                     <button
@@ -585,7 +592,7 @@ import { addOverlay, overlayName, overlayRows, useObsSources } from './obsSource
 import { type Cross, type Side, alignedCorner, boxOf, pointOf } from './relativeAlign'
 import SceneList from './SceneList.vue'
 import { colorOf, hexOf } from './sourceColor'
-import { type ItemRow, childId, itemRows, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
+import { type ItemRow, childId, itemRows, kindIcon, kindKey, obsReady, setStudioMode, transitionNow, updateItem } from './scenes'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -1086,17 +1093,45 @@ async function change(
       position: sticky;
       top: 0;
       z-index: 1;
-      background: var(--p-surface-950);
+      background: var(--p-surface-900);
     }
   }
 }
 
 /* One column: the scene list keeps to about three rows, so the items are near. */
 @container view (max-width: 64rem) {
-  .pane:first-child :deep(.scenes) {
+  .pane:first-child :deep(.scene-list) {
     max-height: 11.5rem;
     overflow-y: auto;
   }
+}
+
+/* Each side is a card, as the prototype. */
+.pane {
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--p-surface-500);
+  border-radius: 6px;
+  background: var(--p-surface-900);
+}
+
+.pane h2 {
+  margin: 0;
+}
+
+.grip {
+  width: 1.5rem;
+  padding-inline: 0.25rem;
+  color: var(--p-text-muted-color);
+  cursor: grab;
+}
+
+.item-name .kind {
+  margin-inline: 0.125rem 0.375rem;
+  color: var(--p-text-muted-color);
+}
+
+.locked {
+  color: var(--p-primary-color);
 }
 
 .items-head {
@@ -1284,6 +1319,24 @@ caption {
   text-align: start;
   color: var(--p-text-muted-color);
   padding-bottom: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Short cells keep to one line (a number and its name, the kind, the position); a narrow pane scrolls the table
+   sideways rather than breaking them a character a line. */
+tbody th,
+.kind-cell,
+.geo {
+  white-space: nowrap;
+}
+
+.items-scroll {
+  overflow-x: auto;
+}
+
+/* The scene list fills its card's width (the card is a .stack, which keeps children to their own width). */
+.pane > :deep(.scene-list) {
+  align-self: stretch;
 }
 
 tbody th {
