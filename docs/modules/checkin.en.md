@@ -1,4 +1,4 @@
-<!-- source: docs/modules/checkin.md source-sha256: eba981442e17f3fb224b46352a79a81b9505d71e6ee1289d6e1340b0dc5fe78f -->
+<!-- source: docs/modules/checkin.md source-sha256: 80c27174d8ad13ff33a6acc59b5dc782c4cbf19cfe1ecef6c7aab706ee1cd07b -->
 [繁體中文](checkin.md) | **English**
 
 # Daily check-in
@@ -21,10 +21,11 @@ A complex module (see [architecture.en.md](../architecture.en.md) §3). This doc
 - Times are stored in UTC; when an event's time cannot be read, the time it was received is used.
 
 ## Admin UI
-- The home "check-in" tile and drawer show how many viewers checked in today (the current business day) and the latest few; the full page lists each viewer's total, stamp card and last check-in day, searchable by login or display name.
+- The home "check-in" tile and drawer show how many viewers checked in today (the current business day) and the latest few; the drawer also shows how many of them have a full card now, each recent viewer's "stamps / slots", and the redemptions that kept failing (retry or skip, as in settings). The full-card count and the progress come from the lifetime total, so later back-fills and slot changes count again. The full page lists each viewer's total, stamp card and last check-in day, searchable by login or display name; the card shows a dot per slot up to 20 slots and a bar above, both with "stamps / slots".
+- While some redemptions keep failing, the home "pending" list says how many and opens the check-in drawer; the item goes once they are handled (retried successfully or skipped). Home reads them without the drawer open, through one shared 2-second read with the drawer and the settings page; home does not read while the check-in module is off.
 - The broadcaster can register a known viewer for today or back-fill a past business day (recorded at the start of that day); future business days are refused. Manual check-ins and back-fills follow the same once-per-business-day rule, and a repeat returns "already checked in" with a notice, not an error.
 - Viewer names are shown as text only. Deleting or editing single records and exporting are not offered; the lifetime total cannot be edited.
-- The full page also shows each viewer's available stamps, which can be spent (e.g. one press when a full card buys a song request), with an optional reason; the change log lists the latest 100 deductions (time, viewer, stamps, reason). See "Stamps" below.
+- The full page also shows each viewer's available stamps, which can be spent (e.g. one press when a full card buys a song request), with an optional reason; the change log opens in a dialog from a button at the top right of the full page and lists the latest 100 deductions (time, viewer, stamps, reason). See "Stamps" below.
 
 ## OBS stamp card
 - `/overlay/checkin/`: a successful check-in shows the viewer's name, avatar and stamp card, with a different effect when the card fills up; many check-ins at once show one card at a time, in order; repeat check-ins on the same day show nothing by default, and the card style can choose to show them (nothing is recorded; a redelivered redemption event never shows again).

@@ -100,6 +100,7 @@
     "collapse": "收合",
     "statsLine": "{redemptions} 兌換 · {subs} 訂閱",
     "queueIdle": "沒有正在播的",
+    "pendingCheckin": "打卡有 {n} 筆兌換一直無法處理",
     "blocks": {
       "pending": "待處理",
       "checklist": "開播前檢查",
