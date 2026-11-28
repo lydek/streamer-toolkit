@@ -95,7 +95,7 @@ pub async fn activity_between(
         "SELECT twitch_message_id AS alert_id, kind, user_name, tier, months, count, bits, viewers, gifted, \
          message, occurred_at FROM \
          (SELECT * FROM activity_events WHERE gifted = 0 AND (?1 IS NULL OR occurred_at >= ?1) \
-          AND (?2 IS NULL OR occurred_at < ?2) ORDER BY occurred_at DESC LIMIT ?3) ORDER BY occurred_at",
+          AND (?2 IS NULL OR occurred_at < ?2) ORDER BY occurred_at DESC, id DESC LIMIT ?3) ORDER BY occurred_at, id",
     )
     .bind(from.map(time_text))
     .bind(until.map(time_text))
@@ -166,7 +166,7 @@ pub async fn session_entries(
 ) -> Result<Vec<ActivityEntry>, sqlx::Error> {
     sqlx::query_as(
         "SELECT twitch_message_id AS alert_id, kind, user_name, tier, months, count, bits, viewers, gifted, \
-         message, occurred_at FROM activity_events WHERE session_id = ? AND kind <> 'gift' ORDER BY occurred_at",
+         message, occurred_at FROM activity_events WHERE session_id = ? AND kind <> 'gift' ORDER BY occurred_at, id",
     )
     .bind(session_id)
     .fetch_all(pool)
@@ -355,6 +355,38 @@ pub(crate) mod tests {
             .map(|e| e.kind)
             .collect();
         assert_eq!(kinds, ["follow", "gift"]);
+    }
+
+    #[tokio::test]
+    async fn activity_from_the_same_instant_keeps_the_order_it_arrived_in() {
+        let pool = pool().await;
+        // UUIDv7 IDs grow in insert order; the kinds tell the rows apart.
+        for (id, kind) in [("01", "raid"), ("02", "follow"), ("03", "cheer")] {
+            sqlx::query(
+                "INSERT INTO activity_events (id, twitch_message_id, kind, session_id, occurred_at) \
+                 VALUES (?, ?, ?, 's1', '2026-11-19T10:00:00.000000Z')",
+            )
+            .bind(id)
+            .bind(format!("m{id}"))
+            .bind(kind)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let kinds =
+            |entries: Vec<ActivityEntry>| entries.into_iter().map(|e| e.kind).collect::<Vec<_>>();
+        assert_eq!(
+            kinds(activity_between(&pool, None, None, 10).await.unwrap()),
+            ["raid", "follow", "cheer"]
+        );
+        assert_eq!(
+            kinds(activity_between(&pool, None, None, 2).await.unwrap()),
+            ["follow", "cheer"]
+        );
+        assert_eq!(
+            kinds(session_entries(&pool, "s1").await.unwrap()),
+            ["raid", "follow", "cheer"]
+        );
     }
 
     /// Another module's table, as a test stand-in.

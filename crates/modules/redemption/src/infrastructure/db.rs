@@ -65,7 +65,7 @@ pub async fn redeemed_between(
     sqlx::query_as(
         "SELECT twitch_redemption_id, user_name, reward_title, reward_cost, user_input, redeemed_at FROM \
          (SELECT * FROM redemption_records WHERE (?1 IS NULL OR redeemed_at >= ?1) AND (?2 IS NULL OR redeemed_at < ?2) \
-          ORDER BY redeemed_at DESC LIMIT ?3) ORDER BY redeemed_at",
+          ORDER BY redeemed_at DESC, id DESC LIMIT ?3) ORDER BY redeemed_at, id",
     )
     .bind(from.map(time_text))
     .bind(until.map(time_text))
@@ -451,6 +451,41 @@ pub(crate) mod tests {
                 (serde_json::from_str(&payload).unwrap(), at)
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn redemptions_from_the_same_instant_keep_the_order_they_arrived_in() {
+        let pool = pool().await;
+        // UUIDv7 IDs grow in insert order; the reward titles tell the rows apart.
+        for (id, title) in [("01", "Hydrate"), ("02", "Stretch"), ("03", "Dance")] {
+            sqlx::query(
+                "INSERT INTO redemption_records (id, twitch_redemption_id, user_id, user_login, user_name, reward_id, \
+                 reward_title, reward_cost, user_input, status, redeemed_at, updated_at, playback_tracked) \
+                 VALUES (?, ?, 'u', 'u', 'u', 'r', ?, 1, '', 'unfulfilled', ?, ?, 1)",
+            )
+            .bind(id)
+            .bind(format!("t-{id}"))
+            .bind(title)
+            .bind("2026-11-22T10:00:00.000000Z")
+            .bind("2026-11-22T10:00:00.000000Z")
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let titles = |entries: Vec<RedeemedEntry>| {
+            entries
+                .into_iter()
+                .map(|e| e.reward_title)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            titles(redeemed_between(&pool, None, None, 10).await.unwrap()),
+            ["Hydrate", "Stretch", "Dance"]
+        );
+        assert_eq!(
+            titles(redeemed_between(&pool, None, None, 2).await.unwrap()),
+            ["Stretch", "Dance"]
+        );
     }
 
     #[tokio::test]
